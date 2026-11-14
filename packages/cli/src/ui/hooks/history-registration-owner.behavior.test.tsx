@@ -43,7 +43,7 @@ describe('history registration ownership', () => {
           Object.assign(
             { ...diagnostics },
             {
-              getHistory: peer.getHistory.bind(peer),
+              getHistory: peer.streamHistory.bind(peer),
             },
           ),
           null,
@@ -51,7 +51,7 @@ describe('history registration ownership', () => {
           () => null,
           bindCopyCommandHistoryRead(
             current.session.isHistoryInitialized.bind(current.session),
-            current.getHistory.bind(current),
+            current.streamHistory.bind(current),
           ),
           async (text) => {
             clipboard.push(text);

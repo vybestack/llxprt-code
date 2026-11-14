@@ -5,7 +5,10 @@
  */
 
 import * as path from 'node:path';
-import { resumeSessionNotFoundMessage } from './resumeNotFoundMessages.js';
+import {
+  RESUME_NO_SESSIONS_FOUND,
+  resumeSessionNotFoundMessage,
+} from './resumeNotFoundMessages.js';
 import type { UnreadableRecording } from './types.js';
 
 /** `<file>: <reason>`, the form every caller shows for a skipped recording. */
@@ -35,4 +38,13 @@ export function matchUnreadableRecordings(
       recording.filePath === ref ||
       path.basename(recording.filePath) === ref,
   );
+}
+
+/** The error for a project that has no readable session, naming the recordings that were passed over. */
+export function noReadableSessionsError(
+  skipped: readonly UnreadableRecording[],
+): string {
+  return skipped.length === 0
+    ? RESUME_NO_SESSIONS_FOUND
+    : `${RESUME_NO_SESSIONS_FOUND}; skipped unreadable recordings: ${skipped.map(describeUnreadableRecording).join('; ')}`;
 }

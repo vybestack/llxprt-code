@@ -50,6 +50,13 @@ export interface AgentRuntimeState {
   readonly parentRuntimeId?: string;
 
   /**
+   * The parent session id when this runtime belongs to a subagent. Threads
+   * journal lineage so the child journal's `session_start` header can stamp
+   * it (#854 P05c). `undefined` for the main agent.
+   */
+  readonly parentSessionId?: string;
+
+  /**
    * The subagent's display name when this runtime belongs to a subagent.
    * `undefined` for the main agent so it serialises as `null` in token-usage
    * records. @issue #3130
@@ -86,6 +93,7 @@ export interface RuntimeStateParams {
   modelParams?: ModelParams;
   sessionId?: string;
   parentRuntimeId?: string;
+  parentSessionId?: string;
   subagentName?: string;
 }
 
@@ -106,6 +114,7 @@ export interface RuntimeStateSnapshot {
   sessionId: string;
   updatedAt: number;
   parentRuntimeId?: string;
+  parentSessionId?: string;
   subagentName?: string;
   version: number; // Schema version for future migrations
 }
@@ -202,6 +211,7 @@ export function createAgentRuntimeState(
     sessionId,
     updatedAt: Date.now(),
     parentRuntimeId: params.parentRuntimeId,
+    parentSessionId: params.parentSessionId,
     subagentName: params.subagentName,
   });
 
@@ -337,6 +347,7 @@ export function getAgentRuntimeStateSnapshot(
     sessionId: state.sessionId,
     updatedAt: state.updatedAt,
     parentRuntimeId: state.parentRuntimeId,
+    parentSessionId: state.parentSessionId,
     subagentName: state.subagentName,
     version: 1, // Schema version (line 341)
   });

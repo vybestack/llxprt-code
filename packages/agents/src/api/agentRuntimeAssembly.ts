@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import type { SettingsStateSnapshot } from '@vybestack/llxprt-code-settings';
 import { runCleanupSteps } from '../core/subagent-cleanup.js';
@@ -151,11 +152,6 @@ interface PreferredAuth {
   readonly oauth: OAuthManager;
 }
 
-interface ActivatedPreferredClient {
-  readonly client: SessionClientOwner;
-  readonly parsed: FacadeParsedConfig;
-}
-
 export class PreferredAgentAssembly {
   private readonly schedulerHandles: AgentSchedulerHandle[] = [];
   private readonly inheritedTrustRelease = new AcquisitionRelease();
@@ -247,6 +243,8 @@ export class PreferredAgentAssembly {
     );
     const config = new Config({
       ...params,
+      namedWriters: raw.namedWriters,
+      scratchRoots: raw.scratchRoots ?? new ScratchRootOwner(),
       includeDirectories: [
         ...(params.includeDirectories ?? []),
         ...((parsed.harness?.includeProcessCwd ?? true) ? [process.cwd()] : []),
@@ -323,6 +321,7 @@ export class PreferredAgentAssembly {
         async (manager, oauth) => {
           const tokenizerFactory = configureProviderTokenizer(
             manager,
+            config.scratchRoots,
             raw.tokenizerFactory,
           );
           const contentGeneratorFactory =
@@ -418,12 +417,14 @@ class PreferredProviderAssembly {
       );
       if (raw.executeShellCommand !== undefined)
         client.toolCatalog.bindShellExecution(raw.executeShellCommand);
-      const activated = await this.initializeCreatedAgent(
+      const parsed = await this.initializeCreatedAgent(
         mcpRuntime,
-        client,
+        client.bindHostGitHub.bind(client),
+        client.initializeTools.bind(client),
+        client.operations.refreshAuth,
         github,
       );
-      return await this.#acquireFacade(mcpRuntime, activated);
+      return await this.#acquireFacade(mcpRuntime, client, parsed);
     } catch (primaryError) {
       return cleanupFailedCreatedAgent(
         primaryError,
@@ -433,7 +434,7 @@ class PreferredProviderAssembly {
             this.provider.inheritedTrustRelease,
           ),
         media,
-        client,
+        client?.dispose.bind(client),
         disposeMcpRuntime,
       );
     }
@@ -441,14 +442,16 @@ class PreferredProviderAssembly {
 
   private async initializeCreatedAgent(
     mcpRuntime: AgentRuntimeMcpPort,
-    client: SessionClientOwner,
+    bindHostGitHub: (github: HostGitHubBrokerOwner | undefined) => void,
+    initializeTools: () => Promise<void>,
+    refreshAuth: (method?: string) => Promise<void>,
     github: HostGitHubBrokerOwner | undefined,
-  ): Promise<ActivatedPreferredClient> {
+  ): Promise<FacadeParsedConfig> {
     const { construction, config, policyOwner } = this.workspace;
     const { settings, settingsOwner } = this.settings;
     const { manager } = this.provider;
     const { oauth } = this.auth;
-    await initializeCreatedClient(client, github);
+    await initializeCreatedClient(bindHostGitHub, initializeTools, github);
     const activationOutcome = await activateCreatedSession(
       construction.parsed,
       construction.resolvedAuth,
@@ -460,17 +463,15 @@ class PreferredProviderAssembly {
       (): RuntimeKind => 'agent',
       policyOwner.session.messageBus,
       mcpRuntime,
-      client,
+      refreshAuth,
     );
-    return {
-      client,
-      parsed: { ...construction.parsed, ...activationOutcome },
-    };
+    return { ...construction.parsed, ...activationOutcome };
   }
 
   async #acquireFacade(
     mcpRuntime: AgentRuntimeMcpPort,
-    { client, parsed }: ActivatedPreferredClient,
+    client: SessionClientOwner,
+    parsed: FacadeParsedConfig,
   ): Promise<Agent> {
     const { construction, config, media, schedulerFactory } = this.workspace;
     const { handles, manager, release, inheritedTrustRelease } = this.provider;

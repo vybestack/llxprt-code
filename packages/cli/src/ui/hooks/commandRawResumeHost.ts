@@ -42,7 +42,7 @@ export function bindCommandRawResume(
   if (config === null || callbacks === undefined) return null;
   return (action) => {
     if (!persistence) throw new Error('CLI session persistence is unavailable');
-    const context: Omit<ResumeContext, 'mediaStore' | 'persistenceFactory'> = {
+    const context: Omit<ResumeContext, 'mediaStore' | 'scratchRoots'> = {
       chatsDir: join(config.projectTempDir, 'chats'),
       projectHash: getProjectHash(config.getProjectRoot()),
       currentSessionId: config.getSessionId(),

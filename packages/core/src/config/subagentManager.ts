@@ -458,9 +458,6 @@ export class SubagentManager {
    */
   private async _listDiskSubagents(): Promise<string[]> {
     try {
-      // Ensure directory exists
-      await this.ensureDirectory();
-
       // Read directory contents
       const files = await fsPromises.readdir(this.baseDir);
 

@@ -1,0 +1,210 @@
+{
+  "name": "density-small",
+  "description": "density passes that remove and replace a few rows",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 10,
+        "prefix": "row"
+      },
+      "observed": {
+        "live": {
+          "length": 10,
+          "digest": "8479be96da647f0259c9d6bed2bee8f6e6f9fbc54b674cfbade4cca8ef4c8a83",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2"
+          ]
+        },
+        "resumed": {
+          "length": 10,
+          "digest": "8479be96da647f0259c9d6bed2bee8f6e6f9fbc54b674cfbade4cca8ef4c8a83",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "density",
+        "removals": [1, 3],
+        "replacements": [
+          [
+            0,
+            {
+              "speaker": "human",
+              "text": "dense-0"
+            }
+          ],
+          [
+            5,
+            {
+              "speaker": "ai",
+              "text": "dense-5"
+            }
+          ]
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "f7e72b6c238a9a1e47f4cb1265fa6f1bb7f73c2f82c159cacb00270fb1033940",
+          "tags": [
+            "fe34b2d015d2a4a2",
+            "2fe521d61900adad",
+            "139a49d3b9d0a113",
+            "69892f6b77b6d56c",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "f7e72b6c238a9a1e47f4cb1265fa6f1bb7f73c2f82c159cacb00270fb1033940",
+          "tags": [
+            "fe34b2d015d2a4a2",
+            "2fe521d61900adad",
+            "139a49d3b9d0a113",
+            "69892f6b77b6d56c",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "after-density"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 9,
+          "digest": "4af3e186b158ffb535bc1afb8cfe8c6c7789e31e2c8cd4076e891175d2caa64c",
+          "tags": [
+            "fe34b2d015d2a4a2",
+            "2fe521d61900adad",
+            "139a49d3b9d0a113",
+            "69892f6b77b6d56c",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2",
+            "0f1fb2bfe4438769"
+          ]
+        },
+        "resumed": {
+          "length": 9,
+          "digest": "4af3e186b158ffb535bc1afb8cfe8c6c7789e31e2c8cd4076e891175d2caa64c",
+          "tags": [
+            "fe34b2d015d2a4a2",
+            "2fe521d61900adad",
+            "139a49d3b9d0a113",
+            "69892f6b77b6d56c",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2",
+            "0f1fb2bfe4438769"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "density",
+        "removals": [0],
+        "replacements": []
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "e490cdbba2a29680bcd1471e6000169352d2179b74936f1291d61a50e5c92bcd",
+          "tags": [
+            "2fe521d61900adad",
+            "139a49d3b9d0a113",
+            "69892f6b77b6d56c",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2",
+            "0f1fb2bfe4438769"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "e490cdbba2a29680bcd1471e6000169352d2179b74936f1291d61a50e5c92bcd",
+          "tags": [
+            "2fe521d61900adad",
+            "139a49d3b9d0a113",
+            "69892f6b77b6d56c",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2",
+            "0f1fb2bfe4438769"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 7,
+          "digest": "6e3770098d6a42e825c31f7f30165d661380678a82265b2061392482d95ded90",
+          "tags": [
+            "2fe521d61900adad",
+            "139a49d3b9d0a113",
+            "69892f6b77b6d56c",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2"
+          ]
+        },
+        "resumed": {
+          "length": 7,
+          "digest": "6e3770098d6a42e825c31f7f30165d661380678a82265b2061392482d95ded90",
+          "tags": [
+            "2fe521d61900adad",
+            "139a49d3b9d0a113",
+            "69892f6b77b6d56c",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "47eb0bb439996870",
+            "3d4a64aa4f4ccdf2"
+          ]
+        }
+      }
+    }
+  ]
+}

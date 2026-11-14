@@ -6,41 +6,48 @@
 import type {
   IContent,
   RecordingIntegration,
-  SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentSessionControl } from '../agent.js';
 
-export interface SessionNativeHistory {
-  getHistory(): Promise<readonly IContent[]>;
-  setHistory(
-    history: readonly IContent[],
-    options?: { readonly historyOrigin?: object },
-  ): Promise<void>;
-  restoreHistory(history: readonly IContent[], origin?: object): Promise<void>;
-  resetChat(): Promise<void>;
-  hasChatInitialized(): boolean;
+export interface SessionNativeHistory
+  extends Pick<
+    AgentClientContract,
+    | 'getHistory'
+    | 'streamHistory'
+    | 'getHistoryService'
+    | 'setHistory'
+    | 'setHistoryFromSource'
+    | 'restoreHistory'
+    | 'resetChat'
+    | 'resumeChat'
+    | 'discardDeferredHistory'
+    | 'hasChatInitialized'
+  > {
+  subscribeContextRange(
+    observers: Set<() => void | Promise<void>>,
+    publish: Parameters<AgentSessionControl['subscribeContextRange']>[0],
+  ): () => void;
   hasHistory(): boolean;
   historyRevision(): number;
-  subscribeRecording(recording: RecordingIntegration, origin: object): boolean;
-  seedRecording(
-    recording: SessionRecordingService,
-    history: readonly IContent[],
+  subscribeRecording(
+    recording: RecordingIntegration,
     origin: object,
-  ): void;
+  ): Promise<boolean>;
   readHistorySnapshot: AgentSessionControl['readHistorySnapshot'];
-  readInitializedHistory(): readonly IContent[] | null;
+  readInitializedHistory(): AsyncIterable<IContent> | null;
   replaceNativeHistory(
     history: readonly IContent[],
     origin: object,
     prepareRecording: () => Promise<void>,
   ): Promise<void>;
   subscribeHistoryTokens(
-    observers: Set<() => void>,
+    observers: Set<() => void | Promise<void>>,
     publish: (count: number) => void,
   ): () => void;
-  attachRecordingHistory(recording: RecordingIntegration): void;
+  attachRecordingHistory(recording: RecordingIntegration): Promise<void>;
   connectRecordingHistory(
-    observers: Set<() => void>,
+    observers: Set<() => void | Promise<void>>,
     readRecording: () => RecordingIntegration | null,
-  ): () => void;
+  ): () => Promise<void>;
 }

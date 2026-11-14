@@ -1,3 +1,4 @@
+import { readCurated } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -141,7 +142,7 @@ describe('the user turn survives an unrecoverable hook boundary (issue #4000 Cod
       const session = conversation.session();
       const [history] = await conversation.seedImages(1);
       const { original, fragments, images } = await splitTurn();
-      const contents = [...session.history.getCurated(), ...fragments];
+      const contents = [...(await readCurated(session.history)), ...fragments];
 
       await session.send([original], true, {
         pending: undefined,
@@ -165,7 +166,7 @@ describe('the user turn survives an unrecoverable hook boundary (issue #4000 Cod
       await conversation.seedImages(1);
       conversation.seedBigText();
       const { original, fragments } = await splitTurn();
-      const contents = [...session.history.getCurated(), ...fragments];
+      const contents = [...(await readCurated(session.history)), ...fragments];
 
       const error = await rejection(
         session.send([original], true, {

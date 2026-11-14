@@ -415,10 +415,10 @@ describe('useTokenMetricsTracking', () => {
     useRuntimeApiMock.mockReturnValue(runtimeApi);
 
     const updateHistoryTokenCount = vi.fn();
-    const onHistoryServiceReplaced = vi.fn();
+    const subscribeToJournal = vi.fn();
     const recordingIntegrationRef = {
       current: {
-        onHistoryServiceReplaced,
+        subscribeToJournal,
       },
     };
 
@@ -435,7 +435,7 @@ describe('useTokenMetricsTracking', () => {
       vi.advanceTimersByTime(100);
     });
 
-    expect(onHistoryServiceReplaced).toHaveBeenCalledWith(historyServiceA);
+    expect(subscribeToJournal).toHaveBeenCalledWith(historyServiceA);
 
     activeHistoryService = historyServiceB;
 
@@ -443,7 +443,7 @@ describe('useTokenMetricsTracking', () => {
       vi.advanceTimersByTime(100);
     });
 
-    expect(onHistoryServiceReplaced).toHaveBeenCalledWith(historyServiceB);
+    expect(subscribeToJournal).toHaveBeenCalledWith(historyServiceB);
   });
   it('keeps the UI token listener on owner changes without subscribing the raw recorder', () => {
     const first = makeHistoryService(11);
@@ -459,7 +459,7 @@ describe('useTokenMetricsTracking', () => {
     const published: number[] = [];
     const rawSubscribe = vi.fn();
     const recordingIntegrationRef = {
-      current: { onHistoryServiceReplaced: rawSubscribe },
+      current: { subscribeToJournal: rawSubscribe },
     };
     const { rerender, unmount } = renderHook(
       ({ uiRuntime }) =>

@@ -1,0 +1,313 @@
+{
+  "route": "openai-chat-kimi",
+  "cases": {
+    "text-only": {
+      "stream": {
+        "sha256": "75c3f33c8308e490207d9adf97e55d13c5ffe3471ce41dee7b2cb61281aff989",
+        "length": 338,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "75c3f33c8308e490207d9adf97e55d13c5ffe3471ce41dee7b2cb61281aff989",
+        "length": 338,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "system-and-tools": {
+      "stream": {
+        "sha256": "3e98b7b10cec03bc0b3adbeb20e829f7df1192e58390b5d7a29ed46f479bb4f4",
+        "length": 577,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "3e98b7b10cec03bc0b3adbeb20e829f7df1192e58390b5d7a29ed46f479bb4f4",
+        "length": 577,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "tool-calls-with-results": {
+      "stream": {
+        "sha256": "dea5beb257fc1e83a8d982e74aa9c82771046d6dd7758584f85fe5924b707510",
+        "length": 1302,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.get_weather:0\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\n{\\n  \\\"temp\\\": 21\\n}\",\"tool_call_id\":\"functions.get_weather:0\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.get_weather:1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"London\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nrainy, 14C\",\"tool_call_id\":\"functions.get_weather:1\"},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "dea5beb257fc1e83a8d982e74aa9c82771046d6dd7758584f85fe5924b707510",
+        "length": 1302,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.get_weather:0\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\n{\\n  \\\"temp\\\": 21\\n}\",\"tool_call_id\":\"functions.get_weather:0\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.get_weather:1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"London\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nrainy, 14C\",\"tool_call_id\":\"functions.get_weather:1\"},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "parallel-tool-calls": {
+      "stream": {
+        "sha256": "713556cc8b4086fc20e841bc9eee79c487e9efce7e6882a3b68c4383425e630c",
+        "length": 1150,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"functions.read_file:1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nalpha\",\"tool_call_id\":\"functions.read_file:0\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"functions.read_file:1\"},{\"role\":\"user\",\"content\":\"summarise\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "713556cc8b4086fc20e841bc9eee79c487e9efce7e6882a3b68c4383425e630c",
+        "length": 1150,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"functions.read_file:1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nalpha\",\"tool_call_id\":\"functions.read_file:0\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"functions.read_file:1\"},{\"role\":\"user\",\"content\":\"summarise\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "orphan-tool-call": {
+      "stream": {
+        "sha256": "eecaca1b8ab1a0aa955bfc952353d89d7ae8b48fffbda69f6868d329c88e7666",
+        "length": 762,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/lost.txt\\\"}\"}}]},{\"role\":\"user\",\"content\":\"never mind, say hi\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "eecaca1b8ab1a0aa955bfc952353d89d7ae8b48fffbda69f6868d329c88e7666",
+        "length": 762,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/lost.txt\\\"}\"}}]},{\"role\":\"user\",\"content\":\"never mind, say hi\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "orphan-tool-result": {
+      "stream": {
+        "sha256": "03e32713e4d6beee21188c05244cd69a6fcd5ef7f83fdb7d957951f635a64948",
+        "length": 775,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nfrom nowhere\",\"tool_call_id\":\"functions.read_file:0\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":\"continue\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "03e32713e4d6beee21188c05244cd69a6fcd5ef7f83fdb7d957951f635a64948",
+        "length": 775,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nfrom nowhere\",\"tool_call_id\":\"functions.read_file:0\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":\"continue\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "interleaved-tool-results": {
+      "stream": {
+        "sha256": "597303be22bb1b405bffe8ff18f3fa9d929ecbb4e2ff919eb373ace52382aa61",
+        "length": 1087,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"functions.read_file:1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"functions.read_file:1\"},{\"role\":\"user\",\"content\":\"hurry up\"},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":\"good\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "597303be22bb1b405bffe8ff18f3fa9d929ecbb4e2ff919eb373ace52382aa61",
+        "length": 1087,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"functions.read_file:1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"functions.read_file:1\"},{\"role\":\"user\",\"content\":\"hurry up\"},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":\"good\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "displaced-tool-result": {
+      "stream": {
+        "sha256": "82c55dbcc19356794fceb214802e7fa8be34716c5811d09a0a71e49bd768e3e8",
+        "length": 1232,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/1.txt\\\"}\"}}]},{\"role\":\"assistant\",\"content\":\"while waiting\"},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/2.txt\\\"}\"}},{\"id\":\"functions.read_file:2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/3.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntwo\",\"tool_call_id\":\"functions.read_file:1\"},{\"role\":\"user\",\"content\":\"done?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "82c55dbcc19356794fceb214802e7fa8be34716c5811d09a0a71e49bd768e3e8",
+        "length": 1232,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/1.txt\\\"}\"}}]},{\"role\":\"assistant\",\"content\":\"while waiting\"},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/2.txt\\\"}\"}},{\"id\":\"functions.read_file:2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/3.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntwo\",\"tool_call_id\":\"functions.read_file:1\"},{\"role\":\"user\",\"content\":\"done?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "tool-id-shapes": {
+      "stream": {
+        "sha256": "a490cfb2ee31e46ccdfde097eb3aaa709fdf33dbdcb277d69ee17b689ce10caa",
+        "length": 1422,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/x\\\"}\"}},{\"id\":\"functions.get_weather:1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nx-body\",\"tool_call_id\":\"functions.read_file:2\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\ncold\",\"tool_call_id\":\"functions.get_weather:1\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ny-body\",\"tool_call_id\":\"functions.read_file:2\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "a490cfb2ee31e46ccdfde097eb3aaa709fdf33dbdcb277d69ee17b689ce10caa",
+        "length": 1422,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/x\\\"}\"}},{\"id\":\"functions.get_weather:1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nx-body\",\"tool_call_id\":\"functions.read_file:2\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\ncold\",\"tool_call_id\":\"functions.get_weather:1\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ny-body\",\"tool_call_id\":\"functions.read_file:2\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "reasoning-thinking": {
+      "stream": {
+        "sha256": "a90b269bc948e1395841160d55aea54d825a1997757473460ac2878eae494a4a",
+        "length": 1027,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":\"first answer\"},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.get_weather:0\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nsunny\",\"tool_call_id\":\"functions.get_weather:0\"},{\"role\":\"assistant\",\"content\":\"It is sunny.\"},{\"role\":\"user\",\"content\":\"and tomorrow?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "a90b269bc948e1395841160d55aea54d825a1997757473460ac2878eae494a4a",
+        "length": 1027,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":\"first answer\"},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.get_weather:0\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nsunny\",\"tool_call_id\":\"functions.get_weather:0\"},{\"role\":\"assistant\",\"content\":\"It is sunny.\"},{\"role\":\"user\",\"content\":\"and tomorrow?\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "thinking-only-chain": {
+      "stream": {
+        "sha256": "9d0e453a5c10759622a384b410af8b1c7a0b00dd69216b6f77f619f34e19ee0d",
+        "length": 333,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"assistant\",\"content\":\"part one\"},{\"role\":\"assistant\",\"content\":\"part two\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "9d0e453a5c10759622a384b410af8b1c7a0b00dd69216b6f77f619f34e19ee0d",
+        "length": 333,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"assistant\",\"content\":\"part one\"},{\"role\":\"assistant\",\"content\":\"part two\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "media-inline-image": {
+      "stream": {
+        "sha256": "c9b5dde0ede785c676cc61b0fa78d9c3858bd8f18fc842e37c90fa7b216ddb84",
+        "length": 568,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"and the url one?\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.test/pixel.png\"}}]}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "c9b5dde0ede785c676cc61b0fa78d9c3858bd8f18fc842e37c90fa7b216ddb84",
+        "length": 568,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"and the url one?\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.test/pixel.png\"}}]}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "media-reference-image": {
+      "stream": {
+        "sha256": "bce63edbd7f1a94d473f676bcf511897f10579e37dd60590220c7b8ca0b885f5",
+        "length": 379,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "bce63edbd7f1a94d473f676bcf511897f10579e37dd60590220c7b8ca0b885f5",
+        "length": 379,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "unicode-edges": {
+      "stream": {
+        "sha256": "a10f0695e176d5736051a4648d9a794b754620da089a069ee7ef877677a7f703",
+        "length": 1071,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"2\\\":\\\"two\\\",\\\"10\\\":\\\"ten\\\",\\\"path\\\":\\\"/ü/雪.txt\\\",\\\"b\\\":1,\\\"a\\\":[1,2,{\\\"z\\\":null}]}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nline1\\nline2\\t\\\"quoted\\\"\",\"tool_call_id\":\"functions.read_file:0\"},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "a10f0695e176d5736051a4648d9a794b754620da089a069ee7ef877677a7f703",
+        "length": 1071,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"2\\\":\\\"two\\\",\\\"10\\\":\\\"ten\\\",\\\"path\\\":\\\"/ü/雪.txt\\\",\\\"b\\\":1,\\\"a\\\":[1,2,{\\\"z\\\":null}]}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nline1\\nline2\\t\\\"quoted\\\"\",\"tool_call_id\":\"functions.read_file:0\"},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-user": {
+      "stream": {
+        "sha256": "12df2d6ab1c2f03942c47530cbf0d4f7342f8780b380faf822a2ca62477b433e",
+        "length": 771,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":\"seven\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "12df2d6ab1c2f03942c47530cbf0d4f7342f8780b380faf822a2ca62477b433e",
+        "length": 771,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":\"seven\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-tool-result": {
+      "stream": {
+        "sha256": "aceaa3a62df4a94ce9fcbdf090165b330a94906269ce4b2473dba621d2846beb",
+        "length": 853,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/t.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntail body\",\"tool_call_id\":\"functions.read_file:0\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "aceaa3a62df4a94ce9fcbdf090165b330a94906269ce4b2473dba621d2846beb",
+        "length": 853,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/t.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntail body\",\"tool_call_id\":\"functions.read_file:0\"}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-assistant": {
+      "stream": {
+        "sha256": "d7c536a58a7169d58ab72da473c50c2e602499d338881600600681b57afc0cbc",
+        "length": 292,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "d7c536a58a7169d58ab72da473c50c2e602499d338881600600681b57afc0cbc",
+        "length": 292,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-anchor": {
+      "stream": {
+        "sha256": "91cfe8dcd541e1ac9cf3de08819b0de88903608b068da96598b88eaf49968cb7",
+        "length": 382,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":\"acknowledged\"},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":\"another question\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "91cfe8dcd541e1ac9cf3de08819b0de88903608b068da96598b88eaf49968cb7",
+        "length": 382,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":\"acknowledged\"},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":\"another question\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-thinking": {
+      "stream": {
+        "sha256": "611a95ace2b7ef3adedd038b4c687b962ece6bb0b3f7cda1a61372179d5fd764",
+        "length": 231,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"visible answer\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "611a95ace2b7ef3adedd038b4c687b962ece6bb0b3f7cda1a61372179d5fd764",
+        "length": 231,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"visible answer\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "cache-media-purge-boundary": {
+      "stream": {
+        "sha256": "6401220d9a1830f997945e2660d284c398a1fe1e8ff9e531bf4c167502868a5c",
+        "length": 454,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"stable prefix\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":\"tail\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "6401220d9a1830f997945e2660d284c398a1fe1e8ff9e531bf4c167502868a5c",
+        "length": 454,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"stable prefix\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":\"tail\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "responses-stateful-parent": {
+      "stream": {
+        "sha256": "47aace04725b0037f4e6b61344bbd0b97b8a3d5c489318a8ba395b0ac45b19ac",
+        "length": 810,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/s.txt\\\"}\"}}]}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "47aace04725b0037f4e6b61344bbd0b97b8a3d5c489318a8ba395b0ac45b19ac",
+        "length": 810,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:0\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/s.txt\\\"}\"}}]}],\"stream\":false,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    },
+    "blockless-row": {
+      "stream": {
+        "sha256": "4e89e144c4fb8ff3222ce2869f48c51232189e8f2d2aef3d3bb14f89cd930cda",
+        "length": 257,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":\"after\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "4e89e144c4fb8ff3222ce2869f48c51232189e8f2d2aef3d3bb14f89cd930cda",
+        "length": 257,
+        "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":\"after\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}",
+        "contentLength": "present"
+      }
+    }
+  }
+}

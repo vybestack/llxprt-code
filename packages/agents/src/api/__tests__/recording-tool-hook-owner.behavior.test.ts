@@ -21,6 +21,7 @@ import {
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { makeScratchDir } from './helpers/scratch-dir.js';
+import { NativeJournalPageReader } from '@vybestack/llxprt-code-core/journal/native-journal-page-reader.js';
 
 /**
  * @license
@@ -55,6 +56,26 @@ function pathOf(agent: Agent): string {
   const path = agent.session.getRecording().path;
   if (!path) throw new Error('Recording path missing');
   return path;
+}
+
+async function presentations(path: string): Promise<string[]> {
+  const reader = await NativeJournalPageReader.open(path);
+  const result: string[] = [];
+  try {
+    for await (const row of reader.entries()) {
+      const presentation = await reader.presentation(row);
+      if (
+        presentation?.descriptor.type === 'tool-approval' ||
+        presentation?.descriptor.type === 'tool-result'
+      )
+        result.push(
+          `${presentation.descriptor.type}:${presentation.descriptor.callId}`,
+        );
+    }
+    return result;
+  } finally {
+    await reader.close();
+  }
 }
 
 interface CommandInput {
@@ -233,6 +254,18 @@ describe('borrowed facade tool hook owner routing', () => {
             'resumed',
           );
 
+          expect(await presentations(bPath)).toStrictEqual([
+            'tool-approval:owner-b-1',
+            'tool-approval:owner-b-1',
+            'tool-result:owner-b-1',
+          ]);
+          expect(resumedPath).toBe(aPath);
+          expect(await presentations(aPath)).toStrictEqual([
+            'tool-approval:owner-a-1',
+            'tool-approval:owner-a-2',
+            'tool-approval:owner-a-2',
+            'tool-result:owner-a-2',
+          ]);
           const inputs: CommandInput[] = (await readFile(output, 'utf8'))
             .trim()
             .split('\n')

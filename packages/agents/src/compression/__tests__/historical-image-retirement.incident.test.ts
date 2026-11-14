@@ -1,3 +1,4 @@
+import { readHistory } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -52,7 +53,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
     session = new RetirementSession(directory, undefined);
   });
   afterEach(async () => {
-    session.dispose();
+    await session.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -120,7 +121,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
 
   it('keeps canonical history, stored originals and reservations untouched', async () => {
     const { images, newest } = await seedIncident();
-    const before = JSON.stringify(session.history.getAll());
+    const before = JSON.stringify(await readHistory(session.history));
 
     await session.send([imageTurn(newest.reference, 'latest')]);
 
@@ -128,7 +129,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
     const oldest = images[0];
     const original = await session.store.readVerified(oldest.reference);
     expect({
-      history: JSON.stringify(session.history.getAll()) === before,
+      history: JSON.stringify(await readHistory(session.history)) === before,
       originalReadable: Buffer.from(original).equals(Buffer.from(oldest.bytes)),
       activeRequests: session.resolver.accounting().activeRequestCount,
       reserved: await session.store.hasReservations(oldest.reference.contentId),
@@ -153,7 +154,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
   });
 
   it('keeps an explicit 15 MiB-equal budget identical to the default', async () => {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(directory, FIFTEEN_MIB);
     const { images, newest } = await seedIncident();
 
@@ -164,7 +165,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
   });
 
   it('fails with the typed byte error, not silent dropping, for an explicit zero budget', async () => {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(directory, 0);
     const { newest } = await seedIncident();
 
@@ -177,7 +178,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
 
   it('releases reservations and leaves canonical history intact when transport fails', async () => {
     const { newest } = await seedIncident();
-    const before = JSON.stringify(session.history.getAll());
+    const before = JSON.stringify(await readHistory(session.history));
     session.transportFailure = new Error('connection reset');
 
     const error = await rejection(
@@ -186,7 +187,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
 
     expect({
       rejected: error instanceof Error,
-      history: JSON.stringify(session.history.getAll()) === before,
+      history: JSON.stringify(await readHistory(session.history)) === before,
       activeRequests: session.resolver.accounting().activeRequestCount,
     }).toStrictEqual({ rejected: true, history: true, activeRequests: 0 });
   });

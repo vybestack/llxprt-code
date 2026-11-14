@@ -15,10 +15,15 @@
  */
 
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
-import { assertInstanceOf, createProviderCallOptions } from './testSupport.js';
+import { assertInstanceOf } from './testSupport.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  MediaReferenceBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createProviderCallOptions } from './testSupport.js';
+
 import type {
   RequestMediaResolutionService,
   ResolvedMediaRequest,
@@ -30,18 +35,50 @@ const realLlxprtCodeSettingsModule = {
 
 const generateContentStreamMock = vi.fn();
 
-const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
+// The provider releases the SDK `Content[]` once the call settles (issue #854
+// WP09), so requests are snapshotted at call time for later assertions.
+interface SentRequest {
+  contents: Array<{ role: string; parts: Part[] }>;
+}
+let sentRequests: SentRequest[] = [];
+
+const googleGenAIConstructor = vi.fn((options: GeminiApiClientOptions) => ({
   models: {
-    generateContentStream: generateContentStreamMock,
+    async generateContent(): Promise<GenerateContentResponse> {
+      throw new Error('Unexpected non-streaming test request');
+    },
+    async generateContentStream(
+      request: GenerateContentParameters,
+    ): Promise<AsyncIterable<GenerateContentResponse>> {
+      const contents: Content[] = [];
+      if (options.requestContents !== undefined)
+        for await (const content of options.requestContents())
+          contents.push(content);
+      const converted = { ...request, contents };
+      sentRequests.push({
+        contents: structuredClone(contents).map((content) => {
+          if (content.role === undefined || content.parts === undefined)
+            throw new Error('Expected converted Gemini content');
+          return { role: content.role, parts: content.parts };
+        }),
+      });
+      return generateContentStreamMock(converted);
+    },
   },
 }));
 
-import type { CreateGeminiApiClient } from '../gemini/GeminiProvider.js';
-// The factory is injected into GeminiProvider rather than module-mocked:
-// `vi.mock` registers process-wide and bun hoists it ahead of the whole
-// run, so the stub leaked into every suite loaded alongside this one.
-const injectedClientFactory =
-  googleGenAIConstructor as unknown as CreateGeminiApiClient;
+const injectedClientFactory = async (
+  options: GeminiApiClientOptions,
+): Promise<GeminiApiClient> => googleGenAIConstructor(options);
+
+import type {
+  GeminiApiClientOptions,
+  GenerateContentParameters,
+  GenerateContentResponse,
+  Content,
+  GeminiApiClient,
+  Part,
+} from '../gemini/geminiWireTypes.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
@@ -66,6 +103,7 @@ describe('GeminiProvider - MediaBlock support', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     generateContentStreamMock.mockReset();
+    sentRequests = [];
     delete process.env.GEMINI_API_KEY;
   });
 
@@ -77,551 +115,598 @@ describe('GeminiProvider - MediaBlock support', () => {
     }
   });
 
-  it('converts MediaBlock in user messages to inlineData parts', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'I see the image' }],
-              },
-            },
-          ],
-        };
-      },
-    };
-    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
-    process.env.GEMINI_API_KEY = 'test-key';
+  it(
+    'converts MediaBlock in user messages to inlineData parts',
+    convertsUserMedia,
+  );
 
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      injectedClientFactory,
-    );
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          { type: 'text', text: 'What is in this image?' },
+  it(
+    'handles multiple MediaBlocks in a single user message',
+    convertsMultipleMedia,
+  );
+
+  it('handles user message with only MediaBlocks (no text)', convertsMediaOnly);
+
+  it('handles URL-encoded MediaBlock with fileData', convertsUrlMedia);
+
+  it(
+    'handles MediaBlock with data URI (already prefixed)',
+    stripsDataUriPrefix,
+  );
+
+  it(
+    'converts PDF MediaBlock to inlineData (Gemini handles all media generically)',
+    convertsPdfMedia,
+  );
+
+  it(
+    'handles audio and video media generically (no silent drops)',
+    convertsAudioMedia,
+  );
+
+  it(
+    'preserves stream and media-release failures in one aggregate error',
+    preservesGenerationAndReleaseFailures,
+  );
+});
+
+async function convertsUserMedia(): Promise<void> {
+  const fakeStream = {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        candidates: [
           {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-            encoding: 'base64',
+            content: {
+              parts: [{ text: 'I see the image' }],
+            },
           },
         ],
-      },
-    ];
+      };
+    },
+  };
+  generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+  process.env.GEMINI_API_KEY = 'test-key';
 
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-    );
+  const provider = new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
+  const contents: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: 'What is in this image?' },
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          encoding: 'base64',
+        },
+      ],
+    },
+  ];
 
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
+  const generator = provider.generateChatCompletion(
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+    }),
+  );
 
-    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-    const callArgs = generateContentStreamMock.mock.calls[0][0];
-    expect(callArgs.contents).toBeDefined();
-    expect(callArgs.contents).toHaveLength(1);
-    expect(callArgs.contents[0].role).toBe('user');
-    expect(callArgs.contents[0].parts).toHaveLength(2);
-    expect(callArgs.contents[0].parts[0]).toStrictEqual({
-      text: 'What is in this image?',
-    });
-    expect(callArgs.contents[0].parts[1]).toStrictEqual({
-      inlineData: {
-        mimeType: 'image/png',
-        data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-      },
-    });
+  const chunks = [];
+  for await (const chunk of generator) {
+    chunks.push(chunk);
+  }
+
+  expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+  const callArgs = sentRequests[0];
+  expect(callArgs.contents).toBeDefined();
+  expect(callArgs.contents).toHaveLength(1);
+  expect(callArgs.contents[0].role).toBe('user');
+  expect(callArgs.contents[0].parts).toHaveLength(2);
+  expect(callArgs.contents[0].parts[0]).toStrictEqual({
+    text: 'What is in this image?',
   });
-
-  it('handles multiple MediaBlocks in a single user message', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'Two images received' }],
-              },
-            },
-          ],
-        };
-      },
-    };
-    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
-    process.env.GEMINI_API_KEY = 'test-key';
-
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      injectedClientFactory,
-    );
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          { type: 'text', text: 'Compare these images:' },
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'data1',
-            encoding: 'base64',
-          },
-          {
-            type: 'media',
-            mimeType: 'image/jpeg',
-            data: 'data2',
-            encoding: 'base64',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-    );
-
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
-
-    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-    const callArgs = generateContentStreamMock.mock.calls[0][0];
-    expect(callArgs.contents[0].parts).toHaveLength(3);
-    expect(callArgs.contents[0].parts[0]).toStrictEqual({
-      text: 'Compare these images:',
-    });
-    expect(callArgs.contents[0].parts[1]).toStrictEqual({
-      inlineData: {
-        mimeType: 'image/png',
-        data: 'data1',
-      },
-    });
-    expect(callArgs.contents[0].parts[2]).toStrictEqual({
-      inlineData: {
-        mimeType: 'image/jpeg',
-        data: 'data2',
-      },
-    });
-  });
-
-  it('handles user message with only MediaBlocks (no text)', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'Image only message received' }],
-              },
-            },
-          ],
-        };
-      },
-    };
-    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
-    process.env.GEMINI_API_KEY = 'test-key';
-
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      injectedClientFactory,
-    );
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'imagedata',
-            encoding: 'base64',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-    );
-
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
-
-    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-    const callArgs = generateContentStreamMock.mock.calls[0][0];
-    expect(callArgs.contents[0].parts).toHaveLength(1);
-    expect(callArgs.contents[0].parts[0]).toStrictEqual({
-      inlineData: {
-        mimeType: 'image/png',
-        data: 'imagedata',
-      },
-    });
-  });
-
-  it('handles URL-encoded MediaBlock with fileData', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'URL image received' }],
-              },
-            },
-          ],
-        };
-      },
-    };
-    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
-    process.env.GEMINI_API_KEY = 'test-key';
-
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      injectedClientFactory,
-    );
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'https://example.com/image.png',
-            encoding: 'url',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-    );
-
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
-
-    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-    const callArgs = generateContentStreamMock.mock.calls[0][0];
-    expect(callArgs.contents[0].parts[0]).toStrictEqual({
-      fileData: {
-        mimeType: 'image/png',
-        fileUri: 'https://example.com/image.png',
-      },
-    });
-  });
-
-  it('handles MediaBlock with data URI (already prefixed)', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'Data URI image received' }],
-              },
-            },
-          ],
-        };
-      },
-    };
-    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
-    process.env.GEMINI_API_KEY = 'test-key';
-
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      injectedClientFactory,
-    );
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-            encoding: 'base64',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-    );
-
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
-
-    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-    const callArgs = generateContentStreamMock.mock.calls[0][0];
-    // Gemini expects just the base64 data, not the data URI prefix
-    expect(callArgs.contents[0].parts[0]).toStrictEqual({
-      inlineData: {
-        mimeType: 'image/png',
-        data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-      },
-    });
-  });
-
-  it('converts PDF MediaBlock to inlineData (Gemini handles all media generically)', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'PDF content analyzed' }],
-              },
-            },
-          ],
-        };
-      },
-    };
-    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
-    process.env.GEMINI_API_KEY = 'test-key';
-
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      injectedClientFactory,
-    );
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          { type: 'text', text: 'Summarize this document' },
-          {
-            type: 'media',
-            mimeType: 'application/pdf',
-            data: 'JVBERi0xLjQ=',
-            encoding: 'base64',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-    );
-
-    for await (const _chunk of generator) {
-      /* drain */
-    }
-
-    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-    const callArgs = generateContentStreamMock.mock.calls[0][0];
-    expect(callArgs.contents[0].parts).toHaveLength(2);
-    expect(callArgs.contents[0].parts[1]).toStrictEqual({
-      inlineData: {
-        mimeType: 'application/pdf',
-        data: 'JVBERi0xLjQ=',
-      },
-    });
-  });
-
-  it('handles audio and video media generically (no silent drops)', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'Media received' }],
-              },
-            },
-          ],
-        };
-      },
-    };
-    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
-    process.env.GEMINI_API_KEY = 'test-key';
-
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      injectedClientFactory,
-    );
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          { type: 'text', text: 'Analyze this' },
-          {
-            type: 'media',
-            mimeType: 'audio/mpeg',
-            data: 'audiodata',
-            encoding: 'base64',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-    );
-
-    for await (const _chunk of generator) {
-      /* drain */
-    }
-
-    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-    const callArgs = generateContentStreamMock.mock.calls[0][0];
-    expect(callArgs.contents[0].parts).toHaveLength(2);
-    expect(callArgs.contents[0].parts[1]).toStrictEqual({
-      inlineData: {
-        mimeType: 'audio/mpeg',
-        data: 'audiodata',
-      },
-    });
-  });
-
-  it('preserves stream and media-release failures in one aggregate error', async () => {
-    const contentId =
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-    const reference = {
-      type: 'media' as const,
+  expect(callArgs.contents[0].parts[1]).toStrictEqual({
+    inlineData: {
       mimeType: 'image/png',
-      encoding: 'reference' as const,
-      contentId,
-      originalContentId: contentId,
-      selectedContentId: contentId,
-      originalObject: {
-        contentId,
-        mimeType: 'image/png',
-        byteLength: 3,
-        normalizedBase64Length: 4,
-      },
-      selectedObject: {
-        contentId,
-        mimeType: 'image/png',
-        byteLength: 3,
-        normalizedBase64Length: 4,
-      },
-      transformation: {
-        policyId: 'identity',
-        policyVersion: 1,
-        parameters: {},
-      },
-      byteLength: 3,
-      normalizedBase64Length: 4,
-      semanticMetadata: {},
-    };
-    const materialized: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    },
+  });
+}
+
+async function convertsMultipleMedia(): Promise<void> {
+  const fakeStream = {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        candidates: [
           {
-            type: 'media',
-            mimeType: 'image/png',
-            encoding: 'base64',
-            data: 'QUJD',
+            content: {
+              parts: [{ text: 'Two images received' }],
+            },
           },
         ],
-      },
-    ];
-    const request: ResolvedMediaRequest = {
-      withContents: (consume) => consume(materialized),
-      registerCleanup: () => {},
-      accounting: () => ({
-        selectedReferenceCount: 1,
-        uniqueContentCount: 1,
-        selectedNormalizedBytes: 4,
-        materializedNormalizedBytes: 4,
-        storeReadCount: 1,
-        reservedContentCount: 1,
-        released: false,
-      }),
+      };
+    },
+  };
+  generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+  process.env.GEMINI_API_KEY = 'test-key';
+
+  const provider = new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
+  const contents: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: 'Compare these images:' },
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'data1',
+          encoding: 'base64',
+        },
+        {
+          type: 'media',
+          mimeType: 'image/jpeg',
+          data: 'data2',
+          encoding: 'base64',
+        },
+      ],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+    }),
+  );
+
+  const chunks = [];
+  for await (const chunk of generator) {
+    chunks.push(chunk);
+  }
+
+  expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+  const callArgs = sentRequests[0];
+  expect(callArgs.contents[0].parts).toHaveLength(3);
+  expect(callArgs.contents[0].parts[0]).toStrictEqual({
+    text: 'Compare these images:',
+  });
+  expect(callArgs.contents[0].parts[1]).toStrictEqual({
+    inlineData: {
+      mimeType: 'image/png',
+      data: 'data1',
+    },
+  });
+  expect(callArgs.contents[0].parts[2]).toStrictEqual({
+    inlineData: {
+      mimeType: 'image/jpeg',
+      data: 'data2',
+    },
+  });
+}
+
+async function convertsMediaOnly(): Promise<void> {
+  const fakeStream = {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Image only message received' }],
+            },
+          },
+        ],
+      };
+    },
+  };
+  generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+  process.env.GEMINI_API_KEY = 'test-key';
+
+  const provider = new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
+  const contents: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'imagedata',
+          encoding: 'base64',
+        },
+      ],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+    }),
+  );
+
+  const chunks = [];
+  for await (const chunk of generator) {
+    chunks.push(chunk);
+  }
+
+  expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+  const callArgs = sentRequests[0];
+  expect(callArgs.contents[0].parts).toHaveLength(1);
+  expect(callArgs.contents[0].parts[0]).toStrictEqual({
+    inlineData: {
+      mimeType: 'image/png',
+      data: 'imagedata',
+    },
+  });
+}
+
+async function convertsUrlMedia(): Promise<void> {
+  const fakeStream = {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'URL image received' }],
+            },
+          },
+        ],
+      };
+    },
+  };
+  generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+  process.env.GEMINI_API_KEY = 'test-key';
+
+  const provider = new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
+  const contents: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'https://example.com/image.png',
+          encoding: 'url',
+        },
+      ],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+    }),
+  );
+
+  const chunks = [];
+  for await (const chunk of generator) {
+    chunks.push(chunk);
+  }
+
+  expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+  const callArgs = sentRequests[0];
+  expect(callArgs.contents[0].parts[0]).toStrictEqual({
+    fileData: {
+      mimeType: 'image/png',
+      fileUri: 'https://example.com/image.png',
+    },
+  });
+}
+
+async function stripsDataUriPrefix(): Promise<void> {
+  const fakeStream = {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Data URI image received' }],
+            },
+          },
+        ],
+      };
+    },
+  };
+  generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+  process.env.GEMINI_API_KEY = 'test-key';
+
+  const provider = new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
+  const contents: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          encoding: 'base64',
+        },
+      ],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+    }),
+  );
+
+  const chunks = [];
+  for await (const chunk of generator) {
+    chunks.push(chunk);
+  }
+
+  expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+  const callArgs = sentRequests[0];
+  // Gemini expects just the base64 data, not the data URI prefix
+  expect(callArgs.contents[0].parts[0]).toStrictEqual({
+    inlineData: {
+      mimeType: 'image/png',
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    },
+  });
+}
+
+async function convertsPdfMedia(): Promise<void> {
+  const fakeStream = {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'PDF content analyzed' }],
+            },
+          },
+        ],
+      };
+    },
+  };
+  generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+  process.env.GEMINI_API_KEY = 'test-key';
+
+  const provider = new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
+  const contents: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: 'Summarize this document' },
+        {
+          type: 'media',
+          mimeType: 'application/pdf',
+          data: 'JVBERi0xLjQ=',
+          encoding: 'base64',
+        },
+      ],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+    }),
+  );
+
+  for await (const _chunk of generator) {
+    /* drain */
+  }
+
+  expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+  const callArgs = sentRequests[0];
+  expect(callArgs.contents[0].parts).toHaveLength(2);
+  expect(callArgs.contents[0].parts[1]).toStrictEqual({
+    inlineData: {
+      mimeType: 'application/pdf',
+      data: 'JVBERi0xLjQ=',
+    },
+  });
+}
+
+async function convertsAudioMedia(): Promise<void> {
+  const fakeStream = {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Media received' }],
+            },
+          },
+        ],
+      };
+    },
+  };
+  generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+  process.env.GEMINI_API_KEY = 'test-key';
+
+  const provider = new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
+  const contents: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: 'Analyze this' },
+        {
+          type: 'media',
+          mimeType: 'audio/mpeg',
+          data: 'audiodata',
+          encoding: 'base64',
+        },
+      ],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+    }),
+  );
+
+  for await (const _chunk of generator) {
+    /* drain */
+  }
+
+  expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+  const callArgs = sentRequests[0];
+  expect(callArgs.contents[0].parts).toHaveLength(2);
+  expect(callArgs.contents[0].parts[1]).toStrictEqual({
+    inlineData: {
+      mimeType: 'audio/mpeg',
+      data: 'audiodata',
+    },
+  });
+}
+
+async function preservesGenerationAndReleaseFailures(): Promise<void> {
+  const reference = createFailureMediaReference();
+  const materialized: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          encoding: 'base64',
+          data: 'QUJD',
+        },
+      ],
+    },
+  ];
+  const request: ResolvedMediaRequest = {
+    withContents: (consume) => consume(materialized),
+    registerCleanup: () => {},
+    accounting: () => ({
+      selectedReferenceCount: 1,
+      uniqueContentCount: 1,
+      selectedNormalizedBytes: 4,
+      materializedNormalizedBytes: 4,
+      storeReadCount: 1,
+      reservedContentCount: 1,
+      released: false,
+    }),
+    release: async () => {
+      throw new Error('media release failed');
+    },
+  };
+  const mediaResolver: RequestMediaResolutionService = {
+    verify: async () => {},
+    resolve: async () => ({ ...request, release: async () => {} }),
+    openReservations: () => ({
       release: async () => {
         throw new Error('media release failed');
       },
-    };
-    const mediaResolver: RequestMediaResolutionService = {
-      resolve: async () => request,
-    };
-    generateContentStreamMock.mockResolvedValueOnce({
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          throw new Error('stream generation failed');
-        },
-      }),
-    });
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      injectedClientFactory,
-    );
-    const options = createProviderCallOptions({
-      providerName: provider.name,
-      contents: [{ speaker: 'human', blocks: [reference] }],
-    });
-    const iterator = bindProviderMedia(
-      provider,
-      mediaResolver,
-      undefined,
-    ).generateChatCompletion(options);
-
-    let error: unknown;
-    try {
-      for await (const _content of iterator) {
-        throw new Error('Unexpected Gemini content');
-      }
-    } catch (reason) {
-      error = reason;
-    }
-
-    assertInstanceOf(
-      error,
-      AggregateError,
-      'Expected generation and release AggregateError',
-    );
-    expect(error.errors).toStrictEqual([
-      new Error('stream generation failed'),
-      new Error('media release failed'),
-    ]);
+    }),
+  };
+  generateContentStreamMock.mockResolvedValueOnce({
+    [Symbol.asyncIterator]: () => ({
+      next: async () => {
+        throw new Error('stream generation failed');
+      },
+    }),
   });
-});
+  const provider = new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
+  const options = createProviderCallOptions({
+    providerName: provider.name,
+    contents: [{ speaker: 'human', blocks: [reference] }],
+  });
+  const iterator = bindProviderMedia(
+    provider,
+    mediaResolver,
+    undefined,
+  ).generateChatCompletion(options);
+
+  let error: unknown;
+  try {
+    for await (const _content of iterator) {
+      throw new Error('Unexpected Gemini content');
+    }
+  } catch (reason) {
+    error = reason;
+  }
+
+  assertInstanceOf(
+    error,
+    AggregateError,
+    'Expected generation and release AggregateError',
+  );
+  expect(error.errors).toStrictEqual([
+    new Error('stream generation failed'),
+    new AggregateError(
+      [new Error('media release failed')],
+      'Failed to release media request',
+    ),
+  ]);
+}
+
+function createFailureMediaReference(): MediaReferenceBlock {
+  const contentId =
+    'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  return {
+    type: 'media' as const,
+    mimeType: 'image/png',
+    encoding: 'reference' as const,
+    contentId,
+    originalContentId: contentId,
+    selectedContentId: contentId,
+    originalObject: {
+      contentId,
+      mimeType: 'image/png',
+      byteLength: 3,
+      normalizedBase64Length: 4,
+    },
+    selectedObject: {
+      contentId,
+      mimeType: 'image/png',
+      byteLength: 3,
+      normalizedBase64Length: 4,
+    },
+    transformation: {
+      policyId: 'identity',
+      policyVersion: 1,
+      parameters: {},
+    },
+    byteLength: 3,
+    normalizedBase64Length: 4,
+    semanticMetadata: {},
+  };
+}

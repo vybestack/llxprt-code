@@ -274,7 +274,6 @@ describe('useAgentStream', () => {
           props.client,
           props.runtime,
           {
-            history: props.history,
             addItem: props.addItem,
             settings: props.loadedSettings,
             onDebugMessage: props.onDebugMessage,
@@ -461,7 +460,6 @@ describe('useAgentStream', () => {
         agentForHook1,
         createStreamRuntimeForTest(mockConfig),
         {
-          history: [],
           addItem: mockAddItem,
           settings: mockLoadedSettings,
           onDebugMessage: mockOnDebugMessage,
@@ -575,7 +573,6 @@ describe('useAgentStream', () => {
         agentForHook2,
         createStreamRuntimeForTest(mockConfig),
         {
-          history: [],
           addItem: mockAddItem,
           settings: mockLoadedSettings,
           onDebugMessage: mockOnDebugMessage,

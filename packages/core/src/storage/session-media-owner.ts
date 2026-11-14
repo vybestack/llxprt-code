@@ -23,6 +23,7 @@ export class SessionMediaOwner {
       rootDirectory: join(projectDirectory, 'media-live', randomUUID()),
       quotaBytes,
       recordingArchive: this.archive,
+      lockLifetime: 'store',
     });
   }
 

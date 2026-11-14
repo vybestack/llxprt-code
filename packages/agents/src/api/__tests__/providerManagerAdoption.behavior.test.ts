@@ -174,7 +174,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
             manager,
             oauth,
             runtimeId,
-            configureProviderTokenizer(manager),
+            configureProviderTokenizer(manager, config.scratchRoots),
             undefined,
             process.env.LLXPRT_FAKE_RESPONSES,
           ),

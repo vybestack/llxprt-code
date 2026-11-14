@@ -1,3 +1,4 @@
+import { replayableContents } from '../utils/collectContents.js';
 /**
  * @plan PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement REQ-SP2-001
@@ -10,11 +11,11 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
+import { type ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -28,104 +29,102 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 
-void vi.mock('@anthropic-ai/sdk', () => {
-  class FakeAnthropic {
-    static created: Array<{
-      instanceId: symbol;
-      options: Record<string, unknown>;
-    }> = [];
+class FakeAnthropic {
+  static created: Array<{
+    instanceId: symbol;
+    options: Record<string, unknown>;
+  }> = [];
 
-    static requests: Array<{
-      request: unknown;
-    }> = [];
+  static requests: Array<{
+    request: unknown;
+  }> = [];
 
-    static reset(): void {
-      FakeAnthropic.created = [];
-      FakeAnthropic.requests = [];
-    }
-
-    readonly instanceId: symbol;
-    readonly options: Record<string, unknown>;
-    readonly messages: {
-      create: ReturnType<typeof vi.fn>;
-    };
-    readonly post: ReturnType<typeof createAnthropicRawPostTestAdapter>['post'];
-
-    constructor(opts: Record<string, unknown>) {
-      this.instanceId = Symbol('anthropic-client');
-      this.options = opts;
-      FakeAnthropic.created.push({
-        instanceId: this.instanceId,
-        options: opts,
-      });
-      this.messages = {
-        create: vi.fn(async (request: Record<string, unknown>) => {
-          FakeAnthropic.requests.push({ request });
-
-          if (request['stream'] === true) {
-            // Return async iterable for streaming
-            return {
-              async *[Symbol.asyncIterator]() {
-                yield {
-                  type: 'message_start',
-                  message: {
-                    id: 'msg_test',
-                    type: 'message',
-                    role: 'assistant',
-                    content: [],
-                    model: 'claude-3-sonnet-20240229',
-                    stop_reason: null,
-                    stop_sequence: null,
-                    usage: { input_tokens: 10, output_tokens: 0 },
-                  },
-                };
-                yield {
-                  type: 'content_block_start',
-                  index: 0,
-                  content_block: { type: 'text', text: '' },
-                };
-                yield {
-                  type: 'content_block_delta',
-                  index: 0,
-                  delta: { type: 'text_delta', text: 'ok' },
-                };
-                yield {
-                  type: 'content_block_stop',
-                  index: 0,
-                };
-                yield {
-                  type: 'message_delta',
-                  delta: { stop_reason: 'end_turn', stop_sequence: null },
-                  usage: { output_tokens: 1 },
-                };
-                yield {
-                  type: 'message_stop',
-                };
-              },
-            };
-          }
-
-          // Non-streaming response
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'ok',
-              },
-            ],
-            usage: {
-              input_tokens: 0,
-              output_tokens: 0,
-            },
-          };
-        }),
-      };
-      this.post = createAnthropicRawPostTestAdapter(this.messages.create).post;
-    }
+  static reset(): void {
+    FakeAnthropic.created = [];
+    FakeAnthropic.requests = [];
   }
 
-  return { default: FakeAnthropic };
-});
+  readonly instanceId: symbol;
+  readonly options: Record<string, unknown>;
+  readonly messages: {
+    create: ReturnType<typeof vi.fn>;
+  };
+  readonly post: ReturnType<typeof createAnthropicRawPostTestAdapter>['post'];
+
+  constructor(opts: Record<string, unknown>) {
+    this.instanceId = Symbol('anthropic-client');
+    this.options = opts;
+    FakeAnthropic.created.push({
+      instanceId: this.instanceId,
+      options: opts,
+    });
+    this.messages = {
+      create: vi.fn(async (request: Record<string, unknown>) => {
+        FakeAnthropic.requests.push({ request });
+
+        if (request['stream'] === true) {
+          // Return async iterable for streaming
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: 'message_start',
+                message: {
+                  id: 'msg_test',
+                  type: 'message',
+                  role: 'assistant',
+                  content: [],
+                  model: 'claude-3-sonnet-20240229',
+                  stop_reason: null,
+                  stop_sequence: null,
+                  usage: { input_tokens: 10, output_tokens: 0 },
+                },
+              };
+              yield {
+                type: 'content_block_start',
+                index: 0,
+                content_block: { type: 'text', text: '' },
+              };
+              yield {
+                type: 'content_block_delta',
+                index: 0,
+                delta: { type: 'text_delta', text: 'ok' },
+              };
+              yield {
+                type: 'content_block_stop',
+                index: 0,
+              };
+              yield {
+                type: 'message_delta',
+                delta: { stop_reason: 'end_turn', stop_sequence: null },
+                usage: { output_tokens: 1 },
+              };
+              yield {
+                type: 'message_stop',
+              };
+            },
+          };
+        }
+
+        // Non-streaming response
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'ok',
+            },
+          ],
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+          },
+        };
+      }),
+    };
+    this.post = createAnthropicRawPostTestAdapter(this.messages.create).post;
+  }
+}
+
+void vi.mock('@anthropic-ai/sdk', () => ({ default: FakeAnthropic }));
 
 const FakeAnthropicClass = Anthropic as unknown as {
   created: Array<{
@@ -183,21 +182,28 @@ const createSettings = (runtimeId: string): SettingsService => {
 
 function buildCallOptions(
   provider: AnthropicProvider,
-  overrides: Omit<ProviderCallOptionsInit, 'providerName'> = {},
-) {
+  overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> & {
+    contents?: readonly IContent[];
+  } = {},
+): GenerateChatOptions {
   const { contents = [], ...rest } = overrides;
-  return createProviderCallOptions({
-    providerName: provider.name,
-    contents,
-    ...rest,
-  });
+  const stream = replayableContents(contents);
+  return {
+    ...createProviderCallOptions({
+      providerName: provider.name,
+      contents: stream,
+      ...rest,
+    }),
+    contents: stream,
+  };
+}
+
+function resetRuntime(): void {
+  FakeAnthropicClass.reset();
 }
 
 describe('Anthropic provider stateless contract tests', () => {
-  beforeEach(() => {
-    FakeAnthropicClass.reset();
-    // Set up default runtime context for tests
-  });
+  beforeEach(resetRuntime);
 
   it('scopes client cache by runtime id @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 1-3', async () => {
     const provider = new TestAnthropicProvider();
@@ -229,6 +235,10 @@ describe('Anthropic provider stateless contract tests', () => {
     expect(runtimeClients).toHaveLength(2);
     expect(runtimeClients[0].instanceId).not.toBe(runtimeClients[1].instanceId);
   });
+});
+
+describe('Anthropic provider stateless contract: fresh clients', () => {
+  beforeEach(resetRuntime);
 
   it('creates fresh client for each call @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002', async () => {
     const provider = new TestAnthropicProvider();
@@ -285,6 +295,10 @@ describe('Anthropic provider stateless contract tests', () => {
     expect(runtimeClients[1].options.apiKey).toBe('token-B');
     expect(runtimeClients[2].options.apiKey).toBe('token-A');
   });
+});
+
+describe('Anthropic provider stateless contract: request settings', () => {
+  beforeEach(resetRuntime);
 
   it('gets model params from SettingsService without caching @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003', async () => {
     const provider = new TestAnthropicProvider();
@@ -344,6 +358,10 @@ describe('Anthropic provider stateless contract tests', () => {
     });
     expect(getEphemerals).not.toHaveBeenCalled();
   });
+});
+
+describe('Anthropic provider stateless contract: auth tokens', () => {
+  beforeEach(resetRuntime);
 
   it('reuses the projected runtime token for the prepared transport attempt', async () => {
     const provider = new TestAnthropicProvider();

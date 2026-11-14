@@ -95,7 +95,9 @@ export function buildExtraArgs(
  * containing cmd.exe special characters (such as inline JSON profiles).
  */
 export function nativeBunCommand(): string {
-  return process.versions.bun === undefined ? 'bun' : process.execPath;
+  const versions: Readonly<Record<string, string | undefined>> =
+    process.versions;
+  return versions.bun === undefined ? 'bun' : process.execPath;
 }
 
 /**

@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -11,6 +12,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { resumeOwnerSession } from './resumeOwnerSession.js';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 
 const fixture = fileURLToPath(
   new URL(
@@ -61,14 +63,13 @@ describe('interactive owner session replay', () => {
     await first.session.setRecording({ enabled: false });
 
     const next = await build(root, 'second-owner');
-    const replay = await resumeOwnerSession(
+    await resumeOwnerSession(
       next.session.resume.bind(next.session),
       'first-owner',
-      'allowed',
       next.session.listBrowserTargetsDetailed.bind(next.session),
     );
     expect(
-      replay.history.some((item) =>
+      (await Array.fromAsync(next.streamHistory())).some((item) =>
         item.blocks.some(
           (block) =>
             block.type === 'text' && block.text.includes('replayed owner turn'),
@@ -76,7 +77,7 @@ describe('interactive owner session replay', () => {
       ),
     ).toBe(true);
     expect(
-      replay.uiHistory.some(
+      (await readJournalItems(next)).some(
         (item) => item.type === 'user' && item.text === 'replayed owner turn',
       ),
     ).toBe(true);
@@ -104,14 +105,13 @@ describe('interactive owner session replay', () => {
     }
     const checkpoint = await agent.session.createCheckpoint('fork-point');
     const source = agent.session.getRecording().path;
-    const replay = await resumeOwnerSession(
+    await resumeOwnerSession(
       agent.session.resume.bind(agent.session),
       checkpoint.checkpointId,
-      'allowed',
       agent.session.listBrowserTargetsDetailed.bind(agent.session),
     );
     expect(
-      replay.uiHistory.some(
+      (await readJournalItems(agent)).some(
         (item) => item.type === 'user' && item.text === 'before owner fork',
       ),
     ).toBe(true);
@@ -139,20 +139,21 @@ describe('interactive owner session replay', () => {
       resumeOwnerSession(
         agent.session.resume.bind(agent.session),
         'absent-owner',
-        'allowed',
         agent.session.listBrowserTargetsDetailed.bind(agent.session),
       ),
     ).rejects.toThrow('Failed to resume session');
     await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'warning',
-      message: 'still-running-after-failed-resume',
+      type: 'directories_changed',
+      directories: ['/still-running-after-failed-resume'],
     });
     const path = agent.session.getRecording().path;
     if (path === undefined) throw new Error('Recording was not materialized');
-    expect(await readFile(path, 'utf8')).toContain(
-      'still-running-after-failed-resume',
-    );
+    expect((await readRecordedFacts(path)).directories).toStrictEqual([
+      '/still-running-after-failed-resume',
+    ]);
+    expect(
+      JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+    ).toContain('retain failed resume session');
     await agent.session.setRecording({ enabled: false });
     expect(
       (await readdir(dirname(path))).filter((file) => file.endsWith('.lock')),

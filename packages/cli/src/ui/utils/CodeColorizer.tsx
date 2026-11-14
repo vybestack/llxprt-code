@@ -22,6 +22,7 @@ import {
 } from '../components/shared/MaxSizedBox.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { LruCache } from '@vybestack/llxprt-code-core';
 
 // Configure theming and parsing utilities.
 const lowlight = createLowlight(common);
@@ -205,6 +206,7 @@ export function colorizeCode(
       }
     }
 
+    const highlightedLines = new LruCache<string, React.ReactNode>(128);
     return (
       <MaxSizedBox
         maxHeight={availableHeight}
@@ -213,11 +215,15 @@ export function colorizeCode(
         overflowDirection="top"
       >
         {lines.map((line, index) => {
-          const contentToRender = highlightAndRenderLine(
-            line,
-            language,
-            activeTheme,
-          );
+          let contentToRender = highlightedLines.get(line);
+          if (contentToRender === undefined) {
+            contentToRender = highlightAndRenderLine(
+              line,
+              language,
+              activeTheme,
+            );
+            highlightedLines.set(line, contentToRender);
+          }
           return (
             <Box key={index}>
               {showLineNumbers && (

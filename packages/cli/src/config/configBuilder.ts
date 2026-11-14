@@ -1,3 +1,7 @@
+import {
+  NamedWriterOwnership,
+  ScratchRootOwner,
+} from '@vybestack/llxprt-code-core';
 import { registerActivateSkillTool } from '@vybestack/llxprt-code-agents';
 import { loadSettings } from './settings.js';
 /**
@@ -327,6 +331,8 @@ export function buildConfig(input: ConfigBuildInput): Config {
   );
 
   return new Config({
+    namedWriters: new NamedWriterOwnership(),
+    scratchRoots: new ScratchRootOwner(),
     ...buildSessionBaseArgs(input, toolConfig, telemetry, sanitizationConfig),
     ...buildFeatureArgs(input, hooksConfig),
   });

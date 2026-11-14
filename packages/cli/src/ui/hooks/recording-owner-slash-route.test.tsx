@@ -1,3 +1,4 @@
+import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import {
   createCommandRegistrationFixture,
   createCommandRegistryFixture,
@@ -13,7 +14,7 @@ import { useFakeResponsesReplay } from '../../../../agents/src/api/__tests__/hel
 import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { describe, expect, it, vi } from 'bun:test';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
-import { readFile } from 'node:fs/promises';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { act } from 'react';
 import { Agent } from '@vybestack/llxprt-code-agents';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
@@ -147,11 +148,19 @@ function slashInputs(
     ...commandRegistry,
     ...createCommandRegistrationFixture(_agent),
     ...createUnconfiguredHistoryReaders(),
+    writeOutput: async (item) => {
+      if (recordingOwner !== 'agent') return;
+      await appendJournalUiItem(
+        { appendDisplay: _agent.session.appendDisplay.bind(_agent.session) },
+        undefined,
+        item,
+      );
+    },
     ports: createUnconfiguredSlashCommandPorts(),
     settings: createMockSettings({}),
     addItem: () => 0,
     clearItems: () => {},
-    loadHistory: () => {},
+
     refreshStatic: () => {},
     toggleVimEnabled: async () => true,
     setIsProcessing: () => {},
@@ -190,6 +199,57 @@ function slashInputs(
 }
 
 describe('interactive slash command recording route', () => {
+  it('commits command output to the journal before resolving without a ledger write', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.session.setRecording({ enabled: true });
+      const inputs = slashInputs(agent, 'agent');
+      const { result, unmount } = renderHook(
+        () =>
+          useSlashCommandProcessorCore({
+            ...inputs,
+            addItem: () => {
+              throw new Error('Unexpected ledger write');
+            },
+          }),
+        { wrapper },
+      );
+      try {
+        await waitFor(() => {
+          expect(
+            result.current.slashCommands?.some((cmd) => cmd.name === 'chat'),
+          ).toBe(true);
+        });
+        await act(async () => {
+          await result.current.handleSlashCommand('/unknown-journal-command');
+        });
+        const path = agent.session.getRecording().path;
+        if (!path) throw new Error('Missing output journal');
+        const { NativeJournalCursor } = await import(
+          '../stores/turn/native-journal-cursor.js'
+        );
+        const cursor = await NativeJournalCursor.open(path, {}, 16);
+        try {
+          const entries = (await cursor.pageBack(16)).entries;
+          expect(
+            entries.flatMap((entry) =>
+              entry.kind === 'projected' ? [entry.item.text] : [],
+            ),
+          ).toStrictEqual([
+            'Unknown command: /unknown-journal-command',
+            '/unknown-journal-command',
+          ]);
+          expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual(
+            [],
+          );
+        } finally {
+          await cursor.close();
+        }
+      } finally {
+        unmount();
+      }
+    });
+  }, 30000);
+
   useFakeResponsesReplay('multi-turn-text.jsonl');
   it('selects the owner handler through the real processor and command context', async () => {
     const route = await openRouteAAgent({ config: { interactive: true } });
@@ -217,7 +277,11 @@ describe('interactive slash command recording route', () => {
       await act(async () => {
         await result.current.handleSlashCommand('/chat save owner-route');
       });
-      expect(await readFile(path, 'utf8')).toContain('owner-route');
+      expect(
+        (await agent.session.listCheckpoints()).map(
+          (checkpoint) => checkpoint.name,
+        ),
+      ).toContain('owner-route');
       unmount();
     } finally {
       await route.close();
@@ -250,7 +314,11 @@ describe('interactive slash command recording route', () => {
       await act(async () => {
         await result.current.handleSlashCommand('/chat save raw-default');
       });
-      expect(await readFile(path, 'utf8')).not.toContain('raw-default');
+      expect(
+        (await agent.session.listCheckpoints()).map(
+          (checkpoint) => checkpoint.name,
+        ),
+      ).not.toContain('raw-default');
       unmount();
     } finally {
       await route.close();

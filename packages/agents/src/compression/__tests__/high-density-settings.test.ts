@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { afterEach as closePolicyFixtures } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -38,6 +39,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -79,6 +81,7 @@ function buildRuntimeContext(
   const settingsOwner = new SessionSettingsOwner(settingsService);
   policyRoots.push(settingsOwner);
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
       settingsOwner.prepareProviderInvocation(
@@ -198,8 +201,7 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
     expect(typeof strategy.optimize).toBe('function');
   });
 
-  /** @requirement REQ-HD-004.2 */
-  it('HighDensityStrategy from factory has compress method', () => {
+  it('HighDensityStrategy from factory has the journal compression method', () => {
     const strategy = getCompressionStrategy(
       'high-density',
       undefined,
@@ -207,7 +209,9 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
       undefined,
       undefined,
     );
-    expect(typeof strategy.compress).toBe('function');
+    expect('compressDisk' in strategy && typeof strategy.compressDisk).toBe(
+      'function',
+    );
   });
 });
 

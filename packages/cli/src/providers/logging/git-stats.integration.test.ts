@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
@@ -11,44 +12,49 @@ import { tmpdir } from 'node:os';
 import { GitStatsTracker } from './git-stats.js';
 import { Config } from '@vybestack/llxprt-code-core';
 
-describe('Git Stats Integration', () => {
-  let tempDir: string;
-  let conversationLogDir: string;
-  let config: Config;
-  let tracker: GitStatsTracker;
+let tempDir: string;
 
-  beforeEach(async () => {
-    // Create temporary directories for testing
-    tempDir = await fs.mkdtemp(join(tmpdir(), 'git-stats-test-'));
-    conversationLogDir = join(tempDir, '.llxprt', 'conversations');
-    await fs.mkdir(conversationLogDir, { recursive: true });
+let conversationLogDir: string;
 
-    // Create config with temp directory
-    const randomId = Math.floor(Math.random() * 10000);
-    config = new Config({
-      sessionId: `test-session-${randomId}`,
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'gemini-flash',
-      telemetry: {
-        logConversations: true,
-        conversationLogPath: conversationLogDir,
-      },
-    });
+let config: Config;
 
-    tracker = new GitStatsTracker(config);
+let tracker: GitStatsTracker;
+async function setupGitStatsIntegrationBeforeEach(): Promise<void> {
+  // Create temporary directories for testing
+  tempDir = await fs.mkdtemp(join(tmpdir(), 'git-stats-test-'));
+  conversationLogDir = join(tempDir, '.llxprt', 'conversations');
+  await fs.mkdir(conversationLogDir, { recursive: true });
+
+  // Create config with temp directory
+  const randomId = Math.floor(Math.random() * 10000);
+  config = new Config({
+    sessionId: `test-session-${randomId}`,
+    targetDir: tempDir,
+    debugMode: false,
+    cwd: tempDir,
+    model: 'gemini-flash',
+    telemetry: {
+      logConversations: true,
+      conversationLogPath: conversationLogDir,
+    },
   });
 
-  afterEach(async () => {
-    // Clean up temporary directory
-    try {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    } catch (error) {
-      // Ignore cleanup errors in tests
-      globalThis.console.warn('Failed to cleanup temp directory:', error);
-    }
-  });
+  tracker = new GitStatsTracker(config);
+}
+
+async function setupGitStatsIntegrationAfterEach(): Promise<void> {
+  // Clean up temporary directory
+  try {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  } catch (error) {
+    // Ignore cleanup errors in tests
+    globalThis.console.warn('Failed to cleanup temp directory:', error);
+  }
+}
+
+describe('Git Stats Integration / file edits and persistence', () => {
+  beforeEach(setupGitStatsIntegrationBeforeEach);
+  afterEach(setupGitStatsIntegrationAfterEach);
 
   it('should track stats during actual file edits', async () => {
     const testFile = join(tempDir, 'test.ts');
@@ -131,6 +137,11 @@ describe('Git Stats Integration', () => {
       sessionId: config.getSessionId(),
     });
   });
+});
+
+describe('Git Stats Integration / displayed and concurrent stats', () => {
+  beforeEach(setupGitStatsIntegrationBeforeEach);
+  afterEach(setupGitStatsIntegrationAfterEach);
 
   it('should display stats in /logging show command simulation', async () => {
     const testFiles = [
@@ -226,6 +237,11 @@ describe('Git Stats Integration', () => {
     await newTracker.trackFileEdit('file2.ts', 'another', 'another file');
     expect(newTracker.getSummary().filesChanged).toBe(1);
   });
+});
+
+describe('Git Stats Integration / recreation and filesystem errors', () => {
+  beforeEach(setupGitStatsIntegrationBeforeEach);
+  afterEach(setupGitStatsIntegrationAfterEach);
 
   it('should handle file system errors gracefully', async () => {
     // Test with read-only directory (if possible to create)
@@ -325,12 +341,17 @@ describe('Git Stats Integration', () => {
     expect(summary.totalLinesAdded).toBe(2);
     expect(summary.totalLinesRemoved).toBe(1);
   });
+});
+
+describe('Git Stats Integration / large files, encoding and network isolation', () => {
+  beforeEach(setupGitStatsIntegrationBeforeEach);
+  afterEach(setupGitStatsIntegrationAfterEach);
 
   it('should validate no external network calls during integration', async () => {
     // Set up network monitoring
     const originalFetch = global.fetch;
     const fetchSpy = vi.fn();
-    global.fetch = fetchSpy;
+    global.fetch = withFetchPreconnect(fetchSpy);
 
     try {
       // Perform various operations that could potentially make network calls

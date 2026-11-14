@@ -144,7 +144,10 @@ describe('profile candidate operations', () => {
       firstCredentials().authority,
       firstCallerRelease,
     );
-    const firstCallerTokenizer = configureProviderTokenizer(firstCallerManager);
+    const firstCallerTokenizer = configureProviderTokenizer(
+      firstCallerManager,
+      firstCallerConfig.scratchRoots,
+    );
     const firstCallerContent = createRuntimeContentGeneratorFactory();
     const firstCallerOAuth = acquirePreferredOAuth(
       undefined,
@@ -308,8 +311,10 @@ describe('profile candidate operations', () => {
       secondCredentials().authority,
       secondCallerRelease,
     );
-    const secondCallerTokenizer =
-      configureProviderTokenizer(secondCallerManager);
+    const secondCallerTokenizer = configureProviderTokenizer(
+      secondCallerManager,
+      firstCallerConfig.scratchRoots,
+    );
     const secondCallerContent = createRuntimeContentGeneratorFactory();
     const secondCallerOAuth = acquirePreferredOAuth(
       undefined,

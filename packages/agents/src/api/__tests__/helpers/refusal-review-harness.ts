@@ -21,7 +21,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
-import { replaySession } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
 import {
@@ -32,6 +31,9 @@ import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 import {
   emptyRefusalReply,
   readJsonl,
+  collectHistory,
+  readJournalAudit,
+  readJournalRows,
   requestedWaits,
   startScriptedEndpoint,
   stopReply,
@@ -213,7 +215,7 @@ export interface ReviewRun {
   readonly foregroundEndpoint: readonly WireRequest[];
   /** Review requests whose client hung up before the reply ended. */
   readonly abandonedReviews: number;
-  readonly historyAfter: Awaited<ReturnType<Agent['getHistory']>>;
+  readonly historyAfter: readonly IContent[];
   readonly tokenRecords: ReadonlyArray<Record<string, unknown>>;
   readonly journalRecords: ReadonlyArray<Record<string, unknown>>;
   /** History a resume of the recorded session would restore. */
@@ -277,13 +279,8 @@ async function replayJournal(
   journalPath: string,
   journalRecords: ReadonlyArray<Record<string, unknown>>,
 ): Promise<readonly IContent[]> {
-  const start = journalRecords.find((r) => r['type'] === 'session_start');
-  const projectHash = (
-    start?.['payload'] as { projectHash?: string } | undefined
-  )?.projectHash;
-  if (projectHash === undefined) return [];
-  const replay = await replaySession(journalPath, projectHash);
-  return replay.ok ? replay.history : [];
+  void journalRecords;
+  return readJournalRows(journalPath);
 }
 
 /** Settings, seeded history and journal recording for one scenario. */
@@ -329,11 +326,11 @@ async function collectRun(input: {
   readonly profileName: string | undefined;
 }): Promise<ReviewRun> {
   const { agent, endpoints, profileName } = input;
-  const historyAfter = await agent.getHistory();
+  const historyAfter = await collectHistory(agent);
   const journalPath = agent.session.getRecording().path ?? '';
   const stats = agent.getStats();
   await agent.session.setRecording({ enabled: false });
-  const journalRecords = readJsonl(journalPath);
+  const journalRecords = await readJournalAudit(journalPath);
   const tokenLog = join(
     new Storage(input.workingDir).getProjectTempDir(),
     'token-usage',

@@ -161,7 +161,7 @@ describe('logout ownership', () => {
         firstManager,
         firstOauth,
         firstConfig.getSessionId(),
-        configureProviderTokenizer(firstManager),
+        configureProviderTokenizer(firstManager, firstConfig.scratchRoots),
         undefined,
       );
   }
@@ -289,7 +289,7 @@ describe('logout ownership', () => {
         secondManager,
         secondOauth,
         secondConfig.getSessionId(),
-        configureProviderTokenizer(secondManager),
+        configureProviderTokenizer(secondManager, firstConfig.scratchRoots),
         undefined,
       );
   }

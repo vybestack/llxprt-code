@@ -5,7 +5,6 @@
  */
 
 import type { GenerateContentResponse, Part } from './geminiWireTypes.js';
-import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
@@ -18,8 +17,6 @@ import {
 import {
   buildGeminiTools,
   buildRequestConfig,
-  convertToGeminiContents,
-  prepareContentsWithSignatures,
 } from './geminiRequestBuilding.js';
 import { createGeminiResponseMapper } from './geminiResponseMapper.js';
 import type { GeminiAuthMode } from './geminiAuth.js';
@@ -28,6 +25,7 @@ export type HttpOptions = { headers: Record<string, string> };
 
 /** Resolved setup for a generation call. */
 export interface GeminiGenerationSetup {
+  requestContents?: () => AsyncIterable<import('./geminiWireTypes.js').Content>;
   fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   authMode: GeminiAuthMode;
   authToken: string;
@@ -58,21 +56,11 @@ export async function buildGenerationSetup(
   getBaseURL: () => string | undefined,
   logger: DebugLogger,
 ): Promise<GeminiGenerationSetup> {
-  const { contents: content, tools } = options;
+  const { tools } = options;
   const { authMode, token: authToken } = await resolveAuth();
   const currentModel = options.resolved.model;
-  const configForMessages = parseOutputLimits(options.invocation.ephemerals);
-  const contents = convertToGeminiContents(
-    content,
-    currentModel,
-    configForMessages,
-  );
   const reasoningConfig = extractReasoningConfig(options);
   const { shouldDumpSuccess, shouldDumpError } = extractDumpConfig(options);
-  const contentsWithSignatures = prepareContentsWithSignatures(
-    contents,
-    reasoningConfig.stripFromContext,
-  );
   const { geminiTools, toolNamesForPrompt } = buildGeminiTools(tools);
   const mapResponseToChunks: (
     response: GenerateContentResponse,
@@ -83,7 +71,7 @@ export async function buildGenerationSetup(
     fetch: options.invocation.fetch,
     authToken,
     currentModel,
-    contentsWithSignatures,
+    contentsWithSignatures: [],
     requestConfig: buildRequestConfig(
       options,
       geminiTools,

@@ -1,3 +1,4 @@
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -492,12 +493,12 @@ describe('default root image composition', () => {
       await store.saveToken('codex', firstCredential);
       const realFetch = globalThis.fetch;
       const transport = spyOn(globalThis, 'fetch').mockImplementation(
-        (input, init) => {
+        withFetchPreconnect((input, init) => {
           const url = input instanceof Request ? input.url : String(input);
           if (!url.startsWith(wire.endpoint))
             throw new Error(`Unexpected external image endpoint ${url}`);
           return realFetch(input, init);
-        },
+        }),
       );
       const peer = await createAgent({
         provider: 'openai',

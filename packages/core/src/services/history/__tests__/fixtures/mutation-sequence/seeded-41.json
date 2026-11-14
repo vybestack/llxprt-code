@@ -1,0 +1,322 @@
+{
+  "name": "seeded-41",
+  "description": "random mutation sequence, seed 41",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 4,
+        "prefix": "s41"
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "2f3759463763d2f7b35044ad12c48be0e116cbae81b41dc7c3c3d2cac135d645",
+          "tags": [
+            "eaac3b1e32271589",
+            "fbafe54d2f327533",
+            "790066873c34103b",
+            "0f6b119b9f4ab11c"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "2f3759463763d2f7b35044ad12c48be0e116cbae81b41dc7c3c3d2cac135d645",
+          "tags": [
+            "eaac3b1e32271589",
+            "fbafe54d2f327533",
+            "790066873c34103b",
+            "0f6b119b9f4ab11c"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "removeLast"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "679458980a851a061d37f699c8fc0bd07ec3b052334c888083fd12b1aefc68b4",
+          "tags": ["eaac3b1e32271589", "fbafe54d2f327533", "790066873c34103b"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "679458980a851a061d37f699c8fc0bd07ec3b052334c888083fd12b1aefc68b4",
+          "tags": ["eaac3b1e32271589", "fbafe54d2f327533", "790066873c34103b"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "density",
+        "removals": [1],
+        "replacements": []
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "c605e3cb87af9fb7911c95400e6f36d56c62538d6390141fd600e2a1c8583ec7",
+          "tags": ["eaac3b1e32271589", "790066873c34103b"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "c605e3cb87af9fb7911c95400e6f36d56c62538d6390141fd600e2a1c8583ec7",
+          "tags": ["eaac3b1e32271589", "790066873c34103b"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "removeLast"
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "0bbaf4386011907672df6630f86adfb67b03dbca67dd2d60f499098597bc64fc",
+          "tags": ["eaac3b1e32271589"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "0bbaf4386011907672df6630f86adfb67b03dbca67dd2d60f499098597bc64fc",
+          "tags": ["eaac3b1e32271589"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s41-add-7"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "517c629580065d3470a7d4507eec5d840389dc12b9dff534abf62f483e988b37",
+          "tags": ["eaac3b1e32271589", "22abdb7fff6ebbb4"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "517c629580065d3470a7d4507eec5d840389dc12b9dff534abf62f483e988b37",
+          "tags": ["eaac3b1e32271589", "22abdb7fff6ebbb4"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "addAll",
+        "rows": [
+          {
+            "speaker": "human",
+            "text": "s41-q-8"
+          },
+          {
+            "speaker": "ai",
+            "text": "s41-a-8"
+          }
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "46ef80fc6dd30628ccc27c4bba61a91d2c810f40546faef8f4bd9c49eb7ddf86",
+          "tags": [
+            "eaac3b1e32271589",
+            "22abdb7fff6ebbb4",
+            "ad5642f57daef057",
+            "424469a2848859eb"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "46ef80fc6dd30628ccc27c4bba61a91d2c810f40546faef8f4bd9c49eb7ddf86",
+          "tags": [
+            "eaac3b1e32271589",
+            "22abdb7fff6ebbb4",
+            "ad5642f57daef057",
+            "424469a2848859eb"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "removeLast"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "670b8c35e7c6b66f0370758d4d2342618ccde0f5efab7b5c4c07377bfed62ebb",
+          "tags": ["eaac3b1e32271589", "22abdb7fff6ebbb4", "ad5642f57daef057"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "670b8c35e7c6b66f0370758d4d2342618ccde0f5efab7b5c4c07377bfed62ebb",
+          "tags": ["eaac3b1e32271589", "22abdb7fff6ebbb4", "ad5642f57daef057"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "517c629580065d3470a7d4507eec5d840389dc12b9dff534abf62f483e988b37",
+          "tags": ["eaac3b1e32271589", "22abdb7fff6ebbb4"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "517c629580065d3470a7d4507eec5d840389dc12b9dff534abf62f483e988b37",
+          "tags": ["eaac3b1e32271589", "22abdb7fff6ebbb4"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "0bbaf4386011907672df6630f86adfb67b03dbca67dd2d60f499098597bc64fc",
+          "tags": ["eaac3b1e32271589"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "0bbaf4386011907672df6630f86adfb67b03dbca67dd2d60f499098597bc64fc",
+          "tags": ["eaac3b1e32271589"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s41-add-13"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "48d5394a532b11ea0a86384703d189fa39ad002a37c7724d0c0dc63d30d5b7af",
+          "tags": ["eaac3b1e32271589", "b0bfe7504ffdac87"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "48d5394a532b11ea0a86384703d189fa39ad002a37c7724d0c0dc63d30d5b7af",
+          "tags": ["eaac3b1e32271589", "b0bfe7504ffdac87"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s41-add-14"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "05f01444a26e283b380c03fff7ac86509903015a7a979662fb76118c661e4a96",
+          "tags": ["eaac3b1e32271589", "b0bfe7504ffdac87", "4827dcc13043a85e"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "05f01444a26e283b380c03fff7ac86509903015a7a979662fb76118c661e4a96",
+          "tags": ["eaac3b1e32271589", "b0bfe7504ffdac87", "4827dcc13043a85e"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "addAll",
+        "rows": [
+          {
+            "speaker": "human",
+            "text": "s41-q-15"
+          },
+          {
+            "speaker": "ai",
+            "text": "s41-a-15"
+          }
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 5,
+          "digest": "4d1f5b21ec57439114fb3eeb0bec65ded36e13493b208f1b319276b224847040",
+          "tags": [
+            "eaac3b1e32271589",
+            "b0bfe7504ffdac87",
+            "4827dcc13043a85e",
+            "42eef753a1af0395",
+            "fe5f4805355a5be0"
+          ]
+        },
+        "resumed": {
+          "length": 5,
+          "digest": "4d1f5b21ec57439114fb3eeb0bec65ded36e13493b208f1b319276b224847040",
+          "tags": [
+            "eaac3b1e32271589",
+            "b0bfe7504ffdac87",
+            "4827dcc13043a85e",
+            "42eef753a1af0395",
+            "fe5f4805355a5be0"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "removeLast"
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "6a45df81123c7dc3487a5fd0a3339bad117c25fa0bf1ddc0e3163de0bc676e8a",
+          "tags": [
+            "eaac3b1e32271589",
+            "b0bfe7504ffdac87",
+            "4827dcc13043a85e",
+            "42eef753a1af0395"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "6a45df81123c7dc3487a5fd0a3339bad117c25fa0bf1ddc0e3163de0bc676e8a",
+          "tags": [
+            "eaac3b1e32271589",
+            "b0bfe7504ffdac87",
+            "4827dcc13043a85e",
+            "42eef753a1af0395"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "05f01444a26e283b380c03fff7ac86509903015a7a979662fb76118c661e4a96",
+          "tags": ["eaac3b1e32271589", "b0bfe7504ffdac87", "4827dcc13043a85e"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "05f01444a26e283b380c03fff7ac86509903015a7a979662fb76118c661e4a96",
+          "tags": ["eaac3b1e32271589", "b0bfe7504ffdac87", "4827dcc13043a85e"]
+        }
+      }
+    }
+  ]
+}

@@ -30,18 +30,27 @@ const CRASH = 'summarizer crashed after rewriting history';
 
 /** An addBatch whose finalizer fails after the batch was published. */
 async function revertedBatch(history: HistoryService): Promise<void> {
-  const unregister = history.registerBatchParticipant(() => ({
-    publish: () => undefined,
-    rollback: () => undefined,
-    finalize: () => {
-      throw new Error('finalizer failed after publication');
-    },
-  }));
-  try {
-    await rejection(history.addBatch([aiTurn(REVERTED)]));
-  } finally {
-    unregister();
-  }
+  let fail = true;
+  await history.registerMediaOwner({
+    adopt: () => undefined,
+    prepareReplacement: () => ({
+      publish: () => undefined,
+      rollback: () => undefined,
+    }),
+    releaseAll: async () => undefined,
+    reconcile: async () => undefined,
+    prepareReferenceAddition: () => ({
+      publish: () => undefined,
+      rollback: () => undefined,
+      finalize: () => {
+        if (fail) {
+          fail = false;
+          throw new Error('finalizer failed after publication');
+        }
+      },
+    }),
+  });
+  await rejection(history.addBatch([aiTurn(REVERTED)]));
 }
 
 describe('rollback of a failed compression and a reverted batch (issue #4000 CodeRabbit round 3 R2)', () => {
@@ -51,7 +60,7 @@ describe('rollback of a failed compression and a reverted batch (issue #4000 Cod
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = historyTexts(session.history);
+    const before = await historyTexts(session.history);
     let runs = 0;
     session.useCompression(async (history) => {
       runs += 1;
@@ -67,7 +76,7 @@ describe('rollback of a failed compression and a reverted batch (issue #4000 Cod
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      history: historyTexts(session.history),
+      history: await historyTexts(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       history: [...before, COMMITTED],

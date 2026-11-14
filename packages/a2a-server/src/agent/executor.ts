@@ -1,3 +1,7 @@
+import {
+  NamedWriterOwnership,
+  type ScratchRootOwner,
+} from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -86,8 +90,10 @@ export class CoderAgentExecutor implements AgentExecutor {
   private executingTasks = new Set<string>();
 
   constructor(
+    private readonly scratchRoots: ScratchRootOwner,
     private taskStore?: TaskStore,
     private readonly createTaskSession: typeof acquireTaskSession = acquireTaskSession,
+    private readonly namedWriters = new NamedWriterOwnership(),
   ) {}
 
   /**
@@ -113,6 +119,8 @@ export class CoderAgentExecutor implements AgentExecutor {
       contextId,
       agentSettings,
       eventBus,
+      this.namedWriters,
+      this.scratchRoots,
     );
     runtimeTask.taskState = persistedState._taskState;
 
@@ -134,6 +142,8 @@ export class CoderAgentExecutor implements AgentExecutor {
       contextId,
       agentSettings,
       eventBus,
+      this.namedWriters,
+      this.scratchRoots,
     );
 
     const wrapper = new TaskWrapper(runtimeTask, agentSettings);

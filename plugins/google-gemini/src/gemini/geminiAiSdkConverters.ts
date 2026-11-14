@@ -402,7 +402,19 @@ export function toCallOptions(
   const providerOptions: Record<string, unknown> = {};
   for (const key of PROVIDER_OPTION_KEYS) {
     if (config[key] !== undefined) {
-      providerOptions[key] = config[key];
+      const value = config[key];
+      if (
+        key === 'thinkingConfig' &&
+        isRecord(value) &&
+        typeof value['thinkingLevel'] === 'string'
+      ) {
+        providerOptions[key] = {
+          ...value,
+          thinkingLevel: value['thinkingLevel'].toLowerCase(),
+        };
+      } else {
+        providerOptions[key] = value;
+      }
     }
   }
 

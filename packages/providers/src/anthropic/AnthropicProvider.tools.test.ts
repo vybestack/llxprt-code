@@ -287,6 +287,9 @@ describe('AnthropicProvider', () => {
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'Success' }],
+          responseAttemptId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+          ),
         },
       ]);
 
@@ -326,6 +329,9 @@ describe('AnthropicProvider', () => {
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'Success' }],
+          responseAttemptId: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+          ),
         },
       ]);
 
@@ -385,6 +391,9 @@ describe('AnthropicProvider', () => {
           {
             speaker: 'ai',
             blocks: [{ type: 'text', text: 'Fixed and working' }],
+            responseAttemptId: expect.stringMatching(
+              /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+            ),
           },
         ]);
 

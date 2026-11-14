@@ -19,6 +19,7 @@ import {
 import { ESC } from '../utils/input.js';
 import { FOCUS_IN, FOCUS_OUT } from '../hooks/useFocus.js';
 import { parseMouseEvent } from '../utils/mouse.js';
+import { StartupStdinContext } from './startup-stdin-context.js';
 
 export const BACKSLASH_ENTER_TIMEOUT = 5;
 export const ESC_TIMEOUT = 100;
@@ -145,10 +146,29 @@ function nonKeyboardEventFilter(
   };
 }
 
-function bufferFastReturn(keypressHandler: KeypressHandler): KeypressHandler {
+function bufferFastReturn(
+  keypressHandler: KeypressHandler,
+  isStartupInput: () => boolean,
+): KeypressHandler {
   let lastKeyTime = 0;
   return (key: Key) => {
     const now = Date.now();
+    if (isStartupInput()) {
+      // Cooked terminals translate Enter to LF before raw mode starts. The
+      // paste decoder has already preserved LF inside framed paste payloads.
+      keypressHandler(
+        key.ctrl && key.name === 'j'
+          ? {
+              ...key,
+              name: 'return',
+              ctrl: false,
+              sequence: String.fromCharCode(13),
+            }
+          : key,
+      );
+      lastKeyTime = Number.NEGATIVE_INFINITY;
+      return;
+    }
     if (key.name === 'return' && now - lastKeyTime <= FAST_RETURN_TIMEOUT) {
       keypressHandler({
         ...key,
@@ -162,6 +182,9 @@ function bufferFastReturn(keypressHandler: KeypressHandler): KeypressHandler {
     } else {
       keypressHandler(key);
     }
+    // Pastes start the window too: a live Enter right after a paste is treated
+    // as part of the pasted text. Input held during startup is replayed above,
+    // outside the window, so a paste and Enter typed ahead still submit.
     lastKeyTime = now;
   };
 }
@@ -653,9 +676,10 @@ function createDragDropHandler(broadcast: (key: Key) => void) {
  */
 export function createKeypressPipeline(
   broadcast: KeypressHandler,
+  { isStartupInput = () => false }: { isStartupInput?: () => boolean } = {},
 ): (data: string) => void {
   let processor = nonKeyboardEventFilter(broadcast);
-  processor = bufferFastReturn(processor);
+  processor = bufferFastReturn(processor, isStartupInput);
   processor = bufferBackslashEnter(processor);
   processor = bufferPaste(processor);
   return createDataListener(processor);
@@ -666,6 +690,7 @@ function useKeypressSetup(
   setRawMode: (mode: boolean) => void,
   broadcast: (key: Key) => void,
 ) {
+  const startupStdin = useContext(StartupStdinContext);
   useEffect(() => {
     const wasRaw = stdin.isRaw;
     if (wasRaw === false) setRawMode(true);
@@ -676,16 +701,23 @@ function useKeypressSetup(
     };
 
     stdin.setEncoding('utf8');
-    const dataListener = createKeypressPipeline(handleDragDropAndBroadcast);
+    const dataListener = createKeypressPipeline(handleDragDropAndBroadcast, {
+      isStartupInput: () => startupStdin?.isReplaying === true,
+    });
 
-    stdin.on('data', dataListener);
+    const disconnect =
+      stdin === process.stdin && startupStdin
+        ? startupStdin.connect(dataListener)
+        : undefined;
+    if (!disconnect) stdin.on('data', dataListener);
     return () => {
+      disconnect?.();
       stdin.removeListener('data', dataListener);
       if (wasRaw === false) setRawMode(false);
       dragHandler.cleanup();
       dragHandler.flush();
     };
-  }, [stdin, setRawMode, broadcast]);
+  }, [stdin, setRawMode, broadcast, startupStdin]);
 }
 
 export function KeypressProvider({ children }: { children: React.ReactNode }) {

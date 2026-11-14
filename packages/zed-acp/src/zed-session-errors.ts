@@ -27,20 +27,22 @@
  * that genuinely does not exist. `classifyResumeFailure` closes that gap in the
  * zed layer WITHOUT touching core discovery: when the plain mapping would be
  * resourceNotFound, it probes the on-disk session-file namespace (a readdir of
- * the chats dir, injected for testability) and — if a file matching this
- * session's `session-*-<first-12-of-id>.jsonl` name EXISTS — reports
- * internalError ("session file exists but could not be read/replayed") instead,
+ * the chats dir, injected for testability). If a file matches the selected
+ * backend's filename for this session, it reports internalError
+ * ("session file exists but could not be read/replayed") instead,
  * so a corrupt session is never misreported as missing.
  */
 
 import * as acp from '@agentclientprotocol/sdk';
+
 import {
   DebugLogger,
   RESUME_NO_SESSIONS_FOUND,
-  RESUME_SESSION_NOT_FOUND_PREFIX,
   RESUME_SESSION_INDEX_OUT_OF_RANGE_RE,
+  RESUME_SESSION_NOT_FOUND_PREFIX,
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from '@vybestack/llxprt-code-core';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 
 /** JSON-RPC code ACP assigns to resourceNotFound. */
 const RESOURCE_NOT_FOUND_CODE = -32002;
@@ -98,7 +100,7 @@ export function mapResumeError(
  * against the on-disk session-file namespace (FINDING B). When the plain mapping
  * is resourceNotFound, `probe` is invoked to list the chats-dir entries; if any
  * entry matches this session's recorded filename
- * (`session-<timestamp>-<first-12-of-id>.jsonl`), the session exists but could
+ * (`session-<timestamp>-<first-12-of-id><extension>`), the session exists but could
  * not be read/replayed (corrupt or incompatible) and an internalError carrying
  * the filename is returned instead of the misleading resourceNotFound. When no
  * entry matches (including an absent chats directory), the genuine
@@ -235,9 +237,9 @@ export function isEnoent(error: unknown): boolean {
 
 /**
  * Pure matcher: returns the first entry naming a recorded session file for
- * `sessionId`, or null when none match. SessionRecordingService.materialize
- * names files `session-<timestamp>-<first-12-of-id>.jsonl`, so a matching file
- * both starts with `session-` and ends with `-<first-12-of-id>.jsonl`. Exported
+ * `sessionId`, or null when none match. The journal recorder
+ * names files using the native extension, so a matching file
+ * starts with `session-` and ends with the truncated id and that extension. Exported
  * so the loadSession re-attach probe (zed-session-loader.ts) decides "does an
  * on-disk recording exist for this id?" against the EXACT same naming rule the
  * corrupt-vs-missing resume probe uses, keeping the two in lockstep.
@@ -262,13 +264,11 @@ export function findMatchingSessionFile(
 }
 
 /**
- * The trailing `-<first-12-of-id>.jsonl` a recorded session file for `sessionId`
- * ends with. SessionRecordingService.materialize names files
- * `session-<timestamp>-<first-12-of-id>.jsonl`, so a matching file both starts
- * with `session-` and ends with this suffix.
+ * The trailing id token and selected recording extension. Both the resume
+ * failure probe and the load-session reattachment probe use this suffix.
  */
 function sessionFileSuffix(sessionId: string): string {
-  return `-${sessionId.substring(0, SESSION_FILE_ID_PREFIX_LENGTH)}.jsonl`;
+  return `-${sessionId.substring(0, SESSION_FILE_ID_PREFIX_LENGTH)}${SESSION_FILE_EXTENSION}`;
 }
 
 /**
@@ -288,10 +288,12 @@ export function wrapReplayFailure(
     return error;
   }
   const detail = errorMessage(error);
-  return acp.RequestError.internalError(
+  const failure = acp.RequestError.internalError(
     { sessionId, reason: detail, phase: 'replay' },
     `Failed to replay session history: ${detail}`,
   );
+  failure.cause = error;
+  return failure;
 }
 
 /**

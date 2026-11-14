@@ -56,6 +56,20 @@ export function tagMediaPurgeBoundary(
   return tagMediaPurgeBoundaryBlock(message.content[blockIndex], boundaryId);
 }
 
+function boundaryIdentity(value: unknown): object | undefined {
+  return typeof value === 'object' && value !== null ? value : undefined;
+}
+
+/** The purge boundary identity the converter tagged this block with, if any. */
+export function readPurgeBlockTag(block: object): object | undefined {
+  return boundaryIdentity(Reflect.get(block, MEDIA_PURGE_BOUNDARY_BLOCK));
+}
+
+/** The purge boundary identity the converter tagged this string message with. */
+export function readPurgeStringTag(message: object): object | undefined {
+  return boundaryIdentity(Reflect.get(message, MEDIA_PURGE_BOUNDARY_STRING));
+}
+
 export function materializeMediaPurgeBoundary(
   message: AnthropicMessage,
   blocks: AnthropicMessageBlock[],

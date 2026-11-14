@@ -21,6 +21,7 @@ import {
   type SchedulerConstruction,
 } from './assembleSchedulerOwner.js';
 import type { SessionSchedulerOwner } from './sessionSchedulerOwner.js';
+import type { ApprovalLifecycleWriter } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 
 type ClientChannel = ReturnType<AgentToolControl['openClientChannel']>;
 
@@ -35,6 +36,7 @@ export function createClientToolChannel(
   getToolGovernance: () => ToolGovernance,
   readApprovalMode: (() => ApprovalMode) | undefined,
   telemetry: RootTelemetry,
+  persistApproval?: ApprovalLifecycleWriter,
 ): ClientChannel & { hasPendingWork(): boolean } {
   const observers = new Set<AgentDisplayCallbacks>();
   const completions = new Set<Promise<void>>();
@@ -45,6 +47,7 @@ export function createClientToolChannel(
     {
       config,
       telemetry,
+      persistApproval,
       readExecutionPolicy,
       readApprovalMode,
       getToolGovernance,
@@ -75,8 +78,13 @@ export function createClientToolChannel(
   return {
     hasPendingWork: () => owner.hasPendingWork() || completions.size > 0,
     ready: lease.ready,
-    schedule: (request, signal) =>
-      lease.schedule(request, AbortSignal.any([signal, controller.signal])),
+    schedule: async (request, signal) => {
+      await lease.schedule(
+        request,
+        AbortSignal.any([signal, controller.signal]),
+      );
+      await Promise.all(completions);
+    },
     cancelAll: () => {
       controller.abort();
       controller = new AbortController();

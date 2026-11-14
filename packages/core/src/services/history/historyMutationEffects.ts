@@ -1,58 +1,50 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import type {
-  HistoryBatchParticipant,
-  HistoryBatchPublication,
-  HistoryEffectFactory,
-  HistoryMediaOwner,
-  HistoryOwnedMediaReservation,
-  PreparedHistoryBatchEffect,
-} from './HistoryServiceCore.js';
-import type { IContent } from './IContent.js';
-
-export interface MutationEffectInput {
-  readonly mediaOwner: HistoryMediaOwner | undefined;
-  readonly participants: ReadonlySet<HistoryBatchParticipant>;
-  readonly publication: HistoryBatchPublication | undefined;
-  readonly previousHistory: readonly IContent[];
-  readonly nextHistory: readonly IContent[];
-  readonly adopted: readonly HistoryOwnedMediaReservation[];
-  readonly prepareEffect: HistoryEffectFactory | undefined;
-  readonly signal: AbortSignal | undefined;
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+export function historyMutationFailure(
+  primary: unknown,
+  failures: readonly unknown[],
+): unknown {
+  return failures.length === 0
+    ? primary
+    : new AggregateError(
+        [primary, ...failures],
+        'History mutation and rollback failed',
+        { cause: primary },
+      );
 }
 
-/**
- * Prepares the media-ownership, batch-participant and caller-owned effects of
- * one history commit, in that order, appending each to `effects`. A prepared
- * effect is recorded before the signal is checked so that an abort rolls it
- * back instead of leaking what its preparation reserved.
- */
-export async function prepareMutationEffects(
-  effects: PreparedHistoryBatchEffect[],
-  input: MutationEffectInput,
-): Promise<void> {
-  const { mediaOwner, publication, signal } = input;
-  if (mediaOwner !== undefined) {
-    effects.push(
-      await mediaOwner.prepareReplacement({
-        previous: input.previousHistory,
-        next: input.nextHistory,
-        adopted: input.adopted,
-      }),
-    );
-    signal?.throwIfAborted();
-  }
-  if (publication !== undefined) {
-    for (const participant of input.participants) {
-      effects.push(await participant(publication));
-      signal?.throwIfAborted();
+import type {
+  PreparedHistoryBatchEffect,
+  HistoryMediaOwner,
+  HistoryOwnedMediaReservation,
+} from './historyBatchContracts.js';
+import type { HistoryMutationSnapshot } from './historyIndexedRows.js';
+import type { HistoryRowSource } from './historyIndexedRows.js';
+import type { RowOwnership } from '../../recording/rowOwnership.js';
+
+export async function rollbackMutationEffects(
+  effects: readonly PreparedHistoryBatchEffect[],
+): Promise<unknown[]> {
+  const failures: unknown[] = [];
+  for (const effect of [...effects].reverse()) {
+    try {
+      await effect.rollback();
+    } catch (error: unknown) {
+      failures.push(error);
     }
   }
-  const requested = await input.prepareEffect?.(input.nextHistory);
-  if (requested !== undefined) effects.push(requested);
-  signal?.throwIfAborted();
+  return failures;
+}
+
+export async function prepareMutationEffects(
+  owner: HistoryMediaOwner | undefined,
+  effects: PreparedHistoryBatchEffect[],
+  previous: HistoryMutationSnapshot,
+  next: HistoryRowSource,
+  adopted: readonly HistoryOwnedMediaReservation[],
+  ownership?: RowOwnership,
+): Promise<void> {
+  if (owner !== undefined)
+    effects.push(
+      await owner.prepareReplacement({ previous, next, adopted, ownership }),
+    );
 }

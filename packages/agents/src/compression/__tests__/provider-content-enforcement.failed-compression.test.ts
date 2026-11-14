@@ -1,3 +1,4 @@
+import { readHistory } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -49,7 +50,7 @@ describe('a failed compression restores history before the ladder continues (iss
       session.useCompression(async (history) => {
         runs += 1;
         if (runs === 1) return crashAfterPartialRewrite(history);
-        history.clear();
+        await history.clear();
         history.add(aiTurn(REAL_SUMMARY));
         await history.waitForTokenUpdates();
         return undefined;
@@ -79,14 +80,15 @@ describe('a failed compression restores history before the ladder continues (iss
       await conversation.seedImages(3);
       conversation.seedBigText();
       session.useCompression(crashAfterPartialRewrite);
-      const before = JSON.stringify(session.history.getAll());
+      const before = JSON.stringify(await readHistory(session.history));
 
       const error = await rejection(session.send([textTurn('next question')]));
 
       expect({
         contextOverflow: error instanceof ContextOverflowError,
         sent: session.sent.length,
-        historyRestored: JSON.stringify(session.history.getAll()) === before,
+        historyRestored:
+          JSON.stringify(await readHistory(session.history)) === before,
       }).toStrictEqual({
         contextOverflow: true,
         sent: 0,
@@ -102,14 +104,15 @@ describe('a failed compression restores history before the ladder continues (iss
         await rewriteToPartialSummary(history);
         throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
       });
-      const before = JSON.stringify(session.history.getAll());
+      const before = JSON.stringify(await readHistory(session.history));
 
       const error = await rejection(session.send([textTurn('next question')]));
 
       expect({
         name: error instanceof Error ? error.name : '',
         sent: session.sent.length,
-        historyRestored: JSON.stringify(session.history.getAll()) === before,
+        historyRestored:
+          JSON.stringify(await readHistory(session.history)) === before,
       }).toStrictEqual({
         name: 'AbortError',
         sent: 0,
@@ -123,7 +126,8 @@ describe('a failed compression restores history before the ladder continues (iss
       conversation.seedBigText();
       session.useCompression(async (history) => {
         await rewriteToPartialSummary(history);
-        history.transformAll = () => Promise.reject(new Error('disk full'));
+        history.detachedValues.host().journal.compensate = () =>
+          Promise.reject(new Error('disk full'));
         throw new Error('summarizer crashed after rewriting history');
       });
 
@@ -152,7 +156,7 @@ describe('a failed compression restores history before the ladder continues (iss
       await conversation.seedImages(3);
       conversation.seedBigText();
       session.useCompression(crashAfterPartialRewrite);
-      const before = JSON.stringify(session.history.getAll());
+      const before = JSON.stringify(await readHistory(session.history));
 
       const error = await rejection(
         session.recomposeViaCallback([textTurn('next question')]),
@@ -160,7 +164,8 @@ describe('a failed compression restores history before the ladder continues (iss
 
       expect({
         contextOverflow: error instanceof ContextOverflowError,
-        historyRestored: JSON.stringify(session.history.getAll()) === before,
+        historyRestored:
+          JSON.stringify(await readHistory(session.history)) === before,
       }).toStrictEqual({ contextOverflow: true, historyRestored: true });
     });
   });

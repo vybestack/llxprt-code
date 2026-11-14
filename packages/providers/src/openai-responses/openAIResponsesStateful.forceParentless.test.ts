@@ -7,7 +7,12 @@
 import { describe, expect, it, vi } from 'bun:test';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { computeStatefulConversation } from './openAIResponsesStateful.js';
+import {
+  parentHitOf,
+  planStatefulConversation,
+  selectStatefulParent,
+  type StatefulPlan,
+} from './openAIResponsesStateful.js';
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 
@@ -41,91 +46,68 @@ function historyWithStoredParent(): IContent[] {
   ];
 }
 
-function textOf(content: IContent[]): string {
-  return content
-    .flatMap((message) => message.blocks)
-    .map((block) => (block.type === 'text' ? block.text : ''))
-    .join('');
-}
-
 const logger = { debug: vi.fn() } as unknown as DebugLogger;
 
-describe('computeStatefulConversation forceParentless @issue:3446', () => {
-  it('skips the parent scan and returns full content with statefulness enabled when an eligible parent exists', () => {
-    const result = computeStatefulConversation(
-      options(),
-      historyWithStoredParent(),
-      {},
-      undefined,
-      /* isCodex */ true,
-      CODEX_BASE_URL,
-      () => false,
-      /* statefulTransportSupported */ true,
-      logger,
-      /* forceParentless */ true,
-    );
+function plan(
+  overrides: {
+    readonly explicitUserStore?: boolean;
+    readonly statefulTransportSupported?: boolean;
+    readonly forceParentless?: boolean;
+  } = {},
+): StatefulPlan {
+  return planStatefulConversation(
+    options(),
+    {},
+    overrides.explicitUserStore,
+    /* isCodex */ true,
+    CODEX_BASE_URL,
+    () => false,
+    overrides.statefulTransportSupported ?? true,
+    logger,
+    overrides.forceParentless ?? false,
+  );
+}
 
-    expect(result.enabled).toBe(true);
-    expect(result.parentId).toBeUndefined();
-    // Full history, not trimmed to the post-parent turns.
-    expect(textOf(result.content)).toContain('first question');
-    expect(textOf(result.content)).toContain('first answer');
-    expect(textOf(result.content)).toContain('second question');
+/** The decision a send makes after scanning the stored history for a parent. */
+function selectParent(scan: Extract<StatefulPlan, { kind: 'scan' }>) {
+  const history = historyWithStoredParent();
+  let hit: ReturnType<typeof parentHitOf>;
+  history.forEach((row, index) => {
+    hit = parentHitOf(row, index, scan) ?? hit;
+  });
+  return selectStatefulParent(hit, history.length, logger);
+}
+
+describe('planStatefulConversation forceParentless @issue:3446', () => {
+  it('skips the parent scan with statefulness enabled when an eligible parent exists', () => {
+    const result = plan({ forceParentless: true });
+
+    expect(result).toStrictEqual({ kind: 'settled', enabled: true });
   });
 
-  it('returns the normal trimmed shape without forceParentless', () => {
-    const result = computeStatefulConversation(
-      options(),
-      historyWithStoredParent(),
-      {},
-      undefined,
-      /* isCodex */ true,
-      CODEX_BASE_URL,
-      () => false,
-      /* statefulTransportSupported */ true,
-      logger,
-    );
+  it('scans for the stored parent without forceParentless', () => {
+    const result = plan();
 
-    expect(result.enabled).toBe(true);
-    expect(result.parentId).toBe('resp_stored');
-    expect(textOf(result.content)).not.toContain('first question');
-    expect(textOf(result.content)).toContain('second question');
+    expect(result.kind).toBe('scan');
+    if (result.kind !== 'scan') return;
+    const selection = selectParent(result);
+    expect(selection.parentId).toBe('resp_stored');
+    // The rows up to and including the parent are replayed server-side.
+    expect(selection.skipRows).toBe(2);
   });
 
   it('stays disabled when the transport cannot carry statefulness, even with forceParentless', () => {
-    const result = computeStatefulConversation(
-      options(),
-      historyWithStoredParent(),
-      {},
-      undefined,
-      /* isCodex */ true,
-      CODEX_BASE_URL,
-      () => false,
-      /* statefulTransportSupported */ false,
-      logger,
-      /* forceParentless */ true,
-    );
+    const result = plan({
+      statefulTransportSupported: false,
+      forceParentless: true,
+    });
 
-    expect(result.enabled).toBe(false);
-    expect(result.parentId).toBeUndefined();
-    expect(textOf(result.content)).toContain('first question');
+    expect(result).toStrictEqual({ kind: 'settled', enabled: false });
   });
 
   it('stays disabled when the user set store=false, even with forceParentless', () => {
-    const result = computeStatefulConversation(
-      options(),
-      historyWithStoredParent(),
-      {},
-      /* explicitUserStore */ false,
-      /* isCodex */ true,
-      CODEX_BASE_URL,
-      () => false,
-      /* statefulTransportSupported */ true,
-      logger,
-      /* forceParentless */ true,
-    );
+    const result = plan({ explicitUserStore: false, forceParentless: true });
 
-    expect(result.enabled).toBe(false);
-    expect(result.parentId).toBeUndefined();
+    expect(result).toStrictEqual({ kind: 'settled', enabled: false });
   });
 });

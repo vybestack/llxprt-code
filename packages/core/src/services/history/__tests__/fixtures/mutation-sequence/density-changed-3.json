@@ -1,0 +1,183 @@
+{
+  "name": "density-changed-3",
+  "description": "density result that changes 3 rows (13.5 defect 3 sizes)",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 8,
+        "prefix": "row"
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "d664c37d03bb3c90c25ba03da9330f3be4f309588bb8f7e3644b63c51bf90948",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "d664c37d03bb3c90c25ba03da9330f3be4f309588bb8f7e3644b63c51bf90948",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "densityChanged",
+        "count": 3
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "5841372bbaff3339ba193f2ae8c1b1808dc03f6949b2fac8d6e943909e926402",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "5841372bbaff3339ba193f2ae8c1b1808dc03f6949b2fac8d6e943909e926402",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "after-density"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 9,
+          "digest": "e3fcde66931f3b22ed1abd9bfc9d7c4c4b94ceedd41ad43fe6a1fe7dc57d686c",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "42e78f3efaa36e1a"
+          ]
+        },
+        "resumed": {
+          "length": 9,
+          "digest": "e3fcde66931f3b22ed1abd9bfc9d7c4c4b94ceedd41ad43fe6a1fe7dc57d686c",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306",
+            "42e78f3efaa36e1a"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "5841372bbaff3339ba193f2ae8c1b1808dc03f6949b2fac8d6e943909e926402",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "5841372bbaff3339ba193f2ae8c1b1808dc03f6949b2fac8d6e943909e926402",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "truncate",
+        "keep": 4
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "cabe5ca117efc44eeb1eaf81a9e7770c8152c248645f98cb4f6817dc74a53c1b",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "6dd6c8be9f629697"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "cabe5ca117efc44eeb1eaf81a9e7770c8152c248645f98cb4f6817dc74a53c1b",
+          "tags": [
+            "8a105d65c04b5c81",
+            "6f39f6e59cfd8c7b",
+            "a5bbc837d5bafc0c",
+            "6dd6c8be9f629697"
+          ]
+        }
+      }
+    }
+  ]
+}

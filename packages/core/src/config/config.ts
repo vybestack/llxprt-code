@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '../storage/scratch-root.js';
+import { NamedWriterOwnership } from '../journal/named-writer-ownership.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -64,6 +66,8 @@ export {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
 export class Config extends ConfigBase {
+  readonly namedWriters: NamedWriterOwnership;
+  readonly scratchRoots: ScratchRootOwner;
   private gitStatsService: IGitStatsService | null = null;
   private conversationFileWriter: ConversationFileWriter | undefined;
   readonly profileDirectory: string | undefined;
@@ -72,6 +76,8 @@ export class Config extends ConfigBase {
 
   constructor(params: ConfigParameters) {
     super();
+    this.namedWriters = params.namedWriters ?? new NamedWriterOwnership();
+    this.scratchRoots = params.scratchRoots ?? new ScratchRootOwner();
     this.initialWorkspaceTrust = params.trustedFolder;
     this.profileDirectory = params.profileDirectory;
     this.subagentDirectory = params.subagentDirectory;

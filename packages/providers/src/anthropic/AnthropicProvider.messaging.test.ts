@@ -176,6 +176,9 @@ describe('AnthropicProvider', () => {
       expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
+          responseAttemptId: expect.stringMatching(
+            /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+          ),
           blocks: [{ type: 'text', text: 'Success' }],
         },
       ]);
@@ -215,6 +218,9 @@ describe('AnthropicProvider', () => {
       expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
+          responseAttemptId: expect.stringMatching(
+            /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+          ),
           blocks: [{ type: 'text', text: 'Success' }],
         },
       ]);
@@ -274,6 +280,9 @@ describe('AnthropicProvider', () => {
         expect(chunks).toStrictEqual([
           {
             speaker: 'ai',
+            responseAttemptId: expect.stringMatching(
+              /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i,
+            ),
             blocks: [{ type: 'text', text: 'Fixed and working' }],
           },
         ]);

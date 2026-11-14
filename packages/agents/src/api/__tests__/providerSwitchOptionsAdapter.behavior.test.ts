@@ -6,8 +6,10 @@
 
 import { describe, it, expect } from 'bun:test';
 import { buildAgent } from './helpers/agentHarness.js';
+import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 
 describe('provider switch with the fake-response seam on', () => {
+  useFakeResponsesReplay('plain-text.jsonl');
   it('rejects a switch to an unregistered provider and leaves the agent on its provider', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {

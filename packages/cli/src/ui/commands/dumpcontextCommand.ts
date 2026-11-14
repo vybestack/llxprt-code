@@ -12,7 +12,7 @@ import type { DumpMode } from '@vybestack/llxprt-code-providers';
 const validModes: readonly DumpMode[] = ['now', 'status', 'on', 'error', 'off'];
 
 function isValidMode(mode: string): mode is DumpMode {
-  return validModes.includes(mode as DumpMode);
+  return validModes.some((valid) => valid === mode);
 }
 
 const dumpcontextSchema: CommandArgumentSchema = [
@@ -39,7 +39,7 @@ export interface DumpcontextCommandOperations {
   readonly dumpDirectory: string;
   readonly readMode: () => unknown;
   readonly writeMode: (mode: Exclude<DumpMode, 'now' | 'status'>) => void;
-  readonly dumpNow: () => Promise<MessageActionReturn>;
+  readonly dumpNow: (signal: AbortSignal) => Promise<MessageActionReturn>;
 }
 
 export function createDumpcontextCommand(
@@ -51,7 +51,7 @@ export function createDumpcontextCommand(
       'Control context dumping: now, status, on, error, off (default: status)',
     kind: CommandKind.BUILT_IN,
     schema: dumpcontextSchema,
-    action: async (_context, args): Promise<MessageActionReturn> => {
+    action: async (context, args): Promise<MessageActionReturn> => {
       const mode = args.trim().toLowerCase() || 'status';
       if (!isValidMode(mode)) {
         return {
@@ -60,7 +60,7 @@ export function createDumpcontextCommand(
           content: `Invalid mode '${mode}'. Valid modes are: ${validModes.join(', ')}`,
         };
       }
-      if (mode === 'now') return operations.dumpNow();
+      if (mode === 'now') return operations.dumpNow(context.signal);
       if (mode === 'status') {
         const rawMode = operations.readMode();
         const currentMode =

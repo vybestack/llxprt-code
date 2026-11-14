@@ -1,357 +1,278 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- *
- * replaceIfUnchanged is the transactional rewrite used by refusal recovery
- * (issue #4036): the reviewed snapshot must still be the live history when the
- * rewrite commits, a prepared effect (the journal write) is part of the same
- * commit, and a failure anywhere leaves the previous history in place.
- */
-
+import { publishReviewedRewrite } from './publish-reviewed-rewrite.js';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { createUserMessage } from './IContent.js';
-import type { IContent } from './IContent.js';
-import { HistoryService } from './HistoryService.js';
-
-function texts(contents: readonly IContent[]): string[] {
-  return contents.flatMap((content) =>
-    content.blocks.flatMap((block) =>
-      block.type === 'text' ? [block.text] : [],
-    ),
-  );
-}
+import {
+  withNativeDetachedFixture,
+  type NativeDetachedFixture,
+} from './__tests__/support/detached-contract-fixture.js';
+import { journalMediaParticipant } from './chronology-rollback-test-helpers.js';
+import type { DetachedHistoryOptions } from './detachedHistoryMutation.js';
+import { createUserMessage, type IContent } from './IContent.js';
+import { textsOf } from '../../recording/__tests__/refusal-rewrite-test-helpers.js';
 
 function ai(text: string, metadata?: IContent['metadata']): IContent {
-  return {
-    speaker: 'ai',
-    blocks: [{ type: 'text', text }],
-    ...(metadata === undefined ? {} : { metadata }),
+  return { speaker: 'ai', blocks: [{ type: 'text', text }], metadata };
+}
+async function seeded(
+  action: (fixture: NativeDetachedFixture) => Promise<void>,
+  rows: readonly IContent[] = [createUserMessage('goal'), ai('answer')],
+): Promise<void> {
+  await withNativeDetachedFixture(async (fixture) => {
+    await fixture.history.addBatch([...rows]);
+    await action(fixture);
+  });
+}
+async function rewriteAt(
+  fixture: NativeDetachedFixture,
+  target: number,
+  text: string,
+  options: DetachedHistoryOptions = {},
+): Promise<void> {
+  const replacements = new Map<number, IContent>();
+  let ordinal = 0;
+  for await (const row of fixture.history.streamRawHistory()) {
+    if (ordinal++ === target) {
+      replacements.set(target, {
+        ...row,
+        blocks: row.blocks.map((block) =>
+          block.type === 'text' ? { ...block, text } : block,
+        ),
+      });
+      break;
+    }
+  }
+  await publishReviewedRewrite(fixture.history, replacements, options);
+}
+function requireCurrent(isCurrent: () => boolean): () => void {
+  return () => {
+    if (!isCurrent()) throw new Error('stale review');
   };
 }
 
-function replaceText(
-  contents: readonly IContent[],
-  index: number,
-  text: string,
-): IContent[] {
-  return contents.map((content, position) =>
-    position === index
-      ? { ...content, blocks: [{ type: 'text' as const, text }] }
-      : content,
-  );
-}
-
-async function seeded(entries: readonly IContent[]): Promise<HistoryService> {
-  const history = new HistoryService();
-  await history.addBatch([...entries]);
-  return history;
-}
-
-describe('HistoryService.replaceIfUnchanged', () => {
-  it('commits the rewrite when the snapshot is still the live history', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer one')]);
-
-    const outcome = await history.replaceIfUnchanged({
-      expected: history.getAll(),
-      rewrite: (current) => replaceText(current, 1, 'answer rewritten'),
-    });
-
-    expect({ outcome, final: texts(history.getAll()) }).toStrictEqual({
-      outcome: 'applied',
-      final: ['goal', 'answer rewritten'],
+describe('guarded native history transformations', () => {
+  it('commits the rewrite when the reviewed journal version is current', async () => {
+    await seeded(async (fixture) => {
+      await rewriteAt(fixture, 1, 'answer rewritten', {
+        assertCurrent: requireCurrent(fixture.history.historyMutationGuard()),
+      });
+      expect(await textsOf(fixture.history.streamRawHistory())).toStrictEqual([
+        'goal',
+        'answer rewritten',
+      ]);
     });
   });
-
-  it('re-estimates tokens for the rewritten history', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('short')]);
-    const before = history.getTotalTokens();
-
-    await history.replaceIfUnchanged({
-      expected: history.getAll(),
-      rewrite: (current) =>
-        replaceText(current, 1, `long ${'answer '.repeat(400)}`),
-    });
-
-    expect(history.getTotalTokens()).toBeGreaterThan(before);
-  });
-
-  it('leaves history untouched when an entry was appended after the snapshot', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const snapshot = history.getAll();
-    await history.addBatch([createUserMessage('appended meanwhile')]);
-
-    const outcome = await history.replaceIfUnchanged({
-      expected: snapshot,
-      rewrite: (current) => replaceText(current, 1, 'answer rewritten'),
-    });
-
-    expect({ outcome, final: texts(history.getAll()) }).toStrictEqual({
-      outcome: 'stale',
-      final: ['goal', 'answer', 'appended meanwhile'],
+  it('re-estimates tokens for rewritten history', async () => {
+    await seeded(async (fixture) => {
+      fixture.history.setTokenizerFactory({
+        getTokenizer: () => ({
+          countTokens: async (value: unknown) => JSON.stringify(value).length,
+        }),
+      });
+      await fixture.history.recalculateTokens();
+      const before = fixture.history.getTotalTokens();
+      await rewriteAt(fixture, 1, `long ${'answer '.repeat(400)}`);
+      expect(fixture.history.getTotalTokens()).toBeGreaterThan(before);
     });
   });
-
-  it('runs the prepared effect with the committed history and finalizes it', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const steps: string[] = [];
-
-    await history.replaceIfUnchanged({
-      expected: history.getAll(),
-      rewrite: (current) => replaceText(current, 1, 'answer rewritten'),
-      prepareEffect: (next) => {
-        steps.push(`prepare:${texts(next).join('|')}`);
-        return {
-          publish: () => {
-            steps.push('publish');
-          },
-          rollback: () => {
-            steps.push('rollback');
-          },
-          finalize: () => {
-            steps.push('finalize');
-          },
-        };
-      },
+  it('leaves history untouched when a row was appended after review', async () => {
+    await seeded(async (fixture) => {
+      const current = fixture.history.historyMutationGuard();
+      await fixture.history.addBatch([createUserMessage('appended meanwhile')]);
+      await expect(
+        rewriteAt(fixture, 1, 'answer rewritten', {
+          assertCurrent: requireCurrent(current),
+        }),
+      ).rejects.toThrow('stale review');
+      expect(await textsOf(fixture.history.streamRawHistory())).toStrictEqual([
+        'goal',
+        'answer',
+        'appended meanwhile',
+      ]);
     });
-
-    expect(steps).toStrictEqual([
-      'prepare:goal|answer rewritten',
-      'publish',
-      'finalize',
-    ]);
   });
-
-  it('keeps the previous history when the prepared effect cannot publish', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const rolledBack: string[] = [];
-
-    const failure = await history
-      .replaceIfUnchanged({
-        expected: history.getAll(),
-        rewrite: (current) => replaceText(current, 1, 'answer rewritten'),
-        prepareEffect: () => ({
+  it('publishes and finalizes native media effects with the committed rows', async () => {
+    await seeded(async (fixture) => {
+      const steps: string[] = [];
+      await fixture.history.registerMediaOwner(
+        journalMediaParticipant(() => {
+          steps.push('prepare');
+          return {
+            publish: () => {
+              steps.push('publish');
+            },
+            rollback: () => {
+              steps.push('rollback');
+            },
+            finalize: () => {
+              steps.push('finalize');
+            },
+          };
+        }),
+      );
+      await rewriteAt(fixture, 1, 'answer rewritten');
+      expect(steps).toStrictEqual(['prepare', 'publish', 'finalize']);
+      expect(await textsOf(fixture.persistedRows())).toStrictEqual([
+        'goal',
+        'answer rewritten',
+      ]);
+    });
+  });
+  it('restores previous rows when a native effect cannot publish', async () => {
+    await seeded(async (fixture) => {
+      const steps: string[] = [];
+      await fixture.history.registerMediaOwner(
+        journalMediaParticipant(() => ({
           publish: () => {
             throw new Error('journal is unwritable');
           },
           rollback: () => {
-            rolledBack.push('rollback');
+            steps.push('rollback');
           },
-        }),
-      })
-      .then(
-        () => undefined,
-        (error: unknown) => error,
+        })),
       );
-
-    expect({
-      message: failure instanceof Error ? failure.message : undefined,
-      final: texts(history.getAll()),
-      rolledBack,
-    }).toStrictEqual({
-      message: 'journal is unwritable',
-      final: ['goal', 'answer'],
-      rolledBack: ['rollback'],
+      await expect(rewriteAt(fixture, 1, 'answer rewritten')).rejects.toThrow(
+        'journal is unwritable',
+      );
+      expect({
+        final: await textsOf(fixture.history.streamRawHistory()),
+        steps,
+      }).toStrictEqual({ final: ['goal', 'answer'], steps: ['rollback'] });
+      await fixture.durable();
     });
   });
-
-  it('keeps the previous history when finalizing the effect fails', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const before = history.getTotalTokens();
-
-    const failure = await history
-      .replaceIfUnchanged({
-        expected: history.getAll(),
-        rewrite: (current) =>
-          replaceText(current, 1, `long ${'answer '.repeat(400)}`),
-        prepareEffect: () => ({
-          publish: () => undefined,
-          rollback: () => undefined,
+  it('restores rows and tokens when finalization fails', async () => {
+    await seeded(async (fixture) => {
+      const before = fixture.history.getTotalTokens();
+      await fixture.history.registerMediaOwner(
+        journalMediaParticipant(() => ({
+          publish: () => {},
+          rollback: () => {},
           finalize: () => {
             throw new Error('flush failed');
           },
+        })),
+      );
+      await expect(
+        rewriteAt(fixture, 1, `long ${'answer '.repeat(400)}`),
+      ).rejects.toThrow('flush failed');
+      expect({
+        final: await textsOf(fixture.history.streamRawHistory()),
+        tokens: fixture.history.getTotalTokens(),
+      }).toStrictEqual({ final: ['goal', 'answer'], tokens: before });
+      await fixture.durable();
+    });
+  });
+  it('drops Responses parent markers when retained context is rewritten', async () => {
+    await seeded(
+      async (fixture) => {
+        await rewriteAt(fixture, 0, 'goal rewritten');
+        const markers: Array<boolean | undefined> = [];
+        for await (const row of fixture.history.streamRawHistory())
+          markers.push(row.metadata?.responsesStored);
+        expect(markers).toStrictEqual([undefined, undefined, undefined]);
+      },
+      [
+        createUserMessage('goal'),
+        ai('stored answer', { responsesStored: true, id: 'resp_1' }),
+        createUserMessage('follow-up'),
+      ],
+    );
+  });
+  for (const target of [0, 2]) {
+    it(`updates the cache anchor according to whether row ${target} changes the preserved head`, async () => {
+      await seeded(
+        async (fixture) => {
+          const rows = await Array.fromAsync(
+            fixture.history.streamRawHistory(),
+          );
+          const anchor = rows[1].metadata?.chronology?.seq ?? 0;
+          fixture.history.setCacheAnchorSeq(anchor);
+          await rewriteAt(
+            fixture,
+            target,
+            target === 0 ? 'head rewritten' : 'tail rewritten',
+          );
+          expect(fixture.history.getCacheAnchorSeq()).toBe(
+            target === 0 ? 0 : anchor,
+          );
+        },
+        [createUserMessage('head'), ai('anchored'), createUserMessage('tail')],
+      );
+    });
+  }
+  it('writes no new group for an unchanged transform without an audit', async () => {
+    await seeded(async (fixture) => {
+      const before = fixture.session.store.published?.commitSeq;
+      await rewriteAt(fixture, -1, 'unused');
+      expect(fixture.session.store.published?.commitSeq).toBe(before);
+    });
+  });
+  it('commits an audit for unchanged rows when requested', async () => {
+    await seeded(async (fixture) => {
+      const before = await Array.fromAsync(fixture.history.streamRawHistory());
+      await rewriteAt(fixture, -1, 'unused', {
+        audit: { key: 'refusal_rewrite:pending', value: new Uint8Array([1]) },
+      });
+      expect(
+        await fixture.session.store.getMeta('refusal_rewrite:pending'),
+      ).toStrictEqual(new Uint8Array([1]));
+      expect(
+        await Array.fromAsync(fixture.history.streamRawHistory()),
+      ).toStrictEqual(before);
+    });
+  });
+  it('refuses an unchanged audit when the reviewed version moved on', async () => {
+    await seeded(async (fixture) => {
+      const current = fixture.history.historyMutationGuard();
+      await fixture.history.addBatch([createUserMessage('appended meanwhile')]);
+      await expect(
+        rewriteAt(fixture, -1, 'unused', {
+          assertCurrent: requireCurrent(current),
+          audit: { key: 'refusal_rewrite:pending', value: new Uint8Array([1]) },
         }),
-      })
-      .then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-
-    expect({
-      failed: failure instanceof Error,
-      final: texts(history.getAll()),
-      tokens: history.getTotalTokens(),
-    }).toStrictEqual({
-      failed: true,
-      final: ['goal', 'answer'],
-      tokens: before,
+      ).rejects.toThrow('stale review');
+      expect(
+        await fixture.session.store.getMeta('refusal_rewrite:pending'),
+      ).toBeUndefined();
     });
   });
-
-  it('drops stored Responses parent markers when a retained entry is rewritten', async () => {
-    const history = await seeded([
-      createUserMessage('goal'),
-      ai('stored answer', { responsesStored: true, id: 'resp_1' }),
-      createUserMessage('follow-up'),
-    ]);
-
-    await history.replaceIfUnchanged({
-      expected: history.getAll(),
-      rewrite: (current) => replaceText(current, 0, 'goal rewritten'),
-    });
-
-    expect(
-      history.getAll().map((c) => c.metadata?.responsesStored),
-    ).toStrictEqual([undefined, undefined, undefined]);
-  });
-
-  it('resets the cache anchor when the rewrite touches the preserved head', async () => {
-    const history = await seeded([
-      createUserMessage('head'),
-      ai('anchored'),
-      createUserMessage('tail'),
-    ]);
-    const anchorSeq = history.getAll()[1].metadata?.chronology?.seq ?? 0;
-    history.setCacheAnchorSeq(anchorSeq);
-
-    await history.replaceIfUnchanged({
-      expected: history.getAll(),
-      rewrite: (current) => replaceText(current, 0, 'head rewritten'),
-    });
-
-    expect(history.getCacheAnchorSeq()).toBe(0);
-  });
-
-  it('keeps the cache anchor when the rewrite is after the preserved head', async () => {
-    const history = await seeded([
-      createUserMessage('head'),
-      ai('anchored'),
-      createUserMessage('tail'),
-    ]);
-    const anchorSeq = history.getAll()[1].metadata?.chronology?.seq ?? 0;
-    history.setCacheAnchorSeq(anchorSeq);
-
-    await history.replaceIfUnchanged({
-      expected: history.getAll(),
-      rewrite: (current) => replaceText(current, 2, 'tail rewritten'),
-    });
-
-    expect(history.getCacheAnchorSeq()).toBe(anchorSeq);
-  });
-
-  it('commits nothing and reports unchanged when the rewrite changes no entry', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const steps: string[] = [];
-
-    const outcome = await history.replaceIfUnchanged({
-      expected: history.getAll(),
-      rewrite: (current) => current,
-      prepareEffect: () => {
-        steps.push('prepare');
-        return undefined;
-      },
-    });
-
-    expect({ outcome, steps }).toStrictEqual({
-      outcome: 'unchanged',
-      steps: [],
-    });
-  });
-
-  it('commits the prepared effect for a rewrite that changes no entry when asked to', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const before = history.getAll();
-    const steps: string[] = [];
-
-    const outcome = await history.replaceIfUnchanged({
-      expected: before,
-      commitUnchanged: true,
-      rewrite: (current) => current,
-      prepareEffect: (next) => {
-        steps.push(`prepare:${texts(next).join('|')}`);
-        return {
-          publish: () => {
-            steps.push('publish');
-          },
-          rollback: () => {
-            steps.push('rollback');
-          },
-          finalize: () => {
-            steps.push('finalize');
-          },
-        };
-      },
-    });
-
-    expect({
-      outcome,
-      steps,
-      same: history.getAll().every((entry, index) => entry === before[index]),
-    }).toStrictEqual({
-      outcome: 'applied',
-      steps: ['prepare:goal|answer', 'publish', 'finalize'],
-      same: true,
-    });
-  });
-
-  it('still refuses a rewrite that changes no entry when the history moved on', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const expected = history.getAll();
-    await history.addBatch([createUserMessage('appended meanwhile')]);
-
-    const outcome = await history.replaceIfUnchanged({
-      expected,
-      commitUnchanged: true,
-      rewrite: (current) => current,
-    });
-
-    expect(outcome).toBe('stale');
-  });
-
-  it('rejects with the abort and prepares nothing when cancelled after the rewrite was computed', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const before = history.getAll();
-    const controller = new AbortController();
-    const steps: string[] = [];
-
-    const failure = await history
-      .replaceIfUnchanged({
-        expected: before,
-        signal: controller.signal,
-        rewrite: (current) => {
-          const rewritten = replaceText(current, 1, 'answer rewritten');
-          controller.abort();
-          return rewritten;
-        },
-        prepareEffect: () => {
+  it('prepares no effects when cancelled while computing a rewrite', async () => {
+    await seeded(async (fixture) => {
+      const controller = new AbortController();
+      const before = await Array.fromAsync(fixture.history.streamRawHistory());
+      const steps: string[] = [];
+      await fixture.history.registerMediaOwner(
+        journalMediaParticipant(() => {
           steps.push('prepare');
-          return undefined;
-        },
-      })
-      .then(
-        () => undefined,
-        (error: unknown) => error,
+          return { publish: () => {}, rollback: () => {} };
+        }),
       );
-
-    expect({
-      aborted: failure === controller.signal.reason,
-      steps,
-      same: history.getAll().every((entry, index) => entry === before[index]),
-    }).toStrictEqual({ aborted: true, steps: [], same: true });
+      const failure = await fixture.history.detachedValues
+        .transform(
+          async () => {
+            controller.abort();
+            controller.signal.throwIfAborted();
+          },
+          undefined,
+          { signal: controller.signal },
+        )
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      expect(failure).toBe(controller.signal.reason);
+      expect(steps).toStrictEqual([]);
+      expect(
+        await Array.fromAsync(fixture.history.streamRawHistory()),
+      ).toStrictEqual(before);
+    });
   });
-
-  it('rolls back the prepared effect and keeps the history when cancelled while the effect publishes', async () => {
-    const history = await seeded([createUserMessage('goal'), ai('answer')]);
-    const before = history.getAll();
-    const controller = new AbortController();
-    const steps: string[] = [];
-
-    const failure = await history
-      .replaceIfUnchanged({
-        expected: before,
-        signal: controller.signal,
-        rewrite: (current) => replaceText(current, 1, 'answer rewritten'),
-        prepareEffect: () => ({
+  it('rolls back the prepared effect when cancelled during publication', async () => {
+    await seeded(async (fixture) => {
+      const controller = new AbortController();
+      const steps: string[] = [];
+      await fixture.history.registerMediaOwner(
+        journalMediaParticipant(() => ({
           publish: async () => {
             steps.push('publish');
             controller.abort();
@@ -363,21 +284,22 @@ describe('HistoryService.replaceIfUnchanged', () => {
           finalize: () => {
             steps.push('finalize');
           },
-        }),
-      })
-      .then(
+        })),
+      );
+      const failure = await rewriteAt(fixture, 1, 'answer rewritten', {
+        signal: controller.signal,
+      }).then(
         () => undefined,
         (error: unknown) => error,
       );
-
-    expect({
-      aborted: failure === controller.signal.reason,
-      steps,
-      final: texts(history.getAll()),
-    }).toStrictEqual({
-      aborted: true,
-      steps: ['publish', 'rollback'],
-      final: ['goal', 'answer'],
+      expect(failure).toBe(controller.signal.reason);
+      expect({
+        steps,
+        final: await textsOf(fixture.history.streamRawHistory()),
+      }).toStrictEqual({
+        steps: ['publish', 'rollback'],
+        final: ['goal', 'answer'],
+      });
     });
   });
 });

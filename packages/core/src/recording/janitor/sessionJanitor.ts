@@ -199,6 +199,8 @@ async function performSweep(
     mediaCleanupErrors = await reclaimSessionMedia(
       globalTempDir,
       params.activeHistory,
+      {},
+      params.signal,
     );
   } catch (error: unknown) {
     mediaCleanupErrors = 1;

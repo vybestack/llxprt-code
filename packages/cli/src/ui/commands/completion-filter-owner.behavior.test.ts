@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -68,26 +69,25 @@ describe('registered completion filtering owner', () => {
       createRestoreCommand(
         {
           enabled: true,
-          restoreProjectSnapshot: undefined,
+          git: undefined,
           checkpointDirectory: prefixDir,
-          setClientHistory: (history) => owner.setHistory(history),
+          replaceHistoryFromSource: owner.session.replaceHistoryFromSource.bind(
+            owner.session,
+          ),
         },
         () => false,
-        () => {},
-        () => 0,
       ),
     );
     const fuzzy = await register(
       createRestoreCommand(
         {
           enabled: true,
-          restoreProjectSnapshot: undefined,
+          git: undefined,
           checkpointDirectory: fuzzyDir,
-          setClientHistory: (history) => sibling.setHistory(history),
+          replaceHistoryFromSource:
+            sibling.session.replaceHistoryFromSource.bind(sibling.session),
         },
         () => true,
-        () => {},
-        () => 0,
       ),
     );
     if (!prefix.schema || !fuzzy.schema)
@@ -110,6 +110,6 @@ describe('registered completion filtering owner', () => {
     expect(fuzzyResult.suggestions.map((entry) => entry.value)).toContain(
       'production',
     );
-    expect(await sibling.getHistory()).toStrictEqual([]);
+    expect(await collectResumeRows(sibling.streamHistory())).toStrictEqual([]);
   });
 });

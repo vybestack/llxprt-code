@@ -6,13 +6,16 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { FakeProvider } from './FakeProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 async function collectReplayText(provider: FakeProvider): Promise<string> {
   const textChunks: string[] = [];
-  for await (const chunk of provider.generateChatCompletion([])) {
+  for await (const chunk of provider.generateChatCompletion(
+    replayableContents([]),
+  )) {
     const text = chunk.blocks.find((block) => block.type === 'text');
     if (text && 'text' in text) textChunks.push(text.text);
   }
@@ -84,7 +87,9 @@ describe('FakeProvider', () => {
 
     const provider = new FakeProvider(filePath, '/tmp/work');
     const chunks: unknown[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
+    for await (const chunk of provider.generateChatCompletion(
+      replayableContents([]),
+    )) {
       chunks.push(chunk);
     }
 
@@ -106,13 +111,17 @@ describe('FakeProvider', () => {
     const provider = new FakeProvider(filePath);
 
     // consume first turn
-    for await (const _chunk of provider.generateChatCompletion([])) {
+    for await (const _chunk of provider.generateChatCompletion(
+      replayableContents([]),
+    )) {
       // noop
     }
 
     await expect(
       (async () => {
-        for await (const _chunk of provider.generateChatCompletion([])) {
+        for await (const _chunk of provider.generateChatCompletion(
+          replayableContents([]),
+        )) {
           // noop
         }
       })(),
@@ -172,7 +181,9 @@ describe('FakeProvider', () => {
     const provider = new FakeProvider(filePath);
 
     const chunks: unknown[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
+    for await (const chunk of provider.generateChatCompletion(
+      replayableContents([]),
+    )) {
       chunks.push(chunk);
     }
 
@@ -210,7 +221,9 @@ describe('FakeProvider', () => {
     const provider = new FakeProvider(filePath);
 
     const chunks: unknown[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
+    for await (const chunk of provider.generateChatCompletion(
+      replayableContents([]),
+    )) {
       chunks.push(chunk);
     }
 

@@ -5,7 +5,7 @@
  */
 import type { NetworkFetch } from '@vybestack/llxprt-code-auth/network-fetch.js';
 
-import type { EventEmitter } from 'node:events';
+import type { OAuthDisplaySink } from '../auth/oauth-authorization.js';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { MCPServerConfig } from '../config/index.js';
 import {
@@ -198,7 +198,7 @@ export interface McpOAuthCapabilities {
     server: string,
     config: MCPOAuthConfig,
     url?: string,
-    events?: EventEmitter,
+    display?: OAuthDisplaySink,
     signal?: AbortSignal,
   ) => Promise<unknown>;
 }
@@ -618,14 +618,14 @@ export function bindMcpOAuthCapabilities(
     getAuthProviderFactory,
     discover: (url, signal) =>
       OAuthUtils.discoverOAuthConfig(requestFetch, url, signal),
-    authenticate: (server, config, url, events, signal) =>
+    authenticate: (server, config, url, display, signal) =>
       MCPOAuthProvider.authenticate(
         requestFetch,
         { tokenStorage, openBrowser },
         server,
         config,
         url,
-        events,
+        display,
         signal,
       ),
   };

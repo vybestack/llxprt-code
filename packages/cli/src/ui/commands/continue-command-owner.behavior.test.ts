@@ -5,7 +5,8 @@
  */
 import { validateSessionMediaPackage } from '@vybestack/llxprt-code-core';
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { NativeJournalPageReader } from '@vybestack/llxprt-code-core/journal/native-journal-page-reader.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
@@ -99,12 +100,25 @@ describe('registered continue command owner', () => {
         `export ${session.id} ${destination}`,
       );
       expect(result).toMatchObject({ type: 'message', messageType: 'info' });
-      const serialized = await readFile(
-        join(destination, 'session.jsonl'),
-        'utf8',
+      const validated = await validateSessionMediaPackage(destination);
+      const reader = await NativeJournalPageReader.open(
+        validated.recording.path,
       );
-      expect(serialized).toContain('registered owner content');
-      expect(serialized).not.toContain('invocation decoy content');
+      try {
+        const texts: string[] = [];
+        for await (const entry of reader.entries()) {
+          const content = await reader.readContent(entry);
+          texts.push(
+            ...content.blocks.flatMap((block) =>
+              block.type === 'text' ? [block.text] : [],
+            ),
+          );
+        }
+        expect(texts).toContain('registered owner content');
+        expect(texts).not.toContain('invocation decoy content');
+      } finally {
+        await reader.close();
+      }
     } finally {
       await rm(exportRoot, { recursive: true, force: true });
     }

@@ -1,3 +1,4 @@
+import { readHistory } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,17 +14,20 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { computeStatefulConversation } from '../../../../providers/src/openai-responses/openAIResponsesStateful.js';
-import { aiTurn } from './image-retirement-harness.js';
+import {
+  sendThroughRoute,
+  WIRE_ROUTES,
+} from '../../../../providers/src/__tests__/support/wireBodyCapture.js';
+import { openNativeProviderFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-provider-fixture.js';
+import { tmpdir } from 'node:os';
+import { aiTurn, countRetirementNotes } from './image-retirement-harness.js';
 import {
   storedAiTurn,
   textTurn,
   useReliefConversation,
 } from './media-relief-fixtures.js';
 
-const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const STALE_PARENT = 'resp_stale_pending_tail';
 
 function tailWithStoredParent(): IContent[] {
@@ -34,36 +38,47 @@ function tailWithStoredParent(): IContent[] {
   ];
 }
 
-function providerView(contents: IContent[]): {
-  parentId: string | undefined;
-  noteCount: number;
-  storedEntries: number;
-} {
-  const conversation = computeStatefulConversation(
-    { invocation: { modelBehavior: {} } },
+async function providerView(
+  contents: IContent[],
+): Promise<{ parentId: unknown; storedEntries: number; noteCount: number }> {
+  const route = WIRE_ROUTES.find((item) => item.id === 'openai-responses');
+  if (route === undefined) throw new Error('Missing Responses route');
+  const source = await openNativeProviderFixture(
+    tmpdir(),
     contents,
-    {},
-    undefined,
-    true,
-    CODEX_BASE_URL,
-    () => false,
-    true,
-    DebugLogger.getLogger('test:issue4000:responses-parent'),
+    contents.length,
   );
-  return {
-    parentId: conversation.parentId,
-    noteCount: conversation.content
-      .flatMap((content) => content.blocks)
-      .filter(
-        (block) =>
-          block.type === 'text' &&
-          block.text.includes('was omitted from this request'),
-      ).length,
-    storedEntries: contents.filter(
-      (content) =>
-        content.speaker === 'ai' && content.metadata?.responsesStored === true,
-    ).length,
-  };
+  try {
+    const requests = await sendThroughRoute(
+      {
+        ...route,
+        ephemerals: { ...route.ephemerals, 'responses-stateful': true },
+      },
+      {
+        id: 'retired',
+        description: 'retired media with stateful parents',
+        rows: contents,
+      },
+      'rows',
+      undefined,
+      source,
+    );
+    const body: unknown = JSON.parse(
+      Buffer.from(requests.bytes).toString('utf8'),
+    );
+    const parentId =
+      typeof body === 'object' &&
+      body !== null &&
+      'previous_response_id' in body
+        ? body.previous_response_id
+        : undefined;
+    let storedEntries = 0;
+    for await (const row of source.openReader())
+      if (row.metadata?.responsesStored === true) storedEntries++;
+    return { parentId, storedEntries, noteCount: countRetirementNotes(body) };
+  } finally {
+    await source.close();
+  }
 }
 
 describe('stored Responses parents in the pending tail after retire-all recomposition (issue #4000 review round 3)', () => {
@@ -76,7 +91,7 @@ describe('stored Responses parents in the pending tail after retire-all recompos
 
     const contents = await session.recomposeViaCallback(tailWithStoredParent());
 
-    expect(providerView(contents)).toStrictEqual({
+    expect(await providerView(contents)).toStrictEqual({
       parentId: undefined,
       noteCount: 3,
       storedEntries: 0,
@@ -91,7 +106,7 @@ describe('stored Responses parents in the pending tail after retire-all recompos
     session.useCompression(async (history) => {
       runs += 1;
       if (runs === 1) throw new Error('summarizer offline on the byte pass');
-      history.clear();
+      await history.clear();
       history.add(aiTurn('short summary of the earlier conversation'));
       for (const image of images) {
         history.add({
@@ -104,7 +119,7 @@ describe('stored Responses parents in the pending tail after retire-all recompos
 
     const { contents } = await session.send(tailWithStoredParent());
 
-    expect(providerView(contents)).toStrictEqual({
+    expect(await providerView(contents)).toStrictEqual({
       parentId: undefined,
       noteCount: 3,
       storedEntries: 0,
@@ -122,8 +137,7 @@ describe('stored Responses parents in the pending tail after retire-all recompos
     await session.recomposeViaCallback(pending);
 
     expect({
-      canonicalHistoryStored: session.history
-        .getAll()
+      canonicalHistoryStored: (await readHistory(session.history))
         .filter((content) => content.metadata?.responsesStored === true)
         .map((content) => content.metadata?.id),
       pendingStored: pending[1].metadata?.responsesStored,
@@ -155,7 +169,7 @@ describe('stored Responses parents before the first retired image (issue #4000 C
       textTurn('next question'),
     ]);
 
-    expect(providerView(contents)).toStrictEqual({
+    expect(await providerView(contents)).toStrictEqual({
       parentId: EARLY_PARENT,
       noteCount: 3,
       storedEntries: 1,
@@ -173,7 +187,7 @@ describe('stored Responses parents before the first retired image (issue #4000 C
       textTurn('next question'),
     ]);
 
-    expect(providerView(contents)).toStrictEqual({
+    expect(await providerView(contents)).toStrictEqual({
       parentId: undefined,
       noteCount: 3,
       storedEntries: 0,

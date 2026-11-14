@@ -1,3 +1,4 @@
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -19,7 +20,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
 import type {
   IContent,
   MediaReferenceBlock,
@@ -232,11 +233,13 @@ describe('Anthropic incident-sized request budget (issue #3984)', () => {
       body: '',
       contentLength: null,
     };
-    globalThis.fetch = async (_input, init): Promise<Response> => {
-      sent.body = await bodyText(init?.body);
-      sent.contentLength = new Headers(init?.headers).get('content-length');
-      return successfulResponse();
-    };
+    globalThis.fetch = withFetchPreconnect(
+      async (_input, init): Promise<Response> => {
+        sent.body = await bodyText(init?.body);
+        sent.contentLength = new Headers(init?.headers).get('content-length');
+        return successfulResponse();
+      },
+    );
     const { provider, options } = prepared(
       contents,
       resolver,
@@ -263,10 +266,10 @@ describe('Anthropic incident-sized request budget (issue #3984)', () => {
     const resolver = new RequestMediaResolver(store);
     const { contents } = await incidentHistory(store, incidentRawLengths());
     let networkSubmissions = 0;
-    globalThis.fetch = async (): Promise<Response> => {
+    globalThis.fetch = withFetchPreconnect(async (): Promise<Response> => {
       networkSubmissions += 1;
       return successfulResponse();
-    };
+    });
     const { provider, options } = prepared(contents, resolver, undefined);
 
     const projectionError = await rejection(
@@ -291,10 +294,10 @@ describe('Anthropic incident-sized request budget (issue #3984)', () => {
     const resolver = new RequestMediaResolver(store);
     const { contents } = await incidentHistory(store, incidentRawLengths());
     let networkSubmissions = 0;
-    globalThis.fetch = async (): Promise<Response> => {
+    globalThis.fetch = withFetchPreconnect(async (): Promise<Response> => {
       networkSubmissions += 1;
       return successfulResponse();
-    };
+    });
     const { provider, options } = prepared(contents, resolver, FIFTEEN_MIB);
 
     const projectionError = await rejection(
@@ -349,10 +352,10 @@ describe('Anthropic incident-sized request budget (issue #3984)', () => {
     it('rejects the same body at send before any HTTP request', async () => {
       const { contents, resolver } = await oversizedHistory();
       let networkSubmissions = 0;
-      globalThis.fetch = async (): Promise<Response> => {
+      globalThis.fetch = withFetchPreconnect(async (): Promise<Response> => {
         networkSubmissions += 1;
         return successfulResponse();
-      };
+      });
       const { provider, options } = prepared(
         contents,
         resolver,

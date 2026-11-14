@@ -104,6 +104,12 @@ describe('ChatSession historical image retirement (issue #3984)', () => {
       );
     }
 
+    let canonicalImages = 0;
+    for await (const content of history.streamRawHistory()) {
+      canonicalImages += content.blocks.filter(
+        (block) => block.type === 'media',
+      ).length;
+    }
     const retiredPerRequest = observations.map((entry) => entry.notes);
     const retirementEvents = retiredPerRequest.filter(
       (count, index) => count !== (retiredPerRequest[index - 1] ?? 0),
@@ -127,10 +133,7 @@ describe('ChatSession historical image retirement (issue #3984)', () => {
             ? [block.data]
             : [],
         )[0],
-      canonicalImages: history
-        .getAll()
-        .flatMap((content) => content.blocks)
-        .filter((block) => block.type === 'media').length,
+      canonicalImages,
     }).toStrictEqual({
       requests: IMAGE_COUNT,
       everyRequestWithinBudget: true,

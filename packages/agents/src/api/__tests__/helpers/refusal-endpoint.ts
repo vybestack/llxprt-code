@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { testNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
@@ -265,8 +268,8 @@ export interface ScriptedRun {
   readonly waits: readonly number[];
   readonly stats: ReturnType<Agent['getStats']>;
   readonly requests: readonly WireRequest[];
-  readonly historyBefore: Awaited<ReturnType<Agent['getHistory']>>;
-  readonly historyAfter: Awaited<ReturnType<Agent['getHistory']>>;
+  readonly historyBefore: readonly IContent[];
+  readonly historyAfter: readonly IContent[];
   readonly tokenRecords: ReadonlyArray<Record<string, unknown>>;
   readonly journalRecords: ReadonlyArray<Record<string, unknown>>;
 }
@@ -371,7 +374,7 @@ export async function runScriptedPrompt(
       agent.setEphemeralSetting(key, value);
     for (const [key, value] of Object.entries(options.modelParams ?? {}))
       agent.setModelParam(key, value);
-    const historyBefore = await agent.getHistory();
+    const historyBefore = await collectHistory(agent);
     await agent.session.setRecording({ enabled: true });
     const events: AgentEvent[] = [];
     for (const prompt of prompts) {
@@ -384,10 +387,10 @@ export async function runScriptedPrompt(
       }
     }
     await options.inspect?.(agent);
-    const historyAfter = await agent.getHistory();
+    const historyAfter = await collectHistory(agent);
     const journalPath = agent.session.getRecording().path ?? '';
     await agent.session.setRecording({ enabled: false });
-    const journalRecords = readJsonl(journalPath);
+    const journalRecords = await readJournalAudit(journalPath);
     const projectTempDir = new Storage(workingDir).getProjectTempDir();
     return {
       events,
@@ -420,4 +423,63 @@ export function aiTexts(history: ScriptedRun['historyAfter']): string[] {
     .filter((message) => message.speaker === 'ai')
     .flatMap((message) => message.blocks)
     .flatMap((block) => (block.type === 'text' ? [block.text] : []));
+}
+
+export async function collectHistory(agent: Agent): Promise<IContent[]> {
+  const rows: IContent[] = [];
+  for await (const row of agent.streamHistory()) rows.push(row);
+  return rows;
+}
+
+export async function readJournalAudit(
+  path: string,
+): Promise<Array<Record<string, unknown>>> {
+  const session = await JournalSession.open(path, {
+    namedWriters: testNamedWriters,
+  });
+  try {
+    const records: Array<Record<string, unknown>> = [];
+    for await (const entry of auditMetadata(session)) {
+      const payload: unknown = JSON.parse(
+        new TextDecoder().decode(entry.value),
+      );
+      records.push({
+        type: entry.key.startsWith('refusal_rewrite:')
+          ? 'refusal_rewrite'
+          : 'refusal',
+        payload,
+      });
+    }
+    return records.sort((left, right) =>
+      auditTime(left).localeCompare(auditTime(right)),
+    );
+  } finally {
+    await session.close();
+  }
+}
+
+export async function readJournalRows(path: string): Promise<IContent[]> {
+  const session = await JournalSession.open(path, {
+    namedWriters: testNamedWriters,
+  });
+  try {
+    const rows: IContent[] = [];
+    for await (const row of session.rows()) rows.push(row.content);
+    return rows;
+  } finally {
+    await session.close();
+  }
+}
+
+async function* auditMetadata(
+  session: JournalSession,
+): AsyncGenerator<{ readonly key: string; readonly value: Uint8Array }> {
+  yield* session.store.metadata('refusal:', 'state');
+  yield* session.store.metadata('refusal_rewrite:', 'meta');
+}
+
+function auditTime(record: Record<string, unknown>): string {
+  const payload = record['payload'];
+  if (typeof payload !== 'object' || payload === null) return '';
+  return 'time' in payload ? String(payload.time) : '';
 }

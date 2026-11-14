@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
@@ -41,6 +42,7 @@ import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * Provider whose stream yields one chunk and then throws, simulating a
@@ -135,7 +137,7 @@ function createTestFixture(provider: IProvider): TestFixture {
       sessionId: 'test-session-id',
     }),
     providerRuntimeSnapshot,
-    historyService: new HistoryService(),
+    historyService: new HistoryService({ scratchRoots: historyScratchRoots }),
     mockContentGenerator: {
       generateContent: vi.fn(),
       generateContentStream: vi.fn(),
@@ -147,6 +149,7 @@ function createTestFixture(provider: IProvider): TestFixture {
 
 function buildChatSession(fixture: TestFixture): ChatSession {
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     ...createSessionPolicyFixture(
       fixture.runtimeSetup.settingsService,
       fixture.providerRuntimeSnapshot.runtimeId,

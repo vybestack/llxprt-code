@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
 
 function buildProviderWithOAuth() {
   const oauthManager = {

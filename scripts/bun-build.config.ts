@@ -68,6 +68,8 @@ export const EXTERNALS = [
   '@lydell/node-pty-win32-arm64',
   '@lydell/node-pty-win32-x64',
   '@napi-rs/keyring',
+  // Sharp resolves its platform addon and libvips relative to its package.
+  'sharp',
   'node:module',
   // UI package uses opentui which has Bun-specific imports.
   '@vybestack/llxprt-ui',

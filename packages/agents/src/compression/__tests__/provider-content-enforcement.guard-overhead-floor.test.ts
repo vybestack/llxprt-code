@@ -29,7 +29,7 @@ describe('guard overhead that consumes the whole context limit (issue #4000 Code
   it('rejects with a context overflow instead of returning a candidate that cannot fit', async () => {
     const session = conversation.session();
     const pending = [textTurn('hello')];
-    const original = session.compose(pending);
+    const original = await session.compose(pending);
     const guard = {
       estimatedTokens: 1 + OVERHEAD,
       contextLimit: OVERHEAD,
@@ -45,7 +45,7 @@ describe('guard overhead that consumes the whole context limit (issue #4000 Code
   it('returns a candidate that fits exactly in the room the overhead leaves', async () => {
     const session = conversation.session();
     const pending = [textTurn('hello')];
-    const original = session.compose(pending);
+    const original = await session.compose(pending);
     const guard = {
       estimatedTokens: 1 + OVERHEAD,
       contextLimit: OVERHEAD + 1,

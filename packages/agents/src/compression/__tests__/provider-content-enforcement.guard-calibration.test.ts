@@ -32,7 +32,7 @@ describe('guard overhead calibration across media relief (issue #4000 CodeRabbit
     const session = conversation.session();
     await conversation.seedImages(3);
     const pending = [textTurn('next question')];
-    const original = session.compose(pending);
+    const original = await session.compose(pending);
     const relieved = await session.recomposeViaCallback(pending);
     return {
       original,

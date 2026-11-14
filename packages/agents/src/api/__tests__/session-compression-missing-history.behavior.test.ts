@@ -61,16 +61,21 @@ describe('SessionClientOwner compressHistory without a chat history service', ()
         compressions += 1;
         return performCompression(...args);
       };
+      const getHistoryService = chat.getHistoryService;
       chat.getHistoryService = () => null;
-
-      await expect(
-        opened.owner.clients.conversationBinding.compressHistory(
-          'missing-history',
-          session,
-          opened.owner.hookOperations,
-        ),
-      ).rejects.toThrow('Chat instance not available for compression.');
-      expect(compressions).toBe(0);
+      try {
+        await expect(
+          opened.owner.clients.conversationBinding.compressHistory(
+            'missing-history',
+            session,
+            opened.owner.hookOperations,
+          ),
+        ).rejects.toThrow('Chat instance not available for compression.');
+        expect(compressions).toBe(0);
+      } finally {
+        chat.getHistoryService = getHistoryService;
+        chat.performCompression = performCompression;
+      }
     } finally {
       await runCleanupSteps([
         () => session.dispose(),

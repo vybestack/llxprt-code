@@ -19,40 +19,39 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { RuntimeModel } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeModel.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { TokenUsageLogger } from '../../core/TokenUsageLogger.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
-import { testProviderRuntime } from './MiddleOutStrategy-test-helpers.js';
 
-const requestFetch: NetworkFetch = () =>
-  Promise.reject(new Error('This test must not make network requests'));
+const historyScratchRoots = createTestScratchOwner();
 
 /** Each call returns `summary <n>` and usage that encodes `n`. */
-class CountingSummaryProvider implements IProvider {
+class CountingSummaryProvider {
   readonly name = 'counting-provider';
   calls = 0;
 
-  getModels(): Promise<[]> {
-    return Promise.resolve([]);
+  async getModels(): Promise<RuntimeModel[]> {
+    return [];
   }
 
   getDefaultModel(): string {
     return 'counting-model';
   }
 
-  generateChatCompletion(
-    options: RuntimeGenerateChatOptions,
-  ): AsyncIterableIterator<IContent>;
-  generateChatCompletion(content: IContent[]): AsyncIterableIterator<IContent>;
-  async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+  async *generateChatCompletion(
+    options: RuntimeGenerateChatOptions | AsyncIterable<IContent>,
+  ): AsyncGenerator<IContent, void, unknown> {
+    if (!('contents' in options)) throw new Error('Expected chat options');
+    // Drain the streamed request like a real transport would.
+    for await (const _row of options.contents) {
+      /* consumed */
+    }
     this.calls += 1;
     const n = this.calls;
     yield {
@@ -72,6 +71,7 @@ class CountingSummaryProvider implements IProvider {
 }
 
 const tempDirs: string[] = [];
+const histories: HistoryService[] = [];
 
 interface Harness {
   readonly historyService: HistoryService;
@@ -85,40 +85,28 @@ async function createHarness(): Promise<Harness> {
   tempDirs.push(dir);
   const logPath = path.join(dir, 'usage.jsonl');
   const logger = new TokenUsageLogger('summary', logPath);
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
+  histories.push(historyService);
   const endedSummaries: IContent[] = [];
   historyService.on('compressionEnded', (summary: IContent) => {
     endedSummaries.push(summary);
   });
   const provider = new CountingSummaryProvider();
-  const providerResult = {
-    invocation: captureProviderInvocation(
-      {
-        fetch: requestFetch,
-        runtimeId: testProviderRuntime.runtimeId,
-        metadata: testProviderRuntime.metadata,
-        globalSettings: new SettingsService().getAllGlobalSettings(),
-        providerSettings: new SettingsService().getProviderSettings(
-          provider.name,
-        ),
-      },
-      provider.name,
-    ),
-    provider,
-    runtime: testProviderRuntime as never,
-  };
 
   return {
     historyService,
     logPath,
     endedSummaries,
     handler(strategy: string): CompressionHandler {
+      const runtime = buildRuntimeContext(historyService, {
+        compressionStrategy: strategy,
+        contextLimit: 200_000,
+        compressionThreshold: 0.85,
+      });
       const handler = new CompressionHandler(
-        buildRuntimeContext(historyService, {
-          compressionStrategy: strategy,
-          contextLimit: 200_000,
-          compressionThreshold: 0.85,
-        }),
+        runtime,
         undefined,
         historyService,
         undefined,
@@ -126,7 +114,11 @@ async function createHarness(): Promise<Harness> {
         undefined,
         undefined,
         {},
-        () => Promise.resolve(providerResult),
+        async () => ({
+          provider,
+          runtime: runtime.providerRuntime,
+          invocation: runtime.prepareProviderInvocation(provider.name),
+        }),
         () => Promise.resolve(undefined),
       );
       handler.tokenUsageLogger = logger;
@@ -135,7 +127,11 @@ async function createHarness(): Promise<Harness> {
   };
 }
 
-function addTurns(historyService: HistoryService, label: string, n: number) {
+async function addTurns(
+  historyService: HistoryService,
+  label: string,
+  n: number,
+): Promise<void> {
   for (let i = 0; i < n; i++) {
     historyService.add({
       speaker: 'human',
@@ -146,14 +142,29 @@ function addTurns(historyService: HistoryService, label: string, n: number) {
       blocks: [{ type: 'text', text: `${label} ai ${i}` }],
     });
   }
+  await historyService.waitForCommit();
+  await historyService.waitForTokenUpdates();
+}
+
+function summaryText(entry: IContent): string | undefined {
+  if (entry.metadata?.reason !== 'compression-state-snapshot') return undefined;
+  return entry.blocks[0].type === 'text' ? entry.blocks[0].text : '';
 }
 
 function summaryTexts(history: readonly IContent[]): string[] {
-  return history
-    .filter((entry) => entry.metadata?.reason === 'compression-state-snapshot')
-    .map((entry) =>
-      entry.blocks[0].type === 'text' ? entry.blocks[0].text : '',
-    );
+  return history.flatMap((entry) => summaryText(entry) ?? []);
+}
+
+/** Summary texts in curated history, read row by row from the journal. */
+async function curatedSummaryTexts(
+  historyService: HistoryService,
+): Promise<string[]> {
+  const texts: string[] = [];
+  for await (const entry of historyService.streamCuratedHistory()) {
+    const text = summaryText(entry);
+    if (text !== undefined) texts.push(text);
+  }
+  return texts;
 }
 
 async function compressionRecords(
@@ -175,6 +186,7 @@ async function compress(handler: CompressionHandler): Promise<void> {
 
 describe('compression telemetry usage comes from the compression that ran (#4067)', () => {
   afterEach(async () => {
+    await Promise.all(histories.splice(0).map((history) => history.dispose()));
     await Promise.all(
       tempDirs
         .splice(0)
@@ -186,14 +198,14 @@ describe('compression telemetry usage comes from the compression that ran (#4067
     const harness = await createHarness();
     const middleOut = harness.handler('middle-out');
 
-    addTurns(harness.historyService, 'seed', 20);
+    await addTurns(harness.historyService, 'seed', 20);
     await compress(middleOut);
-    addTurns(harness.historyService, 'later', 30);
+    await addTurns(harness.historyService, 'later', 30);
     await compress(middleOut);
 
     // Precondition: the second compression kept the first summary ahead of
     // its own, which is the shape that made telemetry repeat old usage.
-    expect(summaryTexts(harness.historyService.getCurated())).toStrictEqual([
+    expect(await curatedSummaryTexts(harness.historyService)).toStrictEqual([
       '<state_snapshot>summary 1</state_snapshot>',
       '<state_snapshot>summary 2</state_snapshot>',
     ]);
@@ -217,9 +229,9 @@ describe('compression telemetry usage comes from the compression that ran (#4067
     const harness = await createHarness();
     const middleOut = harness.handler('middle-out');
 
-    addTurns(harness.historyService, 'seed', 20);
+    await addTurns(harness.historyService, 'seed', 20);
     await compress(middleOut);
-    addTurns(harness.historyService, 'later', 30);
+    await addTurns(harness.historyService, 'later', 30);
     await compress(middleOut);
 
     expect(summaryTexts(harness.endedSummaries)).toStrictEqual([
@@ -231,13 +243,13 @@ describe('compression telemetry usage comes from the compression that ran (#4067
   it('leaves usage absent for a compression that made no LLM call, even with an earlier summary in history', async () => {
     const harness = await createHarness();
 
-    addTurns(harness.historyService, 'seed', 20);
+    await addTurns(harness.historyService, 'seed', 20);
     await compress(harness.handler('middle-out'));
-    addTurns(harness.historyService, 'later', 30);
+    await addTurns(harness.historyService, 'later', 30);
     await compress(harness.handler('high-density'));
 
     // The high-density pass kept the earlier summary in history.
-    expect(summaryTexts(harness.historyService.getCurated())).toContain(
+    expect(await curatedSummaryTexts(harness.historyService)).toContain(
       '<state_snapshot>summary 1</state_snapshot>',
     );
 

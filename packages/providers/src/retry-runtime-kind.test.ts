@@ -26,10 +26,16 @@ import {
   type RuntimeKind,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { RetryOrchestrator } from './RetryOrchestrator.js';
 import { AllBucketsExhaustedError } from './errors.js';
 import type { GenerateChatOptions, IProvider } from './IProvider.js';
+const noRows: AsyncIterable<IContent> = {
+  async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void> {
+    yield* [];
+  },
+};
 
 describe('retry runtime kind', () => {
   const credentials = useOwnedCredentials();
@@ -80,7 +86,7 @@ describe('retry runtime kind', () => {
         credentials().authority,
         release,
       );
-      configureProviderTokenizer(manager);
+      configureProviderTokenizer(manager, selected.scratchRoots);
       manager.setRuntimeContext(
         createProviderRuntimeContext({
           runtimeId,
@@ -110,7 +116,7 @@ describe('retry runtime kind', () => {
     return {
       owner,
       options: {
-        contents: [],
+        contents: noRows,
         runtimeKind,
         tryBucketFailover: async () => false,
         readFailoverBuckets: () => ['work'],
@@ -181,7 +187,7 @@ describe('retry runtime kind', () => {
       if (!activeProvider) throw new Error('Missing fixture provider');
       try {
         for await (const content of activeProvider.generateChatCompletion({
-          contents: [],
+          contents: noRows,
         })) {
           throw new Error(`Unexpected content: ${JSON.stringify(content)}`);
         }

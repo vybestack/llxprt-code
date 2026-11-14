@@ -15,16 +15,17 @@ import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
  * synthesize-and-resolve route, not a native tool_call chunk.
  */
 
+import { describe, expect, it, vi, beforeEach } from 'bun:test';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import {
   SubagentTerminateMode,
   type OutputConfig,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+
 import {
   acquireSubagentSettings,
   acquireSubagentWorkspace,
@@ -168,6 +169,9 @@ async function runDirectNonInteractive(
 }
 
 describe('issue 3540 textual Hermes emitter rejection', () => {
+  afterAll(() => {
+    void vi.mock('@vybestack/llxprt-code-tools', () => toolsModule);
+  });
   const retainSubagentCleanup = installSubagentCleanup();
 
   beforeEach(() => {

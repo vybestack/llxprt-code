@@ -49,6 +49,7 @@ import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/r
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
+import { callerOwnedProviderRequest } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -256,7 +257,7 @@ export function buildTriggerInstruction(toCompress: IContent[]): string {
 export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
-  context: CompressionContext,
+  context: Omit<CompressionContext, 'history'>,
   mediaResolver: RequestMediaResolutionService | undefined,
   requestMediaBudgetBytes: number | undefined,
   providerFileBindings: ProviderFileBindingStore | undefined,
@@ -266,7 +267,9 @@ export async function runVerificationPass(
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
   invocation?: RuntimeGenerateChatOptions['invocation'],
 ): Promise<string> {
-  const verificationRequest = verificationMessages(initialSummary);
+  const verificationRequest = await callerOwnedProviderRequest(
+    verificationMessages(initialSummary),
+  );
 
   try {
     const providerRuntime =
@@ -280,7 +283,7 @@ export async function runVerificationPass(
       resolvedConfig?.getTargetDir(),
     ).generateChatCompletion(
       await buildCompressionChatOptions({
-        contents: verificationRequest,
+        requestRows: verificationRequest,
         providerRuntime,
         resolvedConfig,
         fallbackConfig: context.config,
@@ -318,6 +321,8 @@ export async function runVerificationPass(
     }
   } catch {
     // Verification is best-effort — fall back to initial summary on any error
+  } finally {
+    await verificationRequest.close();
   }
 
   return initialSummary;

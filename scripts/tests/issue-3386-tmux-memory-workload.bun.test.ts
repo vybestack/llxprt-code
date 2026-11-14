@@ -154,7 +154,7 @@ describe('issue #3386 tmux memory-retention workload', () => {
       'LLXPRT_FAKE_RESPONSES=scripts/fixtures/issue2208-newlines.responses.jsonl',
     );
     expect(shellCommand).toContain(
-      'LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json',
+      'LLXPRT_SYSTEM_SETTINGS_PATH="$PWD/scripts/system-settings.interactive-ui.json"',
     );
     expect(shellCommand).toContain(
       'LLXPRT_CODE_WELCOME_CONFIG_PATH=scripts/fixtures/welcome-completed.json',

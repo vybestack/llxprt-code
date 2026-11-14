@@ -1,3 +1,4 @@
+import { readHistory } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -33,7 +34,7 @@ describe('rejected fallback truncation keeps other writers entries (issue #4000 
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = historyTexts(session.history);
+    const before = await historyTexts(session.history);
     session.useCompression(() => Promise.reject(new Error('summarizer down')));
     session.useFallback(async (history, applyResult) => {
       await history.addBatch([aiTurn(BEFORE_CANDIDATE)]);
@@ -46,7 +47,7 @@ describe('rejected fallback truncation keeps other writers entries (issue #4000 
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      history: historyTexts(session.history),
+      history: await historyTexts(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       history: [...before, BEFORE_CANDIDATE, AFTER_CANDIDATE],
@@ -57,7 +58,7 @@ describe('rejected fallback truncation keeps other writers entries (issue #4000 
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = JSON.stringify(session.history.getAll());
+    const before = JSON.stringify(await readHistory(session.history));
     session.useCompression(() => Promise.reject(new Error('summarizer down')));
     session.useFallback(async (_history, applyResult) => {
       await applyResult([aiTurn(CANDIDATE)]);
@@ -68,7 +69,8 @@ describe('rejected fallback truncation keeps other writers entries (issue #4000 
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      historyRestored: JSON.stringify(session.history.getAll()) === before,
+      historyRestored:
+        JSON.stringify(await readHistory(session.history)) === before,
     }).toStrictEqual({ contextOverflow: true, historyRestored: true });
   });
 });

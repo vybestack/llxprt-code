@@ -224,6 +224,23 @@ describe('GPT-5.6 runtime tokenizer input normalization', () => {
     expect(await tokenizer.countTokens({ value: 'hello' })).toBe(5);
   });
 
+  it('counts a bounded byte stream identically to the whole text', async () => {
+    const text =
+      "雪ABC I'm thinking" +
+      String.fromCharCode(10, 32, 32, 32) +
+      'unsplittable'.repeat(1000);
+    const bytes = Buffer.from(text);
+    async function* parts(): AsyncGenerator<Uint8Array> {
+      for (let offset = 0; offset < bytes.length; offset += 7)
+        yield bytes.subarray(offset, offset + 7);
+    }
+    if (tokenizer.countTokenStream === undefined)
+      throw new Error('Missing streamed tokenizer');
+    expect(await tokenizer.countTokenStream(parts())).toBe(
+      await tokenizer.countTokens(text),
+    );
+  });
+
   it.each([
     ['undefined', undefined],
     ['BigInt', { value: 1n }],

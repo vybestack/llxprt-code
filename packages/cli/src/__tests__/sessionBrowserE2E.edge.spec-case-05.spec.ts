@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -46,7 +47,10 @@ describe('Edge cases #5', () => {
       currentSessionId: 'other-session',
     });
 
-    const result = await performResume('nonexistent-session-xyz', context);
+    const result = await performResume(
+      'nonexistent-session-xyz',
+      withTestNamedWriters(context),
+    );
 
     expect(result.ok).toBe(false);
     assertFalse(result.ok);

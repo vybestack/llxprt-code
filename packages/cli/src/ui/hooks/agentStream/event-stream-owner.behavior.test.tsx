@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -58,14 +59,14 @@ describe('bound event stream owner', () => {
         ),
       );
       expect(
-        (await owner.getHistory())
+        (await collectResumeRows(owner.streamHistory()))
           .flatMap((entry) => entry.blocks)
           .some(
             (block) =>
               block.type === 'text' && block.text.includes('bound owner turn'),
           ),
       ).toBe(true);
-      expect(await sibling.getHistory()).toHaveLength(0);
+      expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(0);
       expect(events.some((event) => event.type === 'done')).toBe(true);
     } finally {
       first.unmount();
@@ -81,7 +82,7 @@ describe('bound event stream owner', () => {
         ),
       );
       expect(
-        (await sibling.getHistory())
+        (await collectResumeRows(sibling.streamHistory()))
           .flatMap((entry) => entry.blocks)
           .some(
             (block) =>

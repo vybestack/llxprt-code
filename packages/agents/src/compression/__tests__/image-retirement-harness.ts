@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,35 +11,37 @@
  */
 
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import type { RuntimeCompressionGuardInfo } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   IContent,
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { AnthropicProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
-import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
 import {
-  createPromptEnvelopePreparer,
-  preparePromptEnvelopeAfterEnforcement,
-} from '../../core/promptEnvelopeSendSeam.js';
-import {
-  ProviderContentEnforcer,
-  type CompressionGuardInfo,
-} from '../providerContentEnforcement.js';
+  collectRequestRows,
+  retirementSource,
+  enforceRetirementSource,
+  type RetirementSourceInput,
+} from './retirement-source-fixture.js';
+import { DEFAULT_REQUEST_MEDIA_BUDGET_BYTES } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { createSourcePromptEnvelopePreparer } from '../../core/promptEnvelopeSendSeam.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export const MODEL = 'claude-sonnet-4-20250514';
 export const BASE_URL = 'https://api.anthropic.com';
@@ -47,7 +50,7 @@ export const FIFTEEN_MIB = 15 * 1024 * 1024;
 const requestFetch: NetworkFetch = (input, init) =>
   globalThis.fetch(input, init);
 
-const tokenizerFactory: RuntimeTokenizerFactory = {
+const baseTokenizerFactory: RuntimeTokenizerFactory = {
   getTokenizer: () => undefined,
   estimatePrompt: (request) =>
     request.legacyEstimate().then((count) => ({
@@ -59,6 +62,8 @@ const tokenizerFactory: RuntimeTokenizerFactory = {
       projectionRevision: request.projectionRevision,
     })),
 };
+
+const tokenizerFactory = withGpt56DiskSources(baseTokenizerFactory, tmpdir());
 
 export interface AdmittedImage {
   readonly reference: MediaReferenceBlock;
@@ -109,7 +114,10 @@ export function collectText(value: unknown, found: string[]): string[] {
   if (Array.isArray(value)) {
     for (const item of value) collectText(item, found);
   } else if (isRecord(value)) {
-    if (value['type'] === 'text' && typeof value['text'] === 'string') {
+    if (
+      (value['type'] === 'text' || value['type'] === 'input_text') &&
+      typeof value['text'] === 'string'
+    ) {
       found.push(value['text']);
     } else if (typeof value['content'] === 'string') {
       found.push(value['content']);
@@ -174,7 +182,7 @@ export interface SentRequest {
 export class RetirementSession {
   readonly store: LocalMediaStore;
   readonly resolver: RequestMediaResolver;
-  readonly history = new HistoryService();
+  readonly history = new HistoryService({ scratchRoots: historyScratchRoots });
   readonly sent: SentRequest[] = [];
   compressionRuns = 0;
   /** When set, the HTTP boundary fails every request with this error. */
@@ -186,8 +194,11 @@ export class RetirementSession {
   private readonly options: ReturnType<typeof createProviderCallOptions>;
   private readonly settings = new SettingsService();
   private readonly originalFetch = globalThis.fetch;
-  private compression: (history: HistoryService) => Promise<void> = () =>
+  private compression: (
+    history: HistoryService,
+  ) => Promise<void | PerformCompressionResult> = () =>
     Promise.reject(new Error('compression must not run'));
+  estimateOverride: ((rows: IContent[]) => Promise<number>) | undefined;
   private compressionOutcome = PerformCompressionResult.COMPRESSED;
   private fallback: (
     history: HistoryService,
@@ -248,7 +259,7 @@ export class RetirementSession {
       invocation,
       resolved: { model: MODEL, baseURL: BASE_URL, authToken: 'test-key' },
     });
-    globalThis.fetch = async (_input, init): Promise<Response> => {
+    const transport: NetworkFetch = async (_input, init): Promise<Response> => {
       if (this.transportFailure !== undefined) throw this.transportFailure;
       const body =
         init?.body === null || init?.body === undefined
@@ -260,14 +271,23 @@ export class RetirementSession {
       });
       return successfulResponse();
     };
+    globalThis.fetch = Object.assign(transport, {
+      preconnect: this.originalFetch.preconnect,
+    });
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     globalThis.fetch = this.originalFetch;
+    await this.history.dispose();
+    await this.store.close();
   }
 
   /** Runs a real compression callback; the default refuses to run. */
-  useCompression(compress: (history: HistoryService) => Promise<void>): void {
+  useCompression(
+    compress: (
+      history: HistoryService,
+    ) => Promise<void | PerformCompressionResult>,
+  ): void {
     this.compression = compress;
   }
 
@@ -318,147 +338,123 @@ export class RetirementSession {
     return { reference, base64: Buffer.from(bytes).toString('base64'), bytes };
   }
 
-  private enforcerFor(
-    estimate: (contents: IContent[]) => Promise<number>,
-  ): ProviderContentEnforcer {
-    const runtimeContext = createHistoryRuntimeFixture({
-      state: createAgentRuntimeState({
-        runtimeId: 'issue3984-retirement',
-        provider: 'anthropic',
-        model: MODEL,
-        sessionId: 'issue3984-retirement-session',
-      }),
+  private sourceInput(
+    pending: IContent[],
+    declared: DeclaredRequest,
+  ): RetirementSourceInput {
+    return {
       history: this.history,
-      policy: {
-        compressionThreshold: 0.8,
-        contextLimit: this.contextLimit,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: false, target: null },
-        'reasoning.includeInContext': true,
-      },
-    });
-    return new ProviderContentEnforcer({
-      historyService: this.history,
-      runtimeContext,
-      generationConfig: { maxOutputTokens: 1000 },
-      readCompletionBudgetSetting: () =>
-        runtimeContext.readCompletionBudgetSetting(),
-      logger: DebugLogger.getLogger('test:issue3984:retirement'),
-      ensureDensityOptimized: () => Promise.resolve(),
-      performCompression: async () => {
-        this.compressionRuns += 1;
-        if (this.compressionOutcome !== PerformCompressionResult.COMPRESSED) {
+      directory: this.directory,
+      pending,
+      protectedContents: declared.protectedContents ?? declared.pending ?? [],
+      contents: declared.contents,
+      recoverable: declared.pending !== undefined,
+      budget: this.enforcerBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
+      contextLimit: this.contextLimit,
+      model: MODEL,
+      compress: async () => {
+        this.compressionRuns++;
+        if (this.compressionOutcome !== PerformCompressionResult.COMPRESSED)
           return this.compressionOutcome;
-        }
-        await this.compression(this.history);
-        return PerformCompressionResult.COMPRESSED;
+        const outcome = await this.compression(this.history);
+        return typeof outcome === 'string'
+          ? outcome
+          : PerformCompressionResult.COMPRESSED;
       },
-      performFallbackCompression: (_promptId, applyResult) =>
-        this.fallback(this.history, applyResult),
-      getPromptTokenBaseline: () => null,
-      resetPromptTokenBaseline: () => undefined,
-      restorePromptTokenBaseline: () => undefined,
-      estimateFinalizedPromptTokens: estimate,
-      requestMediaBudgetBytes: this.enforcerBudgetBytes,
-    });
+      fallback: (apply) => this.fallback(this.history, apply),
+    };
   }
 
-  /**
-   * The production order: enforce history plus pending, project through the
-   * real provider, then transmit the exact prepared projection.
-   */
+  private sourceOptions(source: Parameters<typeof enforceRetirementSource>[1]) {
+    return {
+      ...this.options,
+      requestRows: source,
+      contentCount: source.count,
+      contents: { [Symbol.asyncIterator]: () => source.openReader() },
+    };
+  }
+
   async send(
     pending: IContent[],
-    drain: boolean = true,
+    drain = true,
     declared: DeclaredRequest = { pending },
   ): Promise<{ contents: IContent[] }> {
-    const composed =
-      declared.contents ??
-      buildProviderContent(
-        this.history.getCurated(),
-        pending,
-        DebugLogger.getLogger('test:issue3984:compose'),
-      );
-    const { contents, prepared, preparer } =
-      await preparePromptEnvelopeAfterEnforcement({
-        provider: this.provider,
-        contents: composed,
-        tokenizerFactory,
-        buildOptions: (candidate) => ({ ...this.options, contents: candidate }),
-        enforce: (candidate, estimate) =>
-          this.enforcerFor(estimate).enforce(
-            {
-              contents: candidate,
-              pendingContents: declared.pending,
-              ...(declared.protectedContents === undefined
-                ? {}
-                : { protectedContents: declared.protectedContents }),
-            },
-            'prompt-3984',
-            this.provider,
-          ),
-        fallbackEstimate: () => Promise.resolve(1),
-      });
-    try {
-      if (drain) {
-        for await (const _content of this.provider.generateChatCompletion(
-          prepared.options,
-        )) {
-          // Drain the real provider parser.
-        }
-      }
-    } finally {
-      await preparer.releaseUnused();
-    }
-    return { contents };
-  }
-
-  /**
-   * The provider compression callback path: recomposes history with the
-   * pending region through the enforcer, then proves the real provider
-   * projection accepts the returned contents.
-   */
-  async recomposeViaCallback(
-    pending: IContent[],
-    /** What the context guard measured; absent when no guard is involved. */
-    guard?: CompressionGuardInfo,
-    /** The request the provider handed its callback; absent for the legacy call. */
-    original?: IContent[],
-    /** Replaces the projection-based token estimator (a tokenizer boundary). */
-    estimate?: (contents: IContent[]) => Promise<number>,
-  ): Promise<IContent[]> {
-    const preparer = createPromptEnvelopePreparer(
+    const input = this.sourceInput(pending, declared);
+    const source = await retirementSource(input);
+    const preparer = createSourcePromptEnvelopePreparer(
       this.provider,
-      (candidate) => ({ ...this.options, contents: candidate }),
+      (rows) => this.sourceOptions(rows),
+      undefined,
+      undefined,
       tokenizerFactory,
     );
+    preparer.own(source);
     try {
-      const contents = await this.enforcerFor(
-        estimate ??
-          (async (candidate) =>
-            (await preparer.prepare(candidate)).estimate
-              ?.estimatedPromptTokens ?? 1),
-      ).compressAndRecompose(
-        pending,
-        'prompt-callback',
-        guard,
-        this.provider,
-        original,
+      const override = this.estimateOverride;
+      const selected = await enforceRetirementSource(
+        input,
+        source,
+        override === undefined
+          ? async (rows) => (await preparer.prepare(rows)).estimatedPromptTokens
+          : async (rows) => override(await collectRequestRows(rows)),
+        (owned) => preparer.own(owned),
       );
-      await preparer.prepare(contents);
-      return contents;
+      const prepared = await preparer.prepare(selected);
+      const contents = await collectRequestRows(prepared.source);
+      if (drain)
+        for await (const _row of this.provider.generateChatCompletion(
+          prepared.options,
+        )) {
+          void _row;
+        }
+      return { contents };
     } finally {
       await preparer.releaseUnused();
     }
   }
 
-  /** The request a provider would receive: curated history plus `pending`. */
-  compose(pending: IContent[]): IContent[] {
-    return buildProviderContent(
-      this.history.getCurated(),
-      pending,
-      DebugLogger.getLogger('test:issue3984:compose'),
+  async recomposeViaCallback(
+    pending: IContent[],
+    guard?: RuntimeCompressionGuardInfo,
+    original?: IContent[],
+    estimate?: (contents: IContent[]) => Promise<number>,
+  ): Promise<IContent[]> {
+    const input = this.sourceInput(pending, { pending, contents: original });
+    const source = await retirementSource(input);
+    const preparer = createSourcePromptEnvelopePreparer(
+      this.provider,
+      (rows) => this.sourceOptions(rows),
+      undefined,
+      undefined,
+      tokenizerFactory,
     );
+    preparer.own(source);
+    try {
+      const rows = await enforceRetirementSource(
+        input,
+        source,
+        async (candidate) =>
+          estimate === undefined
+            ? (await preparer.prepare(candidate)).estimatedPromptTokens
+            : estimate(await collectRequestRows(candidate)),
+        (owned) => preparer.own(owned),
+        guard,
+      );
+      await preparer.prepare(rows);
+      return await collectRequestRows(rows);
+    } finally {
+      await preparer.releaseUnused();
+    }
+  }
+
+  async compose(pending: IContent[]): Promise<IContent[]> {
+    const source =
+      await this.history.prepareCuratedForProviderSnapshot(pending);
+    try {
+      return await collectRequestRows(source);
+    } finally {
+      await source.close();
+    }
   }
 
   /** Commits a human turn and its answer to canonical history. */

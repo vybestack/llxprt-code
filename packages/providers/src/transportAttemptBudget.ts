@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateChatOptions } from './IProvider.js';
+import type {
+  GenerateChatOptions,
+  MetadataBearingOptions,
+} from './IProvider.js';
 
 /**
  * Metadata key holding the per-request retry context object shared across
@@ -13,6 +16,7 @@ import type { GenerateChatOptions } from './IProvider.js';
  */
 export const RETRY_REQUEST_CONTEXT_KEY = '_retryRequestContext';
 const TRANSPORT_ATTEMPT_BUDGET_KEY = 'transportAttemptBudget';
+const REASONING_ID_TIME_KEY = 'reasoningIdTime';
 
 export interface TransportAttemptBudget {
   readonly limit: number;
@@ -48,9 +52,9 @@ function isTransportAttemptBudget(
   );
 }
 
-function getRequestContext(options: {
-  readonly metadata?: Record<string, unknown>;
-}): Record<string, unknown> | undefined {
+function getRequestContext(
+  options: MetadataBearingOptions,
+): Record<string, unknown> | undefined {
   const value = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
   return isRecord(value) ? value : undefined;
 }
@@ -112,6 +116,9 @@ export function attachTransportAttemptBudget(
   const requestContext = {
     ...existingContext,
     [TRANSPORT_ATTEMPT_BUDGET_KEY]: budget,
+    // Minted once per logical request so every attempt and rebuild stamps the
+    // same time into synthesized `rs_<time>_<n>` reasoning ids.
+    [REASONING_ID_TIME_KEY]: Date.now(),
   };
   return {
     options: {
@@ -124,6 +131,17 @@ export function attachTransportAttemptBudget(
     budget,
     release: releaseBudgetLifecycle(lifecycle),
   };
+}
+
+/**
+ * The time component the request owner minted for synthesized reasoning ids,
+ * or `undefined` for a direct provider call that has no request owner.
+ */
+export function readRequestReasoningIdTime(
+  options: MetadataBearingOptions,
+): number | undefined {
+  const value = getRequestContext(options)?.[REASONING_ID_TIME_KEY];
+  return typeof value === 'number' ? value : undefined;
 }
 
 /**
@@ -140,22 +158,22 @@ export function readTransportAttemptBudgetFromRecord(
   return isTransportAttemptBudget(value) ? value : undefined;
 }
 
-export function getTransportAttemptBudget(options: {
-  readonly metadata?: Record<string, unknown>;
-}): TransportAttemptBudget | undefined {
+export function getTransportAttemptBudget(
+  options: MetadataBearingOptions,
+): TransportAttemptBudget | undefined {
   return readTransportAttemptBudgetFromRecord(getRequestContext(options));
 }
 
-export function hasTransportAttemptRemaining(options: {
-  readonly metadata?: Record<string, unknown>;
-}): boolean {
+export function hasTransportAttemptRemaining(
+  options: MetadataBearingOptions,
+): boolean {
   const budget = getTransportAttemptBudget(options);
   return budget === undefined || budget.used < budget.limit;
 }
 
-export function tryConsumeTransportAttempt(options: {
-  readonly metadata?: Record<string, unknown>;
-}): boolean {
+export function tryConsumeTransportAttempt(
+  options: MetadataBearingOptions,
+): boolean {
   const budget = getTransportAttemptBudget(options);
   if (budget === undefined) return true;
   if (budget.used >= budget.limit) return false;

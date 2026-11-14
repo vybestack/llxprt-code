@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -50,7 +51,9 @@ describe('detached auto prompt client', () => {
         const client = clients[2];
         expect(client).not.toBe(primary);
         expect(client.mediaStore).toBe(media);
-        expect(primary.getHistoryService()?.getRawHistory()).toHaveLength(0);
+        expect(await collectResumeRows(primary.streamHistory())).toHaveLength(
+          0,
+        );
         expect(client.initialized).toBe(1);
         expect(client.disposed).toBe(1);
         expect(provider.requests).toHaveLength(1);
@@ -58,7 +61,7 @@ describe('detached auto prompt client', () => {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'still usable' }],
         });
-        expect(await primary.getHistory()).toMatchObject([
+        expect(await collectResumeRows(primary.streamHistory())).toMatchObject([
           {
             speaker: 'human',
             blocks: [{ type: 'text', text: 'still usable' }],
@@ -94,7 +97,9 @@ describe('detached auto prompt client', () => {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'still usable' }],
         });
-        expect(primary.getHistoryService()?.getRawHistory()).toHaveLength(1);
+        expect(await collectResumeRows(primary.streamHistory())).toHaveLength(
+          1,
+        );
         expect(primary.disposed).toBe(0);
       },
     );

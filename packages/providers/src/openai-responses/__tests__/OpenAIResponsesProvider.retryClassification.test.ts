@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from '../responses-request.test-helpers.js';
 /**
  * @license
@@ -27,7 +28,6 @@ import {
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import { OpenAIResponsesProviderBase } from '../OpenAIResponsesProviderBase.js';
 import { shouldRetryError } from '../../retryDelayPolicy.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
@@ -322,7 +322,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -350,7 +350,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -373,7 +373,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -389,7 +389,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -407,7 +407,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 2, retrywait },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -429,7 +429,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -445,7 +445,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -462,7 +462,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -488,7 +488,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -509,7 +509,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -528,7 +528,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -561,7 +561,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -596,7 +596,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -647,7 +647,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
     });
 
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -675,13 +675,13 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
     });
 
     const sseOutcome = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
     );
     const httpOutcome = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -707,7 +707,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),
@@ -724,7 +724,7 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps(provider)),
         buildDeps(provider),
       ),

@@ -1,3 +1,4 @@
+import { allocateChildSessionId } from '@vybestack/llxprt-code-core/recording/childSessionIds.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,10 +19,7 @@ import type {
   ToolConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { SubagentRunPolicy } from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
-import {
-  isLoadBalancerProfile,
-  type Profile,
-} from '@vybestack/llxprt-code-settings';
+import { type Profile } from '@vybestack/llxprt-code-settings';
 import { randomUUID } from 'node:crypto';
 import { buildResolvedRunConfig } from './subagent-run-policy.js';
 import type { SubagentExecutionOptions } from './subagentScheduler.js';
@@ -33,6 +31,12 @@ import {
   resolveRuntimeProfile,
   type RuntimeProfileResolution,
 } from './subagentProfileResolution.js';
+import {
+  buildSubagentModelConfig,
+  buildSubagentPromptConfig,
+  getActivationProfile,
+  getRuntimeStateProfile,
+} from './subagentProfileConfig.js';
 import { getStringSetting } from './subagentSettingsAccess.js';
 import { normalizeDefaultToolSet } from './subagentSettingsPopulation.js';
 
@@ -40,8 +44,6 @@ import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-
-const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
 const createAbortError = (message: string): Error => {
   const error = new Error(message);
@@ -156,13 +158,12 @@ export class SubagentOrchestrator {
       'Subagent launch aborted while resolving runtime profile.',
     );
 
-    const promptConfig = this.buildPromptConfig(
+    const promptConfig = buildSubagentPromptConfig(
       subagent.systemPrompt,
       request.behaviourPrompts,
     );
-    const modelConfig = this.buildModelConfig(
-      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile),
-    );
+    const runtimeStateProfile = getRuntimeStateProfile(runtimeProfile);
+    const modelConfig = buildSubagentModelConfig(runtimeStateProfile);
     const runConfig = this.resolveRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
@@ -194,10 +195,9 @@ export class SubagentOrchestrator {
     signal: AbortSignal,
   ): ChildAgentLaunch {
     const agentRuntimeId = this.createRuntimeId(subagent.name);
-    const activationProfile =
-      SubagentOrchestrator.getActivationProfile(runtimeProfile);
-    const runtimeStateProfile =
-      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
+    const childSessionId = allocateChildSessionId();
+    const activationProfile = getActivationProfile(runtimeProfile);
+    const runtimeStateProfile = getRuntimeStateProfile(runtimeProfile);
     return {
       subagent,
       activationProfile,
@@ -213,7 +213,10 @@ export class SubagentOrchestrator {
         modelConfig,
         agentRuntimeId,
         subagent.name,
+        childSessionId,
       ),
+      childSessionId,
+      parentSessionId: this.baseSessionId(),
       runtimeId: agentRuntimeId,
       disabledTools: this.defaultDisabledTools,
       signal,
@@ -246,76 +249,6 @@ export class SubagentOrchestrator {
     }
   }
 
-  private buildPromptConfig(
-    basePrompt: string,
-    additions?: string[],
-  ): PromptConfig {
-    const trimmedBase = basePrompt.trim();
-    const trimmedAdditions = (additions ?? [])
-      .map((part) => part.trim())
-      .filter((part): part is string => part.length > 0);
-
-    const promptSections: string[] = [];
-
-    if (trimmedBase) {
-      promptSections.push(trimmedBase);
-    }
-
-    if (trimmedAdditions.length > 0) {
-      const numberedInstructions = trimmedAdditions
-        .map((instruction, index) => `(${index + 1}) ${instruction}`)
-        .join('\n');
-      promptSections.push(
-        [
-          '--- CURRENT TASK DIRECTIVES ---',
-          'Follow these instructions precisely for this run. They take precedence over any default behaviours.',
-          numberedInstructions,
-        ].join('\n'),
-      );
-    }
-
-    const merged = promptSections.join('\n\n');
-
-    return {
-      systemPrompt: merged,
-    };
-  }
-
-  private buildModelConfig(profile: Profile): ModelConfig {
-    return {
-      model: profile.model,
-      temp: profile.modelParams.temperature ?? 0.7,
-      top_p: profile.modelParams.top_p ?? 1,
-    };
-  }
-
-  private static getActivationProfile(
-    runtimeProfile: RuntimeProfileResolution,
-  ): Profile {
-    return isLoadBalancerProfile(runtimeProfile.effectiveProfile)
-      ? runtimeProfile.effectiveProfile
-      : runtimeProfile.primaryProfile;
-  }
-
-  private static getRuntimeStateProfile(
-    runtimeProfile: RuntimeProfileResolution,
-  ): Profile {
-    if (!isLoadBalancerProfile(runtimeProfile.effectiveProfile)) {
-      return runtimeProfile.primaryProfile;
-    }
-    // Keep load-balancer profile metadata/settings while stamping runtime
-    // provider/model to the registered load-balancer provider identity.
-    return {
-      ...runtimeProfile.effectiveProfile,
-      ephemeralSettings: {
-        ...runtimeProfile.effectiveProfile.ephemeralSettings,
-      },
-      modelParams: { ...runtimeProfile.effectiveProfile.modelParams },
-      provider: LOAD_BALANCER_PROVIDER_NAME,
-      model: LOAD_BALANCER_PROVIDER_NAME,
-    };
-  }
-
   private baseSessionId(): string {
     return this.options.readSessionId() || 'llxprt-session';
   }
@@ -330,8 +263,8 @@ export class SubagentOrchestrator {
     modelConfig: ModelConfig,
     agentRuntimeId: string,
     subagentName: string,
+    childSessionId: string,
   ): AgentRuntimeState {
-    const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
     const baseUrl = getStringSetting(profile.ephemeralSettings, ['base-url']);
 
     return createAgentRuntimeState({
@@ -348,7 +281,10 @@ export class SubagentOrchestrator {
         topP: modelConfig.top_p,
         maxTokens: profile.modelParams.max_tokens ?? undefined,
       },
-      sessionId,
+      // The child's own fs-safe session id, allocated before runtime
+      // construction; the derived `${parent}::${runtimeId}` form failed the
+      // safe-session lock grammar and collapsed filename prefixes (#854).
+      sessionId: childSessionId,
       // The foreground agent's runtime id. `resolveRuntimeId` defaults a
       // runtime's id to its session id when no explicit id is supplied
       // (see runtimeStateFactory), which is how the foreground runtime is
@@ -357,6 +293,7 @@ export class SubagentOrchestrator {
       // not carry the caller's runtime context; if that changes, pass the
       // parent runtime id in explicitly rather than re-deriving it here.
       parentRuntimeId: this.baseSessionId(),
+      parentSessionId: this.baseSessionId(),
       subagentName,
     });
   }

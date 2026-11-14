@@ -26,14 +26,13 @@ function ownerOperations(owner: Agent): ChatOwnerOperations {
     deleteCheckpoint: (id) => owner.session.deleteCheckpoint(id),
     renameCheckpoint: (id, name, options) =>
       owner.session.renameCheckpoint(id, name, options),
-    getHistory: () => owner.session.getHistory(),
+    getHistoryCount: () => owner.session.getJournalLength(),
     clearHistory: () => owner.session.clearHistory(),
     restoreTurns: (turns) => owner.session.restoreTurns(turns),
     nameCurrentSession: (name, options) =>
       owner.session.nameCurrentSession(name, options),
     getRecordingPath: () => owner.session.getRecording().path,
     getModel: () => owner.getModel(),
-    getEmojiFilterMode: () => 'auto',
   };
 }
 
@@ -60,9 +59,8 @@ function rawOperations(owner: Agent): ChatRecordingOperations {
     renameCheckpoint,
     nameSession,
     getChatHistory: () => null,
-    replaceChatHistory: async (history) => {
-      await owner.session.replaceHistory(history);
-    },
+    clearHistory: () => owner.session.clearHistory(),
+    restoreTurns: (turns) => owner.session.restoreTurns(turns),
     getModel: () => owner.getModel(),
   };
 }

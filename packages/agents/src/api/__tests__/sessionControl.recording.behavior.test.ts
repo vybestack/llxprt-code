@@ -29,12 +29,17 @@
 
 import { describe, it, expect } from 'bun:test';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
+import { z } from 'zod';
+
+import { nativeRows, rowTexts } from './helpers/native-session-fixture.js';
+import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
+import { fromConfig } from '../fromConfig.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import {
-  buildAgent,
   drain,
   respondToFirstConfirmation,
   ToolConfirmationOutcome,
@@ -45,17 +50,7 @@ function textMessage(role: 'user' | 'model', text: string): AgentMessage {
   return {
     speaker: role === 'user' ? 'human' : 'ai',
     blocks: [{ type: 'text' as const, text }],
-  } as AgentMessage;
-}
-
-/**
- * Derives the core storage temp dir for a working directory, mirroring
- * Storage.getProjectTempDir (`~/.llxprt/tmp/<sha256(workingDir)>`). Used only
- * for test cleanup so recording artifacts never accumulate.
- */
-function storageTempDirFor(workingDir: string): string {
-  const hash = createHash('sha256').update(workingDir).digest('hex');
-  return join(homedir(), '.llxprt', 'tmp', hash);
+  };
 }
 
 /**
@@ -76,16 +71,25 @@ async function withIsolatedAgent<T>(
   // error replaces fn()'s. That is the standard try/finally trade-off and
   // acceptable here — either failure fails the test loudly; the invariant this
   // helper guarantees is only that no temp dir survives.
+  const built = await buildFactoryLessConfig(fixture, {}, { workingDir });
   try {
-    const { agent, cleanup } = await buildAgent(fixture, { workingDir });
+    const agent = await fromConfig(
+      built.config,
+      built.settingsService,
+      {
+        activation: { provider: 'fake', model: 'fake-model' },
+      },
+      new CredentialAuthority(),
+    );
     try {
       return await fn(agent);
     } finally {
-      await cleanup();
+      await agent.dispose();
     }
   } finally {
     rmSync(workingDir, { recursive: true, force: true });
-    rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
+    await built.cleanup();
+    rmSync(built.config.projectTempDir, { recursive: true, force: true });
   }
 }
 
@@ -117,7 +121,7 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
         // Disable to flush + dispose the service so all queued writes land.
         await agent.session.setRecording({ enabled: false });
 
-        const raw = readFileSync(path, 'utf8');
+        const raw = JSON.stringify(await nativeRows(path));
         // The SECOND turn's user prompt and assistant reply are both present.
 
         return { path, raw };
@@ -136,11 +140,10 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       await agent.session.setRecording({ enabled: true });
       await agent.session.setRecording({ enabled: false });
 
-      const restored = await agent.session.resume('latest');
-
-      // The returned value is a real IContent[] carrying the recorded turns —
-      // not void, not a Gemini Content[] round-trip.
-      expect(Array.isArray(restored)).toBe(true);
+      const stream = await agent.session.resume('latest');
+      expect(Symbol.asyncIterator in stream).toBe(true);
+      const restored = [];
+      for await (const row of stream) restored.push(row);
       expect(restored.length).toBeGreaterThanOrEqual(2);
       for (const item of restored) {
         expect(item).toHaveProperty('speaker');
@@ -152,12 +155,14 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       expect(serialized).toContain('acknowledged wombat');
     });
   });
+});
 
+describe('SessionControl post-resume recording', () => {
   it('post-resume turns append to the resumed JSONL file @requirement:REQ-010', async () => {
     const { path, raw } =
       await observePostResumeTurnsAppendToTheResumedJSONLFile();
     expect(path.length).toBeGreaterThan(0);
-    expect(raw).toContain('post-resume-sentinel-gamma');
+    expect(raw.match(/post-resume-sentinel-gamma/g)).toHaveLength(1);
     expect(raw).toContain('a plain text reply');
     expect(raw.match(/pre-resume base turn/g)).toHaveLength(1);
   });
@@ -180,11 +185,13 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       // Disable to flush the appended content.
       await agent.session.setRecording({ enabled: false });
 
-      const raw = readFileSync(path, 'utf8');
+      const raw = JSON.stringify(await nativeRows(path));
 
       return { path, raw };
     });
+});
 
+describe('SessionControl completed tool recording', () => {
   it('records COMPLETED TOOL CALLS (call + response) into the session JSONL for later replay (issue #1605 verification) @requirement:REQ-010', async () => {
     const { path, raw, callBlock, responseBlock } =
       await observeRecordsCOMPLETEDTOOLCALLSCallResponseIntoTheSessionJSONLForLater();
@@ -226,7 +233,7 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
         // Disable to flush + dispose so all queued writes land.
         await agent.session.setRecording({ enabled: false });
 
-        const raw = readFileSync(path, 'utf8');
+        const raw = JSON.stringify(await nativeRows(path));
         // The recorded transcript carries the tool CALL block for read_file …
 
         // … its RESPONSE block …
@@ -237,26 +244,17 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
         // recorded call's id (the runtime normalizes ids in history, so the
         // fixture's raw id is not asserted — the pairing invariant is what the
         // #1604 replay's tool_call/tool_call_update matching depends on).
-        const blocks = raw
-          .split('\n')
-          .filter((line) => line.trim().length > 0)
-          .map((line) => JSON.parse(line) as Record<string, unknown>)
-          .flatMap((entry) => {
-            const payload = entry['payload'] as
-              | {
-                  content?: {
-                    blocks?: ReadonlyArray<Record<string, unknown>>;
-                  };
-                }
-              | undefined;
-            return payload?.content?.blocks ?? [];
-          });
+        const blocks = (await nativeRows(path))
+          .flatMap((row) => row.blocks)
+          .map((block) => z.record(z.unknown()).parse(block));
         const callBlock = blocks.find((b) => b['type'] === 'tool_call');
         const responseBlock = blocks.find((b) => b['type'] === 'tool_response');
 
         return { path, raw, callBlock, responseBlock };
       });
+});
 
+describe('SessionControl recording teardown', () => {
   it('teardown retires the recording subscription: content added after setRecording(false) never reaches the file @requirement:REQ-010', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {
       // Warm up so the chat and its history are materialized.
@@ -271,15 +269,19 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
         textMessage('user', 'added-while-recording-sentinel'),
       );
       await agent.session.setRecording({ enabled: false });
-      const afterDisable = readFileSync(path, 'utf8');
-      expect(afterDisable).toContain('added-while-recording-sentinel');
+      const afterDisable = readFileSync(path);
+      const recorded = rowTexts(await nativeRows(path));
+      expect(recorded).toContain('added-while-recording-sentinel');
+      expect(
+        recorded.filter((text) => text === 'added-while-recording-sentinel'),
+      ).toHaveLength(1);
 
       // After the teardown the subscription is gone: later content is not
       // delivered to the retired recording.
       await agent.addHistory(
         textMessage('user', 'added-after-teardown-sentinel'),
       );
-      expect(readFileSync(path, 'utf8')).toBe(afterDisable);
+      expect(readFileSync(path).equals(afterDisable)).toBe(true);
     });
   });
 });

@@ -34,6 +34,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IModel } from '../IModel.js';
 
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { collectContents } from '../utils/collectContents.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -104,7 +105,7 @@ class EstimatingProvider implements IProvider {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     this.projectionInvoked = true;
-    const contents = options.contents;
+    const contents = await collectContents(options.contents);
     const serialized = JSON.stringify(contents);
     const count = Math.max(Math.ceil(serialized.length / 4), 1);
     return {

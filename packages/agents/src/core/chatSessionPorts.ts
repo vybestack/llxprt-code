@@ -58,6 +58,7 @@ export interface ChatSessionRuntime {
  */
 export interface StreamProcessorRuntime {
   readonly state: AgentRuntimeState;
+  readonly provider: Pick<AgentRuntimeProviderAdapter, 'getActiveProvider'>;
   readonly telemetry: AgentRuntimeTelemetryAdapter;
   readonly history: HistoryService;
   readonly prepareProviderInvocation: PrepareProviderInvocation;
@@ -156,6 +157,7 @@ export function chatSessionPorts(
     },
     stream: {
       state: context.state,
+      provider: context.provider,
       telemetry: context.telemetry,
       history: context.history,
       prepareProviderInvocation: context.prepareProviderInvocation,

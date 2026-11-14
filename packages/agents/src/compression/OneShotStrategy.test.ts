@@ -23,14 +23,17 @@ import type {
 import type {
   CompressionContext,
   CompressionProviderResult,
-  CompressionResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { Logger } from '@vybestack/llxprt-code-core/core/logger.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
+import {
+  compressOneShotViaDisk,
+  requireApplied,
+} from './__tests__/support/oneshot-disk-adapter.js';
 import {
   CompressionExecutionError,
   EmptySummaryError,
@@ -149,13 +152,7 @@ function createThrowingProvider(): IProvider {
 // Stub logger
 // ---------------------------------------------------------------------------
 
-const noopLogger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  log: () => {},
-} as unknown as Logger;
+const noopLogger = new DebugLogger('llxprt:test:compression');
 
 const testProviderRuntime = {
   runtimeId: 'test-provider-runtime',
@@ -270,8 +267,8 @@ function generateHistory(count: number): IContent[] {
   return messages;
 }
 
-function assertNoOrphanedToolResponsesInTail(result: CompressionResult): void {
-  const tail = result.newHistory.slice(2);
+function assertNoOrphanedToolResponsesInTail(newHistory: IContent[]): void {
+  const tail = newHistory.slice(2);
   for (const msg of tail) {
     const toolResponse =
       msg.speaker === 'tool'
@@ -330,36 +327,17 @@ describe('OneShotStrategy', () => {
   describe('no compression needed', () => {
     it('returns empty history unchanged', async () => {
       const ctx = buildContext({ history: [] });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
+      const result = await compressOneShotViaDisk(ctx);
 
       expect(result.kind).toBe('noop');
-      expect(result.reason).toBe('empty-history');
-      expect(result.metadata.llmCallMade).toBe(false);
-      expect(result.metadata.strategyUsed).toBe('one-shot');
     });
 
     it('returns history unchanged when too few messages to compress', async () => {
       const history = generateHistory(3);
       const ctx = buildContext({ history });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
+      const result = await compressOneShotViaDisk(ctx);
 
       expect(result.kind).toBe('noop');
-      expect(result.reason).toBe('too-few-compressible');
-      expect(result.metadata.llmCallMade).toBe(false);
-      expect(result.metadata.originalMessageCount).toBe(3);
-      expect(result.metadata.compressedMessageCount).toBe(3);
     });
 
     it('returns history unchanged when compress portion would be < 4', async () => {
@@ -367,17 +345,10 @@ describe('OneShotStrategy', () => {
       // But 5 messages with 0.5 preserve = keep last 2-3, compress 2-3 → too few
       const history = generateHistory(5);
       const ctx = buildContext({ history, preserveThreshold: 0.5 });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
+      const result = await compressOneShotViaDisk(ctx);
 
       // floor(5 * 0.5) = 2 messages to compress, which is < 4
       expect(result.kind).toBe('noop');
-      expect(result.metadata.llmCallMade).toBe(false);
     });
   });
 
@@ -390,27 +361,18 @@ describe('OneShotStrategy', () => {
       // 20 messages, preserveThreshold 0.2 → keep last 4, compress first 16
       const history = generateHistory(20);
       const ctx = buildContext({ history, preserveThreshold: 0.2 });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
-
-      expect(result.metadata.llmCallMade).toBe(true);
-      expect(result.metadata.strategyUsed).toBe('one-shot');
-      expect(result.metadata.topPreserved).toBe(0);
-      expect(result.metadata.bottomPreserved).toBeGreaterThan(0);
-      expect(result.metadata.middleCompressed).toBeGreaterThan(0);
+      const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
       // Result starts with summary + ack, then preserved tail
-      expect(result.newHistory[0].speaker).toBe('human');
-      expect(result.newHistory[0].blocks[0]).toStrictEqual(
+      const preservedCount = newHistory.length - 2;
+      expect(preservedCount).toBeGreaterThan(0);
+      expect(history.length - preservedCount).toBeGreaterThan(0);
+      expect(newHistory[0].speaker).toBe('human');
+      expect(newHistory[0].blocks[0]).toStrictEqual(
         expect.objectContaining({ type: 'text', text: KNOWN_SUMMARY }),
       );
-      expect(result.newHistory[1].speaker).toBe('ai');
-      expect(result.newHistory[1].blocks[0]).toStrictEqual(
+      expect(newHistory[1].speaker).toBe('ai');
+      expect(newHistory[1].blocks[0]).toStrictEqual(
         expect.objectContaining({
           type: 'text',
           text: 'Understood. Continuing with the current task.',
@@ -418,40 +380,26 @@ describe('OneShotStrategy', () => {
       );
 
       // Preserved tail should be the last messages from original history
-      const preservedCount = result.metadata.bottomPreserved!;
       const expectedTail = history.slice(history.length - preservedCount);
-      const actualTail = result.newHistory.slice(2);
+      const actualTail = newHistory.slice(2);
       expect(actualTail).toStrictEqual(expectedTail);
     });
 
     it('does not preserve any top messages (unlike middle-out)', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history, preserveThreshold: 0.2 });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
+      const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
-      expect(result.metadata.topPreserved).toBe(0);
+      // Nothing from the original head survives ahead of the summary.
+      expect(newHistory[0].metadata?.isSummary).toBe(true);
     });
 
     it('compressed count is less than original', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
+      const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
-      expect(result.metadata.compressedMessageCount).toBeLessThan(
-        result.metadata.originalMessageCount,
-      );
+      expect(newHistory.length).toBeLessThan(history.length);
     });
   });
 
@@ -474,13 +422,7 @@ describe('OneShotStrategy', () => {
         },
       });
 
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      await strategy.compress(ctx);
+      await compressOneShotViaDisk(ctx);
 
       expect(capturedProfile).toBe('my-flash-profile');
     });
@@ -498,13 +440,7 @@ describe('OneShotStrategy', () => {
         },
       });
 
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      await strategy.compress(ctx);
+      await compressOneShotViaDisk(ctx);
 
       expect(capturedProfile).toBeUndefined();
     });
@@ -537,18 +473,11 @@ describe('OneShotStrategy', () => {
       // preserveThreshold = 0.2 → splitIndex = floor(12 * 0.8) = 9
       // That lands on the tool response — boundary adjustment should move it
       const ctx = buildContext({ history, preserveThreshold: 0.2 });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
+      const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
       // Should still compress and produce valid result
-      expect(result.metadata.llmCallMade).toBe(true);
-
-      assertNoOrphanedToolResponsesInTail(result);
+      expect(newHistory.length).toBeGreaterThan(2);
+      assertNoOrphanedToolResponsesInTail(newHistory);
     });
   });
 
@@ -569,13 +498,9 @@ describe('OneShotStrategy', () => {
         }),
       });
 
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+      await expect(compressOneShotViaDisk(ctx)).rejects.toThrow(
+        EmptySummaryError,
       );
-      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
     });
 
     it('throws CompressionExecutionError when provider fails', async () => {
@@ -590,47 +515,14 @@ describe('OneShotStrategy', () => {
         }),
       });
 
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      await expect(strategy.compress(ctx)).rejects.toThrow(
+      await expect(compressOneShotViaDisk(ctx)).rejects.toThrow(
         CompressionExecutionError,
       );
     });
   });
 
   // -----------------------------------------------------------------------
-  // Metadata
-  // -----------------------------------------------------------------------
 
-  describe('metadata', () => {
-    it('reports correct metadata fields', async () => {
-      const history = generateHistory(20);
-      const ctx = buildContext({ history });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
-
-      expect(result.metadata.strategyUsed).toBe('one-shot');
-      expect(result.metadata.llmCallMade).toBe(true);
-      expect(result.metadata.topPreserved).toBe(0);
-      expect(result.metadata.originalMessageCount).toBe(20);
-      expect(result.metadata.bottomPreserved).toBeGreaterThan(0);
-      expect(result.metadata.middleCompressed).toBeGreaterThan(0);
-      expect(
-        result.metadata.bottomPreserved! + result.metadata.middleCompressed!,
-      ).toBe(20);
-    });
-  });
-
-  // -----------------------------------------------------------------------
   // Empty summary handling — permanent error (not retryable)
   // -----------------------------------------------------------------------
 
@@ -645,16 +537,11 @@ describe('OneShotStrategy', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
-      const capturedError = await strategy
-        .compress(ctx)
+      await expect(compressOneShotViaDisk(ctx)).rejects.toThrow(
+        EmptySummaryError,
+      );
+      const capturedError = await compressOneShotViaDisk(ctx)
         .then(() => undefined)
         .catch((error: unknown) => error);
       expect(capturedError).toBeInstanceOf(EmptySummaryError);
@@ -674,16 +561,11 @@ describe('OneShotStrategy', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
-      const capturedError = await strategy
-        .compress(ctx)
+      await expect(compressOneShotViaDisk(ctx)).rejects.toThrow(
+        EmptySummaryError,
+      );
+      const capturedError = await compressOneShotViaDisk(ctx)
         .then(() => undefined)
         .catch((error: unknown) => error);
       expect(capturedError).toBeInstanceOf(EmptySummaryError);
@@ -733,8 +615,12 @@ describe('OneShotStrategy', () => {
         name: 'capture-provider',
         getModels: async () => [],
         getDefaultModel: () => 'capture-model',
-        async *generateChatCompletion(options: { contents: IContent[] }) {
-          capturedRequests.push(...options.contents);
+        async *generateChatCompletion(options: {
+          contents: AsyncIterable<IContent>;
+        }) {
+          for await (const content of options.contents) {
+            capturedRequests.push(content);
+          }
           yield {
             speaker: 'ai' as const,
             blocks: [
@@ -754,15 +640,7 @@ describe('OneShotStrategy', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
-
-      expect(result.metadata.llmCallMade).toBe(true);
+      requireApplied(await compressOneShotViaDisk(ctx));
 
       // Provider received no MediaBlock instances
       const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -820,8 +698,12 @@ describe('OneShotStrategy', () => {
         name: 'capture-provider',
         getModels: async () => [],
         getDefaultModel: () => 'capture-model',
-        async *generateChatCompletion(options: { contents: IContent[] }) {
-          capturedRequests.push(...options.contents);
+        async *generateChatCompletion(options: {
+          contents: AsyncIterable<IContent>;
+        }) {
+          for await (const content of options.contents) {
+            capturedRequests.push(content);
+          }
           yield {
             speaker: 'ai' as const,
             blocks: [
@@ -841,17 +723,11 @@ describe('OneShotStrategy', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new OneShotStrategy(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
-      const result = await strategy.compress(ctx);
+      const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
       // The kept tail should retain the original media block since
       // it's not sent to the compression LLM
-      const preservedTail = result.newHistory.slice(2); // skip summary + ack
+      const preservedTail = newHistory.slice(2); // skip summary + ack
       const tailMediaBlocks = preservedTail.flatMap((m) =>
         m.blocks.filter((b) => b.type === 'media'),
       );

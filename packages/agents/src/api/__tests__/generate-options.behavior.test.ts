@@ -309,7 +309,7 @@ describe('Agent.generate request options', () => {
       expect(await built.agent.generate('Return only a tool call')).toBe('');
       expect(updates).toBe(0);
       unsubscribe();
-      expect(await built.agent.getHistory()).toStrictEqual([]);
+      expect(await built.agent.session.getHistory()).toStrictEqual([]);
     } finally {
       await built.cleanup();
     }
@@ -393,7 +393,7 @@ Requirements:
       expect(JSON.stringify(request.messages)).toContain(
         JSON.stringify(instruction),
       );
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await agent.session.getHistory()).toStrictEqual([]);
     });
   });
 });

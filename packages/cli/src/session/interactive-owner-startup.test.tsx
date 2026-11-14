@@ -30,6 +30,7 @@ import {
 } from '../utils/cleanup.js';
 import { AppWrapper } from '../ui/App.js';
 import { iContentToHistoryItems } from '../ui/utils/iContentToHistoryItems.js';
+import { collectResumeRows } from '../__tests__/resumeRows.js';
 
 const settings = createMockSettings({
   ui: { hideWindowTitle: true, unicode: 'auto' },
@@ -49,7 +50,7 @@ function setupOwnerSessionRecording(
     argv,
     selection,
     warnings,
-  ).then(({ history }) => history);
+  ).then(({ resumedBoot }) => resumedBoot);
 }
 
 describe('interactive CLI owner startup', () => {
@@ -129,7 +130,7 @@ describe('interactive CLI owner startup', () => {
       settings,
       workspaceRoot: config.getProjectRoot(),
       recordingOwner: 'agent',
-      resumedHistory: history,
+      resumedBoot: history,
       hasPipedInput: false,
       readStdinData: async () => '',
     });
@@ -137,21 +138,38 @@ describe('interactive CLI owner startup', () => {
     return tree;
   }
 
-  function appProps(tree: React.ReactElement): Record<string, unknown> {
+  function appProps(
+    tree: React.ReactElement,
+  ): React.ComponentProps<typeof AppWrapper> {
     const visit = (
       node: React.ReactNode,
-    ): Record<string, unknown> | undefined => {
-      if (!React.isValidElement(node)) return undefined;
-      if (node.type === AppWrapper)
-        return node.props as Record<string, unknown>;
-      const props = node.props as { children?: React.ReactNode };
-      return React.Children.toArray(props.children)
+    ): React.ComponentProps<typeof AppWrapper> | undefined => {
+      if (
+        !React.isValidElement<
+          React.ComponentProps<typeof AppWrapper> & {
+            children?: React.ReactNode;
+          }
+        >(node)
+      )
+        return undefined;
+      if (node.type === AppWrapper) return node.props;
+      return React.Children.toArray(node.props.children)
         .map(visit)
         .find((value) => value !== undefined);
     };
     const props = visit(tree);
     if (!props) throw new Error('AppWrapper missing');
     return props;
+  }
+
+  async function resumedItems(
+    history: Awaited<ReturnType<typeof setupOwnerSessionRecording>>,
+  ): Promise<ReturnType<typeof iContentToHistoryItems>> {
+    if (history === null) throw new Error('Expected resumed rows');
+    return iContentToHistoryItems(
+      await collectResumeRows(history.streamRows()),
+      'allowed',
+    );
   }
 
   async function locks(config: Config): Promise<string[]> {
@@ -261,11 +279,13 @@ describe('interactive CLI owner startup', () => {
         resumed.runtimeSettings,
       ),
     );
-    expect(JSON.stringify(props.resumedHistory)).toContain(
-      'resume-interactive-seed',
+    expect(props.readAgentRecordingPath()).toBe(
+      resumed.agent.session.getRecording().path,
     );
+    if (history === null) throw new Error('Missing resumed journal boot');
+    expect(props.resumedBoot).toBe(history);
     expect(
-      iContentToHistoryItems(history ?? [], 'allowed').some(
+      (await resumedItems(history)).some(
         (item) =>
           item.type === 'user' && item.text === 'resume-interactive-seed',
       ),
@@ -278,9 +298,7 @@ describe('interactive CLI owner startup', () => {
       ),
     ).toBe(true);
     expect(await locks(resumed.config)).toHaveLength(1);
-    for await (const _event of resumed.agent.stream(
-      'resume-interactive-continued',
-    )) {
+    for await (const _event of props.stream('resume-interactive-continued')) {
       /* consume */
     }
     if (!path) throw new Error('No recording path');
@@ -313,11 +331,10 @@ describe('interactive CLI owner startup', () => {
     const props = appProps(
       await renderOwner(fork.config, fork.agent, history, fork.runtimeSettings),
     );
-    expect(JSON.stringify(props.resumedHistory)).toContain(
-      'fork-interactive-seed',
-    );
+    if (history === null) throw new Error('Missing resumed journal boot');
+    expect(props.resumedBoot).toBe(history);
     expect(
-      iContentToHistoryItems(history ?? [], 'allowed').some(
+      (await resumedItems(history)).some(
         (item) => item.type === 'user' && item.text === 'fork-interactive-seed',
       ),
     ).toBe(true);
@@ -341,7 +358,7 @@ describe('interactive CLI owner startup', () => {
           history,
           fallback.runtimeSettings,
         ),
-      ).resumedHistory,
+      ).resumedBoot,
     ).toBeUndefined();
     expect(await locks(fallback.config)).toHaveLength(1);
     await fallback.agent.session.setRecording({ enabled: false });

@@ -13,13 +13,12 @@ export function bindChatOwnerOperations(
   resume: ChatOwnerOperations['resume'],
   deleteCheckpoint: ChatOwnerOperations['deleteCheckpoint'],
   renameCheckpoint: ChatOwnerOperations['renameCheckpoint'],
-  getHistory: ChatOwnerOperations['getHistory'],
+  getHistoryCount: ChatOwnerOperations['getHistoryCount'],
   clearHistory: ChatOwnerOperations['clearHistory'],
   restoreTurns: ChatOwnerOperations['restoreTurns'],
   nameCurrentSession: ChatOwnerOperations['nameCurrentSession'],
   getRecordingPath: ChatOwnerOperations['getRecordingPath'],
   getModel: ChatOwnerOperations['getModel'],
-  getEmojiFilterMode: ChatOwnerOperations['getEmojiFilterMode'],
 ): ChatOwnerOperations {
   return {
     listCheckpoints,
@@ -27,13 +26,12 @@ export function bindChatOwnerOperations(
     resume,
     deleteCheckpoint,
     renameCheckpoint,
-    getHistory,
+    getHistoryCount,
     clearHistory,
     restoreTurns,
     nameCurrentSession,
     getRecordingPath,
     getModel,
-    getEmojiFilterMode,
   };
 }
 
@@ -47,7 +45,8 @@ export function bindChatRecordingOperations(
   renameCheckpoint: ChatRecordingOperations['renameCheckpoint'],
   nameSession: ChatRecordingOperations['nameSession'],
   getChatHistory: ChatRecordingOperations['getChatHistory'],
-  replaceChatHistory: ChatRecordingOperations['replaceChatHistory'],
+  clearHistory: ChatRecordingOperations['clearHistory'],
+  restoreTurns: ChatRecordingOperations['restoreTurns'],
   getModel: ChatRecordingOperations['getModel'],
 ): ChatRecordingOperations {
   return {
@@ -60,7 +59,8 @@ export function bindChatRecordingOperations(
     renameCheckpoint,
     nameSession,
     getChatHistory,
-    replaceChatHistory,
+    clearHistory,
+    restoreTurns,
     getModel,
   };
 }
@@ -71,12 +71,13 @@ export function bindPersistedChatRecording(
   readHash: ChatRecordingOperations['getProjectHash'],
   readDirectory: ChatRecordingOperations['getChatsDir'],
   readHistory: ChatRecordingOperations['getChatHistory'],
-  replaceHistory: ChatRecordingOperations['replaceChatHistory'],
+  clearHistory: ChatRecordingOperations['clearHistory'],
+  restoreTurns: ChatRecordingOperations['restoreTurns'],
   readModel: ChatRecordingOperations['getModel'],
 ): ChatRecordingOperations {
   const requireRecording = () => {
     const recording = readRecording();
-    if (!recording) throw new Error('No recording available');
+    if (recording === null) throw new Error('No recording available');
     return recording;
   };
   return bindChatRecordingOperations(
@@ -97,7 +98,8 @@ export function bindPersistedChatRecording(
     (name, overwrite) =>
       readPersistence().nameSession(requireRecording(), name, overwrite),
     readHistory,
-    replaceHistory,
+    clearHistory,
+    restoreTurns,
     readModel,
   );
 }

@@ -178,7 +178,7 @@ export function rewroteCommittedHistory(
 /** What the next attempt's request is: the one just sent, or a fresh build. */
 interface KeptRequest {
   resendIdentically(): void;
-  discard(): void;
+  discard(): void | Promise<void>;
 }
 
 /**
@@ -186,16 +186,16 @@ interface KeptRequest {
  * identical refusal retry does; a content retry or a reviewer rewrite changes
  * what should be sent, so the next attempt builds its request afresh.
  */
-export function keepRequestForNextAttempt(
+export async function keepRequestForNextAttempt(
   request: KeptRequest,
   outcome: StreamAttemptOutcome,
-): void {
+): Promise<void> {
   if (
     outcome.action === 'retry-same-request' &&
     outcome.rewrite === undefined
   ) {
     request.resendIdentically();
   } else {
-    request.discard();
+    await request.discard();
   }
 }

@@ -8,7 +8,7 @@ import type { CliArgs } from './config/cliArgParser.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { handoffCliConfig } from './test-utils/bootstrap-config.js';
+import { handoffCliConfig } from './test-utils/bootstrap-config.test-helper.js';
 
 import {
   describe,
@@ -62,21 +62,17 @@ void vi.mock('./config/settings.js', () => ({
   migrateDeprecatedSettings: vi.fn(),
 }));
 
-void vi.mock('./config/config.js', () => ({
-  loadCliConfig: vi.fn(),
-}));
+void vi.mock('./config/config.js', () => ({ loadCliConfig: vi.fn() }));
+void vi.mock('./config/cliArgParser.js', () => ({ parseArguments: vi.fn() }));
 
 void vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn(),
 }));
 
 void vi.mock('./config/extension.js', () => ({
-  ExtensionStorage: {
-    getUserExtensionsDir: vi.fn(() => '/tmp/extensions'),
-  },
+  ExtensionStorage: { getUserExtensionsDir: vi.fn(() => '/tmp/extensions') },
   loadExtensions: vi.fn(() => []),
 }));
-
 void vi.mock('./utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(() => Promise.resolve()),
   registerCleanup: vi.fn(),
@@ -93,14 +89,13 @@ void vi.mock('./cliAgentBootstrap.js', () => ({
   })),
 }));
 
-const actualActual2 = { ...(await import('@vybestack/llxprt-code-core')) };
+const actualCore = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
-  ...actualActual2,
+  ...actualCore,
   writeToStdout: vi.fn().mockReturnValue(true),
   writeToStderr: vi.fn().mockReturnValue(true),
   patchStdio: vi.fn(() => vi.fn()),
 }));
-
 void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     detectCapabilities: vi.fn(() => Promise.resolve()),
@@ -111,37 +106,27 @@ void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
     getTerminalBackgroundColor: vi.fn(() => undefined),
   },
 }));
-
 void vi.mock('./ui/utils/terminalContract.js', () => ({
   drainStdinBuffer: vi.fn(() => Promise.resolve()),
 }));
-
 void vi.mock('./utils/stdinSafety.js', () => ({
-  StdinRawModeManager: vi.fn(() => ({
-    enable: vi.fn(),
-    disable: vi.fn(),
-  })),
+  StdinRawModeManager: vi.fn(() => ({ enable: vi.fn(), disable: vi.fn() })),
 }));
-
 void vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
-
 void vi.mock('./utils/bootstrap.js', () => ({
   shouldRelaunchForMemory: vi.fn(() => []),
   computeSandboxMemoryArgs: vi.fn(() => ['--max-old-space-size=3072']),
   parseDockerMemoryToMB: vi.fn(() => undefined),
   isDebugMode: vi.fn(() => false),
 }));
-
 void vi.mock('./utils/relaunch.js', () => ({
   relaunchAppInChildProcess: vi.fn(() => Promise.resolve(0)),
 }));
-
 void vi.mock('./utils/sessionCleanup.js', () => ({
   cleanupExpiredSessions: vi.fn(() => Promise.resolve()),
 }));
-
 void vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
@@ -311,7 +296,7 @@ describe('cli main provider initialization', () => {
     }
   }
 
-  async function continueLatest() {
+  async function continueLatest(failRestore = false) {
     process.env.LLXPRT_CONFIG_HOME = projectTempDir;
     process.env.LLXPRT_LOG_HOME = join(projectTempDir, 'log');
     process.env.LLXPRT_FAKE_RESPONSES = fakeResponses;
@@ -350,6 +335,11 @@ describe('cli main provider initialization', () => {
     } as unknown as CliArgs);
     const foreground = await openForegroundOwner(config, freshId);
     const owner = foreground.agent;
+    if (failRestore) {
+      vi.spyOn(owner.session, 'resume').mockRejectedValueOnce(
+        new Error('restore failed on purpose'),
+      );
+    }
     const { createForegroundAgent } = await import('./cliAgentBootstrap.js');
     (
       createForegroundAgent as Mock<typeof createForegroundAgent>
@@ -360,7 +350,7 @@ describe('cli main provider initialization', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const result = await cli.main();
-      const history = await owner.getHistory();
+      const history = await Array.fromAsync(owner.streamHistory());
       for await (const _event of owner.stream('provider-init-continued')) {
         /* consume the fake provider turn */
       }
@@ -371,7 +361,7 @@ describe('cli main provider initialization', () => {
         name.endsWith('.lock'),
       );
       const sessionFiles = filesDuringStartup.filter((name) =>
-        name.endsWith('.jsonl'),
+        name.endsWith('.llxj'),
       );
       if (!recording.path) throw new Error('Owner recording was not started');
       const continuedTranscript = await readFile(recording.path, 'utf8');
@@ -405,6 +395,34 @@ describe('cli main provider initialization', () => {
       await config.dispose();
     }
   }
+
+  it('falls back to a fresh owner session and releases the latest session lock when restore fails during --continue (issue #1873)', async () => {
+    const {
+      result,
+      adoptedId,
+      recording,
+      history,
+      latestPath,
+      freshId,
+      locksDuringStartup,
+      locksAfterExit,
+      sessionFiles,
+      continuedTranscript,
+      exited,
+    } = await continueLatest(true);
+    expect(result).toBeUndefined();
+    expect(exited).toBe(0);
+    expect(sessionFiles).toHaveLength(3);
+    expect(continuedTranscript).toContain('provider-init-continued');
+    expect(adoptedId).toBe(freshId);
+    expect(recording.path).not.toBe(latestPath);
+    expect(JSON.stringify(history)).not.toContain('latest provider-init turn');
+    expect(await readFile(latestPath, 'utf8')).toContain(
+      'latest provider-init turn',
+    );
+    expect(locksDuringStartup).toHaveLength(1);
+    expect(locksAfterExit).toHaveLength(0);
+  }, 30000);
 
   it('resumes the latest owner transcript without starting another recording during --continue (issue #1873)', async () => {
     const {

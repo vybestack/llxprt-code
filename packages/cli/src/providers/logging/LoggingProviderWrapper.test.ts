@@ -11,9 +11,14 @@
  */
 
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type { IContent, Config } from '@vybestack/llxprt-code-core';
-import type { IProvider, ITool } from '@vybestack/llxprt-code-providers';
+import type {
+  GenerateChatOptions,
+  IProvider,
+  ITool,
+  ProviderToolset,
+} from '@vybestack/llxprt-code-providers';
 
 // These interfaces will be implemented in the next phase
 interface LoggingProviderWrapper {
@@ -42,14 +47,23 @@ function createMockProvider(name: string): IProvider {
   return {
     name,
     getModels: vi.fn().mockResolvedValue([]),
-    generateChatCompletion: vi.fn().mockImplementation(async function* () {
+    async *generateChatCompletion(
+      _optionsOrMessages: GenerateChatOptions | AsyncIterable<IContent>,
+      _tools?: ProviderToolset,
+    ): AsyncIterableIterator<IContent> {
       yield {
-        speaker: 'ai' as const,
+        speaker: 'ai',
         blocks: [{ type: 'text', text: `Response from ${name}` }],
       };
-    }),
+    },
     getDefaultModel: vi.fn().mockReturnValue(`${name}-default-model`),
   };
+}
+
+async function* toStream(
+  messages: readonly IContent[],
+): AsyncIterableIterator<IContent> {
+  yield* messages;
 }
 
 function createConfigWithLogging(enabled: boolean): Config {
@@ -99,7 +113,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
     }
 
     // Delegate to wrapped provider
-    yield* this.provider.generateChatCompletion(messages, tools);
+    yield* this.provider.generateChatCompletion(toStream(messages), tools);
   }
 
   getWrappedProvider(): IProvider {
@@ -119,15 +133,24 @@ class MockConversationDataRedactor implements ConversationDataRedactor {
   }
 }
 
-describe('Multi-Provider Conversation Logging', () => {
-  let mockProvider: IProvider;
-  let config: Config;
-  let redactor: ConversationDataRedactor;
+let mockProvider: IProvider;
+let config: Config;
+let redactor: ConversationDataRedactor;
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    redactor = new MockConversationDataRedactor();
-  });
+function resetLoggingFixture(): void {
+  vi.clearAllMocks();
+  telemetryLoggers.logConversationRequest.mockReset();
+  redactor = new MockConversationDataRedactor();
+}
+
+function restoreLoggingMocks(): void {
+  vi.restoreAllMocks();
+  telemetryLoggers.logConversationRequest.mockReset();
+}
+
+describe('Multi-Provider Conversation Logging: OpenAI', () => {
+  beforeEach(resetLoggingFixture);
+  afterEach(restoreLoggingMocks);
 
   /**
    * @requirement LOGGING-001: Provider-agnostic logging
@@ -168,7 +191,11 @@ describe('Multi-Provider Conversation Logging', () => {
       }),
     );
   });
+});
 
+describe('Multi-Provider Conversation Logging: Anthropic', () => {
+  beforeEach(resetLoggingFixture);
+  afterEach(restoreLoggingMocks);
   /**
    * @requirement LOGGING-002: Anthropic provider logging
    * @scenario Anthropic provider generates chat completion
@@ -223,7 +250,11 @@ describe('Multi-Provider Conversation Logging', () => {
       }),
     );
   });
+});
 
+describe('Multi-Provider Conversation Logging: Gemini', () => {
+  beforeEach(resetLoggingFixture);
+  afterEach(restoreLoggingMocks);
   /**
    * @requirement LOGGING-003: Gemini provider logging
    * @scenario Gemini provider generates chat completion
@@ -267,7 +298,11 @@ describe('Multi-Provider Conversation Logging', () => {
       }),
     );
   });
+});
 
+describe('Multi-Provider Conversation Logging: disabled', () => {
+  beforeEach(resetLoggingFixture);
+  afterEach(restoreLoggingMocks);
   /**
    * @requirement LOGGING-004: Logging disabled behavior
    * @scenario LoggingProviderWrapper with logging disabled
@@ -296,7 +331,11 @@ describe('Multi-Provider Conversation Logging', () => {
 
     expect(logSpy).not.toHaveBeenCalled();
   });
+});
 
+describe('Multi-Provider Conversation Logging: tools', () => {
+  beforeEach(resetLoggingFixture);
+  afterEach(restoreLoggingMocks);
   /**
    * @requirement LOGGING-005: Tool format preservation
    * @scenario Provider with custom tool format
@@ -325,15 +364,21 @@ describe('Multi-Provider Conversation Logging', () => {
       },
     ];
 
+    const providerSpy = vi.spyOn(mockProvider, 'generateChatCompletion');
     const stream = wrapper.generateChatCompletion(messages, tools);
     await consumeAsyncIterable(stream);
 
-    expect(mockProvider.generateChatCompletion).toHaveBeenCalledWith(
+    expect(providerSpy).toHaveBeenCalledWith(expect.anything(), tools);
+    const [forwardedHistory] = providerSpy.mock.calls[0];
+    expect(await consumeAsyncIterable(forwardedHistory)).toStrictEqual(
       messages,
-      tools,
     );
   });
+});
 
+describe('Multi-Provider Conversation Logging: errors', () => {
+  beforeEach(resetLoggingFixture);
+  afterEach(restoreLoggingMocks);
   /**
    * @requirement LOGGING-006: Error handling in logging
    * @scenario LoggingProviderWrapper encounters logging error
@@ -371,7 +416,11 @@ describe('Multi-Provider Conversation Logging', () => {
       blocks: [{ type: 'text', text: 'Response from openai' }],
     });
   });
+});
 
+describe('Multi-Provider Conversation Logging: streaming', () => {
+  beforeEach(resetLoggingFixture);
+  afterEach(restoreLoggingMocks);
   /**
    * @requirement LOGGING-007: Async iterator preservation
    * @scenario LoggingProviderWrapper with streaming response

@@ -1,3 +1,5 @@
+import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -296,42 +298,44 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
         async shutdown(): Promise<void> {},
       });
       const authorizations: Array<string | null> = [];
-      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-        const url = input instanceof Request ? input.url : String(input);
-        if (url.includes('/oauth/token')) {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        withFetchPreconnect(async (input, init) => {
+          const url = input instanceof Request ? input.url : String(input);
+          if (url.includes('/oauth/token')) {
+            return new Response(
+              JSON.stringify({
+                access_token: 'sk-ant-oat-new-session',
+                expires_in: 3600,
+              }),
+              {
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+          const headers = new Headers(
+            input instanceof Request ? input.headers : init?.headers,
+          );
+          authorizations.push(headers.get('authorization'));
           return new Response(
             JSON.stringify({
-              access_token: 'sk-ant-oat-new-session',
-              expires_in: 3600,
+              id: 'synthetic-message',
+              type: 'message',
+              role: 'assistant',
+              model: 'claude-sonnet-4-5',
+              content: [{ type: 'text', text: 'Synthetic response' }],
+              stop_reason: 'end_turn',
+              usage: { input_tokens: 1, output_tokens: 1 },
             }),
             {
               headers: { 'Content-Type': 'application/json' },
             },
           );
-        }
-        const headers = new Headers(
-          input instanceof Request ? input.headers : init?.headers,
-        );
-        authorizations.push(headers.get('authorization'));
-        return new Response(
-          JSON.stringify({
-            id: 'synthetic-message',
-            type: 'message',
-            role: 'assistant',
-            model: 'claude-sonnet-4-5',
-            content: [{ type: 'text', text: 'Synthetic response' }],
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 1, output_tokens: 1 },
-          }),
-          {
-            headers: { 'Content-Type': 'application/json' },
-          },
-        );
-      });
+        }),
+      );
       const request = async (): Promise<string[]> => {
         const output: string[] = [];
-        for await (const chunk of anthropicProvider.generateChatCompletion(
-          createProviderCallOptions({
+        for await (const chunk of anthropicProvider.generateChatCompletion({
+          ...createProviderCallOptions({
             providerName: 'anthropic',
             contents: [
               { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
@@ -340,7 +344,14 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
               "You are Claude Code, Anthropic's official CLI for Claude.",
             settingsOverrides: { global: { streaming: 'disabled' } },
           }),
-        )) {
+          contentCount: 1,
+          requestRows: {
+            ...inMemoryRequestSelection([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+            ]),
+            callerOwned: true,
+          },
+        })) {
           for (const block of chunk.blocks) {
             if (block.type === 'text') output.push(block.text);
           }

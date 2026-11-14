@@ -9,7 +9,6 @@
  * Sibling to client.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
   it,
@@ -17,6 +16,7 @@ import {
   vi,
   beforeEach,
   afterEach,
+  afterAll,
   type Mock,
 } from 'bun:test';
 import type {
@@ -29,29 +29,26 @@ import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, Turn } from './turn.js';
-import { createClientIdeFixture } from './__tests__/client-ide-fixture.js';
+import {
+  bindChatHistoryTail,
+  createClientIdeFixture,
+} from './__tests__/client-ide-fixture.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import {
   fromAsync,
   setupAgentClient,
+  createClientHistoryFixture,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
 
-// Mock prompts module before imports
-const realConfigModule = {
-  ...(await import('@vybestack/llxprt-code-core/config/config.js')),
+const realRetryModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
 };
 
-void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(() =>
-    Promise.resolve('Test system instruction'),
-  ),
-  getCoreSystemPrompt: vi.fn(() => 'Test system instruction'),
-  getCompressionPrompt: vi.fn(() => 'Test compression prompt'),
-  initializePromptSystem: vi.fn(() => Promise.resolve(undefined)),
-}));
-
 // Mock clientToolGovernance module so tests can control tool name/governance returns
+const realClientToolGovernance = {
+  ...(await import('./clientToolGovernance.js')),
+};
 void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn(() => undefined),
   readToolList: vi.fn((v: unknown) =>
@@ -66,18 +63,10 @@ void vi.mock('./clientToolGovernance.js', () => ({
   shouldIncludeSubagentDelegationForConfig: vi.fn(() => Promise.resolve(false)),
 }));
 
-// --- Mocks (hoisted so vi.mock factories can reference them) ---
-const {
-  mockChatCreateFn,
-  mockGenerateContentFn,
-  mockEmbedContentFn,
-  mockTurnRunFn,
-} = {
-  mockChatCreateFn: vi.fn(),
-  mockGenerateContentFn: vi.fn(),
-  mockEmbedContentFn: vi.fn(),
-  mockTurnRunFn: vi.fn(),
-};
+const mockChatCreateFn = vi.fn();
+const mockGenerateContentFn = vi.fn();
+const mockEmbedContentFn = vi.fn();
+const mockTurnRunFn = vi.fn();
 
 const {
   todoStoreReadMock,
@@ -117,6 +106,11 @@ void vi.mock(
   }),
 );
 
+const realTodoReminderModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/services/todo-reminder-service.js'
+  )),
+};
 void vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
   () => ({
@@ -133,32 +127,6 @@ void vi.mock('@vybestack/llxprt-code-tools', () => ({
   ...actual,
   LocalTodoStore: mockTodoStoreConstructor,
 }));
-const __actual = { ...(await import('./turn')) };
-void vi.mock('./turn', () => {
-  const result = __actual as
-    | typeof import('./turn.js')
-    | Promise<typeof import('./turn.js')>;
-  class MockTurn {
-    pendingToolCalls: unknown[] = [];
-    run = mockTurnRunFn;
-    constructor() {}
-  }
-  if (result instanceof Promise) {
-    return result.then((actual) => ({
-      ...actual,
-      Turn: MockTurn,
-    }));
-  }
-  return {
-    ...result,
-    Turn: MockTurn,
-  };
-});
-
-void vi.mock('@vybestack/llxprt-code-core/config/config.js', () =>
-  automock(realConfigModule),
-);
-
 void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
@@ -178,6 +146,12 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
 }));
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
+}));
+void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
+  uiTelemetryService: {
+    setLastPromptTokenCount: vi.fn(),
+    getLastPromptTokenCount: vi.fn(),
+  },
 }));
 const actual4 = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
@@ -242,58 +216,99 @@ function findHumanTextBlock(
     .find((block) => block.text.includes(needle));
 }
 
-describe('Agent Client (client.ts)', () => {
-  let client: AgentClient;
-  let ide: Awaited<ReturnType<typeof createClientIdeFixture>>;
+let client: AgentClient;
+let ide: Awaited<ReturnType<typeof createClientIdeFixture>>;
 
-  beforeEach(async () => {
-    const ctx = await setupAgentClient({
+async function setupSendMessageStreamClient(): Promise<void> {
+  todoStoreWritePausedMock.mockClear();
+  const ctx = await setupAgentClient(
+    {
       mockChatCreateFn,
       mockGenerateContentFn,
       mockEmbedContentFn,
-    });
-    client = ctx.client;
-    ide = await createClientIdeFixture(client);
+      createTurn: (chat, promptId, agentId, providerName) => {
+        const turn = new Turn(chat, promptId, agentId, providerName);
+        vi.spyOn(turn, 'run').mockImplementation(mockTurnRunFn);
+        return turn;
+      },
+    },
+    { useInjectedConfig: true },
+  );
+  client = ctx.client;
+  ide = await createClientIdeFixture(client);
 
-    mockTodoStoreConstructor.mockImplementation(() => ({
-      readTodos: todoStoreReadMock,
-      readPausedState: todoStoreReadPausedMock,
-      writePausedState: todoStoreWritePausedMock,
-    }));
-    todoStoreReadMock.mockResolvedValue([]);
-    todoStoreReadPausedMock.mockResolvedValue(false);
-    todoStoreWritePausedMock.mockResolvedValue(undefined);
-  });
+  mockTodoStoreConstructor.mockImplementation(() => ({
+    readTodos: todoStoreReadMock,
+    readPausedState: todoStoreReadPausedMock,
+    writePausedState: todoStoreWritePausedMock,
+  }));
+  todoStoreReadMock.mockResolvedValue([]);
+  todoStoreReadPausedMock.mockResolvedValue(false);
+  todoStoreWritePausedMock.mockResolvedValue(undefined);
+  (
+    client as unknown as {
+      todoContinuationService: { todoToolsAvailable: boolean };
+    }
+  ).todoContinuationService.todoToolsAvailable = true;
+}
 
-  afterEach(async () => {
-    await client.dispose();
-    await ide.dispose();
-    vi.restoreAllMocks();
-  });
+function useZeroTokenChat(): void {
+  const mockChat: Partial<ChatSession> = {
+    ...createClientHistoryFixture(),
+    addHistory: vi.fn(),
+    getHistory: vi.fn().mockReturnValue([]),
+    getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+    getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+    getContextLimit: vi.fn().mockReturnValue(1000000),
+  };
+  client['chat'] = mockChat as ChatSession;
 
+  const mockGenerator: Partial<ContentGenerator> = {
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+  };
+  client['contentGenerator'] = mockGenerator as ContentGenerator;
+}
+
+function setupPauseReminder(): void {
+  const reminderService = new TodoReminderService();
+  (
+    reminderService.getUpdateActiveTodoReminder as Mock<
+      typeof reminderService.getUpdateActiveTodoReminder
+    >
+  ).mockReturnValue(
+    `---
+System Note: Update the active todo before replying.
+---`,
+  );
+  const svcForPause = (
+    client as unknown as {
+      todoContinuationService: {
+        todoReminderService: TodoReminderService;
+        todoToolsAvailable: boolean;
+      };
+    }
+  ).todoContinuationService;
+  svcForPause.todoReminderService =
+    reminderService as unknown as TodoReminderService;
+  svcForPause.todoToolsAvailable = true;
+}
+
+describe('Agent Client (client.ts)', () => {
   describe('sendMessageStream', () => {
-    beforeEach(() => {
-      (
-        client as unknown as {
-          todoContinuationService: { todoToolsAvailable: boolean };
-        }
-      ).todoContinuationService.todoToolsAvailable = true;
+    beforeEach(setupSendMessageStreamClient);
+    afterEach(async () => {
+      await client.dispose();
+      await ide.dispose();
+      vi.restoreAllMocks();
     });
 
     it('retries once when no tool work and todos unchanged', async () => {
-      const reminderService = new TodoReminderService();
       const followUpReminderText =
         '---\nSystem Note: You still have unfinished todos. Continue the required work.\n---';
-      (
-        reminderService.getUpdateActiveTodoReminder as Mock<
-          typeof reminderService.getUpdateActiveTodoReminder
-        >
-      ).mockReturnValue(followUpReminderText);
-      (
-        reminderService.getEscalatedActiveTodoReminder as Mock<
-          typeof reminderService.getEscalatedActiveTodoReminder
-        >
-      ).mockReturnValue(followUpReminderText);
+      const reminderService = {
+        getUpdateActiveTodoReminder: vi.fn(() => followUpReminderText),
+        getEscalatedActiveTodoReminder: vi.fn(() => followUpReminderText),
+      };
       const svcForRetry = (
         client as unknown as {
           todoContinuationService: {
@@ -331,23 +346,10 @@ describe('Agent Client (client.ts)', () => {
       });
 
       ide.setEnabled(false);
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      useZeroTokenChat();
 
       const stream = client.sendMessageStream(
-        [{ text: 'Get started' }],
+        [{ type: 'text', text: 'Get started' }],
         new AbortController().signal,
         'prompt-no-tools',
       );
@@ -359,6 +361,17 @@ describe('Agent Client (client.ts)', () => {
       const secondRequest = forwardedRequests[1];
       const reminderPart = findHumanTextBlock(secondRequest, 'System Note');
       expect(reminderPart).toBeDefined();
+    });
+  });
+});
+
+describe('Agent Client (client.ts): paused continuation', () => {
+  describe('sendMessageStream', () => {
+    beforeEach(setupSendMessageStreamClient);
+    afterEach(async () => {
+      await client.dispose();
+      await ide.dispose();
+      vi.restoreAllMocks();
     });
 
     it('does not retry with pending todos when paused for the current prompt', async () => {
@@ -389,23 +402,10 @@ describe('Agent Client (client.ts)', () => {
       });
 
       ide.setEnabled(false);
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      useZeroTokenChat();
 
       const stream = client.sendMessageStream(
-        [{ text: 'Continue the task' }],
+        [{ type: 'text', text: 'Continue the task' }],
         new AbortController().signal,
         'prompt-paused-current',
       );
@@ -415,6 +415,17 @@ describe('Agent Client (client.ts)', () => {
       expect(todoStoreWritePausedMock).not.toHaveBeenCalled();
       expect(forwardedRequests).toHaveLength(1);
       expect(JSON.stringify(forwardedRequests[0])).not.toContain('System Note');
+    });
+  });
+});
+
+describe('Agent Client (client.ts): new prompt', () => {
+  describe('sendMessageStream', () => {
+    beforeEach(setupSendMessageStreamClient);
+    afterEach(async () => {
+      await client.dispose();
+      await ide.dispose();
+      vi.restoreAllMocks();
     });
 
     it('clears paused state at the start of a new prompt', async () => {
@@ -433,23 +444,10 @@ describe('Agent Client (client.ts)', () => {
       );
 
       ide.setEnabled(false);
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      useZeroTokenChat();
 
       const stream = client.sendMessageStream(
-        [{ text: 'New request' }],
+        [{ type: 'text', text: 'New request' }],
         new AbortController().signal,
         'prompt-new-after-pause',
       );
@@ -457,27 +455,20 @@ describe('Agent Client (client.ts)', () => {
 
       expect(todoStoreWritePausedMock).toHaveBeenCalledWith(false);
     });
+  });
+});
+
+describe('Agent Client (client.ts): todo_pause', () => {
+  describe('sendMessageStream', () => {
+    beforeEach(setupSendMessageStreamClient);
+    afterEach(async () => {
+      await client.dispose();
+      await ide.dispose();
+      vi.restoreAllMocks();
+    });
 
     it('does not retry after todo_pause', async () => {
-      const reminderService = new TodoReminderService();
-      (
-        reminderService.getUpdateActiveTodoReminder as Mock<
-          typeof reminderService.getUpdateActiveTodoReminder
-        >
-      ).mockReturnValue(
-        '---\nSystem Note: Update the active todo before replying.\n---',
-      );
-      const svcForPause = (
-        client as unknown as {
-          todoContinuationService: {
-            todoReminderService: TodoReminderService;
-            todoToolsAvailable: boolean;
-          };
-        }
-      ).todoContinuationService;
-      svcForPause.todoReminderService =
-        reminderService as unknown as TodoReminderService;
-      svcForPause.todoToolsAvailable = true;
+      setupPauseReminder();
 
       todoStoreReadMock.mockResolvedValue([
         {
@@ -526,23 +517,10 @@ describe('Agent Client (client.ts)', () => {
       );
 
       ide.setEnabled(false);
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
+      useZeroTokenChat();
 
       const stream = client.sendMessageStream(
-        [{ text: 'Work on the task' }],
+        [{ type: 'text', text: 'Work on the task' }],
         new AbortController().signal,
         'prompt-pause',
       );
@@ -551,6 +529,17 @@ describe('Agent Client (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
       expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
       expect(events.some((e) => e.type === AgentEventType.Finished)).toBe(true);
+    });
+  });
+});
+
+describe('Agent Client (client.ts): IDE context', () => {
+  describe('sendMessageStream', () => {
+    beforeEach(setupSendMessageStreamClient);
+    afterEach(async () => {
+      await client.dispose();
+      await ide.dispose();
+      vi.restoreAllMocks();
     });
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {
@@ -577,13 +566,16 @@ describe('Agent Client (client.ts)', () => {
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
+      const addHistory = vi.fn<(content: IContent) => void>();
       const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
+        ...createClientHistoryFixture(),
+        addHistory,
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
         getContextLimit: vi.fn().mockReturnValue(1000000),
       };
+      bindChatHistoryTail(mockChat, () => []);
       client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
@@ -592,7 +584,7 @@ describe('Agent Client (client.ts)', () => {
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      const initialRequest = [{ text: 'Hi' }];
+      const initialRequest: AgentMessageInput = [{ type: 'text', text: 'Hi' }];
 
       // Act
       const stream = client.sendMessageStream(
@@ -605,15 +597,24 @@ describe('Agent Client (client.ts)', () => {
       }
 
       // Verify that the IDE context was included correctly for files without active file
-      const addHistoryCalls = (
-        mockChat.addHistory as Mock<typeof mockChat.addHistory>
-      ).mock.calls;
+      const addHistoryCalls = addHistory.mock.calls;
       const contextCall = addHistoryCalls.find((call) =>
         JSON.stringify(call[0]).includes('editor context'),
       );
       expect(contextCall).toBeDefined();
       expect(JSON.stringify(contextCall![0])).toContain('recent/file1.ts');
       expect(JSON.stringify(contextCall![0])).toContain('recent/file2.ts');
+    });
+  });
+});
+
+describe('Agent Client (client.ts): stream return', () => {
+  describe('sendMessageStream', () => {
+    beforeEach(setupSendMessageStreamClient);
+    afterEach(async () => {
+      await client.dispose();
+      await ide.dispose();
+      vi.restoreAllMocks();
     });
 
     it('should return the turn instance after the stream is complete', async () => {
@@ -630,12 +631,14 @@ describe('Agent Client (client.ts)', () => {
       mockTurnRunFn.mockReturnValue(mockStream);
 
       const mockChat: Partial<ChatSession> = {
+        ...createClientHistoryFixture(),
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
         getContextLimit: vi.fn().mockReturnValue(1000000),
       };
+      bindChatHistoryTail(mockChat, () => []);
       client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
@@ -648,7 +651,7 @@ describe('Agent Client (client.ts)', () => {
 
       // Act
       const stream = client.sendMessageStream(
-        [{ text: 'Hi' }],
+        [{ type: 'text', text: 'Hi' }],
         new AbortController().signal,
         'prompt-id-1',
       );
@@ -667,6 +670,29 @@ describe('Agent Client (client.ts)', () => {
 
       return { finalResult };
     };
+  });
+});
+
+describe('Agent Client (client.ts): session limit', () => {
+  afterAll(() => {
+    void vi.mock('./clientToolGovernance.js', () => realClientToolGovernance);
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
+      () => realTodoReminderModule,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/retry.js',
+      () => realRetryModule,
+    );
+  });
+  describe('sendMessageStream', () => {
+    beforeEach(setupSendMessageStreamClient);
+    afterEach(async () => {
+      await client.dispose();
+      await ide.dispose();
+      vi.restoreAllMocks();
+    });
 
     it('should yield MaxSessionTurns and stop when session turn limit is reached', async () => {
       // Arrange
@@ -682,12 +708,14 @@ describe('Agent Client (client.ts)', () => {
       mockTurnRunFn.mockReturnValue(mockStream);
 
       const mockChat: Partial<ChatSession> = {
+        ...createClientHistoryFixture(),
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
         getContextLimit: vi.fn().mockReturnValue(1000000),
       };
+      bindChatHistoryTail(mockChat, () => []);
       client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
@@ -699,7 +727,7 @@ describe('Agent Client (client.ts)', () => {
       // Run up to the limit
       for (let i = 0; i < MAX_SESSION_TURNS; i++) {
         const stream = client.sendMessageStream(
-          [{ text: 'Hi' }],
+          [{ type: 'text', text: 'Hi' }],
           new AbortController().signal,
           'prompt-id-4',
         );
@@ -711,7 +739,7 @@ describe('Agent Client (client.ts)', () => {
 
       // This call should exceed the limit
       const stream = client.sendMessageStream(
-        [{ text: 'Hi' }],
+        [{ type: 'text', text: 'Hi' }],
         new AbortController().signal,
         'prompt-id-5',
       );

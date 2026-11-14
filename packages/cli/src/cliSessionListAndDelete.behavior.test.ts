@@ -20,11 +20,12 @@ import { getProjectHash } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   runCliProcess,
+  corruptSessionReason,
   writeCorruptSession as writeCorrupt,
   writeHealthySession as writeHealthy,
   type CliRun,
   type RecordingTarget,
-} from './cliSessionListAndDelete.testHelpers.js';
+} from './__tests__/cli-session-list-delete-helpers.js';
 
 const STDIN_ERROR = 'No input provided via stdin';
 const NO_SESSIONS = 'No recorded sessions for this project.';
@@ -197,7 +198,7 @@ describe('--list-sessions / --delete-session outside a TTY (issue #3839)', () =>
         healthyOnStdout: run.stdout.includes('ffffffff'),
         corruptOnStdout: run.stdout.includes(corruptPath),
         skippedBlockOnStderr: run.stderr.includes(
-          `Skipped 1 unreadable session recording(s):\n  ${corruptPath}: Invalid session_start: missing or malformed required fields`,
+          `Skipped 1 unreadable session recording(s):\n  ${corruptPath}: ${corruptSessionReason()}`,
         ),
         skippedBlocks: run.stderr.split('Skipped ').length - 1,
       }).toStrictEqual({
@@ -226,7 +227,7 @@ describe('--list-sessions / --delete-session outside a TTY (issue #3839)', () =>
         exitCode: run.exitCode,
         confirmedOnStdout: run.stdout.includes('Deleted session abababab'),
         skippedBlockOnStderr: run.stderr.includes(
-          `Skipped 1 unreadable session recording(s):\n  ${corruptPath}: Invalid session_start: missing or malformed required fields`,
+          `Skipped 1 unreadable session recording(s):\n  ${corruptPath}: ${corruptSessionReason()}`,
         ),
         skippedBlocks: run.stderr.split('Skipped ').length - 1,
         doomedExists: await exists(doomed),
@@ -260,7 +261,7 @@ describe('--list-sessions / --delete-session outside a TTY (issue #3839)', () =>
         stdout: run.stdout.trim(),
         errorOnStderr: run.stderr.includes('no-such-session'),
         skippedBlockOnStderr: run.stderr.includes(
-          `Skipped 1 unreadable session recording(s):\n  ${corruptPath}: Invalid session_start: missing or malformed required fields`,
+          `Skipped 1 unreadable session recording(s):\n  ${corruptPath}: ${corruptSessionReason()}`,
         ),
         filesUnchanged: (await chatFiles()).join('|') === filesBefore.join('|'),
       }).toStrictEqual({

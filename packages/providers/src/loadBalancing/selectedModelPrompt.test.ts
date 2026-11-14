@@ -24,6 +24,7 @@ import {
   type OptionsBuildContext,
 } from './resolvedOptionsBuilder.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 import type { LoadBalancerSubProfile } from './loadBalancerTypes.js';
 
 const noopLogger = {
@@ -76,7 +77,7 @@ describe('optionsWithSelectedModelPrompt — blank systemInstruction (issue #315
       (_p, model) => `[model=${model}]`,
     );
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       systemInstruction: '',
       systemPromptAssembler: assembler,
     };
@@ -96,7 +97,7 @@ describe('optionsWithSelectedModelPrompt — blank systemInstruction (issue #315
       (_p, model) => `[model=${model}]`,
     );
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       systemInstruction: '   ',
       systemPromptAssembler: assembler,
     };
@@ -118,7 +119,7 @@ describe('legacy whitespace modelId keeps parent prompt and model aligned (issue
       (_p, model) => `[model=${model}]`,
     );
     const parentOptions: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       resolved: { model: 'parent-model' },
       systemInstruction: '[model=parent-model]',
       systemPromptAssembler: assembler,

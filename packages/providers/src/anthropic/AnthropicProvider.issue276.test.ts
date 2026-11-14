@@ -17,10 +17,8 @@ import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
 } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
+import type { ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
@@ -120,10 +118,6 @@ function resetSdkTracking() {
 }
 
 describe('Issue #276: OAuth token behavior through public APIs', () => {
-  let runtimeContext: ProviderRuntimeContext;
-  let config: ReturnType<typeof createRuntimeConfigStub>;
-  let settingsService: SettingsService;
-
   beforeEach(() => {
     vi.clearAllMocks();
     resetSdkTracking();
@@ -155,23 +149,56 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    config = createRuntimeConfigStub(settingsService);
+  });
+  describe('getModels: OAuth and API-key tokens both dynamically list models', () => {
+    registerAnthropicBehavior1();
+
+    registerAnthropicBehavior2();
+
+    registerAnthropicBehavior3();
+
+    registerAnthropicBehavior4();
+
+    registerAnthropicBehavior5();
   });
 
-  const buildCallOptions = (
-    contents: IContent[],
-    overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
-  ) =>
-    createProviderCallOptions({
-      providerName: 'anthropic',
-      contents,
-      settings: settingsService,
-      runtime: runtimeContext,
-      config,
-      ...overrides,
-    });
+  describe('generateChatCompletion: SDK construction uses correct auth mode', () => {
+    registerAnthropicBehavior6();
 
-  describe('getModels: OAuth and API-key tokens both dynamically list models', () => {
+    registerAnthropicBehavior7();
+  });
+
+  describe('generateChatCompletion: OAuth token prefixes tool names', () => {
+    registerAnthropicBehavior8();
+
+    registerAnthropicBehavior9();
+  });
+
+  describe('generateChatCompletion: OAuth token sets beta header in API call', () => {
+    registerAnthropicBehavior10();
+
+    registerAnthropicBehavior11();
+  });
+});
+
+let runtimeContext: ProviderRuntimeContext;
+let settingsService: SettingsService;
+
+const buildCallOptions = (
+  contents: IContent[],
+  overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
+) =>
+  streamCallOptions({
+    providerName: 'anthropic',
+    contents,
+    settings: settingsService,
+    runtime: runtimeContext,
+    config: createRuntimeConfigStub(settingsService),
+    ...overrides,
+  });
+
+function registerAnthropicBehavior1(): void {
+  describe('behavior 1', () => {
     it('lists the dynamic mock model ID when authenticated with an OAuth token', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -189,7 +216,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         expect(model.provider).toBe('anthropic');
       });
     });
+  });
+}
 
+function registerAnthropicBehavior2(): void {
+  describe('behavior 2', () => {
     it('calls client.beta.models.list when using an OAuth token (dynamic path, no static catalog)', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -201,7 +232,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
       expect(mockBetaModelsList).toHaveBeenCalled();
     });
+  });
+}
 
+function registerAnthropicBehavior3(): void {
+  describe('behavior 3', () => {
     it('fetches models from the API when authenticated with a regular API key', async () => {
       const apiProvider = new AnthropicProvider(
         'test-api-key',
@@ -216,7 +251,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         true,
       );
     });
+  });
+}
 
+function registerAnthropicBehavior4(): void {
+  describe('behavior 4', () => {
     it('calls client.beta.models.list when using a regular API key', async () => {
       const apiProvider = new AnthropicProvider(
         'test-api-key',
@@ -228,7 +267,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
       expect(mockBetaModelsList).toHaveBeenCalled();
     });
+  });
+}
 
+function registerAnthropicBehavior5(): void {
+  describe('behavior 5', () => {
     it('returns default models with empty-string auth token when no auth is available', async () => {
       const noAuthProvider = new AnthropicProvider(
         '',
@@ -243,8 +286,10 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       });
     });
   });
+}
 
-  describe('generateChatCompletion: SDK construction uses correct auth mode', () => {
+function registerAnthropicBehavior6(): void {
+  describe('behavior 6', () => {
     it('constructs SDK with authToken and no apiKey for OAuth tokens, plus OAuth beta defaultHeaders', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -283,7 +328,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(typeof betaHeader === 'string').toBe(true);
       expect(betaHeader).toContain('oauth-2025-04-20');
     });
+  });
+}
 
+function registerAnthropicBehavior7(): void {
+  describe('behavior 7', () => {
     it('constructs SDK with apiKey and no authToken for regular API keys, without OAuth beta headers', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
@@ -317,8 +366,10 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(headerIncludesOAuthBeta(betaHeader)).toBe(false);
     });
   });
+}
 
-  describe('generateChatCompletion: OAuth token prefixes tool names', () => {
+function registerAnthropicBehavior8(): void {
+  describe('behavior 8', () => {
     it('sends tool names prefixed with llxprt_ when using an OAuth token', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -361,7 +412,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(requestBody.tools).toBeDefined();
       expect(requestBody.tools[0].name).toBe('llxprt_read_file');
     });
+  });
+}
 
+function registerAnthropicBehavior9(): void {
+  describe('behavior 9', () => {
     it('sends tool names without prefix when using a regular API key', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
@@ -402,8 +457,10 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(requestBody.tools[0].name).toBe('read_file');
     });
   });
+}
 
-  describe('generateChatCompletion: OAuth token sets beta header in API call', () => {
+function registerAnthropicBehavior10(): void {
+  describe('behavior 10', () => {
     it('includes oauth-2025-04-20 in anthropic-beta header for OAuth requests', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -440,7 +497,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       const betaHeader = headers['anthropic-beta'];
       expect(headerIncludesOAuthBeta(betaHeader)).toBe(true);
     });
+  });
+}
 
+function registerAnthropicBehavior11(): void {
+  describe('behavior 11', () => {
     it('does not include oauth-2025-04-20 in anthropic-beta header for API key requests', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
@@ -477,4 +538,4 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(betaIncludesOAuth).toBe(false);
     });
   });
-});
+}

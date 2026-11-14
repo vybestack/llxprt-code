@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   IContent,
@@ -239,6 +239,13 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     );
     expect(toolCalls!.length).toBe(1);
     expect(toolCalls![0].name).toBe('search');
+    expect(toolCallContent?.toolArgumentDelta).toMatchObject({
+      sourceId: '0',
+      id: toolCalls![0].id,
+      name: 'search',
+      complete: true,
+      replacementArguments: JSON.stringify({ query: 'deepseek reasoning' }),
+    });
 
     // Verify there is NO separate IContent that has only a ThinkingBlock
     // (the old behavior that caused the bug)

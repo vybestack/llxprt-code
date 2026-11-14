@@ -7,16 +7,17 @@ import {
   bindCommandRawResume,
   type ResumeSessionReads,
 } from '../ui/hooks/commandRawResumeHost.js';
-import { bindResumedHistoryReplay } from '../ui/hooks/commandHistoryLoaderHost.js';
-import {
-  resolveEmojiFilterMode,
-  type EmojiFilterSettingsSource,
-} from '../ui/utils/iContentToHistoryItems.js';
+import { bindPublishedHistoryRefresh } from '../ui/hooks/commandHistoryLoaderHost.js';
+import { type EmojiFilterSettingsSource } from '../ui/utils/iContentToHistoryItems.js';
 import {
   performResume,
   type RecordingSwapCallbacks,
 } from '../services/performResume.js';
-import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
+import {
+  CliSessionPersistence,
+  type CliSessionPersistencePort,
+} from '../cliSessionPersistence.js';
+import type { Config, LocalMediaStore } from '@vybestack/llxprt-code-core';
 import type { CommandHandlerFixture } from '../ui/hooks/slash-command-handler-deps-test-helpers.js';
 
 /** Reads the raw recording resume path and the emoji filter mode need. */
@@ -38,9 +39,21 @@ export function installFixtureRawResume(
     deps.slashCommandLogger,
     resume,
   );
-  deps.replayResumedHistory = bindResumedHistoryReplay(
-    () => resolveEmojiFilterMode(config),
-    deps.commandContext.ui.clear,
-    deps.commandContext.ui.addItem,
+  deps.refreshResumedHistory = bindPublishedHistoryRefresh(() => {});
+}
+
+export function createRawResumePersistence(
+  config: Config,
+  mediaStore: LocalMediaStore,
+  maxQueueBytes?: number,
+): CliSessionPersistence {
+  return new CliSessionPersistence(
+    { projectRoot: config.getProjectRoot(), chatsDir: config.projectChatsDir },
+    {
+      scratchRoots: config.scratchRoots,
+      namedWriters: config.namedWriters,
+      mediaStore,
+      maxQueueBytes,
+    },
   );
 }

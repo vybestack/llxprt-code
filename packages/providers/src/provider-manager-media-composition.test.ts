@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   installOwnedConfig,
   installBorrowedConfigSettings,
@@ -213,12 +214,12 @@ describe('ProviderManager media/file composition', () => {
       if (provider === undefined) throw new Error('Fixture provider missing');
       const chunks: IContent[] = [];
       for await (const chunk of provider.generateChatCompletion({
-        contents: [
+        contents: callerOwnedRawProviderSource([
           {
             speaker: 'human',
             blocks: [reference],
           },
-        ],
+        ]),
       }))
         chunks.push(chunk);
       expect(chunks).toMatchObject([{ blocks: [{ text: '4' }] }]);

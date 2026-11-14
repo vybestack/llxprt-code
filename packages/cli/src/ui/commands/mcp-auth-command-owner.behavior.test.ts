@@ -34,7 +34,7 @@ function mcpOwner(
     authenticationRequiredServers: async () => [],
     authenticate: async (name, display) => {
       authenticated.push(name);
-      display(`Authenticated ${name}`);
+      await display(`Authenticated ${name}`);
     },
   };
   return {

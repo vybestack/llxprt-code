@@ -1,20 +1,31 @@
+import {
+  afterAll as afterRecordingTests,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../../../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   RecordingIntegration,
-  SessionRecordingService,
+  createSessionRecorder,
 } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('interactive recording resources', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('does not expose raw swap resources for an Agent-owned mount', () => {
     const { result, unmount } = renderHook(() =>
       useRecordingInfrastructure(undefined, undefined, undefined, 'agent'),
@@ -32,16 +43,26 @@ describe('interactive recording resources', () => {
       provider: 'fake',
       model: 'fake-model',
     };
-    const first = new SessionRecordingService({
-      ...options,
-      sessionId: 'raw-first',
-    });
-    const second = new SessionRecordingService({
-      ...options,
-      sessionId: 'raw-second',
-    });
-    const firstIntegration = new RecordingIntegration(first);
-    const secondIntegration = new RecordingIntegration(second);
+    const first = createSessionRecorder(
+      withTestNamedWriters({
+        ...options,
+        sessionId: 'raw-first',
+      }),
+    );
+    const second = createSessionRecorder(
+      withTestNamedWriters({
+        ...options,
+        sessionId: 'raw-second',
+      }),
+    );
+    const firstIntegration = new RecordingIntegration(
+      first,
+      recordingScratchRoots,
+    );
+    const secondIntegration = new RecordingIntegration(
+      second,
+      recordingScratchRoots,
+    );
     const { result, rerender, unmount } = renderHook(() =>
       useRecordingInfrastructure(first, firstIntegration),
     );
@@ -59,6 +80,7 @@ describe('interactive recording resources', () => {
         model: options.model,
         workspaceDirs: [],
         startTime: new Date().toISOString(),
+        kind: 'main',
       });
       expect(result.current.recordingSwapCallbacks?.getCurrentRecording()).toBe(
         second,

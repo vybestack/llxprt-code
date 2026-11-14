@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import type { ChatRecordingOperations } from './chatCommand.js';
 import { Text } from 'ink';
 import type {
   AgentHistoryItem,
@@ -12,8 +13,6 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import { Colors } from '../colors.js';
 import { MessageType, type HistoryItemChatList } from '../types.js';
-import type { EmojiFilterMode } from '@vybestack/llxprt-code-core';
-import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type {
   CommandContext,
@@ -36,17 +35,20 @@ export interface ChatOwnerOperations {
     name: string,
     options: { readonly overwrite: boolean },
   ) => Promise<unknown>;
-  readonly resume: (tag: string) => Promise<readonly AgentHistoryItem[]>;
+  readonly resume: (tag: string) => Promise<AsyncIterable<AgentHistoryItem>>;
   readonly deleteCheckpoint: (checkpointId: string) => Promise<void>;
   readonly renameCheckpoint: (
     checkpointId: string,
     name: string,
     options: { readonly overwrite: boolean },
   ) => Promise<void>;
-  readonly getHistory: () => Promise<readonly AgentHistoryItem[]>;
-  readonly clearHistory: () => Promise<void>;
-  readonly restoreTurns: (turns: number) => Promise<{
-    readonly remainingHistory: readonly AgentHistoryItem[];
+  readonly getHistoryCount: () => number;
+  readonly clearHistory: ChatRecordingOperations['clearHistory'];
+  readonly restoreTurns: (
+    turns: number,
+    options?: Parameters<ChatRecordingOperations['clearHistory']>[0],
+  ) => Promise<{
+    readonly remainingHistory: AsyncIterable<AgentHistoryItem>;
     readonly itemsRemoved: number;
   }>;
   readonly nameCurrentSession: (
@@ -55,7 +57,6 @@ export interface ChatOwnerOperations {
   ) => Promise<void>;
   readonly getRecordingPath: () => string | undefined;
   readonly getModel: () => string;
-  readonly getEmojiFilterMode: () => EmojiFilterMode;
 }
 
 function failure(operation: string, error: unknown): SlashCommandActionReturn {
@@ -101,16 +102,6 @@ function resolveCheckpoint(
   const matchesByName = checkpoints.filter((entry) => entry.name === ref);
   if (matchesByName.length > 1) return `Ambiguous checkpoint name: ${ref}`;
   return matchesByName[0] ?? `No checkpoint found with tag: ${ref}`;
-}
-
-function replayUiHistory(
-  context: CommandContext,
-  operations: ChatOwnerOperations,
-  history: readonly AgentHistoryItem[],
-): void {
-  context.ui.loadHistory(
-    iContentToHistoryItems([...history], operations.getEmojiFilterMode()),
-  );
 }
 
 function usageError(content: string): SlashCommandActionReturn {
@@ -167,7 +158,7 @@ function createResumeAction(operations: ChatOwnerOperations): ChatAction {
     const tag = args.trim();
     if (!tag) return usageError('Missing tag. Usage: /chat resume <tag>');
     try {
-      replayUiHistory(context, operations, await operations.resume(tag));
+      await operations.resume(tag);
       return undefined;
     } catch (error) {
       return failure('resume checkpoint', error);
@@ -249,17 +240,22 @@ function createRenameAction(operations: ChatOwnerOperations): ChatAction {
 function createClearAction(operations: ChatOwnerOperations): ChatAction {
   return async (context) => {
     try {
-      if ((await operations.getHistory()).length === 0)
+      if (operations.getHistoryCount() === 0)
         return {
           type: 'message',
           messageType: 'info',
           content: 'No conversation to clear.',
         };
-      await operations.clearHistory();
-      context.ui.updateHistoryTokenCount(0);
-      context.ui.clear();
+      await operations.clearHistory({
+        signal: context.signal,
+        publish: () => {
+          context.ui.updateHistoryTokenCount(0);
+          context.ui.clear();
+        },
+      });
       return undefined;
     } catch (error) {
+      context.signal.throwIfAborted();
       return failure('clear history', error);
     }
   };
@@ -275,7 +271,10 @@ function createRestoreAction(operations: ChatOwnerOperations): ChatAction {
         'Please provide a valid positive number of turns to restore.',
       );
     try {
-      const result = await operations.restoreTurns(turns);
+      const result = await operations.restoreTurns(turns, {
+        signal: context.signal,
+        publish: () => context.ui.clear(),
+      });
       if (result.itemsRemoved === 0)
         return {
           type: 'message',
@@ -283,9 +282,9 @@ function createRestoreAction(operations: ChatOwnerOperations): ChatAction {
           content:
             'Not enough history to restore the requested number of turns.',
         };
-      replayUiHistory(context, operations, result.remainingHistory);
       return undefined;
     } catch (error) {
+      context.signal.throwIfAborted();
       return failure('restore history', error);
     }
   };
@@ -315,11 +314,11 @@ function createNameAction(operations: ChatOwnerOperations): ChatAction {
 
 function createDebugAction(operations: ChatOwnerOperations): ChatAction {
   return async () => {
-    const history = await operations.getHistory();
+    const count = operations.getHistoryCount();
     return {
       type: 'message',
       messageType: 'info',
-      content: `Chat Debug Information:\n• Chat initialized: ${history.length > 0}\n• History entries: ${history.length}\n• Current model: ${operations.getModel()}\n• Recording: ${operations.getRecordingPath() ?? 'not active'}`,
+      content: `Chat Debug Information:\n• Chat initialized: ${count > 0}\n• History entries: ${count}\n• Current model: ${operations.getModel()}\n• Recording: ${operations.getRecordingPath() ?? 'not active'}`,
     };
   };
 }

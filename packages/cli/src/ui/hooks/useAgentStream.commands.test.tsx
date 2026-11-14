@@ -192,7 +192,7 @@ describe('useAgentStream', () => {
   });
 
   const mockLoadedSettings: LoadedSettings = {
-    merged: { preferredEditor: 'vscode' },
+    merged: { preferredEditor: 'vscode', ui: {} },
     user: { path: '/user/settings.json', settings: {} },
     workspace: { path: '/workspace/.gemini/settings.json', settings: {} },
     errors: [],
@@ -270,7 +270,6 @@ describe('useAgentStream', () => {
           props.client,
           props.runtime,
           {
-            history: props.history,
             addItem: props.addItem,
             settings: props.loadedSettings,
             onDebugMessage: props.onDebugMessage,
@@ -460,7 +459,6 @@ describe('useAgentStream', () => {
           agentForHook1,
           createStreamRuntimeForTest(mockConfig),
           {
-            history: [],
             addItem: mockAddItem,
             settings: mockLoadedSettings,
             onDebugMessage: () => {},
@@ -515,7 +513,6 @@ describe('useAgentStream', () => {
           agentForHook2,
           createStreamRuntimeForTest(testConfig),
           {
-            history: [],
             addItem: mockAddItem,
             settings: mockLoadedSettings,
             onDebugMessage: mockOnDebugMessage,

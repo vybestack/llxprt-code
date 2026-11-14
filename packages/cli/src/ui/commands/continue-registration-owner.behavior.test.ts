@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { NativeJournalPageReader } from '@vybestack/llxprt-code-core/journal/native-journal-page-reader.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
@@ -63,9 +64,24 @@ describe('continue registration operation ownership', () => {
           `export ${session.id} ${destination}`,
         ),
       ).toMatchObject({ type: 'message', messageType: 'info' });
-      expect(
-        await readFile(join(destination, 'session.jsonl'), 'utf8'),
-      ).toContain('captured export conversation');
+      const validated = await validateSessionMediaPackage(destination);
+      const reader = await NativeJournalPageReader.open(
+        validated.recording.path,
+      );
+      try {
+        const texts: string[] = [];
+        for await (const entry of reader.entries()) {
+          const content = await reader.readContent(entry);
+          texts.push(
+            ...content.blocks.flatMap((block) =>
+              block.type === 'text' ? [block.text] : [],
+            ),
+          );
+        }
+        expect(texts).toContain('captured export conversation');
+      } finally {
+        await reader.close();
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

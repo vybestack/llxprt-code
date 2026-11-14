@@ -14,8 +14,14 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import { processKimiMedia } from './kimiMediaProcessing.js';
-import { createBoundedCache } from './kimiFileUpload.js';
+import {
+  applyKimiRowMedia,
+  uploadKimiRowMedia,
+} from './kimiMediaProcessing.js';
+import {
+  createBoundedCache,
+  type KimiUploadOptions,
+} from './kimiFileUpload.js';
 import type {
   IContent,
   MediaBlock,
@@ -38,7 +44,7 @@ function createMockClient(
       apiKey: 'test-key',
       baseURL: 'https://api.kimi.com/coding/v1',
       files: { create: filesCreate },
-    } as unknown as Parameters<typeof processKimiMedia>[0],
+    } as unknown as Parameters<typeof uploadKimiRowMedia>[0],
     filesCreate,
   };
 }
@@ -72,7 +78,51 @@ function makeVideoBlock(data: string, filename = 'clip.mp4'): MediaBlock {
   };
 }
 
-describe('processKimiMedia', () => {
+type KimiClient = Parameters<typeof uploadKimiRowMedia>[0];
+
+interface ProcessedRows {
+  /** The rows after the replacement pass, in order. */
+  contents: IContent[];
+  /** How many blocks were uploaded and recorded. */
+  uploaded: number;
+}
+
+/**
+ * The two passes the chat send runs, over an array only because the test has
+ * one: each row is uploaded in order, then each row is read back with its
+ * uploads applied. Nothing but one row is passed to either function.
+ */
+async function processKimiMedia(
+  client: KimiClient,
+  contents: IContent[],
+  cache?: ReturnType<typeof createBoundedCache<string>>,
+  options: KimiUploadOptions = {},
+): Promise<ProcessedRows> {
+  const uploads = new Map<string, unknown>();
+  try {
+    let uploaded = 0;
+    for (const [ordinal, row] of contents.entries()) {
+      uploaded += await uploadKimiRowMedia(
+        client,
+        row,
+        ordinal,
+        uploads,
+        cache,
+        options,
+      );
+    }
+    return {
+      contents: contents.map((row, ordinal) =>
+        applyKimiRowMedia(row, ordinal, uploads),
+      ),
+      uploaded,
+    };
+  } finally {
+    uploads.clear();
+  }
+}
+
+describe('Kimi row media', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -89,8 +139,8 @@ describe('processKimiMedia', () => {
     const result = await processKimiMedia(client, contents);
 
     expect(filesCreate).not.toHaveBeenCalled();
-    expect(result.fileReferenceText).toBe('');
-    expect(result.contents).toBe(contents);
+    expect(result.uploaded).toBe(0);
+    expect(result.contents[0]).toBe(contents[0]);
   });
 
   it('handles empty contents array without error', async () => {
@@ -98,7 +148,7 @@ describe('processKimiMedia', () => {
     const result = await processKimiMedia(client, []);
 
     expect(filesCreate).not.toHaveBeenCalled();
-    expect(result.fileReferenceText).toBe('');
+    expect(result.uploaded).toBe(0);
     expect(result.contents).toStrictEqual([]);
   });
 
@@ -108,7 +158,7 @@ describe('processKimiMedia', () => {
     const result = await processKimiMedia(client, contents);
 
     expect(filesCreate).not.toHaveBeenCalled();
-    expect(result.fileReferenceText).toBe('');
+    expect(result.uploaded).toBe(0);
   });
 
   it('uploads PDFs from user messages and replaces them with text references', async () => {
@@ -129,7 +179,7 @@ describe('processKimiMedia', () => {
     const result = await processKimiMedia(client, contents);
 
     expect(filesCreate).toHaveBeenCalledTimes(1);
-    expect(result.fileReferenceText).toContain('file-uploaded');
+    expect(result.uploaded).toBe(1);
 
     // The original contents should not be mutated
     expect(contents[0].blocks[1].type).toBe('media');
@@ -166,8 +216,11 @@ describe('processKimiMedia', () => {
     const result = await processKimiMedia(client, contents);
 
     expect(filesCreate).toHaveBeenCalledTimes(1);
-    expect(result.fileReferenceText).toContain('file-tool');
-    expect(result.contents[0].blocks[1].type).toBe('text');
+    expect(result.uploaded).toBe(1);
+    expect(result.contents[0].blocks[1]).toStrictEqual({
+      type: 'text',
+      text: '[Uploaded PDF: doc.pdf (file id: file-tool)]',
+    });
   });
 
   it('de-duplicates repeated uploads across calls via shared cache', async () => {
@@ -187,8 +240,8 @@ describe('processKimiMedia', () => {
     const second = await processKimiMedia(client, contents, cache);
 
     expect(filesCreate).toHaveBeenCalledTimes(1);
-    expect(first.fileReferenceText).toContain('file-once');
-    expect(second.fileReferenceText).toContain('file-once');
+    expect(first.uploaded).toBe(1);
+    expect(second.uploaded).toBe(1);
     expect(second.contents[0].blocks[0].type).toBe('text');
   });
 
@@ -207,7 +260,7 @@ describe('processKimiMedia', () => {
 
     expect(filesCreate).toHaveBeenCalledTimes(1);
     expect(filesCreate.mock.calls[0][0].purpose).toBe('video');
-    expect(result.fileReferenceText).toBe('');
+    expect(result.uploaded).toBe(1);
     expect(result.contents[0].blocks[0]).toMatchObject({
       type: 'media',
       mimeType: 'video/mp4',
@@ -249,7 +302,7 @@ describe('processKimiMedia', () => {
     const result = await processKimiMedia(client, contents);
 
     expect(filesCreate).not.toHaveBeenCalled();
-    expect(result.contents).toBe(contents);
+    expect(result.contents[0]).toBe(contents[0]);
   });
 
   it('rejects instead of returning inline content when an upload fails', async () => {
@@ -320,8 +373,8 @@ describe('processKimiMedia', () => {
     const result = await processKimiMedia(client, contents);
 
     expect(filesCreate).not.toHaveBeenCalled();
-    expect(result.fileReferenceText).toBe('');
-    expect(result.contents).toBe(contents);
+    expect(result.uploaded).toBe(0);
+    expect(result.contents[0]).toBe(contents[0]);
   });
 
   it('handles multiple PDFs across multiple content entries', async () => {
@@ -353,9 +406,127 @@ describe('processKimiMedia', () => {
     const result = await processKimiMedia(client, contents);
 
     expect(filesCreate).toHaveBeenCalledTimes(2);
-    expect(result.fileReferenceText).toContain('file-a');
-    expect(result.fileReferenceText).toContain('file-b');
+    expect(result.uploaded).toBe(2);
+    expect(JSON.stringify(result.contents)).toContain('file-a');
+    expect(JSON.stringify(result.contents)).toContain('file-b');
     expect(result.contents[0].blocks[0].type).toBe('text');
     expect(result.contents[1].blocks[1].type).toBe('text');
+  });
+  describe('row-at-a-time order', () => {
+    function pdfRow(...names: string[]): IContent {
+      return {
+        speaker: 'human',
+        blocks: names.map((name) => makePdfBlock(`DATA_${name}`, name)),
+      };
+    }
+
+    it('uploads in history order, one block after the other', async () => {
+      let inFlight = 0;
+      let peakInFlight = 0;
+      const { client, filesCreate } = createMockClient(async () => {
+        inFlight++;
+        peakInFlight = Math.max(peakInFlight, inFlight);
+        await Promise.resolve();
+        inFlight--;
+        return { id: `file-${filesCreate.mock.calls.length}`, bytes: 1 };
+      });
+      const contents = [
+        pdfRow('a.pdf'),
+        { speaker: 'human', blocks: [{ type: 'text', text: 'no media' }] },
+        pdfRow('b1.pdf', 'b2.pdf'),
+        pdfRow('c.pdf'),
+      ] as IContent[];
+
+      await processKimiMedia(client, contents);
+
+      const names = filesCreate.mock.calls.map(
+        ([body]) => (body.file as { name: string }).name,
+      );
+      expect(names).toStrictEqual(['a.pdf', 'b1.pdf', 'b2.pdf', 'c.pdf']);
+      expect(peakInFlight).toBe(1);
+    });
+
+    it('inserts cache entries in upload order and evicts as a single pass would', async () => {
+      const inserted: string[] = [];
+      const base = createBoundedCache<string>(2);
+      const cache = {
+        ...base,
+        set: (key: string, value: string) => {
+          inserted.push(value);
+          base.set(key, value);
+        },
+      };
+      let next = 0;
+      const { client } = createMockClient(async () => ({
+        id: `file-${next++}`,
+        bytes: 1,
+      }));
+
+      await processKimiMedia(
+        client,
+        [pdfRow('a.pdf'), pdfRow('b.pdf'), pdfRow('c.pdf')],
+        cache,
+      );
+
+      expect(inserted).toStrictEqual(['file-0', 'file-1', 'file-2']);
+      expect(base.size).toBe(2);
+    });
+
+    it('uploads equal blocks of different rows once through the shared cache and replaces both', async () => {
+      const { client, filesCreate } = createMockClient(async () => ({
+        id: 'file-shared',
+        bytes: 1,
+      }));
+      const cache = createBoundedCache<string>(10);
+      const contents = [pdfRow('same.pdf'), pdfRow('same.pdf')];
+
+      const result = await processKimiMedia(client, contents, cache);
+
+      expect(filesCreate).toHaveBeenCalledTimes(1);
+      expect(result.uploaded).toBe(2);
+      expect(result.contents[0].blocks[0].type).toBe('text');
+      expect(result.contents[1].blocks[0].type).toBe('text');
+    });
+
+    it('replaces each equal block under its own position when nothing is shared', async () => {
+      let next = 0;
+      const { client, filesCreate } = createMockClient(async () => ({
+        id: `file-${next++}`,
+        bytes: 1,
+      }));
+      const contents = [pdfRow('same.pdf'), pdfRow('same.pdf')];
+
+      const result = await processKimiMedia(client, contents);
+
+      expect(filesCreate).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(result.contents[0])).toContain('file-0');
+      expect(JSON.stringify(result.contents[1])).toContain('file-1');
+    });
+
+    it('does not modify the rows it replaces media in', async () => {
+      const { client } = createMockClient(async () => ({
+        id: 'file-keep',
+        bytes: 1,
+      }));
+      const contents = [pdfRow('keep.pdf')];
+      const before = structuredClone(contents);
+
+      const result = await processKimiMedia(client, contents);
+
+      expect(result.contents[0]).not.toBe(contents[0]);
+      expect(contents).toStrictEqual(before);
+    });
+
+    it('fails when a recorded upload has an unexpected shape', () => {
+      const uploads = new Map<string, unknown>();
+      try {
+        uploads.set('kimi-media:0:0', { kind: 'unknown' });
+        expect(() => applyKimiRowMedia(pdfRow('x.pdf'), 0, uploads)).toThrow(
+          'Kimi upload record holds an unexpected value',
+        );
+      } finally {
+        uploads.clear();
+      }
+    });
   });
 });

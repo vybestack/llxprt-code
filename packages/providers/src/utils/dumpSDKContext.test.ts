@@ -15,6 +15,7 @@ import {
   dumpSDKContext,
   dumpSDKErrorRequestResponse,
   dumpSDKRequestContext,
+  StreamedDumpBody,
   wrapStreamWithDump,
   wrapStreamWithSDKErrorDump,
 } from './dumpSDKContext.js';
@@ -577,5 +578,87 @@ describe('wrapStreamWithDump', () => {
       },
       true,
     );
+  });
+});
+
+describe('dumpSDKRequestContext with a streamed body (issue #854 D3c)', () => {
+  const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
+  const createdFiles: string[] = [];
+
+  afterEach(async () => {
+    for (const file of createdFiles.splice(0)) {
+      await fs.rm(path.join(dumpDir, file), { force: true });
+    }
+  });
+
+  async function* chunksOf(
+    text: string,
+    size: number,
+  ): AsyncGenerator<Uint8Array> {
+    const bytes = Buffer.from(text, 'utf8');
+    for (let offset = 0; offset < bytes.length; offset += size) {
+      yield bytes.subarray(offset, offset + size);
+    }
+  }
+
+  const body = {
+    model: 'gpt-4o',
+    messages: [
+      { role: 'system', content: 'be brief' },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'caf\u00e9 {"a":[1,2]}' }],
+      },
+      { role: 'assistant', tool_calls: [] },
+    ],
+    stream: true,
+    tools: [],
+    extra: {},
+  };
+
+  async function dumpFileText(requestParams: unknown): Promise<string> {
+    const result = await dumpSDKRequestContext(
+      'openai',
+      '/chat/completions',
+      requestParams,
+      'https://api.openai.com/v1',
+      { headers: { Authorization: 'Bearer sk-secret' } },
+    );
+    createdFiles.push(result.requestFilename);
+    return fs.readFile(
+      path.join(result.dumpDir, result.requestFilename),
+      'utf8',
+    );
+  }
+
+  const TIMESTAMP = /"timestamp": "[^"]*"/;
+
+  it('writes the file an in-memory body writes, byte for byte', async () => {
+    const fromObject = await dumpFileText(body);
+    const fromBytes = await dumpFileText(
+      new StreamedDumpBody(() => chunksOf(JSON.stringify(body), 7)),
+    );
+    expect(fromBytes.replace(TIMESTAMP, '')).toBe(
+      fromObject.replace(TIMESTAMP, ''),
+    );
+    expect(fromBytes).toContain('"Authorization": "[REDACTED]"');
+  });
+
+  it('removes the dump file and rejects when the byte source fails', async () => {
+    const before = new Set(await fs.readdir(dumpDir).catch(() => []));
+    const failing = new StreamedDumpBody(async function* () {
+      yield Buffer.from('{"model":"gpt-4o","messages":[');
+      throw new Error('dump source failed');
+    });
+    await expect(
+      dumpSDKRequestContext(
+        'openai',
+        '/chat/completions',
+        failing,
+        'https://api.openai.com/v1',
+      ),
+    ).rejects.toThrow('dump source failed');
+    const after = await fs.readdir(dumpDir);
+    expect(after.filter((name) => !before.has(name))).toStrictEqual([]);
   });
 });

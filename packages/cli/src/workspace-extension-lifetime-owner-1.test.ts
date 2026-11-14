@@ -268,7 +268,10 @@ describe('filesystem workspace extension ownership', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const builtCallerTokenizer = configureProviderTokenizer(builtCallerManager);
+    const builtCallerTokenizer = configureProviderTokenizer(
+      builtCallerManager,
+      builtCallerConfig.scratchRoots,
+    );
     const builtCallerContent = createRuntimeContentGeneratorFactory();
     const builtCallerOAuth = acquirePreferredOAuth(
       undefined,

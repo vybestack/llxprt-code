@@ -115,10 +115,10 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       // PRE-dispose sanity: the agent-owned client is not yet torn down.
-      await expect(agent.getHistory()).resolves.toStrictEqual([]);
+      await expect(agent.session.getHistory()).resolves.toStrictEqual([]);
       await agent.dispose();
       // POST-dispose: the createAgent-owned Config IS torn down.
-      await expect(agent.getHistory()).rejects.toThrow(/disposed/);
+      await expect(agent.session.getHistory()).rejects.toThrow(/disposed/);
     } finally {
       await cleanup();
     }

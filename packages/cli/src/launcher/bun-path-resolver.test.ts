@@ -77,8 +77,6 @@ describe('resolveBunPath', () => {
         });
         expect(execution.status).toBe(0);
         const bunVersion = process.versions.bun;
-        if (bunVersion === undefined)
-          throw new Error('Run this test under Bun');
         expect(execution.stdout.trim()).toBe(bunVersion);
       } finally {
         rmSync(root, { recursive: true, force: true });

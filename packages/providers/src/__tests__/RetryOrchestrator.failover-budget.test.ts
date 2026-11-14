@@ -9,6 +9,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { attachTransportAttemptBudget } from '../transportAttemptBudget.js';
 
 function rateLimitError(): Error {
@@ -48,7 +49,7 @@ describe('RetryOrchestrator failover transport budget', () => {
     );
     const options: GenerateChatOptions = retryOperationFixture(
       {
-        contents: [],
+        contents: replayableContents([]),
       },
       undefined,
       {
@@ -77,7 +78,10 @@ describe('RetryOrchestrator failover transport budget', () => {
       failingProvider(() => transportCalls++),
       { maxAttempts: 4, initialDelayMs: 0 },
     );
-    const request = attachTransportAttemptBudget({ contents: [] }, 2);
+    const request = attachTransportAttemptBudget(
+      { contents: replayableContents([]) },
+      2,
+    );
 
     try {
       const failure = await consume(
@@ -120,7 +124,7 @@ describe('RetryOrchestrator failover transport budget', () => {
       orchestrator.generateChatCompletion(
         retryOperationFixture(
           {
-            contents: [],
+            contents: replayableContents([]),
 
             invocation: {
               signal: controller.signal,

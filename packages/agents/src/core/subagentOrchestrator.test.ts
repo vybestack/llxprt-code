@@ -1,3 +1,4 @@
+const parentSignal = new AbortController().signal;
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { createTestChildOrchestrator } from './__tests__/child-launch-fixture.js';
@@ -23,6 +24,7 @@ import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.j
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it, vi } from 'bun:test';
 import {
+  launchForTest,
   createOrchestratorForTurns,
   createRuntimeBundle,
   createScopeFactory,
@@ -30,8 +32,6 @@ import {
   makeForegroundConfig,
 } from './__tests__/subagentOrchestrator-test-helpers.js';
 import { SubagentOrchestrator } from './subagentOrchestrator.js';
-
-const parentSignal = new AbortController().signal;
 
 const baseProfile: Profile = {
   version: 1,
@@ -74,7 +74,7 @@ async function launchAndExtract(
   factory: ReturnType<typeof createScopeFactory>['factory'],
   subagentName: string,
 ): Promise<RunConfig> {
-  await orchestrator.launch({ name: subagentName }, parentSignal);
+  await launchForTest(orchestrator, { name: subagentName });
   return extractRunConfig(factory);
 }
 
@@ -104,8 +104,8 @@ describe('SubagentOrchestrator - token-usage identity (issue #3130)', () => {
       name: 'burn-attribution',
       profile: 'analysis-profile',
       systemPrompt: 'Analyse.',
-      level: 'project',
-      filePath: '/tmp/burn-attribution.md',
+      createdAt: '2026-10-28T00:00:00.000Z',
+      updatedAt: '2026-10-28T00:00:00.000Z',
     };
     const subagentManager = {
       loadSubagent: vi.fn().mockResolvedValue(subagentConfig),
@@ -136,7 +136,7 @@ describe('SubagentOrchestrator - token-usage identity (issue #3130)', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name }, parentSignal);
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     expect(runtimeLoader).toHaveBeenCalledTimes(1);
     const loaderOptions = runtimeLoader.mock.calls[0][0];
@@ -288,14 +288,11 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     });
 
     const extraPrompt = 'Prioritize API surface summaries before examples.';
-    const runResult = await orchestrator.launch(
-      {
-        name: subagentConfig.name,
-        runConfig: defaultRunConfig,
-        behaviourPrompts: [extraPrompt],
-      },
-      parentSignal,
-    );
+    const runResult = await launchForTest(orchestrator, {
+      name: subagentConfig.name,
+      runConfig: defaultRunConfig,
+      behaviourPrompts: [extraPrompt],
+    });
 
     expect(loadSubagent).toHaveBeenCalledWith(subagentConfig.name);
     expect(loadProfile).toHaveBeenCalledWith(subagentConfig.profile);
@@ -313,8 +310,11 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(promptConfig.systemPrompt).toContain(extraPrompt);
 
     expect(modelConfig.model).toBe(baseProfile.model);
-    expect(modelConfig.temp).toBe(baseProfile.modelParams.temperature);
-    expect(modelConfig.top_p).toBe(baseProfile.modelParams.top_p);
+    const { temperature, top_p } = baseProfile.modelParams;
+    if (temperature === undefined || top_p === undefined)
+      throw new Error('Missing profile sampling inputs');
+    expect(modelConfig.temp).toBe(temperature);
+    expect(modelConfig.top_p).toBe(top_p);
     expect(runConfigArg).toStrictEqual(defaultRunConfig);
 
     expect(runResult.scope).toBe(fakeScope);
@@ -370,7 +370,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name }, parentSignal);
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
@@ -426,7 +426,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name }, parentSignal);
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
@@ -493,7 +493,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name }, parentSignal);
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
@@ -548,14 +548,14 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name }, parentSignal);
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     foregroundSettings2.settingsOwner.writeUserParameter(
       'maxTurnsPerPrompt',
       250,
     );
 
-    await orchestrator.launch({ name: subagentConfig.name }, parentSignal);
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const firstRunConfig = factory.mock.calls[0][0].run;
     expect(firstRunConfig.max_turns).toBe(50);
@@ -610,13 +610,10 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch(
-      {
-        name: subagentConfig.name,
-        runConfig: { max_turns: 10 },
-      },
-      parentSignal,
-    );
+    await launchForTest(orchestrator, {
+      name: subagentConfig.name,
+      runConfig: { ...defaultRunConfig, max_turns: 10 },
+    });
 
     const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_turns).toBe(10);
@@ -676,7 +673,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name }, parentSignal);
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_turns).toBe(500);
@@ -728,7 +725,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       messageBus: new MessageBus(),
     });
 
-    await orchestrator.launch({ name: subagentConfig.name }, parentSignal);
+    await launchForTest(orchestrator, { name: subagentConfig.name });
 
     const runConfigArg = factory.mock.calls[0][0].run;
     expect(runConfigArg.max_turns).toBeUndefined();
@@ -802,13 +799,10 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       foregroundConfig: configWithForegroundCap,
     });
 
-    await orchestrator.launch(
-      {
-        name: 'task-unlimited-helper',
-        runConfig: { max_turns: -1 },
-      },
-      parentSignal,
-    );
+    await launchForTest(orchestrator, {
+      name: 'task-unlimited-helper',
+      runConfig: { ...defaultRunConfig, max_turns: -1 },
+    });
 
     const runConfigArg = extractRunConfig(factory);
     // -1 means unlimited: max_turns is omitted entirely so neither the
@@ -897,10 +891,7 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
       messageBus: sessionMessageBus,
     });
 
-    await orchestrator.launch(
-      { name: messageBusSubagentConfig.name },
-      parentSignal,
-    );
+    await launchForTest(orchestrator, { name: messageBusSubagentConfig.name });
 
     expect(factory).toHaveBeenCalledTimes(1);
     const [, runtimeArg, operationsArg] = factory.mock.calls[0];

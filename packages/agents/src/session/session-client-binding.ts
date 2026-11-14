@@ -232,7 +232,10 @@ export async function acquireSessionClient(
   );
   try {
     assembleSessionImages(
-      client,
+      {
+        hasImageComposition: client.hasImageComposition,
+        bindImageOperation: (...args) => client.bindImageOperation(...args),
+      },
       config.getTargetDir(),
       providerManager,
       oauth,

@@ -9,11 +9,29 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  SessionRecordingService,
+  type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
+import {
+  createRecorderForTest,
+  recordRowsForTest,
+} from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { deriveSessionTitle } from './zed-session-info.js';
 import { listRecordedSessions } from './zed-session-listing.js';
+
+async function recordRow(
+  recorder: SessionRecordingPort,
+  row: IContent,
+): Promise<void> {
+  await recordRowsForTest(recorder, [row]);
+  if (recorder instanceof JournalRecordingService && row.speaker === 'human')
+    recorder.recordFirstUserPreview(
+      row.blocks
+        .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+        .join(''),
+    );
+}
 
 const roots: string[] = [];
 
@@ -52,7 +70,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'listed-session',
         projectHash: 'project-hash',
         chatsDir,
@@ -65,7 +83,7 @@ describe('recorded ACP session listing', () => {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Investigate session lifecycle' }],
       };
-      service.recordContent(content);
+      await recordRow(service, content);
       await service.flush();
       await service.dispose();
 
@@ -90,7 +108,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'legacy-session',
         projectHash: 'project-hash',
         chatsDir,
@@ -98,7 +116,7 @@ describe('recorded ACP session listing', () => {
         provider: 'openai',
         model: 'test-model',
       });
-      service.recordContent({
+      await recordRow(service, {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'agent-only content' }],
       });
@@ -160,7 +178,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'merged-session',
         projectHash: 'project-hash',
         chatsDir,
@@ -169,7 +187,7 @@ describe('recorded ACP session listing', () => {
         provider: 'openai',
         model: 'test-model',
       });
-      service.recordContent({
+      await recordRow(service, {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Durable title from disk' }],
       });
@@ -201,7 +219,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'freshness-session',
         projectHash: 'project-hash',
         chatsDir,
@@ -210,7 +228,7 @@ describe('recorded ACP session listing', () => {
         provider: 'openai',
         model: 'test-model',
       });
-      service.recordContent({
+      await recordRow(service, {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Some title' }],
       });
@@ -243,7 +261,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'durable-newer-session',
         projectHash: 'project-hash',
         chatsDir,
@@ -252,7 +270,7 @@ describe('recorded ACP session listing', () => {
         provider: 'openai',
         model: 'test-model',
       });
-      service.recordContent({
+      await recordRow(service, {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Some title' }],
       });
@@ -312,7 +330,7 @@ describe('recorded ACP session listing', () => {
         roots.push(root);
         const chatsDir = join(root, 'chats');
         await mkdir(chatsDir);
-        const service = new SessionRecordingService({
+        const service = createRecorderForTest({
           sessionId: 'consistency-session',
           projectHash: 'project-hash',
           chatsDir,
@@ -326,7 +344,7 @@ describe('recorded ACP session listing', () => {
           speaker: 'human',
           blocks,
         };
-        service.recordContent(content);
+        await recordRow(service, content);
         await service.flush();
         await service.dispose();
 
@@ -351,7 +369,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'metadata-session',
         projectHash: 'project-hash',
         chatsDir,
@@ -362,7 +380,7 @@ describe('recorded ACP session listing', () => {
       });
       // Record a metadata title BEFORE the content event.
       service.recordSessionMetadata('Metadata title from ACP');
-      service.recordContent({
+      await recordRow(service, {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Different first human text' }],
       });
@@ -386,7 +404,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'legacy-metadata-session',
         projectHash: 'project-hash',
         chatsDir,
@@ -396,7 +414,7 @@ describe('recorded ACP session listing', () => {
         model: 'test-model',
       });
       // No recordSessionMetadata — legacy behavior.
-      service.recordContent({
+      await recordRow(service, {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'Legacy first human text' }],
       });
@@ -420,7 +438,7 @@ describe('recorded ACP session listing', () => {
       roots.push(root);
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'untitled-session',
         projectHash: 'project-hash',
         chatsDir,
@@ -431,7 +449,7 @@ describe('recorded ACP session listing', () => {
       });
       // Explicit null title.
       service.recordSessionMetadata(null);
-      service.recordContent({
+      await recordRow(service, {
         speaker: 'human',
         blocks: [
           { type: 'text', text: 'Human text that should NOT be the title' },
@@ -458,7 +476,7 @@ describe('recorded ACP session listing', () => {
       const chatsDir = join(root, 'chats');
       await mkdir(chatsDir);
       const startedAt = Date.now();
-      const service = new SessionRecordingService({
+      const service = createRecorderForTest({
         sessionId: 'created-at-session',
         projectHash: 'project-hash',
         chatsDir,

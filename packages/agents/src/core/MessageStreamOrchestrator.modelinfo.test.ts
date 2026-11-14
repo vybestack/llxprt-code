@@ -17,6 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { buildCliStyleConfig } from '../api/__tests__/helpers/buildCliStyleConfig.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
@@ -116,65 +117,16 @@ interface BuildOptions {
   estimatePendingTokens?: (contents: IContent[]) => Promise<number>;
 }
 
-function buildOrchestrator(options: BuildOptions = {}): {
-  orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
-  state: HarnessState;
-  tokenUsageLogger: RecordingTokenUsageLogger;
-  mockChat: { getContextLimit: ReturnType<typeof vi.fn> };
-} {
-  const state: HarnessState = {
-    identity: {
-      providerName: options.providerName ?? 'openai',
-      model: options.model ?? 'gpt-4',
-    },
-    profileName: options.profileName ?? null,
-    lastPromptId: options.lastPromptId,
-    contextLimit: options.contextLimit,
-  };
-
-  const tokenUsageLogger = new RecordingTokenUsageLogger();
-  const mockChat = {
-    getLastPromptTokenCount: vi.fn().mockReturnValue(100),
-    getProjectedPromptBaseline: vi.fn().mockReturnValue(100),
-    addHistory: vi.fn(),
-    getHistory: vi.fn().mockReturnValue([]),
-    getTokenUsageLogger: () => tokenUsageLogger,
-    estimatePendingTokens: options.estimatePendingTokens,
-    getContextLimit: vi.fn(() => state.contextLimit ?? tokenLimit()),
-  };
-
-  const config = {
-    getMaxSessionTurns: vi.fn(() => 0),
-    getIdeMode: vi.fn(() => false),
-    getContinueOnFailedApiCall: vi.fn(() => false),
-    getEphemeralSetting: vi.fn((key: string) =>
-      key === 'context-limit' ? state.contextLimit : undefined,
-    ),
-    getSettingsService: vi.fn(() => ({
-      getCurrentProfileName: vi.fn(() => state.profileName ?? null),
-      get: vi.fn((key: string) =>
-        key === 'currentProfile' ? state.profileName : undefined,
-      ),
-    })),
-  } as unknown as Config;
-
-  const stream =
-    options.turnStream ??
-    (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
-      yield { type: AgentEventType.Content, value: 'hello' };
-      yield {
-        type: AgentEventType.Finished,
-        value: { outcome: { hadVisibleOutput: true } },
-      };
-    })();
-
-  mockTurnRun.mockReturnValue(stream);
-
-  const identityFn = options.identityProvider ?? (() => state.identity);
-
-  const deps: MessageStreamDeps = {
-    config,
-    getChat: () => mockChat as unknown as ChatSession,
+function buildModelInfoServices(): Pick<
+  MessageStreamDeps,
+  | 'logger'
+  | 'loopDetector'
+  | 'todoContinuationService'
+  | 'ideContextTracker'
+  | 'agentHookManager'
+  | 'complexityAnalyzer'
+> {
+  return {
     logger: {
       debug: vi.fn(),
       warn: vi.fn(),
@@ -226,15 +178,6 @@ function buildOrchestrator(options: BuildOptions = {}): {
       fireBeforeAgentHookSafe: vi.fn().mockResolvedValue(undefined),
       fireAfterAgentHookSafe: vi.fn().mockResolvedValue(undefined),
     } as unknown as MessageStreamDeps['agentHookManager'],
-    getEffectiveModelIdentity: identityFn,
-    getHistory: vi.fn().mockResolvedValue([]),
-    getSessionTurnCount: vi.fn().mockReturnValue(1),
-    incrementSessionTurnCount: vi.fn(),
-    lazyInitialize: vi.fn().mockResolvedValue(undefined),
-    startChat: vi.fn().mockResolvedValue(mockChat),
-    getPreviousHistory: vi.fn().mockReturnValue(undefined),
-    setChat: vi.fn(),
-    hasChat: vi.fn().mockReturnValue(true),
     complexityAnalyzer: {
       analyzeComplexity: vi.fn().mockReturnValue({
         complexityScore: 0.2,
@@ -245,6 +188,86 @@ function buildOrchestrator(options: BuildOptions = {}): {
         shouldSuggestTodos: false,
       }),
     } as unknown as ComplexityAnalyzer,
+  };
+}
+
+function buildOrchestrator(options: BuildOptions = {}): {
+  orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
+  state: HarnessState;
+  tokenUsageLogger: RecordingTokenUsageLogger;
+  mockChat: { getContextLimit: ReturnType<typeof vi.fn> };
+} {
+  const state: HarnessState = {
+    identity: {
+      providerName: options.providerName ?? 'openai',
+      model: options.model ?? 'gpt-4',
+    },
+    profileName: options.profileName ?? null,
+    lastPromptId: options.lastPromptId,
+    contextLimit: options.contextLimit,
+  };
+
+  const tokenUsageLogger = new RecordingTokenUsageLogger();
+  const mockChat = {
+    getLastPromptTokenCount: vi.fn().mockReturnValue(100),
+    getProjectedPromptBaseline: vi.fn().mockReturnValue(100),
+    addHistory: vi.fn(),
+    getHistory: vi.fn().mockReturnValue([]),
+    getTokenUsageLogger: () => tokenUsageLogger,
+    estimatePendingTokens: options.estimatePendingTokens,
+    getContextLimit: vi.fn(
+      () => state.contextLimit ?? tokenLimit(state.identity.model),
+    ),
+  };
+
+  const config = {
+    getMaxSessionTurns: vi.fn(() => 0),
+    getIdeMode: vi.fn(() => false),
+    getContinueOnFailedApiCall: vi.fn(() => false),
+    getEphemeralSetting: vi.fn((key: string) =>
+      key === 'context-limit' ? state.contextLimit : undefined,
+    ),
+    getSettingsService: vi.fn(() => ({
+      getCurrentProfileName: vi.fn(() => state.profileName ?? null),
+      get: vi.fn((key: string) =>
+        key === 'currentProfile' ? state.profileName : undefined,
+      ),
+    })),
+  } as unknown as Config;
+
+  const stream =
+    options.turnStream ??
+    (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
+      yield { type: AgentEventType.Content, value: 'hello' };
+      yield {
+        type: AgentEventType.Finished,
+        value: {
+          reason: 'stop',
+          outcome: {
+            hadVisibleOutput: true,
+            hadThinking: false,
+            hadToolCalls: false,
+          },
+        },
+      };
+    })();
+
+  mockTurnRun.mockReturnValue(stream);
+
+  const identityFn = options.identityProvider ?? (() => state.identity);
+
+  const deps: MessageStreamDeps = {
+    config,
+    getChat: () => mockChat as unknown as ChatSession,
+    ...buildModelInfoServices(),
+    getEffectiveModelIdentity: identityFn,
+    readLastHistoryRow: vi.fn().mockResolvedValue(undefined),
+    getSessionTurnCount: vi.fn().mockReturnValue(1),
+    incrementSessionTurnCount: vi.fn(),
+    lazyInitialize: vi.fn().mockResolvedValue(undefined),
+    startChat: vi.fn().mockResolvedValue(mockChat),
+    setChat: vi.fn(),
+    hasChat: vi.fn().mockReturnValue(true),
     getLastPromptId: () => state.lastPromptId,
     setLastPromptId: (id: string) => {
       state.lastPromptId = id;
@@ -317,14 +340,16 @@ async function collectModelInfos(
     .map((e) => e.value);
 }
 
-describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(
-      (_model: string, userContextLimit?: number) =>
-        userContextLimit ?? 1_000_000,
-    );
-  });
+function resetModelInfoMocks(): void {
+  vi.clearAllMocks();
+  (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(
+    (_model: string, userContextLimit?: number) =>
+      userContextLimit ?? 1_000_000,
+  );
+}
+
+describe('MessageStreamOrchestrator ModelInfo initial sequence (issue #1770)', () => {
+  beforeEach(resetModelInfoMocks);
 
   it('emits ModelInfo for a new prompt', async () => {
     const { orchestrator } = buildOrchestrator({
@@ -379,6 +404,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     // No new prompt, no identity change → zero ModelInfo events
     expect(infos2).toHaveLength(0);
   });
+});
+
+describe('MessageStreamOrchestrator ModelInfo context and continuation (issue #1770)', () => {
+  beforeEach(resetModelInfoMocks);
 
   it('emits ModelInfo when only profile changes on continuation', async () => {
     const { orchestrator, state } = buildOrchestrator({
@@ -455,16 +484,18 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
         blocks: [{ type: 'text', text: 'second model response' }],
       },
     ];
-    const { orchestrator } = buildOrchestrator();
-    const deps = orchestrator['deps'];
-    (deps.hasChat as Mock<typeof deps.hasChat>).mockReturnValue(false);
-    (
-      deps.getPreviousHistory as Mock<typeof deps.getPreviousHistory>
-    ).mockReturnValue(previousHistory);
-
-    await collectModelInfos(orchestrator, 'prompt-restore-history');
-
-    expect(deps.startChat).toHaveBeenCalledWith(previousHistory);
+    const fixture = await buildCliStyleConfig('plain-text.jsonl');
+    try {
+      await fixture.agentClient.restoreHistory(previousHistory);
+      const previousClient = fixture.agentClient;
+      await fixture.sessionClient.clients.refreshAuth();
+      expect(fixture.agentClient).not.toBe(previousClient);
+      expect(
+        await Array.fromAsync(fixture.agentClient.getHistory()),
+      ).toMatchObject(previousHistory);
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
   it('does not make a generic first-turn context decision before provider finalization', async () => {
@@ -479,6 +510,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(mockChat.getContextLimit).not.toHaveBeenCalled();
   });
+});
+
+describe('MessageStreamOrchestrator ModelInfo display labels (issue #1770)', () => {
+  beforeEach(resetModelInfoMocks);
 
   it('B1: load-balancer profile reports the active sub-profile model, not the config default', async () => {
     const { orchestrator } = buildOrchestrator({
@@ -534,6 +569,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos).toHaveLength(1);
     expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
   });
+});
+
+describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
+  beforeEach(resetModelInfoMocks);
 
   it('issue #2544: reports the routed Codex identity, never a stale manager Gemini identity', async () => {
     const { orchestrator } = buildOrchestrator({
@@ -630,7 +669,9 @@ describe('buildEffectiveModelIdentity — model precedence (issue #2544)', () =>
     expect(identity.model).toBe('gpt-5.6-sol');
     expect(identity.model).not.toBe('gemini-pro');
   });
+});
 
+describe('buildEffectiveModelIdentity provider accessors (issue #2544)', () => {
   it('does not evaluate provider models when the sequence model is available', () => {
     const routedProvider = {
       name: 'codex',

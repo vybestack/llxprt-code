@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from './responses-request.test-helpers.js';
 /**
  * @license
@@ -26,11 +27,9 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
-import {
-  buildResponsesRequestContextForProjection,
-  executeOpenAIResponsesRequest,
-} from './openAIResponsesExecutor.js';
+
 import { dumpFinalizedRequest } from './openAIResponsesRequestDump.js';
+import { buildDiskTextResponsesContext } from './responses-disk-text-projection.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -152,7 +151,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
       onStreamLiveness: (event) => livenessEvents.push(event),
     });
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     );
@@ -176,7 +175,7 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
     setGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: sseBody }));
 
     const options = buildNormalizedOptions();
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     );
@@ -390,7 +389,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       },
     });
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     );
@@ -431,7 +430,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       close: vi.fn(),
     };
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(
         options,
         buildDeps({
@@ -507,7 +506,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       close: vi.fn(),
     };
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(
         options,
         buildDeps({
@@ -602,7 +601,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       close: vi.fn(),
     };
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(
         options,
         buildDeps({
@@ -677,7 +676,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
 
     let caught: unknown;
     try {
-      const iterator = executeOpenAIResponsesRequest(
+      const iterator = executeResponsesTestRequest(
         captureResponsesTestRequest(
           options,
           buildDeps({
@@ -746,7 +745,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
         },
       });
       const consumed: IContent[] = [];
-      for await (const chunk of executeOpenAIResponsesRequest(
+      for await (const chunk of executeResponsesTestRequest(
         captureResponsesTestRequest(options, deps),
         deps,
       )) {
@@ -795,26 +794,27 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       isWebSocketTransportActive: () => true,
     });
     const request = captureResponsesTestRequest(options, deps);
-    const prepared = await buildResponsesRequestContextForProjection(
-      request,
-      deps,
-    );
+    const prepared = await buildDiskTextResponsesContext(request, deps);
 
     // Defensive guard of the dump module in isolation: the executor rejects an
     // identity-less Codex credential before it reaches the dump (see the
     // end-to-end test above), so this feeds the dump a context it never
     // receives from the executor. The dump is best-effort: it must still be
     // written and must not relabel the WebSocket request as HTTP.
-    await dumpFinalizedRequest(
-      {
-        ...prepared,
-        apiKey: 'codex-token',
-        baseURL: 'https://chatgpt.com/backend-api/codex',
-      },
-      { dumpcontext: 'on' },
-      deps,
-      request,
-    );
+    try {
+      await dumpFinalizedRequest(
+        {
+          ...prepared,
+          apiKey: 'codex-token',
+          baseURL: 'https://chatgpt.com/backend-api/codex',
+        },
+        { dumpcontext: 'on' },
+        deps,
+        request,
+      );
+    } finally {
+      await prepared.mediaRequest.release();
+    }
 
     const dumpedRequest = await readDumpedEnvelope();
     expect(dumpedRequest.method).toBe('SEND');

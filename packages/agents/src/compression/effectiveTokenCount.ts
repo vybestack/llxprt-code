@@ -34,10 +34,10 @@ export interface ReasoningHistoryPolicy {
   stripFromContext(): 'all' | 'allButLast' | 'none';
 }
 
-export function computeEffectiveTokenCount(
+export async function computeEffectiveTokenCount(
   historyService: HistoryService,
   policy: ReasoningHistoryPolicy,
-): number {
+): Promise<number> {
   const includeInContext = policy.includeInContext();
   const stripPolicy = policy.stripFromContext();
 
@@ -46,37 +46,18 @@ export function computeEffectiveTokenCount(
     return historyService.getTotalTokens();
   }
 
-  const allContents = historyService.getCurated();
   const rawTokens = historyService.getTotalTokens();
-
-  let thinkingTokensToStrip = 0;
-
-  if (stripPolicy === 'allButLast') {
-    let lastIndexWithThinking = -1;
-    for (let i = allContents.length - 1; i >= 0; i--) {
-      if (extractThinkingBlocks(allContents[i]).length > 0) {
-        lastIndexWithThinking = i;
-        break;
-      }
-    }
-
-    for (let i = 0; i < allContents.length; i++) {
-      if (i !== lastIndexWithThinking) {
-        thinkingTokensToStrip += estimateThinkingTokens(
-          extractThinkingBlocks(allContents[i]),
-        );
-      }
-    }
-  } else {
-    // stripPolicy === 'all' explicitly strips all thinking; stripPolicy ===
-    // 'none' also removes all thinking from the effective count when
-    // includeInContext=false.
-    for (const content of allContents) {
-      thinkingTokensToStrip += estimateThinkingTokens(
-        extractThinkingBlocks(content),
-      );
-    }
+  let thinkingTokens = 0;
+  let lastThinkingTokens = 0;
+  for await (const content of historyService.streamCuratedHistory()) {
+    const blocks = extractThinkingBlocks(content);
+    const tokens = estimateThinkingTokens(blocks);
+    thinkingTokens += tokens;
+    if (blocks.length > 0) lastThinkingTokens = tokens;
   }
-
+  const thinkingTokensToStrip =
+    stripPolicy === 'allButLast'
+      ? thinkingTokens - lastThinkingTokens
+      : thinkingTokens;
   return Math.max(0, rawTokens - thinkingTokensToStrip);
 }

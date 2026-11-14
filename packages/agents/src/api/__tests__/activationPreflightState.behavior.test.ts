@@ -50,7 +50,7 @@ describe('activation bootstrap receipts', () => {
 
     const result = await activation.preflight(intent);
     if (!result.token) throw new Error('Missing receipt');
-    const history = await activation.readHistory();
+    const history = await Array.fromAsync(activation.streamHistory());
     const contentConfig = route.config.getContentGeneratorConfig();
     const agent = await AgentProfilePreflight.createForegroundAgent(
       route.preflight,
@@ -58,7 +58,7 @@ describe('activation bootstrap receipts', () => {
       intent,
       {},
     );
-    expect(await agent.getHistory()).toStrictEqual(history);
+    expect(await agent.session.getHistory()).toStrictEqual(history);
     expect(route.config.getContentGeneratorConfig()).toBe(contentConfig);
     await agent.dispose();
     await expect(

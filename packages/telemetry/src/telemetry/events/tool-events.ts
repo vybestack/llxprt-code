@@ -112,7 +112,7 @@ export class HookCallEvent {
   'event.timestamp': string;
   hook_event_name: HookEventName;
   hook_name: string;
-  hook_input: HookInput;
+  hook_input: HookInput | Record<string, unknown>;
   hook_output: HookInput | Record<string, unknown>;
   exit_code: number;
   stdout: string;
@@ -123,7 +123,7 @@ export class HookCallEvent {
 
   constructor(
     eventName: HookEventName,
-    input: HookInput,
+    input: HookInput | Record<string, unknown>,
     result: HookExecutionResult,
   ) {
     this['event.name'] = 'hook_call';

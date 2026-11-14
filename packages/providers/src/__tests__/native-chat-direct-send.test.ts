@@ -1,0 +1,370 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
+import { journalSendFixture } from './support/journal-send-fixture.js';
+import { normalizedRows } from './support/frozenWire/normalizedRows.js';
+import { localWireHashSink } from './support/local-wire-hash-sink.js';
+import {
+  buildHistoryCallOptions,
+  recordOf,
+  sendThroughRoute,
+  WIRE_ROUTES,
+} from './support/wireBodyCapture.js';
+
+function plainRoute(): (typeof WIRE_ROUTES)[number] {
+  const route = WIRE_ROUTES.find((item) => item.id === 'openai-chat-plain');
+  if (route === undefined) throw new Error('Missing plain Chat route');
+  return route;
+}
+const textRows: readonly IContent[] = [
+  { speaker: 'human', blocks: [{ type: 'text', text: 'question 雪\\"\n' }] },
+  { speaker: 'ai', blocks: [{ type: 'text', text: 'answer' }] },
+];
+const toolRows: readonly IContent[] = [
+  {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: 'call_x',
+        name: 'lookup',
+        parameters: { path: '雪' },
+      },
+    ],
+  },
+  {
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: 'call_x',
+        toolName: 'lookup',
+        result: 'ok',
+      },
+      {
+        type: 'media',
+        encoding: 'base64',
+        mimeType: 'image/png',
+        data: 'AQID',
+      },
+    ],
+  },
+  { speaker: 'human', blocks: [{ type: 'text', text: 'continue' }] },
+];
+async function verify(
+  rows: readonly IContent[],
+  ephemerals: Record<string, unknown> = {},
+  expectedRows: readonly IContent[] = rows,
+  pending: readonly IContent[] = [],
+): Promise<number> {
+  const base = plainRoute();
+  const route =
+    ephemerals.streaming === 'enabled'
+      ? {
+          ...base,
+          respond: () =>
+            new Response(
+              `data: ${JSON.stringify({ id: 'chat', object: 'chat.completion.chunk', created: 0, model: 'gpt-4o', choices: [{ index: 0, delta: { role: 'assistant', content: 'ok' }, finish_reason: null }] })}
+
+data: [DONE]
+
+`,
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        }
+      : base;
+  const shape = {
+    id: 'plain-direct',
+    description: 'native HTTP',
+    rows,
+    ephemerals,
+  };
+  const expected = recordOf(
+    await sendThroughRoute(
+      route,
+      { ...shape, rows: await normalizedRows(expectedRows) },
+      'rows',
+    ),
+  );
+  const fixture = await journalSendFixture(rows, pending);
+  const sink = await localWireHashSink(route);
+  try {
+    const provider = route.createProvider();
+    const options = buildHistoryCallOptions(
+      sink.route,
+      shape,
+      'rows',
+      new SettingsService(),
+      fixture.selection,
+    );
+    const receipt = await operationFileCreates(async () => {
+      for await (const chunk of provider.generateChatCompletion(options))
+        void chunk;
+    }, true);
+    expect(receipt).toStrictEqual({ files: [], directories: [] });
+    expect(sink.requests).toHaveLength(1);
+    expect(sink.requests[0].bytes).toBe(expected.length);
+    expect(sink.requests[0].sha256).toBe(expected.sha256);
+    expect(sink.requests[0].contentLength).toBe(String(expected.length));
+    return sink.entries();
+  } finally {
+    await sink.close();
+    await fixture.close();
+  }
+}
+describe('native plain Chat direct production send', () => {
+  it('composes unchanged tree ranges around two historical holders in label order', async () => {
+    const history: readonly IContent[] = [
+      ...Array.from({ length: 40 }, () => textRows[0]),
+      toolRows[0],
+      ...Array.from({ length: 40 }, () => textRows[1]),
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'tool_call', id: 'call_y', name: 'second', parameters: {} },
+        ],
+      },
+      ...Array.from({ length: 40 }, () => textRows[0]),
+    ];
+    const pending: readonly IContent[] = [
+      toolRows[1],
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_y',
+            toolName: 'second',
+            result: 'second result 雪',
+          },
+        ],
+      },
+    ];
+    expect(await verify(history, {}, [...history, ...pending], pending)).toBe(
+      1,
+    );
+  });
+  it.each(['none', 'all'])(
+    'replaces the historical orphan with pending results and media under strip %s',
+    async (strip) => {
+      const history = [toolRows[0]];
+      const pending = [toolRows[1]];
+      expect(
+        await verify(
+          history,
+          { 'reasoning.stripFromContext': strip },
+          [...history, ...pending],
+          pending,
+        ),
+      ).toBe(1);
+    },
+  );
+  it('selects a better pending duplicate and retains the first response media', async () => {
+    const history = toolRows.slice(0, 2);
+    const pending: readonly IContent[] = [
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_x',
+            toolName: 'new name',
+            result: 'better 雪',
+            isComplete: true,
+          },
+        ],
+      },
+    ];
+    expect(await verify(history, {}, [...history, ...pending], pending)).toBe(
+      1,
+    );
+  });
+  it('normalizes response-before-call with a pending duplicate call', async () => {
+    const history = [toolRows[1]];
+    const pending = [toolRows[0], textRows[0]];
+    expect(await verify(history, {}, [...history, ...pending], pending)).toBe(
+      1,
+    );
+  });
+  it('preserves empty IDs, normalized-ID collisions and repeated pending calls', async () => {
+    const history: readonly IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'toolu_collision',
+            name: 'first',
+            parameters: {},
+          },
+          { type: 'tool_call', id: '', name: 'empty', parameters: {} },
+        ],
+      },
+    ];
+    const pending: readonly IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call_collision',
+            name: 'second',
+            parameters: {},
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'toolu_collision',
+            toolName: 'first',
+            result: 'one',
+          },
+          {
+            type: 'tool_response',
+            callId: 'call_collision',
+            toolName: 'second',
+            result: 'two',
+          },
+          {
+            type: 'tool_response',
+            callId: '',
+            toolName: 'empty',
+            result: 'empty',
+          },
+        ],
+      },
+    ];
+    expect(await verify(history, {}, [...history, ...pending], pending)).toBe(
+      1,
+    );
+  });
+  it('keeps pending thinking and inline user image bytes', async () => {
+    const pending: readonly IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'thinking', thought: 'new thought 雪' },
+          { type: 'text', text: 'answer' },
+        ],
+      },
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            encoding: 'base64',
+            mimeType: 'image/png',
+            data: 'AQID',
+          },
+        ],
+      },
+    ];
+    expect(
+      await verify(
+        textRows,
+        { 'reasoning.includeInContext': true },
+        [...textRows, ...pending],
+        pending,
+      ),
+    ).toBe(1);
+  });
+  it('drops cross-speaker result messages when a real assistant call exists', async () => {
+    const history: readonly IContent[] = [
+      { ...toolRows[0], speaker: 'human' },
+      toolRows[0],
+    ];
+    const pending = [toolRows[1]];
+    expect(await verify(history, {}, [...history, ...pending], pending)).toBe(
+      1,
+    );
+  });
+  it.each(['enabled', 'disabled'])(
+    'sends a pending user without files with streaming %s',
+    async (streaming) => {
+      const pending: readonly IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'text',
+              text: `new 雪\\"
+`,
+            },
+          ],
+        },
+      ];
+      expect(
+        await verify(
+          textRows,
+          { streaming },
+          [...textRows, ...pending],
+          pending,
+        ),
+      ).toBe(1);
+    },
+  );
+  it('streams a native request into a real streaming Chat response without files', async () => {
+    expect(await verify(textRows, { streaming: 'enabled' })).toBe(1);
+  });
+  it('sends the old builder bytes and Content-Length without creating any file or directory', async () => {
+    expect(await verify(textRows)).toBe(1);
+  });
+  it('keeps strict OpenAI tool-call reasoning policy in measurement and emission', async () => {
+    expect(
+      await verify(
+        [
+          {
+            ...toolRows[0],
+            blocks: [
+              { type: 'thinking', thought: 'private' },
+              ...toolRows[0].blocks,
+            ],
+          },
+          ...toolRows.slice(1),
+        ],
+        { 'reasoning.includeInContext': true },
+      ),
+    ).toBe(1);
+  });
+  it('filters empty assistant units before counting the native contribution', async () => {
+    expect(
+      await verify(
+        [
+          textRows[0],
+          { speaker: 'ai', blocks: [{ type: 'text', text: '' }] },
+          textRows[1],
+        ],
+        {},
+        textRows,
+      ),
+    ).toBe(1);
+  });
+  it('flushes one tool unit of media without a scratch index or spool', async () => {
+    expect(await verify(toolRows)).toBe(1);
+  });
+  it.each([false, true])(
+    'preserves reasoning.includeInContext=%s',
+    async (include) => {
+      expect(
+        await verify(
+          [
+            {
+              speaker: 'ai',
+              blocks: [
+                { type: 'thinking', thought: 'private 雪' },
+                { type: 'text', text: 'first' },
+              ],
+            },
+            ...textRows,
+          ],
+          { 'reasoning.includeInContext': include },
+        ),
+      ).toBe(1);
+    },
+  );
+});

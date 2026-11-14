@@ -8,7 +8,7 @@ import type { SetActiveModelOperation } from '../ui/contexts/RuntimeContext.js';
 interface SessionModelCommands {
   getModel(): string;
   getProvider(): string;
-  setModel(model: string): Promise<void>;
+  setProvider(provider: string, model: string): Promise<unknown>;
 }
 
 export function createSessionModelCommand(
@@ -16,12 +16,12 @@ export function createSessionModelCommand(
 ): SetActiveModelOperation {
   return async (model) => {
     const previousModel = session.getModel();
-    await session.setModel(model);
+    await session.setProvider(session.getProvider(), model);
     return {
       previousModel,
       nextModel: session.getModel(),
       providerName: session.getProvider(),
-      authRefreshed: true,
+      authRefreshed: false,
     };
   };
 }

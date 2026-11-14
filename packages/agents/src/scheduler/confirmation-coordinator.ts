@@ -15,6 +15,21 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import {
+  publishApproval,
+  publishApprovalRequest,
+  publishApprovalDecision,
+} from './approval-publication.js';
+import {
+  isInteractiveConfirmationDetails,
+  getConfirmationCorrelationId,
+  isConfirmationDetails,
+} from './confirmation-details.js';
+import {
+  ApprovalPublicationError,
+  serializableApprovalDetails,
+  type ApprovalLifecycleWriter,
+} from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 import * as Diff from 'diff';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
@@ -87,6 +102,7 @@ export interface SchedulerAccessor {
   attemptExecution(signal: AbortSignal): Promise<void>;
   getToolCalls(): readonly ToolCall[];
   getHookOwner(callId: string): HookExecutionOwner | undefined;
+  persistApproval?: ApprovalLifecycleWriter;
 }
 
 /**
@@ -98,51 +114,7 @@ export interface EditorCallbacks {
   onEditorOpen?(): void;
 }
 
-function isInteractiveConfirmationDetails(
-  details: ToolCallConfirmationDetails | SerializableConfirmationDetails,
-): details is ToolCallConfirmationDetails {
-  return 'onConfirm' in details;
-}
-
-function getConfirmationCorrelationId(
-  details:
-    | ToolCallConfirmationDetails
-    | SerializableConfirmationDetails
-    | undefined,
-): string | undefined {
-  if (!details || !('correlationId' in details)) {
-    return undefined;
-  }
-
-  const correlationId = details.correlationId;
-  return typeof correlationId === 'string' ? correlationId : undefined;
-}
-
 // ── ConfirmationCoordinator ───────────────────────────────────────────────
-
-/**
- * Coordinates the full confirmation flow for tool execution:
- * - Policy evaluation and routing (ALLOW/DENY/ASK)
- * - Confirmation prompt setup and MessageBus subscription
- * - Handling all confirmation outcomes (ProceedOnce, ProceedAlways, Cancel,
- *   ModifyWithEditor, SuggestEdit, inline modify)
-/**
- * Type guard: narrows the `shouldConfirmExecute` return value to genuine
- * confirmation details. Scheduler plugin boundaries can return malformed
- * nullish values at runtime even when the declared type excludes them.
- */
-function isConfirmationDetails(
-  value:
-    | ToolCallConfirmationDetails
-    | SerializableConfirmationDetails
-    | false
-    | null
-    | undefined,
-): value is ToolCallConfirmationDetails {
-  return (
-    value !== false && value != null && isInteractiveConfirmationDetails(value)
-  );
-}
 
 /**
  * ConfirmationCoordinator manages the lifecycle of tool-call confirmation
@@ -213,6 +185,23 @@ export class ConfirmationCoordinator {
     this.staleCorrelationIds.forEach((t) => clearTimeout(t));
     this.staleCorrelationIds.clear();
     this.callIdToSignal.clear();
+  }
+
+  async cancelPendingApprovals(): Promise<void> {
+    for (const call of this.schedulerAccessor.getToolCalls()) {
+      if (call.status !== 'awaiting_approval') continue;
+      await publishApproval(
+        {
+          request: call.request,
+          details: serializableApprovalDetails(call.confirmationDetails),
+          status: 'cancelled',
+          outcome: ToolConfirmationOutcome.Cancel,
+          aborted: true,
+        },
+        this.schedulerAccessor.persistApproval,
+      );
+      this.processedConfirmations.add(call.request.callId);
+    }
   }
 
   // ── Signal lifecycle ───────────────────────────────────────────────────────
@@ -351,24 +340,6 @@ export class ConfirmationCoordinator {
       );
     }
 
-    if (
-      confirmationDetails.type === 'edit' &&
-      confirmationDetails.ideConfirmation
-    ) {
-      void confirmationDetails.ideConfirmation.then((resolution) => {
-        const outcome =
-          resolution.status === 'accepted'
-            ? ToolConfirmationOutcome.ProceedOnce
-            : ToolConfirmationOutcome.Cancel;
-        void this.handleConfirmationResponse(
-          reqInfo.callId,
-          confirmationDetails.onConfirm,
-          outcome,
-          signal,
-        );
-      });
-    }
-
     const originalOnConfirm = confirmationDetails.onConfirm;
     const correlationId = randomUUID();
 
@@ -388,8 +359,15 @@ export class ConfirmationCoordinator {
         ),
     };
 
+    await publishApprovalRequest(
+      reqInfo,
+      wrappedDetails,
+      signal,
+      this.schedulerAccessor.persistApproval,
+    );
     this.pendingConfirmations.set(correlationId, reqInfo.callId);
     this.pendingOriginalConfirmHandlers.set(correlationId, originalOnConfirm);
+    this.statusMutator.setAwaitingApproval(reqInfo.callId, wrappedDetails);
     void this.onToolNotification(
       this.config,
       wrappedDetails,
@@ -404,7 +382,23 @@ export class ConfirmationCoordinator {
       policyContextWithCallId,
       this.messageBus,
     );
-    this.statusMutator.setAwaitingApproval(reqInfo.callId, wrappedDetails);
+    if (
+      confirmationDetails.type === 'edit' &&
+      confirmationDetails.ideConfirmation
+    ) {
+      void confirmationDetails.ideConfirmation.then((resolution) => {
+        const outcome =
+          resolution.status === 'accepted'
+            ? ToolConfirmationOutcome.ProceedOnce
+            : ToolConfirmationOutcome.Cancel;
+        void this.handleConfirmationResponse(
+          reqInfo.callId,
+          confirmationDetails.onConfirm,
+          outcome,
+          signal,
+        );
+      });
+    }
   }
 
   // ── MessageBus handler ────────────────────────────────────────────────────
@@ -547,7 +541,18 @@ export class ConfirmationCoordinator {
       waitingToolCall?.confirmationDetails,
     );
 
-    if (outcome !== ToolConfirmationOutcome.ModifyWithEditor) {
+    if (waitingToolCall)
+      await publishApprovalDecision(
+        waitingToolCall,
+        outcome,
+        signal,
+        payload,
+        this.schedulerAccessor.persistApproval,
+      );
+    if (
+      !signal.aborted &&
+      outcome !== ToolConfirmationOutcome.ModifyWithEditor
+    ) {
       try {
         await originalOnConfirm(outcome, payload);
       } catch (error) {
@@ -692,19 +697,32 @@ export class ConfirmationCoordinator {
       contentOverrides,
     );
 
-    this.statusMutator.setArgs(callId, updatedParams);
-
-    if (isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)) {
-      this.rePublishConfirmation(callId, waitingToolCall, updatedDiff, signal);
-    }
+    const confirmationDetails = waitingToolCall.confirmationDetails;
+    await this.rePublishConfirmation(
+      callId,
+      {
+        ...waitingToolCall,
+        request: { ...waitingToolCall.request, args: updatedParams },
+        confirmationDetails:
+          confirmationDetails.type === 'edit'
+            ? {
+                ...confirmationDetails,
+                newContent:
+                  await modifyContext.getProposedContent(updatedParams),
+              }
+            : confirmationDetails,
+      },
+      updatedDiff,
+      signal,
+    );
   }
 
-  private rePublishConfirmation(
+  private async rePublishConfirmation(
     callId: string,
     waitingToolCall: WaitingToolCall,
     updatedDiff: string | undefined,
     signal: AbortSignal,
-  ): void {
+  ): Promise<void> {
     if (
       !isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)
     ) {
@@ -737,6 +755,16 @@ export class ConfirmationCoordinator {
         ),
     } as ToolCallConfirmationDetails;
 
+    await publishApproval(
+      {
+        request: waitingToolCall.request,
+        details: serializableApprovalDetails(updatedDetails),
+        status: 'awaiting_approval',
+      },
+      this.schedulerAccessor.persistApproval,
+    );
+    signal.throwIfAborted();
+    this.statusMutator.setArgs(callId, waitingToolCall.request.args);
     this.pendingConfirmations.set(newCorrelationId, callId);
     this.pendingOriginalConfirmHandlers.set(
       newCorrelationId,
@@ -752,12 +780,12 @@ export class ConfirmationCoordinator {
       ...context,
       callId,
     };
+    this.statusMutator.setAwaitingApproval(callId, updatedDetails);
     publishConfirmationRequest(
       newCorrelationId,
       contextWithCallId,
       this.messageBus,
     );
-    this.statusMutator.setAwaitingApproval(callId, updatedDetails);
 
     this.registerStaleCorrelationId(
       getConfirmationCorrelationId(waitingToolCall.confirmationDetails),
@@ -814,6 +842,18 @@ export class ConfirmationCoordinator {
           await pendingTool.invocation.shouldConfirmExecute(signal);
 
         if (!isConfirmationDetails(stillNeedsConfirmation)) {
+          await publishApproval(
+            {
+              request: pendingTool.request,
+              details: serializableApprovalDetails(
+                pendingTool.confirmationDetails,
+              ),
+              status: signal.aborted ? 'cancelled' : 'scheduled',
+              outcome: ToolConfirmationOutcome.ProceedAlways,
+              aborted: signal.aborted,
+            },
+            this.schedulerAccessor.persistApproval,
+          );
           this.statusMutator.setOutcome(
             pendingTool.request.callId,
             ToolConfirmationOutcome.ProceedAlways,
@@ -821,6 +861,7 @@ export class ConfirmationCoordinator {
           this.statusMutator.setScheduled(pendingTool.request.callId);
         }
       } catch (error) {
+        if (error instanceof ApprovalPublicationError) throw error;
         logger.debug(
           () =>
             `Error checking confirmation for tool ${pendingTool.request.callId}: ${error}`,
@@ -853,11 +894,13 @@ export class ConfirmationCoordinator {
       toolCall.request.args,
     );
 
-    const updatedParams = modifyContext.createUpdatedParams(
-      currentContent,
-      newContent,
-      toolCall.request.args,
-    );
+    const updatedParams = {
+      ...modifyContext.createUpdatedParams(
+        currentContent,
+        newContent,
+        toolCall.request.args,
+      ),
+    };
     const updatedDiff = Diff.createPatch(
       modifyContext.getFilePath(toolCall.request.args),
       currentContent,
@@ -866,16 +909,27 @@ export class ConfirmationCoordinator {
       'Proposed',
     );
 
-    this.statusMutator.setArgs(toolCall.request.callId, updatedParams);
-
-    if (!isInteractiveConfirmationDetails(toolCall.confirmationDetails)) {
-      return;
-    }
-
-    this.statusMutator.setAwaitingApproval(toolCall.request.callId, {
+    const updatedDetails = {
       ...toolCall.confirmationDetails,
       fileDiff: updatedDiff,
-    });
+      originalContent: currentContent,
+      newContent,
+    };
+    await publishApproval(
+      {
+        request: { ...toolCall.request, args: updatedParams },
+        details: serializableApprovalDetails(updatedDetails),
+        status: signal.aborted ? 'cancelled' : 'scheduled',
+        aborted: signal.aborted,
+      },
+      this.schedulerAccessor.persistApproval,
+    );
+    signal.throwIfAborted();
+    this.statusMutator.setArgs(toolCall.request.callId, updatedParams);
+    this.statusMutator.setAwaitingApproval(
+      toolCall.request.callId,
+      updatedDetails,
+    );
   }
 
   // ── Bus publish ────────────────────────────────────────────────────────────

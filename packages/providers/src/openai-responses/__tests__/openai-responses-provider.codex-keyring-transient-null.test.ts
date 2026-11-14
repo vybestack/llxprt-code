@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -35,9 +36,12 @@ import {
   type KeyringAdapter,
 } from '@vybestack/llxprt-code-storage';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
+import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
 import { registerStandardOAuthProviders } from '../../composition/oauth-provider-registration.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
@@ -212,13 +216,25 @@ async function buildCodexHarness(
   const settings = new SettingsService();
 
   const send = async (): Promise<SentRequest> => {
+    const runtime = createProviderRuntimeContext({
+      runtimeId: 'codex-keyring-3965',
+    });
+    const ephemerals = { retries: 1, retrywait: 1 };
     const options = createProviderCallOptions({
       providerName: provider.name,
       settings,
       config: createRuntimeConfigStub(settings),
-      runtimeId: 'codex-keyring-3965',
-      ephemerals: { retries: 1, retrywait: 1 },
-      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
+      runtime,
+      invocation: createRuntimeInvocationContext({
+        fetch: (input, init) => globalThis.fetch(input, init),
+        runtimeId: runtime.runtimeId,
+        runtimeMetadata: runtime.metadata,
+        providerName: provider.name,
+        ephemeralsSnapshot: ephemerals,
+      }),
+      contents: callerOwnedRawProviderSource([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      ]),
     });
     const callsBefore = fetchSpy.mock.calls.length;
     for await (const _chunk of provider.generateChatCompletion(options)) {
@@ -253,8 +269,8 @@ describe('Codex requests with transient native-keyring null reads (issue #3965)'
     setEnv('OPENAI_API_KEY', undefined);
     oauthManagers = [];
     root = mkdtempSync(join(tmpdir(), 'codex-keyring-3965-'));
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
-      sseResponse(),
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+      withFetchPreconnect(async () => sseResponse()),
     );
   });
 

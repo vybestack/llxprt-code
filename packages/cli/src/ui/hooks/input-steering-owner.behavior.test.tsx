@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,7 +27,7 @@ async function runWithSteering(
 }
 
 async function historyText(agent: Agent): Promise<string> {
-  return (await agent.getHistory())
+  return (await collectResumeRows(agent.streamHistory()))
     .flatMap((item) =>
       item.blocks.flatMap((block) =>
         block.type === 'text' ? [block.text] : [],

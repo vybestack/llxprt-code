@@ -1,5 +1,6 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -29,14 +30,14 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 /** Build a fake delegate whose per-invocation behavior is supplied inline. */
 function makeFakeProvider(
@@ -76,7 +77,10 @@ function throwStatus(
 
 /** A generator that yields a single success chunk. */
 async function* successChunk(): AsyncGenerator<IContent> {
-  yield { type: 'text' as const, content: 'ok' } as unknown as IContent;
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'ok' }],
+  } as unknown as IContent;
 }
 
 function respondAfterTransientRateLimit(
@@ -88,8 +92,11 @@ function respondAfterTransientRateLimit(
 
 function makeOptions(): GenerateChatOptions {
   return {
-    prompt: 'test prompt',
-    messages: [{ role: 'user' as const, content: 'test' }],
+    invocation: makeLoadBalancerInvocation(),
+    contents: replayableContents([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
+    ]),
   };
 }
 
@@ -152,26 +159,26 @@ async function consumeStream(
   }
   return chunks;
 }
+function makeProviderManager(): ProviderManager {
+  const settingsService = new SettingsService();
+  const config = createRuntimeConfigStub(settingsService);
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+    undefined,
+    undefined,
+    borrowedSettings(config, settingsService),
+  );
+}
 
-describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', () => {
-  let settingsService: SettingsService;
-  let config: Config;
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 1]', () => {
   let providerManager: ProviderManager;
-
   beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
-      undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
-    );
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -212,6 +219,13 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     expect(exhausted2.counter.value).toBe(0);
     // Stayed on zai — no failover.
     expect(lb.getCurrentFailoverIndex()).toBe(0);
+  });
+});
+
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 2]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -279,6 +293,13 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     expect(makora.counter.value).toBe(1);
     expect(lb.getCurrentFailoverIndex()).toBe(1);
   });
+});
+
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 3]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
 
   /**
    * Full reliability scenario from the issue: zai is healthy but sometimes
@@ -313,13 +334,23 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     const chunks = await consumeStream(lb, makeOptions());
 
     expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toStrictEqual({ type: 'text', content: 'ok' });
+    expect(chunks[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'ok' }],
+    });
     // zai: 429 then success on retry — never failed over.
     expect(zai.counter.value).toBe(2);
     // Exhausted backends never reached because zai succeeded on retry.
     expect(makora.counter.value).toBe(0);
     expect(ollama.counter.value).toBe(0);
     expect(lb.getCurrentFailoverIndex()).toBe(0);
+  });
+});
+
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 4]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -353,6 +384,13 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     const total = counters.reduce((sum, c) => sum + c.value, 0);
     expect(total).toBe(6);
   });
+});
+
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 5]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
 
   /**
    * Boundary: if a backend yields one or more chunks and THEN throws 429,
@@ -365,8 +403,8 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
       () =>
         (async function* (): AsyncGenerator<IContent> {
           yield {
-            type: 'text' as const,
-            content: 'partial',
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
           } as unknown as IContent;
           throw statusError('rate limited', 429);
         })(),
@@ -393,7 +431,10 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
 
     // The partial chunk WAS yielded before the error.
     expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toStrictEqual({ type: 'text', content: 'partial' });
+    expect(chunks[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'partial' }],
+    });
     // Only zai was called — no failover to makora after mid-stream 429.
     expect(zai.counter.value).toBe(1);
     expect(makora.counter.value).toBe(0);

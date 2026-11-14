@@ -571,6 +571,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const subagentPromise = new Promise<string[]>((resolve) => {
         resolveSubagents = resolve;
       });
+      let enrichmentStarted = false;
       const search = vi.fn().mockResolvedValue(['file.txt']);
       const mockFileSearch: FileSearch = {
         initialize: vi.fn(() => initialization),
@@ -578,22 +579,23 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
-      const timeoutConfig = {
-        ...mockConfig,
-        getFileFilteringOptions: vi.fn(() => ({
+      const timeoutConfig = Object.assign(mockConfig, {
+        getFileFilteringOptions: () => ({
           respectGitIgnore: true,
           respectLlxprtIgnore: true,
           searchTimeout: 1,
-        })),
-      } as unknown as Config;
-      // The completion runtime reads subagents from the workspace definition
-      // reads, not from the supplied Config, so the controlled enrichment
-      // promise must be installed at that boundary. Otherwise enrichment
-      // settles on its own and can finish before the search timeout elapses.
-      vi.spyOn(
-        definitions.subagentDefinitions,
-        'listSubagents',
-      ).mockReturnValue(subagentPromise);
+        }),
+      });
+      definitions = {
+        ...definitions,
+        subagentDefinitions: {
+          ...definitions.subagentDefinitions,
+          listSubagents: () => {
+            enrichmentStarted = true;
+            return subagentPromise;
+          },
+        },
+      };
 
       const { result } = renderHook(() =>
         useTestHarnessForAtCompletion(
@@ -612,7 +614,7 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
         '',
         expect.any(Object),
       );
-      expect(definitions.subagentDefinitions.listSubagents).toHaveBeenCalled();
+      expect(enrichmentStarted).toBe(true);
 
       await act(async () => {
         await advanceTimersByTimeAsync(2);

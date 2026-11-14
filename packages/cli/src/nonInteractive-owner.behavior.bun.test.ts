@@ -1,3 +1,4 @@
+import { collectResumeRows } from './__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -37,7 +38,7 @@ describe('noninteractive execution ownership', () => {
         'Headless request captured by its original owner',
         'bound-turn',
       );
-      const history = await owner.getHistory();
+      const history = await collectResumeRows(owner.streamHistory());
       expect(history).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({

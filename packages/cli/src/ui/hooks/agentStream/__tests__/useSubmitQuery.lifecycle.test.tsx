@@ -9,7 +9,6 @@ import { readFile } from 'node:fs/promises';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { Agent } from '@vybestack/llxprt-code-agents';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createDeferred } from './createDeferred.js';
 import {
   createLifecycleDeps,
@@ -362,11 +361,9 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       onAuthError: vi.fn(),
       sanitizeContent: (text: string) => ({ text, blocked: false }),
       flushPendingHistoryItem: vi.fn(),
-      pendingResponse: new PendingResponseBuffer(undefined),
       pendingHistoryItemRef: {
         current: null,
       } as React.MutableRefObject<HistoryItemWithoutId | null>,
-      thinkingBlocksRef: { current: [] },
       turnCancelledRef: { current: false },
       queuedSubmissionsRef: { current: [] },
       drainSuppressedRef: { current: false },
@@ -507,16 +504,14 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
   });
 
   it('finalises once and clears responding state when post-begin setup throws', async () => {
-    const setupError = new Error('committed-segment setup failed');
+    const setupError = new Error('turn-start presentation setup failed');
     const runStream = vi.fn().mockResolvedValue(undefined);
     const deps = createLifecycleDeps({
       runStreamRef: { current: runStream } as never,
     });
-    vi.spyOn(deps.pendingResponse, 'beginCommittedSegments').mockImplementation(
-      () => {
-        throw setupError;
-      },
-    );
+    deps.setInitError = () => {
+      throw setupError;
+    };
 
     const { result } = renderUseSubmitQuery(deps);
 

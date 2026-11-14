@@ -1,0 +1,226 @@
+{
+  "group": "responses",
+  "description": "Today's output for the named counterexamples of the #854 design, phase 0. Regenerate only deliberately with FROZEN_WIRE_CORPUS_UPDATE=1; never in CI.",
+  "cases": {
+    "responses ids: call ids \"\" and \"call_\" in one unit": {
+      "openai-responses/raw": [
+        {
+          "length": 368,
+          "sha256": "4424dcbecee7b5798d3bb59dca5f47f9ad051b76d5315901a683f7f35bb5da84",
+          "member": 290,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"},{\"type\":\"function_call\",\"call_id\":\"call_\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"\\\"}\"},{\"type\":\"function_call\",\"call_id\":\"call_\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"call_\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_\",\"output\":\"result call_\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 368,
+          "sha256": "4424dcbecee7b5798d3bb59dca5f47f9ad051b76d5315901a683f7f35bb5da84",
+          "member": 290,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"},{\"type\":\"function_call\",\"call_id\":\"call_\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"\\\"}\"},{\"type\":\"function_call\",\"call_id\":\"call_\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"call_\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_\",\"output\":\"result call_\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "openai-responses-via-openai/raw": [
+        {
+          "length": 368,
+          "sha256": "f023ecca734d593f3d78c9b582557702279971489a3e44fc7409d4a8caa56629",
+          "member": 290,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"role\":\"user\",\"content\":\"q\"},{\"type\":\"function_call\",\"call_id\":\"call_\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"\\\"}\"},{\"type\":\"function_call\",\"call_id\":\"call_\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"call_\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_\",\"output\":\"result call_\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "openai-responses-via-openai/normalized": [
+        {
+          "length": 368,
+          "sha256": "f023ecca734d593f3d78c9b582557702279971489a3e44fc7409d4a8caa56629",
+          "member": 290,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"role\":\"user\",\"content\":\"q\"},{\"type\":\"function_call\",\"call_id\":\"call_\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"\\\"}\"},{\"type\":\"function_call\",\"call_id\":\"call_\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"call_\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_\",\"output\":\"result call_\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ]
+    },
+    "responses parent: a wildcard endpoint is selected": {
+      "openai-responses/raw": [
+        {
+          "length": 175,
+          "sha256": "d754650ef2b3eb28268bba6304f99d611dc19a85cc49a7c3c76d75add4a87f50",
+          "member": 45,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_wildcard\"}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 175,
+          "sha256": "d754650ef2b3eb28268bba6304f99d611dc19a85cc49a7c3c76d75add4a87f50",
+          "member": 45,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_wildcard\"}"
+        }
+      ],
+      "openai-responses-via-openai/raw": [
+        {
+          "length": 175,
+          "sha256": "ff3c18452d27d87b864d4fafec22f6fb4365453cb507e36caab6f4bc2deb131f",
+          "member": 45,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_wildcard\"}"
+        }
+      ],
+      "openai-responses-via-openai/normalized": [
+        {
+          "length": 175,
+          "sha256": "ff3c18452d27d87b864d4fafec22f6fb4365453cb507e36caab6f4bc2deb131f",
+          "member": 45,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_wildcard\"}"
+        }
+      ]
+    },
+    "responses parent: a trailing-slash endpoint is selected": {
+      "openai-responses/raw": [
+        {
+          "length": 172,
+          "sha256": "e2f875f92d5a810970205a72542c1f2e516959f98721b03e43a311aaf15a7148",
+          "member": 45,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_slash\"}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 172,
+          "sha256": "e2f875f92d5a810970205a72542c1f2e516959f98721b03e43a311aaf15a7148",
+          "member": 45,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_slash\"}"
+        }
+      ],
+      "openai-responses-via-openai/raw": [
+        {
+          "length": 172,
+          "sha256": "0daa3bc6b0412022618bcd316217cad8b1ec59f60d201f5da31590d1220d2fcc",
+          "member": 45,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_slash\"}"
+        }
+      ],
+      "openai-responses-via-openai/normalized": [
+        {
+          "length": 172,
+          "sha256": "0daa3bc6b0412022618bcd316217cad8b1ec59f60d201f5da31590d1220d2fcc",
+          "member": 45,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_slash\"}"
+        }
+      ]
+    },
+    "responses parent: an adjacent result is sent after the parent unit": {
+      "openai-responses/raw": [
+        {
+          "length": 249,
+          "sha256": "e36e4b8245f8654c1b992316658b0dd37cad3868da44f83e5638376e51f50d60",
+          "member": 123,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"type\":\"function_call_output\",\"call_id\":\"call_x\",\"output\":\"ADJACENT-RESULT\"},{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_call\"}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 249,
+          "sha256": "e36e4b8245f8654c1b992316658b0dd37cad3868da44f83e5638376e51f50d60",
+          "member": 123,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"type\":\"function_call_output\",\"call_id\":\"call_x\",\"output\":\"ADJACENT-RESULT\"},{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_call\"}"
+        }
+      ],
+      "openai-responses-via-openai/raw": [
+        {
+          "length": 249,
+          "sha256": "cbcf979135f7b7cc6de0653ad0c2798c753a425712b392fd4aa6ec60051c134d",
+          "member": 123,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"type\":\"function_call_output\",\"call_id\":\"call_x\",\"output\":\"ADJACENT-RESULT\"},{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_call\"}"
+        }
+      ],
+      "openai-responses-via-openai/normalized": [
+        {
+          "length": 249,
+          "sha256": "cbcf979135f7b7cc6de0653ad0c2798c753a425712b392fd4aa6ec60051c134d",
+          "member": 123,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"type\":\"function_call_output\",\"call_id\":\"call_x\",\"output\":\"ADJACENT-RESULT\"},{\"role\":\"user\",\"content\":\"second question\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_call\"}"
+        }
+      ]
+    },
+    "responses parent: no following content sends the full history": {
+      "openai-responses/raw": [
+        {
+          "length": 182,
+          "sha256": "6bdb81f39b42ca3a38aa842f593767638009896d553a68d046e1d7bc9641a766",
+          "member": 91,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 182,
+          "sha256": "6bdb81f39b42ca3a38aa842f593767638009896d553a68d046e1d7bc9641a766",
+          "member": 91,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true}"
+        }
+      ],
+      "openai-responses-via-openai/raw": [
+        {
+          "length": 182,
+          "sha256": "58db1c92943bcf56505ad2bcc5583bc9ff29234347c120850757ce2c203dcc3d",
+          "member": 91,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true}"
+        }
+      ],
+      "openai-responses-via-openai/normalized": [
+        {
+          "length": 182,
+          "sha256": "58db1c92943bcf56505ad2bcc5583bc9ff29234347c120850757ce2c203dcc3d",
+          "member": 91,
+          "body": "{\"model\":\"gpt-5.6\",\"input\":[{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true}"
+        }
+      ]
+    },
+    "responses parent: a rejected parent is not reused by a second source": {
+      "first source": [
+        {
+          "length": 158,
+          "sha256": "7f1ed44fc8b4851b47972d9270b6244b7aaadcb50e80edcd969d94353951fa5c",
+          "member": 32,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q2\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_dead\"}"
+        },
+        {
+          "length": 223,
+          "sha256": "47d814738444f7c5cc2e0925f0fd32cea72a34cf5a348110f5e7b5dfa0ba355a",
+          "member": 99,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q1\"},{\"role\":\"assistant\",\"content\":\"a1\"},{\"role\":\"user\",\"content\":\"q2\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_ok\"}"
+        }
+      ],
+      "second source, same provider": [
+        {
+          "length": 290,
+          "sha256": "fbcdf2c01dbc9336c72e9867ec0d873eb8aa871c0b9f6632b6cc2e0facb96101",
+          "member": 166,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q1\"},{\"role\":\"assistant\",\"content\":\"a1\"},{\"role\":\"user\",\"content\":\"q2\"},{\"role\":\"assistant\",\"content\":\"a2\"},{\"role\":\"user\",\"content\":\"q3\"}],\"stream\":true,\"instructions\":\"test system prompt\",\"store\":true,\"previous_response_id\":\"resp_ok\"}"
+        }
+      ]
+    },
+    "responses pdf: two documents just below the 50,000,000 byte limit are sent": {
+      "openai-responses": [
+        {
+          "length": 66667009,
+          "sha256": "a6d9e23e4e44432e99fe3f2a74873aa6f67fda318bda3c1fc6fb6e572b955894",
+          "member": 66666931
+        }
+      ]
+    },
+    "responses pdf: two documents just above the 50,000,000 byte limit throw": {
+      "openai-responses": [
+        {
+          "threw": "Native PDF input payload (50000003 bytes) exceeds the allowed 50000000 bytes (50 MB). Reduce the number or size of PDF files."
+        }
+      ]
+    },
+    "responses pdf: the same oversized documents are sent as notices when PDF input is disabled": {
+      "openai-responses": [
+        {
+          "length": 567,
+          "sha256": "3366f9364936aa14cd29ad982fdc9b5391477e6cd93b415c9092d5a0d4ab84b6",
+          "member": 489,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"The PDF \\\"x.pdf\\\" was not read because native PDF input is disabled for this provider. Extract its text or render pages to images, then provide that content instead.\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"The PDF \\\"x.pdf\\\" was not read because native PDF input is disabled for this provider. Extract its text or render pages to images, then provide that content instead.\"}]},{\"role\":\"user\",\"content\":\"summarize\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ]
+    }
+  }
+}

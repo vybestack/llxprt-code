@@ -1,3 +1,4 @@
+import { readHistory } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,14 +23,12 @@ import { textTurn, useReliefConversation } from './media-relief-fixtures.js';
 const PARTIAL = 'PARTIAL SUMMARY FROM FAILED COMPRESSION';
 const INDEPENDENT = 'ENTRY COMMITTED BY ANOTHER WRITER DURING COMPRESSION';
 
-function texts(history: HistoryService): string[] {
-  return history
-    .getAll()
-    .flatMap((content) =>
-      content.blocks.flatMap((block) =>
-        block.type === 'text' ? [block.text] : [],
-      ),
-    );
+async function texts(history: HistoryService): Promise<string[]> {
+  return (await readHistory(history)).flatMap((content) =>
+    content.blocks.flatMap((block) =>
+      block.type === 'text' ? [block.text] : [],
+    ),
+  );
 }
 
 /** What CompressionHandler.performCompression does around a strategy. */
@@ -52,7 +51,7 @@ describe('a failed compression keeps entries other writers committed meanwhile (
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = texts(session.history);
+    const before = await texts(session.history);
     let runs = 0;
     session.useCompression((history) => {
       runs += 1;
@@ -67,7 +66,7 @@ describe('a failed compression keeps entries other writers committed meanwhile (
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      history: texts(session.history),
+      history: await texts(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       history: [...before, INDEPENDENT],
@@ -78,7 +77,7 @@ describe('a failed compression keeps entries other writers committed meanwhile (
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = texts(session.history);
+    const before = await texts(session.history);
     let runs = 0;
     session.useCompression(async (history) => {
       runs += 1;
@@ -91,7 +90,7 @@ describe('a failed compression keeps entries other writers committed meanwhile (
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      history: texts(session.history),
+      history: await texts(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       history: [...before, INDEPENDENT],

@@ -5,7 +5,8 @@
  */
 
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
-import type { GenerateChatOptions, IProvider } from './IProvider.js';
+import type { IProvider, ProviderRuntimeOptions } from './IProvider.js';
+
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { ProviderRuntimeNormalizationError } from './errors.js';
 import { getBaseUrlFromProvider } from './baseUrlResolver.js';
@@ -18,19 +19,19 @@ export interface RuntimeNormalizerDeps {
     providerName: string,
     profileId?: string,
   ) => ProviderRetryOperations;
-  admitRequest: (
-    options: GenerateChatOptions,
+  admitRequest: <Options extends ProviderRuntimeOptions>(
+    options: Options,
     providerName: string,
-  ) => GenerateChatOptions;
+  ) => Options;
   getActiveProviderName: () => string | undefined;
   getProvider: (name: string) => IProvider | undefined;
 }
 
-export function normalizeRuntimeInputs(
-  rawOptions: GenerateChatOptions,
+export function normalizeRuntimeInputs<Contents>(
+  rawOptions: ProviderRuntimeOptions & { contents: Contents },
   deps: RuntimeNormalizerDeps,
   providerName?: string,
-): GenerateChatOptions {
+): ProviderRuntimeOptions & { contents: Contents } {
   const targetProvider = providerName ?? deps.getActiveProviderName();
   const runtimeId = rawOptions.invocation?.runtimeId ?? 'unknown';
   if (targetProvider === undefined) {
@@ -106,7 +107,7 @@ function shouldApplyGlobal(
 }
 
 function resolveModel(
-  options: GenerateChatOptions,
+  options: ProviderRuntimeOptions,
   provider: Record<string, unknown>,
   global: Readonly<Record<string, unknown>>,
   applyGlobal: boolean,
@@ -123,7 +124,7 @@ function resolveModel(
 }
 
 function resolveEndpoint(
-  options: GenerateChatOptions,
+  options: ProviderRuntimeOptions,
   provider: Record<string, unknown>,
   global: Readonly<Record<string, unknown>>,
   applyGlobal: boolean,
@@ -170,8 +171,8 @@ function assertProviderChain(
 }
 
 function captureRequestMetadata(
-  admitted: GenerateChatOptions,
-  invocation: NonNullable<GenerateChatOptions['invocation']>,
+  admitted: ProviderRuntimeOptions,
+  invocation: NonNullable<ProviderRuntimeOptions['invocation']>,
   runtimeId: string,
   targetProvider: string,
 ): { metadata: Record<string, unknown>; signal: AbortSignal | undefined } {
@@ -189,7 +190,7 @@ function captureRequestMetadata(
 
 function captureRecovery(
   deps: RuntimeNormalizerDeps,
-  admitted: GenerateChatOptions,
+  admitted: ProviderRuntimeOptions,
   providerName: string,
   metadata: Record<string, unknown>,
 ): ProviderRetryOperations | undefined {

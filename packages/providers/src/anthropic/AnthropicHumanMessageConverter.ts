@@ -9,6 +9,7 @@ import {
   type ContentBlock,
   type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { measuredAnthropicMedia } from './anthropic-measured-media.js';
 import {
   buildUnsupportedMediaPlaceholder,
   classifyMediaBlock,
@@ -36,14 +37,14 @@ export function mediaBlockToAnthropicImage(
       ? inlineMedia.data.split(';base64,')[1]
       : inlineMedia.data;
   const detected = detectImageMimeTypeFromBase64(rawData);
-  return {
+  return measuredAnthropicMedia(media, {
     type: 'image',
     source: {
       type: 'base64',
       media_type: detected ?? (inlineMedia.mimeType || 'image/png'),
       data: rawData,
     },
-  };
+  });
 }
 
 export function mediaBlockToAnthropicDocument(
@@ -62,7 +63,7 @@ export function mediaBlockToAnthropicDocument(
     inlineMedia.data.includes(';base64,')
       ? inlineMedia.data.split(';base64,')[1]
       : inlineMedia.data;
-  return {
+  return measuredAnthropicMedia(media, {
     type: 'document',
     source: {
       type: 'base64',
@@ -70,7 +71,7 @@ export function mediaBlockToAnthropicDocument(
       data: rawData,
     },
     ...(media.filename ? { title: media.filename } : {}),
-  };
+  });
 }
 
 type HumanMediaPart =
@@ -112,10 +113,12 @@ export function convertHumanMessageWithMedia(
       } else if (category === 'pdf') {
         parts.push(mediaBlockToAnthropicDocument(block));
       } else {
-        parts.push({
-          type: 'text',
-          text: buildUnsupportedMediaPlaceholder(block, 'Anthropic'),
-        });
+        parts.push(
+          measuredAnthropicMedia(block, {
+            type: 'text',
+            text: buildUnsupportedMediaPlaceholder(block, 'Anthropic'),
+          }),
+        );
       }
     }
     providerPartBySourceBlock.push(

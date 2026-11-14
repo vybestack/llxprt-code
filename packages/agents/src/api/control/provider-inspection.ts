@@ -6,9 +6,9 @@
 import type {
   RuntimeProvider,
   RuntimeProviderManager,
-  IContent,
 } from '@vybestack/llxprt-code-core';
 import type {
+  IProvider,
   ExtendedLoadBalancerStats,
   TokenAccountingDiagnostics,
 } from '@vybestack/llxprt-code-providers';
@@ -50,11 +50,8 @@ type ActiveProviderDumpView = {
    * @vybestack/llxprt-plugin-google-gemini) exposes it; the base
    * buildProviderDumpBody dispatcher does not know Gemini wire shapes (#2763).
    */
-  buildContextDumpBody?: (
-    history: IContent[],
-    model?: string,
-    config?: unknown,
-  ) => Record<string, unknown>;
+  contextDumpVersion?: number;
+  buildContextDumpBody?: IProvider['buildContextDumpBody'];
 };
 
 export function getProviderDumpMetadata(
@@ -63,6 +60,7 @@ export function getProviderDumpMetadata(
   },
 ): {
   providerName: string;
+  contextDumpVersion: number | undefined;
   buildContextDumpBody: ActiveProviderDumpView['buildContextDumpBody'];
   activeModel: string | undefined;
   activeBaseURL: string | undefined;
@@ -71,6 +69,7 @@ export function getProviderDumpMetadata(
     providerManager?.getActiveProvider();
   return {
     providerName: providerManager?.getActiveProviderName() ?? 'backend',
+    contextDumpVersion: activeProvider?.contextDumpVersion,
     buildContextDumpBody:
       activeProvider?.buildContextDumpBody?.bind(activeProvider),
     activeModel: activeProvider?.getCurrentModel?.(),

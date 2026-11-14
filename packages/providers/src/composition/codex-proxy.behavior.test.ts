@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import {
   afterEach,
   beforeEach,
@@ -18,7 +19,7 @@ import {
   restoreProviderEnvCredentials,
   clearProviderEnvCredentials,
 } from './providerEnvCredentials.test-helpers.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -79,20 +80,20 @@ async function generate(
   return contents;
 }
 
-describe('provider-selected Codex semantics', () => {
-  let savedProviderEnvCredentials: ReturnType<
-    typeof saveProviderEnvCredentials
-  >;
+let savedProviderEnvCredentials: ReturnType<typeof saveProviderEnvCredentials>;
+function setupProviderSelectedCodexSemanticsBeforeEach(): void {
+  savedProviderEnvCredentials = saveProviderEnvCredentials();
+  clearProviderEnvCredentials();
+}
 
-  beforeEach(() => {
-    savedProviderEnvCredentials = saveProviderEnvCredentials();
-    clearProviderEnvCredentials();
-  });
+function setupProviderSelectedCodexSemanticsAfterEach(): void {
+  restoreProviderEnvCredentials(savedProviderEnvCredentials);
+  mock.restore();
+}
 
-  afterEach(() => {
-    restoreProviderEnvCredentials(savedProviderEnvCredentials);
-    mock.restore();
-  });
+describe('provider-selected Codex semantics / WebSocket request semantics', () => {
+  beforeEach(setupProviderSelectedCodexSemanticsBeforeEach);
+  afterEach(setupProviderSelectedCodexSemanticsAfterEach);
 
   for (const [baseURL, effectiveURL] of [
     [
@@ -125,8 +126,8 @@ describe('provider-selected Codex semantics', () => {
         },
         close(): void {},
       });
-      spyOn(globalThis, 'fetch').mockImplementation(async () =>
-        sseResponse('generic', 'ok'),
+      spyOn(globalThis, 'fetch').mockImplementation(
+        withFetchPreconnect(async () => sseResponse('generic', 'ok')),
       );
       const provider = createOpenAIResponsesAliasProvider(
         {
@@ -162,6 +163,11 @@ describe('provider-selected Codex semantics', () => {
       provider.clearState();
     });
   }
+});
+
+describe('provider-selected Codex semantics / HTTP fallback and generic Responses', () => {
+  beforeEach(setupProviderSelectedCodexSemanticsBeforeEach);
+  afterEach(setupProviderSelectedCodexSemanticsAfterEach);
 
   it('retains Codex settings and account headers when a proxy rejects WebSocket and HTTP is used', async () => {
     const requests: Array<Record<string, unknown>> = [];
@@ -176,12 +182,14 @@ describe('provider-selected Codex semantics', () => {
       },
       close(): void {},
     });
-    spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
-      urls.push(String(url));
-      requests.push(await new Response(init?.body).json());
-      headers.push(new Headers(init?.headers));
-      return sseResponse('proxy-http', 'ok');
-    });
+    spyOn(globalThis, 'fetch').mockImplementation(
+      withFetchPreconnect(async (url, init) => {
+        urls.push(String(url));
+        requests.push(await new Response(init?.body).json());
+        headers.push(new Headers(init?.headers));
+        return sseResponse('proxy-http', 'ok');
+      }),
+    );
     const baseURL = 'http://127.0.0.1:18443/backend-api/codex';
     const provider = createOpenAIResponsesAliasProvider(
       {
@@ -209,11 +217,13 @@ describe('provider-selected Codex semantics', () => {
   it('keeps generic Responses HTTP and model parameters even at a Codex-shaped URL', async () => {
     const requests: Array<Record<string, unknown>> = [];
     const headers: Headers[] = [];
-    spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
-      requests.push(await new Response(init?.body).json());
-      headers.push(new Headers(init?.headers));
-      return sseResponse('generic', 'ok');
-    });
+    spyOn(globalThis, 'fetch').mockImplementation(
+      withFetchPreconnect(async (_url, init) => {
+        requests.push(await new Response(init?.body).json());
+        headers.push(new Headers(init?.headers));
+        return sseResponse('generic', 'ok');
+      }),
+    );
     const baseURL = 'https://chatgpt.com/backend-api/codex';
     const provider = new OpenAIResponsesProvider('api-key', baseURL);
     await generate(provider, baseURL);

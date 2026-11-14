@@ -66,12 +66,6 @@ export interface CommandContext {
      * @param item The history item to display as pending, or `null` to clear.
      */
     setPendingItem: (item: HistoryItemWithoutId | null) => void;
-    /**
-     * Loads a new set of history items, replacing the current history.
-     *
-     * @param history The array of history items to load.
-     */
-    loadHistory: UseHistoryManagerReturn['loadHistory'];
     /** Toggles a special display mode. */
     toggleCorgiMode: () => void;
     toggleDebugProfiler: () => void;
@@ -268,7 +262,7 @@ export type PerformResumeActionReturn =
  * Includes both core shared types and CLI-specific types.
  */
 export type SlashCommandActionReturn =
-  | CommandActionReturn<HistoryItemWithoutId>
+  | Exclude<CommandActionReturn<HistoryItemWithoutId>, { type: 'load_history' }>
   | QuitActionReturn
   | OpenDialogActionReturn
   | ConfirmShellCommandsActionReturn

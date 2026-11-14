@@ -16,7 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
-import { prepareRequest } from '@vybestack/llxprt-code-providers/openai/OpenAIRequestPreparation.js';
+import { prepareRequestBody as prepareRequest } from '../../../../providers/src/openai/__tests__/support/prepareRequestBody.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>

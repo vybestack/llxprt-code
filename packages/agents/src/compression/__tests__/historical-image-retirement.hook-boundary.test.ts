@@ -1,3 +1,4 @@
+import { readCurated } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -12,9 +13,13 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
-import { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import { HookOutputOwner } from '@vybestack/llxprt-code-core/hooks/hookOutputSnapshot.js';
+import { HookModelSnapshotOutput } from '@vybestack/llxprt-code-core/hooks/hookSnapshotAggregator.js';
+import { callerOwnedProviderRequest } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
+import { tmpdir } from 'node:os';
+import { collectRequestRows } from './retirement-source-fixture.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { fireBeforeModelHook } from '../../core/beforeModelHookFire.js';
+import { fireBeforeModelSnapshotHook } from '../../core/beforeModelHookFire.js';
 import {
   collectImageData,
   countRetirementNotes,
@@ -28,10 +33,25 @@ function splittingHook(replacement: IContent[]): HookExecutionOwner {
   return {
     sessionId: () => 'issue4000-hook-boundary',
     transcriptPath: () => undefined,
-    beforeModel: async () =>
-      new BeforeModelHookOutput({
-        hookSpecificOutput: { llm_request: { contents: replacement } },
-      }),
+    beforeModelSnapshot: async () => {
+      const output = new HookOutputOwner(tmpdir());
+      output.stdout.append(
+        Buffer.from(
+          JSON.stringify({
+            hookSpecificOutput: { llm_request: { contents: replacement } },
+          }),
+        ),
+      );
+      const document = output.output(0);
+      if (document === undefined) throw new Error('Missing hook output');
+      return {
+        success: true,
+        errors: [],
+        totalDuration: 0,
+        finalOutput: new HookModelSnapshotOutput([document]),
+        close: () => output.dispose(),
+      };
+    },
   };
 }
 
@@ -52,8 +72,10 @@ describe('a BeforeModel hook that splits the user turn (issue #4000 CodeRabbit T
         second.reference,
       ],
     };
-    const history = session.history.getCurated();
-    const requestContents = [...history, original];
+    const history = await readCurated(session.history);
+    const requestContents =
+      await session.history.prepareCuratedForProviderSnapshot([original]);
+    const rawPending = await callerOwnedProviderRequest([original]);
     const redactedHistory = history.map((content) =>
       content.speaker === 'ai'
         ? { ...content, blocks: [{ type: 'text' as const, text: 'redacted' }] }
@@ -74,24 +96,33 @@ describe('a BeforeModel hook that splits the user turn (issue #4000 CodeRabbit T
       { speaker: 'human', blocks: [{ type: 'text', text: 'hook note' }] },
     ];
 
-    const fired = await fireBeforeModelHook({
+    const fired = await fireBeforeModelSnapshotHook({
       owner: splittingHook(replacement),
       requestContents,
-      pendingUserIContents: [original],
+      rawPending,
       tools: undefined,
-      hookRestrictedAllowedTools: undefined,
       model: 'claude-sonnet-4-20250514',
       log: () => undefined,
     });
-    await session.send([original], true, {
-      pending: fired.pendingContents,
-      protectedContents: fired.protectedContents,
-      contents: fired.contents,
-    });
+    if (fired === undefined) throw new Error('Hook did not fire');
+    try {
+      await session.send([original], true, {
+        pending:
+          fired.pendingSelection === undefined
+            ? undefined
+            : await collectRequestRows(fired.pendingSelection),
+        protectedContents: [original],
+        contents: await collectRequestRows(fired.contents),
+      });
+    } finally {
+      await fired.close();
+      await requestContents.close();
+      await rawPending.close();
+    }
 
     const body = session.lastBody();
     expect({
-      boundaryKnown: fired.pendingContents !== undefined,
+      boundaryKnown: fired.pendingSelection !== undefined,
       sentImages: collectImageData(body, []),
       notes: countRetirementNotes(body),
     }).toStrictEqual({

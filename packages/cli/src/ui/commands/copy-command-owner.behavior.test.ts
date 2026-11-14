@@ -19,7 +19,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 async function latestOutput(agent: Agent) {
   return bindCopyCommandHistoryRead(
     () => agent.session.isHistoryInitialized(),
-    () => agent.getHistory(),
+    () => agent.streamHistory(),
   )();
 }
 
@@ -52,7 +52,7 @@ describe('registered copy command owner', () => {
       const command = createCopyCommand(
         bindCopyCommandHistoryRead(
           () => owner.session.isHistoryInitialized(),
-          () => owner.getHistory(),
+          () => owner.streamHistory(),
         ),
         (text) => writeFile(copiedOutput, text, 'utf8'),
       );

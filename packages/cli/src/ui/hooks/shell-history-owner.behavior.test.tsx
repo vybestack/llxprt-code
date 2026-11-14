@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -84,11 +85,15 @@ describe('shell history owner', () => {
     const owner = await makeOwner('shell-owner');
     const sibling = await makeOwner('shell-sibling');
     await runShell(owner, sibling, 'node -p "6 * 7"');
-    const ownerHistory = JSON.stringify(await owner.getHistory());
+    const ownerHistory = JSON.stringify(
+      await collectResumeRows(owner.streamHistory()),
+    );
     expect(ownerHistory).toContain('42');
-    expect(await sibling.getHistory()).toHaveLength(0);
+    expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(0);
     await owner.dispose();
     await runShell(sibling, owner, 'node -p "7 * 8"');
-    expect(JSON.stringify(await sibling.getHistory())).toContain('56');
+    expect(
+      JSON.stringify(await collectResumeRows(sibling.streamHistory())),
+    ).toContain('56');
   });
 });

@@ -56,7 +56,9 @@ describe('isolated ACP session fixtures', () => {
     liveHistory?: readonly AgentMessage[];
     beforeDispose?: () => Promise<void>;
   }): StubAgentHandle {
-    const resume = vi.fn(async () => [] as readonly IContent[]);
+    const resume = vi.fn(async () =>
+      (async function* (): AsyncIterable<IContent> {})(),
+    );
     const setRecording = vi.fn(async () => undefined);
     const getHistory = vi.fn(async () => options.liveHistory ?? []);
     let disposedCount = 0;
@@ -75,6 +77,10 @@ describe('isolated ACP session fixtures', () => {
         disposedCount += 1;
       },
       getHistory,
+      async *streamHistory(signal?: AbortSignal) {
+        signal?.throwIfAborted();
+        yield* await getHistory();
+      },
       async *stream() {
         yield { type: 'done', reason: 'stop' };
       },

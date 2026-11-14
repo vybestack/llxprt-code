@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { captureStartupStdin } from './src/utils/startup-stdin.js';
 import { FatalError, writeToStderr } from '@vybestack/llxprt-code-core';
 import { runBunLauncherIfNeeded } from './src/launcher/bun-launcher.js';
 import {
@@ -154,9 +155,11 @@ runBunLauncherIfNeeded()
     if (abortReason !== undefined) {
       throw new FatalError(abortReason, HARDENING_FAILURE_EXIT_CODE);
     }
+    const startupStdin = captureStartupStdin();
+    process.once('exit', () => startupStdin?.dispose());
     const { main } = await import('./src/cli.js');
     try {
-      await main();
+      await main(startupStdin);
     } catch (error) {
       await exitAfterCriticalError(error);
     }

@@ -14,6 +14,7 @@ import {
   resolveRetryRequestContext,
 } from '../retryRequestContext.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 const defaults = {
   maxAttempts: 2,
@@ -21,7 +22,9 @@ const defaults = {
   authRetryTimeoutMs: 500,
 };
 
-function createContext(options: GenerateChatOptions = { contents: [] }) {
+function createContext(
+  options: GenerateChatOptions = { contents: replayableContents([]) },
+) {
   return resolveRetryRequestContext(options, defaults);
 }
 
@@ -221,7 +224,7 @@ describe('retry request commit state', () => {
   it('tracks an optional request deadline from the retry-deadline-ms ephemeral', () => {
     const ephemerals: Record<string, unknown> = { 'retry-deadline-ms': 60_000 };
     const context = createContext({
-      contents: [],
+      contents: replayableContents([]),
       invocation: { ephemerals } as GenerateChatOptions['invocation'],
     });
 

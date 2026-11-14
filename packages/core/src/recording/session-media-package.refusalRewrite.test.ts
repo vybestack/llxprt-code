@@ -15,8 +15,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IContent } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
-import { replaySession } from './ReplayEngine.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { ScratchRootOwner } from '../storage/scratch-root.js';
+import {
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
@@ -50,18 +56,25 @@ describe('session media package with a refusal_rewrite record', () => {
       blocks: [{ type: 'text', text }, reference],
       metadata: { isSummary: true },
     });
-    const recording = new SessionRecordingService({
-      sessionId: 'rewrite-package-session',
-      projectHash: PROJECT_HASH,
-      chatsDir: join(tempDirectory, 'source', 'chats'),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      mediaStore: sourceStore,
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'rewrite-package-session',
+        projectHash: PROJECT_HASH,
+        chatsDir: join(tempDirectory, 'source', 'chats'),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+        mediaStore: sourceStore,
+      }),
+    );
+    const history = new HistoryService({
+      scratchRoots: new ScratchRootOwner(),
+      recording,
     });
-    recording.recordContent(withMedia('original wording'));
+    await history.registerRuntimeMediaOwner(sourceStore);
+    await history.addBatch([withMedia('original wording')]);
     await recording.flush();
-    const prepared = recording.prepareRefusalRewrite({
+    const payload = {
       operationId: 'op-package',
       time: '2026-11-12T10:00:00.000Z',
       promptId: 'prompt-1',
@@ -77,10 +90,28 @@ describe('session media package with a refusal_rewrite record', () => {
           newText: 'rewritten wording',
         },
       ],
-      resultingHistory: [withMedia('rewritten wording')],
-    });
-    prepared.publish();
-    await prepared.finalize();
+    };
+    await history.detachedValues.transform(
+      async (source, sink) => {
+        let index = 0;
+        for await (const row of source.streamRows())
+          await sink.appendDerived(index++, {
+            ...row,
+            blocks: row.blocks.map((block) =>
+              block.type === 'text'
+                ? { ...block, text: 'rewritten wording' }
+                : block,
+            ),
+          });
+      },
+      undefined,
+      {
+        audit: {
+          key: 'refusal_rewrite:op-package',
+          value: new TextEncoder().encode(JSON.stringify(payload)),
+        },
+      },
+    );
     await recording.flush();
     const sourcePath = recording.getFilePath();
     assertNotNull(sourcePath, 'Expected recording path');
@@ -92,6 +123,7 @@ describe('session media package with a refusal_rewrite record', () => {
       sourceStore,
       packageDirectory,
     );
+    await history.dispose();
     await recording.dispose();
     const destinationRoot = join(tempDirectory, 'moved');
     const destinationStore = new LocalMediaStore({
@@ -103,18 +135,29 @@ describe('session media package with a refusal_rewrite record', () => {
       join(destinationRoot, 'chats'),
       PROJECT_HASH,
       destinationStore,
+      undefined,
+      testJournalOptions(),
     );
-    const replay = await replaySession(imported.recordingPath, PROJECT_HASH, {
-      mediaStore: destinationStore,
-    });
-
-    assertNotNull(replay.ok ? replay : null, 'Expected a successful replay');
+    const replay = await JournalSession.open(
+      imported.recordingPath,
+      testJournalOptions(),
+    );
+    const texts: string[] = [];
+    try {
+      for await (const { content } of replay.rows())
+        texts.push(
+          ...content.blocks.flatMap((block) =>
+            block.type === 'text' ? [block.text] : [],
+          ),
+        );
+      expect(
+        await replay.store.getMeta('refusal_rewrite:op-package'),
+      ).toBeDefined();
+    } finally {
+      await replay.close();
+    }
     expect({
-      texts: replay.ok
-        ? replay.history.flatMap((c) =>
-            c.blocks.flatMap((b) => (b.type === 'text' ? [b.text] : [])),
-          )
-        : [],
+      texts,
       blob: await destinationStore.readVerified(reference),
     }).toStrictEqual({
       texts: ['rewritten wording'],

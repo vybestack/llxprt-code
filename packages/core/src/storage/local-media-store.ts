@@ -5,6 +5,7 @@
  */
 
 import { isMediaReferenceBlock } from '../services/history/IContent.js';
+import { AdmissionSourceReservations } from './admitted-media-source.js';
 import type {
   MediaReferenceBlock,
   MediaSemanticMetadata,
@@ -28,14 +29,12 @@ import {
 import {
   buildIdentityReference,
   buildReference,
-  buildStoredObject,
   contentIdFor,
-  isPositiveSafeInteger,
+  knownAdmissionIdentity,
   prepareAdmission,
   uniqueStoredObjects,
   validateContentId,
-  validatedProviderFileIds,
-  validatedSemanticMetadata,
+  validateKnownObjectByteLength,
   validateStoredObjectMetadata,
 } from './local-media-store-validation.js';
 
@@ -80,6 +79,7 @@ function storedObjectMetadataMatches(
 }
 
 export class LocalMediaStore {
+  readonly admissionSources = new AdmissionSourceReservations();
   readonly rootDirectory: string;
   readonly quotaBytes: number;
   readonly recordingArchive: LocalMediaStore | undefined;
@@ -251,7 +251,7 @@ export class LocalMediaStore {
     knownByteLength: number,
   ): Promise<void> {
     validateContentId(contentId, 'preflight known object');
-    this.validateKnownByteLength(knownByteLength, contentId);
+    validateKnownObjectByteLength(knownByteLength, contentId);
     await this.persistence.runExclusive(
       'preflight known object',
       contentId,
@@ -270,26 +270,24 @@ export class LocalMediaStore {
     return this.trackOperation(() => this.admitKnownSource(input, readBytes));
   }
 
+  /**
+   * The reference admitKnown returns for content the caller has already
+   * admitted and reserved. It validates the input and touches no files.
+   */
+  identityReferenceForKnown(
+    input: MediaKnownAdmissionInput,
+  ): MediaReferenceBlock {
+    const { metadata, semanticMetadata, providerFileIds } =
+      knownAdmissionIdentity(input);
+    return buildIdentityReference(metadata, semanticMetadata, providerFileIds);
+  }
+
   private async admitKnownSource(
     input: MediaKnownAdmissionInput,
     readBytes: () => Promise<Uint8Array>,
   ): Promise<MediaReferenceBlock> {
-    validateContentId(input.contentId, 'admit known object');
-    this.validateKnownByteLength(input.knownByteLength, input.contentId);
-    const metadata = buildStoredObject(
-      input.contentId,
-      input.mimeType,
-      input.knownByteLength,
-      input.dimensions,
-    );
-    const semanticMetadata = validatedSemanticMetadata(
-      input.semanticMetadata,
-      input.contentId,
-    );
-    const providerFileIds = validatedProviderFileIds(
-      input.providerFileIds,
-      input.contentId,
-    );
+    const { metadata, semanticMetadata, providerFileIds } =
+      knownAdmissionIdentity(input);
     const existing = await this.persistence.runExclusive(
       'preflight known object admission',
       input.contentId,
@@ -373,8 +371,34 @@ export class LocalMediaStore {
     return this.persistence.reserveAndReadVerified(reference, ownerId);
   }
 
+  /**
+   * Reads bytes for a reference this caller already reserved, without taking
+   * the store lock. Calling it without a live reservation is a caller bug.
+   */
+  async readReserved(reference: MediaReferenceBlock): Promise<Uint8Array> {
+    if (!isMediaReferenceBlock(reference)) {
+      throw new MediaObjectCorruptError(
+        'read reserved',
+        undefined,
+        new Error('Malformed media reference'),
+      );
+    }
+    return this.persistence.readReservedObjectVerified(reference);
+  }
+
   async release(contentId: string, ownerId: string): Promise<void> {
+    await this.admissionSources.close(contentId, ownerId);
     await this.persistence.release(contentId, ownerId);
+  }
+
+  /** Releases one owner's reservations for all given content ids in one lock cycle. */
+  async releaseAll(
+    contentIds: readonly string[],
+    ownerId: string,
+  ): Promise<void> {
+    for (const contentId of contentIds)
+      await this.admissionSources.close(contentId, ownerId);
+    await this.persistence.releaseAll(contentIds, ownerId);
   }
 
   async hasReservations(contentId: string): Promise<boolean> {
@@ -624,19 +648,6 @@ export class LocalMediaStore {
       );
     }
     throw error;
-  }
-
-  private validateKnownByteLength(
-    knownByteLength: number,
-    contentId: string,
-  ): void {
-    if (!isPositiveSafeInteger(knownByteLength)) {
-      throw new MediaStoreError(
-        'validate known byte length',
-        contentId,
-        new Error('Known byte length must be a positive safe integer'),
-      );
-    }
   }
 
   private async admitKnownSnapshotUnlocked(

@@ -1,3 +1,6 @@
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { ScratchRootOwner } from '../../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,7 +14,7 @@
  *
  * Real LocalMediaStore, HistoryService, ProviderContentEnforcer, production
  * send seam, AnthropicProvider projection, RecordingIntegration and
- * SessionRecordingService writing JSONL, replayed by the real ReplayEngine.
+ * JournalRecordingService writing JSONL, replayed by the real ReplayEngine.
  * Only HTTP is stubbed. The compression callback stands in for
  * CompressionHandler.performCompression: it applies the rewrite and ends the
  * compression exactly as that method does, then fails in a later step.
@@ -21,11 +24,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  RecordingIntegration,
-  SessionRecordingService,
-  replaySession,
-} from '@vybestack/llxprt-code-core';
+import { RecordingIntegration } from '@vybestack/llxprt-code-core';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { resumeSession } from '@vybestack/llxprt-code-core/recording/resumeSession.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -35,6 +36,8 @@ import {
   textTurn,
   useReliefConversation,
 } from './media-relief-fixtures.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 const SUMMARY = 'COMMITTED AND JOURNALED COMPRESSION SUMMARY';
 const PARTIAL = 'UNCOMMITTED PARTIAL REWRITE';
@@ -59,9 +62,11 @@ function errorName(error: unknown): string {
 }
 
 describe('a committed compression survives a later failure (issue #4000 CodeRabbit round 3 R1)', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const conversation = useReliefConversation('llxprt-issue4000-cr3-r1-');
   let journalDirectory = '';
-  let recording: SessionRecordingService | undefined;
+  let recording: JournalRecordingService | undefined;
   let integration: RecordingIntegration | undefined;
 
   beforeEach(async () => {
@@ -76,17 +81,21 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
   });
 
   /** Subscribes a real journal to the session's history before it is seeded. */
-  function journalHistory(history: HistoryService): SessionRecordingService {
-    const service = new SessionRecordingService({
-      sessionId: 'issue4000-committed-0001',
-      projectHash: PROJECT_HASH,
-      chatsDir: journalDirectory,
-      workspaceDirs: ['/workspace/project'],
-      provider: 'anthropic',
-      model: 'claude-sonnet-4',
-    });
-    const subscriber = new RecordingIntegration(service);
-    subscriber.subscribeToHistory(history);
+  async function journalHistory(
+    history: HistoryService,
+  ): Promise<JournalRecordingService> {
+    const service = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'issue4000-committed-0001',
+        projectHash: PROJECT_HASH,
+        chatsDir: journalDirectory,
+        workspaceDirs: ['/workspace/project'],
+        provider: 'anthropic',
+        model: 'claude-sonnet-4',
+      }),
+    );
+    const subscriber = new RecordingIntegration(service, recordingScratchRoots);
+    await subscriber.subscribeToJournal(history);
     recording = service;
     integration = subscriber;
     return service;
@@ -94,27 +103,42 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
 
   /** What a resume would restore: the journal replayed from disk. */
   async function resumedTexts(
-    service: SessionRecordingService,
+    service: JournalRecordingService,
     mediaStore: LocalMediaStore,
   ): Promise<{ texts: string[]; ok: boolean }> {
     await integration?.flushAtTurnBoundary();
-    const filePath = service.getFilePath();
-    if (filePath === null) throw new Error('Missing recording path');
-    const replay = await replaySession(filePath, PROJECT_HASH, { mediaStore });
-    if (!replay.ok) return { texts: [], ok: false };
-    return {
-      ok: true,
-      texts: replay.history.flatMap((content) =>
-        content.blocks.flatMap((block) =>
-          block.type === 'text' ? [block.text] : [],
-        ),
-      ),
-    };
+    await integration?.dispose();
+    await service.dispose();
+    const replay = await resumeSession(
+      withTestNamedWriters({
+        continueRef: 'issue4000-committed-0001',
+        projectHash: PROJECT_HASH,
+        chatsDir: journalDirectory,
+        currentProvider: 'anthropic',
+        currentModel: 'claude-sonnet-4',
+        workspaceDirs: ['/workspace/project'],
+        mediaStore,
+      }),
+    );
+    if (!replay.ok) throw new Error(replay.error);
+    const texts: string[] = [];
+    try {
+      for await (const row of replay.boot.streamRows())
+        texts.push(
+          ...row.blocks.flatMap((block) =>
+            block.type === 'text' ? [block.text] : [],
+          ),
+        );
+      return { ok: true, texts };
+    } finally {
+      await replay.boot.close();
+      await replay.recording.dispose();
+    }
   }
 
   it('keeps the compressed history, the journal agrees, and the request continues from it', async () => {
     const session = conversation.session();
-    const journal = journalHistory(session.history);
+    const journal = await journalHistory(session.history);
     await conversation.seedImages(3);
     conversation.seedBigText();
     session.useCompression(async (history) => {
@@ -126,7 +150,7 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
 
     const resumed = await resumedTexts(journal, session.store);
     expect({
-      live: historyTexts(session.history),
+      live: await historyTexts(session.history),
       resumed,
       sent: session.sent.length,
       sentSummary: collectText(session.lastBody(), []).includes(SUMMARY),
@@ -140,10 +164,10 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
 
   it('still rolls back a rewrite whose compression never ended', async () => {
     const session = conversation.session();
-    const journal = journalHistory(session.history);
+    const journal = await journalHistory(session.history);
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = historyTexts(session.history);
+    const before = await historyTexts(session.history);
     session.useCompression(async (history) => {
       history.startCompression();
       await history.replaceAll([aiTurn(PARTIAL)]);
@@ -156,7 +180,7 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
     const resumed = await resumedTexts(journal, session.store);
     expect({
       contextOverflow: errorName(error),
-      live: historyTexts(session.history),
+      live: await historyTexts(session.history),
       resumedMatchesLive: resumed.texts.join('|') === before.join('|'),
       sent: session.sent.length,
     }).toStrictEqual({
@@ -169,7 +193,7 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
 
   it('propagates a cancellation that arrives after the commit without undoing it', async () => {
     const session = conversation.session();
-    const journal = journalHistory(session.history);
+    const journal = await journalHistory(session.history);
     await conversation.seedImages(3);
     conversation.seedBigText();
     session.useCompression(async (history) => {
@@ -182,7 +206,7 @@ describe('a committed compression survives a later failure (issue #4000 CodeRabb
     const resumed = await resumedTexts(journal, session.store);
     expect({
       name: errorName(error),
-      live: historyTexts(session.history),
+      live: await historyTexts(session.history),
       resumed: resumed.texts,
       sent: session.sent.length,
     }).toStrictEqual({

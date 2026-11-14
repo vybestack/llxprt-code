@@ -27,7 +27,7 @@ class FakeProviderBase implements IProvider {
     return 'fake-model';
   }
   async *generateChatCompletion(
-    _contentOrOptions: IContent[] | GenerateChatOptions,
+    _contentOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
     _tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
     yield {

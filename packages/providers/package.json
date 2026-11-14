@@ -65,6 +65,11 @@
       "bun": "./src/BaseProvider.ts",
       "import": "./dist/src/BaseProvider.js"
     },
+    "./streamProtocolErrors.js": {
+      "types": "./dist/src/streamProtocolErrors.d.ts",
+      "bun": "./src/streamProtocolErrors.ts",
+      "import": "./dist/src/streamProtocolErrors.js"
+    },
     "./IModel.js": {
       "bun": "./src/IModel.ts",
       "import": "./dist/src/IModel.js"
@@ -92,6 +97,11 @@
     "./ProviderManager.js": {
       "bun": "./src/ProviderManager.ts",
       "import": "./dist/src/ProviderManager.js"
+    },
+    "./logging/requestSizeReport.js": {
+      "types": "./dist/src/logging/requestSizeReport.d.ts",
+      "bun": "./src/logging/requestSizeReport.ts",
+      "import": "./dist/src/logging/requestSizeReport.js"
     },
     "./logging/ProviderPerformanceTracker.js": {
       "bun": "./src/logging/ProviderPerformanceTracker.ts",
@@ -133,6 +143,15 @@
       "bun": "./src/utils/mediaUtils.ts",
       "import": "./dist/src/utils/mediaUtils.js"
     },
+    "./utils/collectContents.js": {
+      "bun": "./src/utils/collectContents.ts",
+      "import": "./dist/src/utils/collectContents.js"
+    },
+    "./utils/abortSignal.js": {
+      "types": "./dist/src/utils/abortSignal.d.ts",
+      "bun": "./src/utils/abortSignal.ts",
+      "import": "./dist/src/utils/abortSignal.js"
+    },
     "./providerMediaTransportCapabilities.js": {
       "types": "./dist/src/providerMediaTransportCapabilities.d.ts",
       "bun": "./src/providerMediaTransportCapabilities.ts",
@@ -158,10 +177,25 @@
       "bun": "./src/utils/dumpSDKContext.ts",
       "import": "./dist/src/utils/dumpSDKContext.js"
     },
+    "./utils/streamPrettyJson.js": {
+      "types": "./dist/src/utils/streamPrettyJson.d.ts",
+      "bun": "./src/utils/streamPrettyJson.ts",
+      "import": "./dist/src/utils/streamPrettyJson.js"
+    },
     "./utils/request-media-resolution.js": {
       "types": "./dist/src/utils/request-media-resolution.d.ts",
       "bun": "./src/utils/request-media-resolution.ts",
       "import": "./dist/src/utils/request-media-resolution.js"
+    },
+    "./utils/requestScopedBody.js": {
+      "types": "./dist/src/utils/requestScopedBody.d.ts",
+      "bun": "./src/utils/requestScopedBody.ts",
+      "import": "./dist/src/utils/requestScopedBody.js"
+    },
+    "./BaseProviderNormalization.js": {
+      "types": "./dist/src/BaseProviderNormalization.d.ts",
+      "bun": "./src/BaseProviderNormalization.ts",
+      "import": "./dist/src/BaseProviderNormalization.js"
     },
     "./utils/systemPromptPlacement.js": {
       "types": "./dist/src/utils/systemPromptPlacement.d.ts",
@@ -206,25 +240,28 @@
     "dist"
   ],
   "dependencies": {
-    "@vybestack/llxprt-code-storage": "file:../storage",
     "@ai-sdk/openai": "^4.0.50",
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "1.0.22",
+    "@eslint-community/regexpp": "^4.12.2",
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-mcp": "file:../mcp",
     "@vybestack/llxprt-code-settings": "file:../settings",
+    "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "ai": "^7.0.83",
     "comment-json": "^4.5.0",
     "openai": "^5.10.1",
     "strip-json-comments": "^3.1.1",
     "undici": "^7.30.1",
+    "ws": "^8.21.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@ai-sdk/provider-utils": "^5.0.32",
     "@types/node": "^24.2.1",
+    "@types/ws": "^8.18.1",
     "@vybestack/llxprt-code-test-utils": "file:../test-utils",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "fast-check": "^4.3.0",

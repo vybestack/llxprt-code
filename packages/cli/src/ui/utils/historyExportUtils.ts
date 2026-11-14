@@ -5,7 +5,7 @@
  */
 
 import * as nodeCrypto from 'node:crypto';
-import { open } from 'node:fs/promises';
+import { open, unlink, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ContentBlock, IContent } from '@vybestack/llxprt-code-core';
@@ -153,67 +153,57 @@ function speakerToTranscriptRole(speaker: IContent['speaker']): string {
   return 'Assistant';
 }
 
-function formatHistoryAsMarkdown(history: IContent[]): string {
-  let transcript = '# LLxprt Code Conversation Transcript\n\n';
-
-  for (const item of history) {
-    const role = speakerToTranscriptRole(item.speaker);
-    transcript += `## ${role}\n\n`;
-
-    for (const block of item.blocks) {
-      transcript += formatBlockToMarkdown(block);
-    }
-
-    transcript += '---\n\n';
-  }
-
-  return transcript;
-}
-
-/**
- * Exports conversation history to a temporary file for bug reporting.
- *
- * @param history - Array of IContent objects from the conversation
- * @returns Object containing the export file path and sanitized content
- */
-export async function exportHistoryForBugReport(
-  history: IContent[],
-): Promise<{ filePath: string; sanitized: string }> {
-  // Format history as markdown
-  const markdown = formatHistoryAsMarkdown(history);
-
-  // Sanitize the transcript
-  const sanitized = sanitizeTranscript(markdown);
-
-  // Exclusive create with a random suffix so concurrent exports cannot
-  // collide or follow a pre-existing path/symlink. Owner-only mode keeps
-  // residual credentials/paths in the transcript from being world-readable.
-  // Retry a few times if another process raced us for the same name.
-  const maxAttempts = 3;
+async function createExportFile(): Promise<{
+  filePath: string;
+  handle: FileHandle;
+}> {
   for (let attempt = 0; ; attempt++) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const random = nodeCrypto.randomBytes(8).toString('hex');
-    const filename = `llxprt-bug-report-${timestamp}-${random}.md`;
-    const filePath = join(tmpdir(), filename);
-
+    const filePath = join(
+      tmpdir(),
+      `llxprt-bug-report-${timestamp}-${random}.md`,
+    );
     try {
-      const handle = await open(filePath, 'wx', 0o600);
-      try {
-        await handle.writeFile(sanitized, 'utf-8');
-      } finally {
-        await handle.close();
-      }
-      return { filePath, sanitized };
+      return { filePath, handle: await open(filePath, 'wx', 0o600) };
     } catch (error) {
       if (
         error instanceof Error &&
         'code' in error &&
         error.code === 'EEXIST' &&
-        attempt < maxAttempts - 1
-      ) {
+        attempt < 2
+      )
         continue;
-      }
       throw error;
     }
+  }
+}
+
+async function writeTranscript(
+  handle: FileHandle,
+  history: AsyncIterable<IContent>,
+): Promise<void> {
+  await handle.writeFile('# LLxprt Code Conversation Transcript\n\n', 'utf8');
+  for await (const row of history) {
+    let markdown = `## ${speakerToTranscriptRole(row.speaker)}\n\n`;
+    for (const block of row.blocks) markdown += formatBlockToMarkdown(block);
+    await handle.writeFile(sanitizeTranscript(markdown + '---\n\n'), 'utf8');
+  }
+}
+
+export async function exportHistoryForBugReport(
+  history: AsyncIterable<IContent>,
+): Promise<{ filePath: string }> {
+  const { filePath, handle } = await createExportFile();
+  try {
+    try {
+      await writeTranscript(handle, history);
+    } finally {
+      await handle.close();
+    }
+    return { filePath };
+  } catch (error) {
+    await unlink(filePath);
+    throw error;
   }
 }

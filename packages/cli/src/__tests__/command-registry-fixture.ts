@@ -14,7 +14,6 @@ import { bindChatOwnerOperations } from '../ui/commands/chatCommandHost.js';
 import { createChatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
 import type { UseSlashCommandProcessorCoreArgs } from '../ui/hooks/useSlashCommandProcessorCore.js';
 import { createWorkspaceCommandOwners } from '../ui/hooks/workspaceCommandOwners.js';
-import { resolveEmojiFilterMode } from '../ui/utils/iContentToHistoryItems.js';
 import { CommandKind, type SlashCommand } from '../ui/commands/types.js';
 import type { FixtureCommandRuntime } from './slash-command-runtime-fixture.js';
 import {
@@ -85,7 +84,6 @@ type CommandRegistrationFixture = Pick<
   | 'registerChatCommands'
   | 'registerSubagentCommand'
   | 'resumeOwnedCommand'
-  | 'replaceCommandHistory'
   | 'bindRawCommandResume'
   | 'recordCommandEvent'
   | 'isMcpDiscoveryPending'
@@ -178,13 +176,12 @@ export function createCommandRegistrationFixture(
             session.resume.bind(session),
             session.deleteCheckpoint.bind(session),
             session.renameCheckpoint.bind(session),
-            session.getHistory.bind(session),
+            session.getJournalLength.bind(session),
             session.clearHistory.bind(session),
             session.restoreTurns.bind(session),
             session.nameCurrentSession.bind(session),
             () => session.getRecording().path,
             () => agent.getModel(),
-            () => resolveEmojiFilterMode(null),
           ),
           () => false,
         );
@@ -196,7 +193,6 @@ export function createCommandRegistrationFixture(
     }),
     registerSubagentCommand: () => fixtureCommand('subagent'),
     resumeOwnedCommand: unavailableOwner,
-    replaceCommandHistory: unavailableOwner,
     bindRawCommandResume: (config, callbacks) =>
       bindCommandRawResume(
         config,

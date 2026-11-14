@@ -11,6 +11,8 @@ import type {
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
+import { rm } from 'node:fs/promises';
+import { NativeAnthropicEstimateProjection } from '../../anthropic/native-anthropic-estimate.js';
 import type { ProviderFinalizedPromptProjection } from '../../runtime/promptEnvelopeProjections.js';
 import {
   ModelPromptEstimatorError,
@@ -31,9 +33,13 @@ import {
 } from './claudeCalibration.js';
 import type { ClaudeCalibration } from './claudeCalibration.js';
 import {
+  addClaudeContentFeatures,
   extractClaudeContentFeatures,
   type ClaudeContentFeatureExtractor,
+  type ClaudeContentFeatures,
 } from './claudeContentFeatures.js';
+import { countO200kBaseTokensChunked } from '../o200k-chunked-source.js';
+import { SourceFamilyInput, spoolPromptText } from '../source-family-input.js';
 import {
   CLAUDE_5_FAMILY_SPECS,
   isActivatedClaude5Spec,
@@ -80,7 +86,22 @@ function isFinalizedPromptProjection(
 function readProjection(
   request: RuntimePromptEstimateRequest,
   family: string,
-): ProviderFinalizedPromptProjection {
+):
+  | ProviderFinalizedPromptProjection
+  | SourceFamilyInput
+  | NativeAnthropicEstimateProjection {
+  const source = request.finalizedProjection;
+  if (
+    source instanceof NativeAnthropicEstimateProjection &&
+    source.protocol === request.protocol
+  )
+    return source;
+  if (
+    source instanceof SourceFamilyInput &&
+    source.projection.protocol === request.protocol
+  ) {
+    return source;
+  }
   if (
     !isFinalizedPromptProjection(request.finalizedProjection, request.protocol)
   ) {
@@ -109,6 +130,81 @@ function assertProjectionRevision(
       errorContext(request, family),
       `recalibrate this family: the calibration was fitted for projection revision ${calibration.projectionRevision}, not ${request.projectionRevision}`,
     );
+  }
+}
+
+interface MeasuredPrompt {
+  readonly baseTokens: number;
+  readonly features: ClaudeContentFeatures;
+  readonly imageTokens: number;
+}
+
+type O200kEncoder = Awaited<ReturnType<typeof getO200kBaseEncoder>>;
+
+/** One base tokenization and one feature scan over the projection text. */
+function measureProjection(
+  projection: ProviderFinalizedPromptProjection,
+  request: RuntimePromptEstimateRequest,
+  encoder: O200kEncoder,
+  extractFeatures: ClaudeContentFeatureExtractor,
+): MeasuredPrompt {
+  const { promptText } = projection;
+  let imageTokens = 0;
+  for (const entry of projection.imageEntries ?? []) {
+    imageTokens += estimateImageTokens({
+      provider: request.activeProvider,
+      model: request.canonicalModel,
+      dimensions: entry.dimensions,
+    });
+  }
+  return {
+    baseTokens: countO200kBaseTokens(encoder, promptText),
+    features: extractFeatures(promptText),
+    imageTokens,
+  };
+}
+
+const NO_FEATURES: ClaudeContentFeatures = Object.freeze({
+  codePoints: 0,
+  nonAsciiCodePoints: 0,
+  structuralCodePoints: 0,
+  whitespaceCodePoints: 0,
+});
+
+/**
+ * The same measurements over sealed prompt segments. The prompt text is
+ * spooled to a scratch file piece by piece (a piece never splits a code
+ * point, so the additive signals sum to the signals of the whole text) and
+ * counted by the chunked o200k counter, so the text is never one string.
+ */
+async function measureSource(
+  source: SourceFamilyInput,
+  request: RuntimePromptEstimateRequest,
+  encoder: O200kEncoder,
+  extractFeatures: ClaudeContentFeatureExtractor,
+): Promise<MeasuredPrompt> {
+  let features = NO_FEATURES;
+  const spool = await spoolPromptText(source, (piece) => {
+    features = addClaudeContentFeatures(features, extractFeatures(piece));
+  });
+  try {
+    return {
+      baseTokens: await countO200kBaseTokensChunked(
+        { path: spool.path },
+        encoder,
+        {
+          workspaceDirectory: source.workspaceDirectory,
+          signal: source.signal,
+        },
+      ),
+      features,
+      imageTokens: await source.countImageTokens({
+        provider: request.activeProvider,
+        model: request.canonicalModel,
+      }),
+    };
+  } finally {
+    await rm(spool.directory, { recursive: true, force: true });
   }
 }
 
@@ -148,21 +244,33 @@ export async function estimateClaude5Prompt(
   }
 
   try {
-    const promptText = projection.promptText;
-    const baseTokens = countO200kBaseTokens(encoder, promptText);
-    const features = extractFeatures(promptText);
-    let count = applyClaudeCalibration(baseTokens, features, calibration);
+    let measured: MeasuredPrompt;
+    if (projection instanceof NativeAnthropicEstimateProjection)
+      measured = await projection.measure(request, encoder, extractFeatures);
+    else if (projection instanceof SourceFamilyInput)
+      measured = await measureSource(
+        projection,
+        request,
+        encoder,
+        extractFeatures,
+      );
+    else
+      measured = measureProjection(
+        projection,
+        request,
+        encoder,
+        extractFeatures,
+      );
+    let count = applyClaudeCalibration(
+      measured.baseTokens,
+      measured.features,
+      calibration,
+    );
     // Image cost is added post-calibration because the anthropic formula
     // already returns provider-billed image tokens and the coefficients are
     // text-fitted; scaling them here would shrink the billed cost (issue
     // #3663).
-    for (const entry of projection.imageEntries ?? []) {
-      count += estimateImageTokens({
-        provider: request.activeProvider,
-        model: request.canonicalModel,
-        dimensions: entry.dimensions,
-      });
-    }
+    count += measured.imageTokens;
     return {
       count,
       method: 'calibrated',

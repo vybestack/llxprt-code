@@ -20,6 +20,9 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+
 import { RequestError } from '@agentclientprotocol/sdk';
 import {
   classifyResumeFailure,
@@ -30,6 +33,27 @@ import {
 } from './zed-session-errors.js';
 
 const SESSION_ID = 'sess-xyz';
+
+for (const selected of ['journal'] as const) {
+  describe(`recording filename detection on ${selected}`, () => {
+    it('finds only the selected recording format and classifies its unreadable file as present', async () => {
+      const id = '12345678-abcd-4321';
+      const native = `session-2026-10-18-${id.substring(0, 12)}.llxj`;
+      const legacy = `session-2026-10-18-${id.substring(0, 12)}.jsonl`;
+      const expected = native;
+      const other = legacy;
+      expect(findMatchingSessionFile(id, [other, expected])).toBe(expected);
+      expect(findMatchingSessionFile(id, [other])).toBeNull();
+      const error = await classifyResumeFailure(
+        id,
+        resumeError(`Session not found for this project: ${id}`),
+        async () => [expected],
+      );
+      expect(error.code).toBe(-32603);
+      expect(error.data).toMatchObject({ sessionId: id, file: expected });
+    });
+  });
+}
 
 /** Wraps a core resume detail in the envelope SessionControl.resume throws. */
 function resumeError(detail: string): Error {
@@ -114,7 +138,7 @@ const FIXED_SESSION_TIMESTAMP = '2026-07-11T10-00-00';
 // `session-<timestamp>-<first-12-of-id>.jsonl` (SessionRecordingService), so a
 // matching entry both starts with `session-` and ends with `-<first12>.jsonl`.
 function matchingFileName(sessionId: string): string {
-  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}.jsonl`;
+  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}${SESSION_FILE_EXTENSION}`;
 }
 
 describe('classifyResumeFailure (issue #1604 FINDING B: corrupt vs missing)', () => {

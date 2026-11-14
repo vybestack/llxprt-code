@@ -103,7 +103,7 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     expect(awaitingCall.status).toBe('awaiting_approval');
 
     // Call cancelAll to cancel the tool
-    scheduler.cancelAll();
+    await scheduler.cancelAll();
 
     // Wait for tool to be cancelled
     await waitFor(() => {
@@ -210,7 +210,7 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     });
 
     // 3. Trigger a concurrent completion event (e.g. via cancelAll)
-    scheduler.cancelAll();
+    await scheduler.cancelAll();
 
     await schedulePromise;
 

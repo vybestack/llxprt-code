@@ -40,17 +40,33 @@ void vi.mock('ai', () => ({
   wrapLanguageModel: vi.fn((model) => model),
 }));
 
-// Mock @ai-sdk/openai
+let configuredFetch: typeof fetch;
+
+// Mock @ai-sdk/openai at its network boundary.
 void vi.mock('@ai-sdk/openai', () => ({
-  createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
+  createOpenAI: vi.fn((options: { fetch: typeof fetch }) => {
+    configuredFetch = options.fetch;
+    return vi.fn((modelId: string) => ({ modelId }));
+  }),
 }));
 
 describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
   let provider: OpenAIVercelProvider;
   let settingsService: SettingsService;
   let config: ReturnType<typeof createRuntimeConfigStub>;
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    globalThis.fetch = Object.assign(
+      async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> =>
+        new Response(await new Response(init?.body).text(), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      { preconnect: originalFetch.preconnect },
+    );
     vi.clearAllMocks();
     settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openaivercel');
@@ -58,6 +74,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
   });
 
@@ -99,8 +116,12 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
 
       let capturedRoles: string[] = [];
-      mockGenerateText.mockImplementation((request: unknown) => {
-        capturedRoles = readMessageRoles(request);
+      mockGenerateText.mockImplementation(async (request: unknown) => {
+        const response = await configuredFetch(
+          'https://example.test/chat/completions',
+          { method: 'POST', body: JSON.stringify(request) },
+        );
+        capturedRoles = readMessageRoles(await response.json());
         return Promise.resolve({
           text: 'Response',
           toolCalls: [],
@@ -139,8 +160,12 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
 
       let capturedRoles: string[] = [];
-      mockGenerateText.mockImplementation((request: unknown) => {
-        capturedRoles = readMessageRoles(request);
+      mockGenerateText.mockImplementation(async (request: unknown) => {
+        const response = await configuredFetch(
+          'https://example.test/chat/completions',
+          { method: 'POST', body: JSON.stringify(request) },
+        );
+        capturedRoles = readMessageRoles(await response.json());
         return Promise.resolve({
           text: 'Response',
           toolCalls: [],
@@ -187,8 +212,12 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
 
       let capturedRoles: string[] = [];
-      mockGenerateText.mockImplementation((request: unknown) => {
-        capturedRoles = readMessageRoles(request);
+      mockGenerateText.mockImplementation(async (request: unknown) => {
+        const response = await configuredFetch(
+          'https://example.test/chat/completions',
+          { method: 'POST', body: JSON.stringify(request) },
+        );
+        capturedRoles = readMessageRoles(await response.json());
         return Promise.resolve({
           text: 'The weather in San Francisco is sunny.',
           toolCalls: [],

@@ -1,8 +1,10 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -18,7 +20,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
   SessionLockManager,
 } from '@vybestack/llxprt-code-core';
 import { performResume } from '../services/performResume.js';
@@ -59,8 +61,8 @@ describe('Two-phase swap #2', () => {
       sessionId: 'old-preserved-session',
       projectHash: PROJECT_HASH,
     });
-    const oldRecording = new SessionRecordingService(oldConfig);
-    oldRecording.recordContent(makeContent('old message'));
+    const oldRecording = createSessionRecorder(withTestNamedWriters(oldConfig));
+    await recordRowsForTest(oldRecording, [makeContent('old message')]);
     await oldRecording.flush();
     const oldFilePath = oldRecording.getFilePath()!;
     state.recordingsToDispose.push(oldRecording);
@@ -83,12 +85,14 @@ describe('Two-phase swap #2', () => {
     });
 
     // Attempt resume - should fail
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
     expect(result.ok).toBe(false);
 
     // Old recording should still be functional
     expect(oldRecording.isActive()).toBe(true);
-    oldRecording.recordContent(makeContent('new message after failed resume'));
+    await recordRowsForTest(oldRecording, [
+      makeContent('new message after failed resume'),
+    ]);
     await oldRecording.flush();
 
     // Verify the content was written

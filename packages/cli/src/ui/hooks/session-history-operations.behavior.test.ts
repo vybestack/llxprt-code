@@ -1,3 +1,5 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,12 +7,20 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { readFile } from 'node:fs/promises';
+import { readRecordedRows } from '../../__tests__/journal-recording.js';
 import type {
   IContent,
   ChronologyTraceEntry,
 } from '@vybestack/llxprt-code-core';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+
+async function sessionSnapshot(owner: Agent) {
+  const snapshot = owner.session.readHistorySnapshot();
+  if (snapshot === null) return null;
+  const chronology: ChronologyTraceEntry[] = [];
+  for await (const entry of snapshot.chronology) chronology.push(entry);
+  return { messages: await collectResumeRows(snapshot.messages), chronology };
+}
 
 describe('session history operations', () => {
   const makeOwner = useCommandOwners();
@@ -181,7 +191,7 @@ describe('session history operations', () => {
       ],
     };
     expect(owner.session.isHistoryInitialized()).toBe(true);
-    const before = owner.session.readHistorySnapshot();
+    const before = await sessionSnapshot(owner);
     expect(before?.messages.map((item) => item.speaker)).toStrictEqual([
       'human',
       'ai',
@@ -198,11 +208,11 @@ describe('session history operations', () => {
     expect(before?.chronology).toHaveLength(3);
     expect(before).toStrictEqual(expectedSnapshot);
     await owner.sessionClient.refreshAuth();
-    const carried = await owner.session.getHistory();
+    const carried = await collectResumeRows(await owner.session.getHistory());
     if (!before) throw new Error('Native history snapshot is missing');
     expect([...carried]).toStrictEqual(expectedSnapshot.messages);
     await owner.session.replaceHistory(carried);
-    expect(owner.session.readHistorySnapshot()).toStrictEqual(expectedSnapshot);
+    expect(await sessionSnapshot(owner)).toStrictEqual(expectedSnapshot);
   });
 
   it('follows new session history for tokens and detaches without disposing it', async () => {
@@ -223,7 +233,7 @@ describe('session history operations', () => {
     await owner.session.startNewSession();
     await sleep(150);
     expect(counts.at(-1)).toBeLessThan(populated ?? 0);
-    expect(owner.session.readHistorySnapshot()?.messages).toStrictEqual([]);
+    expect((await sessionSnapshot(owner))?.messages).toStrictEqual([]);
     stop();
     const stopped = counts.length;
     await owner.session.replaceHistory([
@@ -231,7 +241,7 @@ describe('session history operations', () => {
     ]);
     await sleep(150);
     expect(counts).toHaveLength(stopped);
-    expect(owner.session.readHistorySnapshot()?.messages).toHaveLength(1);
+    expect((await sessionSnapshot(owner))?.messages).toHaveLength(1);
   });
 
   it('records native replacement once through the session recording owner', async () => {
@@ -246,10 +256,7 @@ describe('session history operations', () => {
     await owner.session.flushRecording();
     const path = owner.session.getRecording().path;
     if (!path) throw new Error('Recording was not materialized');
-    const events = (await readFile(path, 'utf8'))
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line));
+    const events = await readRecordedRows(path);
     expect(
       events.filter((event) =>
         JSON.stringify(event).includes('replacement body'),
@@ -275,6 +282,8 @@ describe('session history operations', () => {
     await owner.session.flushRecording();
     const path = owner.session.getRecording().path;
     if (!path) throw new Error('Recording missing');
-    expect(await readFile(path, 'utf8')).toContain('body after refresh');
+    expect(JSON.stringify(await readRecordedRows(path))).toContain(
+      'body after refresh',
+    );
   });
 });

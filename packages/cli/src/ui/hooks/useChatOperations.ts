@@ -20,7 +20,7 @@ type CheckpointOwner = Pick<
   | 'resume'
   | 'deleteCheckpoint'
   | 'renameCheckpoint'
-  | 'getHistory'
+  | 'getJournalLength'
   | 'clearHistory'
   | 'restoreTurns'
   | 'nameCurrentSession'
@@ -29,7 +29,6 @@ type CheckpointOwner = Pick<
 export function useOwnedChatOperations(
   session: CheckpointOwner | undefined,
   getModel: ChatOwnerOperations['getModel'],
-  getEmojiFilterMode: ChatOwnerOperations['getEmojiFilterMode'],
 ): ChatOwnerOperations {
   return useMemo(
     () =>
@@ -39,7 +38,7 @@ export function useOwnedChatOperations(
         session?.resume.bind(session) ?? missingChatOwner,
         session?.deleteCheckpoint.bind(session) ?? missingChatOwner,
         session?.renameCheckpoint.bind(session) ?? missingChatOwner,
-        session?.getHistory.bind(session) ?? missingChatOwner,
+        () => session?.getJournalLength() ?? missingChatOwner(),
         session?.clearHistory.bind(session) ?? missingChatOwner,
         session?.restoreTurns.bind(session) ?? missingChatOwner,
         session?.nameCurrentSession.bind(session) ?? missingChatOwner,
@@ -48,9 +47,8 @@ export function useOwnedChatOperations(
           return session.getRecording().path;
         },
         getModel,
-        getEmojiFilterMode,
       ),
-    [session, getModel, getEmojiFilterMode],
+    [session, getModel],
   );
 }
 function missingChatOwner(): never {
@@ -67,7 +65,8 @@ export function useRawChatOperations(
   renameCheckpoint: ChatRecordingOperations['renameCheckpoint'],
   nameSession: ChatRecordingOperations['nameSession'],
   getChatHistory: ChatRecordingOperations['getChatHistory'],
-  replaceChatHistory: ChatRecordingOperations['replaceChatHistory'],
+  clearHistory: ChatRecordingOperations['clearHistory'],
+  restoreTurns: ChatRecordingOperations['restoreTurns'],
   getModel: ChatRecordingOperations['getModel'],
 ): ChatRecordingOperations {
   return useMemo(
@@ -82,7 +81,8 @@ export function useRawChatOperations(
         renameCheckpoint,
         nameSession,
         getChatHistory,
-        replaceChatHistory,
+        clearHistory,
+        restoreTurns,
         getModel,
       ),
     [
@@ -95,7 +95,8 @@ export function useRawChatOperations(
       renameCheckpoint,
       nameSession,
       getChatHistory,
-      replaceChatHistory,
+      clearHistory,
+      restoreTurns,
       getModel,
     ],
   );

@@ -10,6 +10,7 @@ import { useCommandCompletion } from '../hooks/useCommandCompletion.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import type { Key } from '../hooks/useKeypress.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { StartupStdinContext } from '../contexts/startup-stdin-context.js';
 import type { MouseEvent } from '../hooks/useMouse.js';
 import { useMouse } from '../hooks/useMouse.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
@@ -36,7 +37,7 @@ import type {
 import type { TextBuffer } from './shared/text-buffer.js';
 
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import clipboardy from 'clipboardy';
 import {
   getMouseEventsGeneration,
@@ -619,6 +620,7 @@ const useInputPromptState = (
 export const useRuntimeState = (
   props: InputPromptRuntimeProps,
 ): InputPromptStateResult => {
+  const startupStdin = useContext(StartupStdinContext);
   const pendingLargePastesRef = useRef<Map<string, string>>(new Map());
   const nextPlaceholderIdRef = useRef(1);
   const state = useInputPromptState({
@@ -630,6 +632,10 @@ export const useRuntimeState = (
   useKeypress(state.handleInput, {
     isActive: props.isEmbeddedShellFocused !== true,
   });
+  useEffect(() => {
+    if (props.focus !== false && props.isEmbeddedShellFocused !== true)
+      startupStdin?.release();
+  }, [props.focus, props.isEmbeddedShellFocused, startupStdin]);
   return state;
 };
 

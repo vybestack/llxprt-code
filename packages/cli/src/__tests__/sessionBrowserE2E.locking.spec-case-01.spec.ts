@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -52,7 +53,10 @@ describe('Session locking #1', () => {
       currentSessionId: 'other-session',
     });
 
-    const result = await performResume(sessionId, context);
+    const result = await performResume(
+      sessionId,
+      withTestNamedWriters(context),
+    );
 
     expect(result.ok).toBe(false);
     assertFalse(result.ok);

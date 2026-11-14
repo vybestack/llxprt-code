@@ -8,11 +8,26 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { isAbortLikeError } from './is-abort-like-error.js';
 import {
-  captureHistoryState,
+  withHistoryState,
   rollbackHistoryState,
-  watchIndependentWrites,
+  type HistoryStateDeps,
 } from './historyStateRollback.js';
-import type { ProviderContentEnforcementDeps } from './providerContentEnforcement.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+
+export interface GuardedCompressionDeps extends HistoryStateDeps {
+  readonly logger: DebugLogger;
+  readonly historyOrigin?: object;
+  readonly performCompression: (
+    promptId: string,
+    options: {
+      bypassCooldown: boolean;
+      trigger: 'auto';
+      onCommitted: () => void;
+    },
+  ) => Promise<PerformCompressionResult>;
+}
+
+export class CompressionRollbackError extends AggregateError {}
 
 function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
@@ -26,11 +41,12 @@ function normalizeError(error: unknown): Error {
  */
 interface CompressionCommit {
   committed(): boolean;
+  mark(): void;
   stop(): void;
 }
 
 function watchCompressionCommit(
-  deps: ProviderContentEnforcementDeps,
+  deps: GuardedCompressionDeps,
 ): CompressionCommit {
   let committed = false;
   const onEnded = (
@@ -46,9 +62,12 @@ function watchCompressionCommit(
       committed = true;
     }
   };
-  deps.historyService.on('compressionEnded', onEnded);
+  deps.historyService.prependListener('compressionEnded', onEnded);
   return {
     committed: () => committed,
+    mark: () => {
+      committed = true;
+    },
     stop: () => {
       deps.historyService.off('compressionEnded', onEnded);
     },
@@ -63,13 +82,15 @@ interface CompressionAttempt {
 }
 
 async function attemptCompression(
-  deps: ProviderContentEnforcementDeps,
+  deps: GuardedCompressionDeps,
   promptId: string,
+  onCommitted: () => void,
 ): Promise<CompressionAttempt> {
   try {
     const result = await deps.performCompression(promptId, {
       bypassCooldown: true,
       trigger: 'auto',
+      onCommitted,
     });
     await deps.historyService.waitForTokenUpdates();
     if (result === PerformCompressionResult.COMPRESSED) {
@@ -115,42 +136,43 @@ async function attemptCompression(
  * overflow error take over.
  */
 export async function runGuardedCompression(
-  deps: ProviderContentEnforcementDeps,
+  deps: GuardedCompressionDeps,
   promptId: string,
 ): Promise<Error | undefined> {
-  const snapshot = captureHistoryState(deps);
-  const writes = watchIndependentWrites(deps.historyService);
-  const commit = watchCompressionCommit(deps);
-  try {
-    const attempt = await attemptCompression(deps, promptId);
-    if (attempt.failure === undefined) {
-      return undefined;
-    }
-    if (commit.committed()) {
-      deps.logger.warn(
-        () =>
-          '[CompressionHandler] Compression committed but a later step failed; keeping the journaled history',
-        attempt.failure,
+  return withHistoryState(deps, async (snapshot) => {
+    const commit = watchCompressionCommit(deps);
+    try {
+      const attempt = await attemptCompression(deps, promptId, () =>
+        commit.mark(),
       );
+      if (attempt.failure === undefined) {
+        return undefined;
+      }
+      if (commit.committed()) {
+        deps.logger.warn(
+          () =>
+            '[CompressionHandler] Compression committed but a later step failed; keeping the journaled history',
+          attempt.failure,
+        );
+        if (isAbortLikeError(attempt.thrown)) {
+          throw attempt.thrown;
+        }
+        return undefined;
+      }
+      try {
+        await rollbackHistoryState(deps, snapshot);
+      } catch (rollbackError) {
+        throw new CompressionRollbackError(
+          [attempt.failure, normalizeError(rollbackError)],
+          'Auto compression failed and its history rollback also failed',
+        );
+      }
       if (isAbortLikeError(attempt.thrown)) {
         throw attempt.thrown;
       }
-      return undefined;
+      return attempt.failure;
+    } finally {
+      commit.stop();
     }
-    try {
-      await rollbackHistoryState(deps, snapshot, writes);
-    } catch (rollbackError) {
-      throw new AggregateError(
-        [attempt.failure, normalizeError(rollbackError)],
-        'Auto compression failed and its history rollback also failed',
-      );
-    }
-    if (isAbortLikeError(attempt.thrown)) {
-      throw attempt.thrown;
-    }
-    return attempt.failure;
-  } finally {
-    commit.stop();
-    writes.stop();
-  }
+  });
 }

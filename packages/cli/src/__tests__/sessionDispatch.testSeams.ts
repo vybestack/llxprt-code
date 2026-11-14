@@ -131,16 +131,14 @@ export function installListenerCapture() {
 
   const offSpy = vi
     .spyOn(process, 'off')
-    .mockImplementation(
-      (event: string | symbol, listener: (...args: unknown[]) => void) => {
-        const list = listeners.get(event);
-        if (list) {
-          const idx = list.indexOf(listener);
-          if (idx >= 0) list.splice(idx, 1);
-        }
-        return process;
-      },
-    );
+    .mockImplementation((event, listener) => {
+      const list = listeners.get(event);
+      if (list) {
+        const idx = list.findIndex((candidate) => candidate === listener);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      return process;
+    });
 
   return {
     onSpy,

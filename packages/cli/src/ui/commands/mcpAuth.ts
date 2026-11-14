@@ -13,7 +13,12 @@ import { CommandKind } from './types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type { HistoryItemWithoutId } from '../types.js';
+
+export type McpAuthOutput = (
+  item: HistoryItemWithoutId,
+  timestamp?: number,
+) => void | number | Promise<void>;
 
 export interface McpAuthCommandOperations {
   readonly isConfigured: () => boolean;
@@ -24,7 +29,7 @@ export interface McpAuthCommandOperations {
   readonly authenticationRequiredServers: () => Promise<readonly string[]>;
   readonly authenticate: (
     serverName: string,
-    displayListener: (message: string) => void,
+    displayListener: (message: string) => void | Promise<void>,
   ) => Promise<void>;
 }
 
@@ -89,16 +94,16 @@ export async function listOAuthServers(
 
 async function performMcpOAuth(
   operations: McpAuthCommandOperations,
-  addItem: UseHistoryManagerReturn['addItem'],
+  writeOutput: McpAuthOutput,
   reloadCommands: () => void,
   serverName: string,
 ): Promise<MessageActionReturn> {
-  const displayListener = (message: string) => {
-    addItem({ type: 'info', text: message });
+  const displayListener = async (message: string): Promise<void> => {
+    await writeOutput({ type: 'info', text: message });
   };
 
   try {
-    addItem(
+    await writeOutput(
       {
         type: 'info',
         text: `Starting OAuth authentication for MCP server '${serverName}'...`,
@@ -108,7 +113,7 @@ async function performMcpOAuth(
 
     await operations.authenticate(serverName, displayListener);
 
-    addItem(
+    await writeOutput(
       {
         type: 'info',
         text: `✅ Successfully authenticated with MCP server '${serverName}'!`,
@@ -135,7 +140,7 @@ async function performMcpOAuth(
 export function createMcpAuthCommand(
   operations: McpAuthCommandOperations,
   readFuzzyFiltering: () => boolean,
-  addItem: UseHistoryManagerReturn['addItem'],
+  writeOutput: McpAuthOutput,
   reloadCommands: () => void,
 ): SlashCommand {
   return {
@@ -174,7 +179,12 @@ export function createMcpAuthCommand(
         };
       }
 
-      return performMcpOAuth(operations, addItem, reloadCommands, serverName);
+      return performMcpOAuth(
+        operations,
+        writeOutput,
+        reloadCommands,
+        serverName,
+      );
     },
   };
 }

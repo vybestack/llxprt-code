@@ -12,7 +12,7 @@
  * semantics and granular cancellation classification.
  */
 
-import type { AgentRequestInput } from '@vybestack/llxprt-code-core';
+import { type AgentRequestInput } from '@vybestack/llxprt-code-core';
 import { prepareTurnForQuery } from './turnPreparation.js';
 import { handleSubmissionError } from './streamUtils.js';
 import type { ObservationCallbacks } from '../../../observation/jspWiring.js';
@@ -263,7 +263,6 @@ async function prepareAndCheckProceed(
       cbd.resetBuckets,
       cbd.startNewPrompt,
       cbd.setThought,
-      cbd.thinkingBlocksRef,
       cbd.resetBucketSession,
       cbd.ensureBucketsAuthenticated,
     );
@@ -415,7 +414,6 @@ export async function runSubmitQueryCore(
     cbd.setIsResponding(true);
     cbd.setInitError(null);
     cbd.observation.observeTurnStarted();
-    cbd.pendingResponse.beginCommittedSegments();
   } catch (error) {
     await finaliseTurnStartFailure(cbd, turn, error);
   }

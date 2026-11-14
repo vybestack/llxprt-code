@@ -1,3 +1,4 @@
+import { readHistory } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -55,20 +56,38 @@ const toolResponse: IContent = { speaker: 'tool', blocks: [responseBlock] };
 const STUB = createTruncationStub(responseBlock, OTHER_SEND_TOKENS);
 
 /** Every tool response result in the raw history, in order. */
-function toolResults(history: HistoryService): unknown[] {
-  return history
-    .getRawHistory()
-    .flatMap((content) =>
-      content.blocks.flatMap((block) =>
-        block.type === 'tool_response' ? [block.result] : [],
-      ),
-    );
+async function toolResults(history: HistoryService): Promise<unknown[]> {
+  return (await readHistory(history)).flatMap((content) =>
+    content.blocks.flatMap((block) =>
+      block.type === 'tool_response' ? [block.result] : [],
+    ),
+  );
 }
 
 async function truncateToolResult(history: HistoryService): Promise<void> {
-  const entryIndex = history.getRawHistory().indexOf(toolResponse);
-  const replaced = await history.replaceToolResponseBlock(entryIndex, 0, STUB);
-  if (!replaced) throw new Error('the tool response was not replaced');
+  const changed = { replaced: false };
+  await history.detachedValues.transform(async (source, sink) => {
+    let ordinal = 0;
+    for await (const row of source.streamRows()) {
+      const matches = row.blocks.some(
+        (block) =>
+          block.type === 'tool_response' && block.callId === STUB.callId,
+      );
+      if (matches) {
+        await sink.appendReplacement(ordinal, {
+          ...row,
+          blocks: row.blocks.map((block) =>
+            block.type === 'tool_response' && block.callId === STUB.callId
+              ? STUB
+              : block,
+          ),
+        });
+        changed.replaced = true;
+      } else await sink.appendDerived(ordinal, row);
+      ordinal++;
+    }
+  });
+  if (!changed.replaced) throw new Error('the tool response was not replaced');
 }
 
 describe('rollback of a failed compression keeps a concurrent tool-response truncation (issue #4000 CodeRabbit round 3 R4)', () => {
@@ -80,7 +99,7 @@ describe('rollback of a failed compression keeps a concurrent tool-response trun
     session.history.add(toolCall);
     session.history.add(toolResponse);
     conversation.seedBigText();
-    const before = historyTexts(session.history);
+    const before = await historyTexts(session.history);
     let runs = 0;
     session.useCompression(async (history) => {
       runs += 1;
@@ -93,8 +112,8 @@ describe('rollback of a failed compression keeps a concurrent tool-response trun
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      texts: historyTexts(session.history),
-      toolResults: toolResults(session.history),
+      texts: await historyTexts(session.history),
+      toolResults: await toolResults(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       texts: before,
@@ -108,7 +127,7 @@ describe('rollback of a failed compression keeps a concurrent tool-response trun
     session.history.add(toolCall);
     session.history.add(toolResponse);
     conversation.seedBigText();
-    const before = historyTexts(session.history);
+    const before = await historyTexts(session.history);
     let runs = 0;
     session.useCompression(async (history) => {
       runs += 1;
@@ -120,8 +139,8 @@ describe('rollback of a failed compression keeps a concurrent tool-response trun
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      texts: historyTexts(session.history),
-      toolResults: toolResults(session.history),
+      texts: await historyTexts(session.history),
+      toolResults: await toolResults(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       texts: before,

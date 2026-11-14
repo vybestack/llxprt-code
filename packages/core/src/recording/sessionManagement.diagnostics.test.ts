@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -12,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import {
   deleteSession,
   deleteSessionWithDiagnostics,
@@ -32,19 +33,25 @@ describe('deleteSessionWithDiagnostics (issue #3839)', () => {
   });
 
   async function writeHealthySession(sessionId: string): Promise<string> {
-    const recording = new SessionRecordingService({
-      chatsDir,
-      sessionId,
-      projectHash: PROJECT_HASH,
-      workspaceDirs: ['/test/workspace'],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        chatsDir,
+        sessionId,
+        projectHash: PROJECT_HASH,
+        workspaceDirs: ['/test/workspace'],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
     try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello' }],
-      });
+      await (
+        await recording.session()
+      ).append([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
+        },
+      ]);
       await recording.flush();
       const filePath = recording.getFilePath();
       if (filePath === null) {

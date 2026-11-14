@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,19 +19,23 @@ describe('logging request admission from data', () => {
   it('captures immutable settings without retaining a settings service', () => {
     const globalSettings = { model: 'first-model', retrywait: 3 };
     const providerSettings = { temperature: 0.4 };
-    const result = normalizeChatCompletionOptions([], undefined, {
-      providerName,
-      statelessRuntimeMetadata: { strict: true },
-      optionsNormalizer: null,
-      readInvocationData: () => ({
-        runtimeId: 'data-owner',
-        metadata: { owner: 'data' },
-        globalSettings,
-        providerSettings,
-        fetch: requestFetch,
-      }),
-      readRuntimeKind: () => 'subagent',
-    });
+    const result = normalizeChatCompletionOptions(
+      { contents: callerOwnedRawProviderSource([]) },
+      undefined,
+      {
+        providerName,
+        statelessRuntimeMetadata: { strict: true },
+        optionsNormalizer: null,
+        readInvocationData: () => ({
+          runtimeId: 'data-owner',
+          metadata: { owner: 'data' },
+          globalSettings,
+          providerSettings,
+          fetch: requestFetch,
+        }),
+        readRuntimeKind: () => 'subagent',
+      },
+    );
     globalSettings.model = 'changed-model';
     providerSettings.temperature = 0.9;
 
@@ -56,7 +61,7 @@ describe('logging request admission from data', () => {
     );
     const result = normalizeChatCompletionOptions(
       {
-        contents: [],
+        contents: callerOwnedRawProviderSource([]),
         invocation,
         runtimeKind: 'agent',
         metadata: { owner: 'caller' },

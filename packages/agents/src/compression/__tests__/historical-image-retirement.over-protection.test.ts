@@ -1,3 +1,4 @@
+import { readCurated } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -58,7 +59,7 @@ describe('over-protection after a hook removed pending duplicates (issue #4000 C
     const error = await rejection(
       session.send([original], true, {
         pending: [original],
-        contents: [...session.history.getCurated(), afterHook],
+        contents: [...(await readCurated(session.history)), afterHook],
       }),
     );
 

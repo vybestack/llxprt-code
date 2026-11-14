@@ -37,6 +37,11 @@ import {
   renderJUnitReport,
   formatAgentsFailureReason,
 } from '../../scripts/lib/bun-test-retry.js';
+import {
+  PARTITION_ENV_VAR,
+  parsePartitionIdentity,
+  selectWeightedPartition,
+} from '../../scripts/lib/bun-test-partition.js';
 import { spawn } from 'node:child_process';
 import { writeReportFile } from '../../scripts/lib/junit-report-writer.js';
 import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -181,6 +186,17 @@ export function discoverTestFiles(root: string): string[] {
   return TEST_ROOTS.flatMap((testRoot) =>
     findTestFiles(join(root, testRoot)),
   ).sort();
+}
+
+export function selectAgentsTestFiles(
+  root: string,
+  identity?: string,
+): string[] {
+  return selectWeightedPartition(
+    discoverTestFiles(root).map((file) => ({ file })),
+    parsePartitionIdentity(identity),
+    join(root, '../..'),
+  ).map((entry) => entry.file);
 }
 
 interface TestResult {
@@ -376,16 +392,31 @@ async function main(): Promise<void> {
     process.env,
     'LLXPRT_TEST_FILE_TIMEOUT_MS',
   );
-  const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
+  const discoveredFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
     relative(WORKSPACE_ROOT, file),
   );
-  if (testFiles.length === 0) {
+  if (discoveredFiles.length === 0) {
     console.error('No test files found under: ' + TEST_ROOTS.join(', '));
     process.exit(1);
   }
 
+  // The agents suite outgrew one CI leg's time budget, so CI splits it across
+  // partitions. Selection runs after full discovery and never reads the env
+  // during discovery, matching the cli runner.
+  const partitionIdentity = parsePartitionIdentity(
+    process.env[PARTITION_ENV_VAR],
+  );
+  const testFiles = selectAgentsTestFiles(
+    WORKSPACE_ROOT,
+    process.env[PARTITION_ENV_VAR],
+  ).map((file) => relative(WORKSPACE_ROOT, file));
+
+  const partitionNote =
+    partitionIdentity !== null && partitionIdentity.count > 1
+      ? ` (${PARTITION_ENV_VAR}=${partitionIdentity.index}of${partitionIdentity.count}, ${testFiles.length}/${discoveredFiles.length})`
+      : '';
   console.log(
-    `Running ${testFiles.length} agents test files with concurrency ${CONCURRENCY}`,
+    `Running ${testFiles.length} agents test files with concurrency ${CONCURRENCY}${partitionNote}`,
   );
 
   // Session-scoped fake system root (issue #3622): every spawned test process

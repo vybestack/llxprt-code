@@ -27,6 +27,7 @@ import { Readable, Writable } from 'node:stream';
 import { describe, expect, it, vi } from 'bun:test';
 import * as acp from '@agentclientprotocol/sdk';
 import type { Agent as AcpAgent } from '@agentclientprotocol/sdk';
+import { toAcpReadableStream } from './acp-readable-stream.js';
 import {
   buildSignalDisposalHandler,
   installDisposalSignalHandlers,
@@ -77,7 +78,7 @@ function buildRealAcpTransport(): {
       cb();
     },
   });
-  const webInput = Readable.toWeb(ownedSource) as ReadableStream<Uint8Array>;
+  const webInput = toAcpReadableStream(Readable.toWeb(ownedSource));
   const webOutput = Writable.toWeb(stdoutSink) as WritableStream<Uint8Array>;
   const stream = acp.ndJsonStream(webOutput, webInput);
   const connection = new acp.AgentSideConnection(

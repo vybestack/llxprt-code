@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -27,6 +28,7 @@ import {
   makeResumeContext,
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 type ResumeLockHandle = SessionBrowserTestState['lockHandles'][number];
 
@@ -71,7 +73,7 @@ describe('Two-phase swap #3', () => {
       currentSessionId: 'some-other-session',
     });
 
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
     expect(result.ok).toBe(true);
     assertTrue(result.ok);
     // Get the new recording from callbacks
@@ -80,7 +82,9 @@ describe('Two-phase swap #3', () => {
     state.recordingsToDispose.push(newRecording!);
 
     // Record new event
-    newRecording!.recordContent(makeContent('new event after resume'));
+    await recordRowsForTest(newRecording!, [
+      makeContent('new event after resume'),
+    ]);
     await newRecording!.flush();
 
     // Verify the content is in the file

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
 /**
  * @license
@@ -31,9 +32,9 @@ import {
   PendingContextWindowEnforcer,
   type PendingContextWindowEnforcerDeps,
 } from '../pendingContextWindowEnforcement.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
-import { buildCompressionContext } from '../compressionContextBuilder.js';
+import { runDiskProviderFallback } from '../diskProviderFallback.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const MODEL = 'test-model';
 const COMPRESSION_THRESHOLD = 0.8;
@@ -84,7 +85,9 @@ interface Harness {
 }
 
 async function buildHarness(): Promise<Harness> {
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
   const runtimeContext = buildRuntimeContext(historyService);
   const logger = makeLogger();
   const marginAdjustedLimit = computeMarginAdjustedLimit(CONTEXT_LIMIT);
@@ -116,8 +119,9 @@ async function buildHarness(): Promise<Harness> {
     // Middle-out and one-shot both refuse on a small number of large
     // messages, which is the shape the reported session hit.
     performCompression: async () => PerformCompressionResult.NOOP,
-    buildCompressionContext: (promptId, targetTokenCount) =>
-      buildCompressionContext(
+    performFallbackCompression: async (promptId, install, targetTokenCount) => {
+      const result = await runDiskProviderFallback(
+        install,
         promptId,
         runtimeContext,
         undefined,
@@ -127,15 +131,11 @@ async function buildHarness(): Promise<Harness> {
         undefined,
         logger,
         { targetTokenCount },
-      ),
-    compressWithFallbackStrategy: (context) =>
-      new TopDownTruncationStrategy().compress(context),
-    applyFallbackCompressionResult: async (result, applyResult) => {
-      if (result.kind === 'noop') {
-        return;
-      }
-      await applyResult(result.newHistory, undefined, 0);
+      );
+      return result.outcome === 'applied';
     },
+    getLastPromptTokenCount: () => null,
+    restoreLastPromptTokenCount: () => {},
     setSuppressDensityDirty: () => {},
     recordCompressionFailure: () => {},
     resetLastPromptTokenCount: () => {},

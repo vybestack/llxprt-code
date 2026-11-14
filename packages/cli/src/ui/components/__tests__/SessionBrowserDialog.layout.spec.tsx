@@ -54,6 +54,10 @@ enum TerminalKeys {
 
 // Mock useResponsive hook to control narrow/wide mode
 const mockIsNarrow = { value: false };
+void vi.mock('../../hooks/useTerminalSize.js', () => ({
+  useTerminalSize: () => ({ columns: 120, rows: 40 }),
+}));
+
 void vi.mock('../../hooks/useResponsive.js', () => ({
   useResponsive: () => ({
     width: mockIsNarrow.value ? 60 : 120,

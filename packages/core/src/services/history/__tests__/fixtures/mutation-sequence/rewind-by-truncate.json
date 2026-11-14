@@ -1,0 +1,165 @@
+{
+  "name": "rewind-by-truncate",
+  "description": "replaceAll of a marked prefix is a rewind with a cut marker",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 8,
+        "prefix": "row"
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "d664c37d03bb3c90c25ba03da9330f3be4f309588bb8f7e3644b63c51bf90948",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "d664c37d03bb3c90c25ba03da9330f3be4f309588bb8f7e3644b63c51bf90948",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "832d83e67de76dc8",
+            "9d735f8b36232306"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "truncate",
+        "keep": 5
+      },
+      "observed": {
+        "live": {
+          "length": 5,
+          "digest": "588de26d8ff7377a54e529ddb78ceb725c066790526f3ff64b32776b577f9e1c",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113"
+          ]
+        },
+        "resumed": {
+          "length": 5,
+          "digest": "588de26d8ff7377a54e529ddb78ceb725c066790526f3ff64b32776b577f9e1c",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "after-cut"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 6,
+          "digest": "8f8f8f12dca97b65c66128e6f8a91397ec7b62b06a345c776ddec2305fafe8fb",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "7d05e51ba0024842"
+          ]
+        },
+        "resumed": {
+          "length": 6,
+          "digest": "8f8f8f12dca97b65c66128e6f8a91397ec7b62b06a345c776ddec2305fafe8fb",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "7d05e51ba0024842"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "truncate",
+        "keep": 2
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "6ee713cbb602f17d2d618d4c99e8d4320941371bdf4faa4705abe315c0e2fd5d",
+          "tags": ["bda346ed0c238faf", "21ceaa072194aeb9"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "6ee713cbb602f17d2d618d4c99e8d4320941371bdf4faa4705abe315c0e2fd5d",
+          "tags": ["bda346ed0c238faf", "21ceaa072194aeb9"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "truncate",
+        "keep": 0
+      },
+      "observed": {
+        "live": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        },
+        "resumed": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "after-empty"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "185131543d6b6761db051cb3b7149fe82255ad33c0f03fd279d5cd8c5914a671",
+          "tags": ["ce799e1863fc5a4b"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "185131543d6b6761db051cb3b7149fe82255ad33c0f03fd279d5cd8c5914a671",
+          "tags": ["ce799e1863fc5a4b"]
+        }
+      }
+    }
+  ]
+}

@@ -65,7 +65,10 @@ export async function fetchModelsFromApi(
   providerName: string,
   getAuthToken: () => Promise<string>,
   getBaseURL: () => string | undefined,
-  requestFetch: typeof fetch,
+  requestFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ): Promise<IModel[] | undefined> {
   const apiKey = (await getAuthToken()) || process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -112,7 +115,10 @@ export async function resolveModelList(
   authMode: GeminiAuthMode,
   getAuthToken: () => Promise<string>,
   getBaseURL: () => string | undefined,
-  requestFetch: typeof fetch,
+  requestFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ): Promise<IModel[]> {
   const defaultModels = getDefaultModelList(providerName);
   if (authMode === 'gemini-api-key' || authMode === 'vertex-ai') {

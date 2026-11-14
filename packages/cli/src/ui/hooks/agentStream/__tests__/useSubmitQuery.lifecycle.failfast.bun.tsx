@@ -590,7 +590,7 @@ describe('useSubmitQuery — D8 fail-fast + dual-failure AggregateError (AC-4, A
   });
 
   it('AggregateError [setup error, finalisation error] when post-begin setup and finalise both fail', async () => {
-    const setupError = new Error('committed-segment setup failed');
+    const setupError = new Error('turn-start presentation setup failed');
     const {
       registry: failRegistry,
       sink: failSink,
@@ -602,11 +602,9 @@ describe('useSubmitQuery — D8 fail-fast + dual-failure AggregateError (AC-4, A
     const deps = createLifecycleDeps({
       runStreamRef: { current: runStream } as never,
     });
-    vi.spyOn(deps.pendingResponse, 'beginCommittedSegments').mockImplementation(
-      () => {
-        throw setupError;
-      },
-    );
+    deps.setInitError = () => {
+      throw setupError;
+    };
 
     const { result } = renderWithRegistry(deps, failRegistry);
     let caught: unknown = undefined;

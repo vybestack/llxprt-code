@@ -13,6 +13,8 @@ import { createGunzip } from 'node:zlib';
 import type { IContent } from '../../services/history/IContent.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { collectMediaReferences } from '../../storage/media-reference-lifecycle.js';
+import { isJournalFileName } from '../sessionFileExtension.js';
+import { scanJournalRecording } from '../journal-recording-scan.js';
 
 const PROJECT_HASH_PATTERN = /^[0-9a-f]{64}$/;
 const CONTENT_ID_PATTERN = /"contentId"\s*:\s*"(sha256:[0-9a-f]{64})"/g;
@@ -114,30 +116,60 @@ async function scanTextStream(
   collectSerializedContentIds(tail + decoder.end(), contentIds);
 }
 
+/**
+ * The ownership files the scan reads. Reclamation only protects, so it reads
+ * every format that can be on disk whatever the backend: the retired `.jsonl`
+ * files stay until they age out and still name blobs.
+ */
+function isOwnershipFile(filePath: string): boolean {
+  return (
+    filePath.endsWith('.json') ||
+    filePath.endsWith('.jsonl') ||
+    filePath.endsWith('.gz') ||
+    isJournalFileName(filePath)
+  );
+}
+
+/** Text tuning is separate from the journal's fixed risk-12 scan ceiling. */
+function isByteLimited(filePath: string): boolean {
+  return !isJournalFileName(filePath);
+}
+
 async function collectFileContentIds(
   filePath: string,
   contentIds: Set<string>,
   limits: MediaReclamationLimits,
   budget: ProjectScanBudget,
 ): Promise<void> {
-  if (
-    !filePath.endsWith('.json') &&
-    !filePath.endsWith('.jsonl') &&
-    !filePath.endsWith('.gz')
-  ) {
-    return;
-  }
+  if (!isOwnershipFile(filePath)) return;
   const fileStat = await lstat(filePath);
   if (!fileStat.isFile() || fileStat.isSymbolicLink()) return;
+  const byteLimited = isByteLimited(filePath);
+  const maximumFileBytes = byteLimited
+    ? limits.maxBytesPerFile
+    : DEFAULT_LIMITS.maxBytesPerFile;
   if (
     budget.files >= limits.maxFilesPerProject ||
-    fileStat.size > limits.maxBytesPerFile ||
-    fileStat.size > limits.maxBytesPerProject - budget.bytes
+    fileStat.size > maximumFileBytes ||
+    (byteLimited && fileStat.size > limits.maxBytesPerProject - budget.bytes)
   ) {
     throw new Error('Ownership data exceeds media reclamation scan limits');
   }
   budget.files += 1;
-  budget.bytes += fileStat.size;
+  if (byteLimited) budget.bytes += fileStat.size;
+  if (isJournalFileName(filePath)) {
+    if (filePath.endsWith('.gz'))
+      throw new Error(
+        'Archived journal ownership scan requires a binary reader',
+      );
+    await scanJournalRecording(filePath, (contents) => {
+      for (const reference of collectMediaReferences(contents)) {
+        contentIds.add(reference.originalContentId);
+        contentIds.add(reference.selectedContentId);
+      }
+    });
+    return;
+  }
   const source = createReadStream(filePath, {
     highWaterMark: SCAN_CHUNK_BYTES,
   });
@@ -145,11 +177,15 @@ async function collectFileContentIds(
     await scanTextStream(
       source.pipe(createGunzip({ chunkSize: SCAN_CHUNK_BYTES })),
       contentIds,
-      limits.maxDecompressedBytesPerFile,
+      byteLimited ? limits.maxDecompressedBytesPerFile : Infinity,
     );
     return;
   }
-  await scanTextStream(source, contentIds, limits.maxBytesPerFile);
+  await scanTextStream(
+    source,
+    contentIds,
+    byteLimited ? limits.maxBytesPerFile : Infinity,
+  );
 }
 
 async function collectOwnedContentIds(
@@ -248,24 +284,29 @@ async function reclaimProjectEntry(
  * Reclaim unreferenced project media after bounded sequential ownership scans.
  *
  * @param globalTempDirectory - Root containing project-hash directories.
- * @param activeHistory - In-memory history whose media remains protected.
+ * @param activeHistory - History source whose media remains protected.
  * @param limitOverrides - Optional finite scan limits.
  * @returns Number of skipped or corrupt projects.
  */
 export async function reclaimSessionMedia(
   globalTempDirectory: string,
-  activeHistory: readonly IContent[] | undefined,
+  activeHistory: Iterable<IContent> | AsyncIterable<IContent> | undefined,
   limitOverrides: Partial<MediaReclamationLimits> = {},
+  signal?: AbortSignal,
 ): Promise<number> {
   const limits = resolveLimits(limitOverrides);
-  const activeContentIds = new Set(
-    activeHistory === undefined
-      ? []
-      : collectMediaReferences(activeHistory).flatMap((reference) => [
-          reference.originalContentId,
-          reference.selectedContentId,
-        ]),
-  );
+  signal?.throwIfAborted();
+  const activeContentIds = new Set<string>();
+  if (activeHistory !== undefined) {
+    for await (const row of activeHistory) {
+      signal?.throwIfAborted();
+      for (const reference of collectMediaReferences([row])) {
+        activeContentIds.add(reference.originalContentId);
+        activeContentIds.add(reference.selectedContentId);
+      }
+    }
+  }
+  signal?.throwIfAborted();
   let entries: Awaited<ReturnType<typeof opendir>>;
   try {
     entries = await opendir(globalTempDirectory);

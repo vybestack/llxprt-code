@@ -5,7 +5,6 @@
  */
 
 import { z } from 'zod';
-import type { IContent } from '../services/history/IContent.js';
 
 const RewriteRoleSchema = z.enum(['human', 'ai', 'tool']);
 const RewriteKindSchema = z.enum([
@@ -16,18 +15,11 @@ const RewriteKindSchema = z.enum([
   'other',
 ]);
 
-const HistoryEntrySchema = z
-  .object({
-    speaker: RewriteRoleSchema,
-    blocks: z.array(z.unknown()),
-  })
-  .passthrough();
-
 /**
  * Payload for the mutating `refusal_rewrite` event (issue #4036): a reviewer
  * model rewrote context that a model refused. The changed entries keep their
  * original text here, outside model history, so a person can inspect or
- * restore it later. Replay installs `resultingHistory`.
+ * restore it later. The journal commit group carries the rewritten rows.
  */
 export const RefusalRewritePayloadSchema = z.object({
   operationId: z.string().min(1),
@@ -53,12 +45,6 @@ export const RefusalRewritePayloadSchema = z.object({
       }),
     )
     .min(1),
-  resultingHistory: z.array(HistoryEntrySchema),
 });
 
-type ParsedRefusalRewritePayload = z.infer<typeof RefusalRewritePayloadSchema>;
-
-export type RefusalRewritePayload = Omit<
-  ParsedRefusalRewritePayload,
-  'resultingHistory'
-> & { readonly resultingHistory: readonly IContent[] };
+export type RefusalRewritePayload = z.infer<typeof RefusalRewritePayloadSchema>;

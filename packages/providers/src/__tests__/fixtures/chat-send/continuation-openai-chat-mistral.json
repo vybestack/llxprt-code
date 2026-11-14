@@ -1,0 +1,618 @@
+{
+  "text-only/stream": {
+    "first": {
+      "sha256": "58805eca62608c80814905e7e196e319cd5291d47dc6ccd6e035557f2c07860c",
+      "length": 335,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "f43f834453c6cc69e5556e51aa63afaa9296de82631f2969f41758c8ae0c8ecb",
+      "length": 719,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":\"thanks\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "text-only/rows": {
+    "first": {
+      "sha256": "58805eca62608c80814905e7e196e319cd5291d47dc6ccd6e035557f2c07860c",
+      "length": 335,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "f43f834453c6cc69e5556e51aa63afaa9296de82631f2969f41758c8ae0c8ecb",
+      "length": 719,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":\"thanks\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "system-and-tools/stream": {
+    "first": {
+      "sha256": "40231a1554a7fdd8f414ce63e33469dab7f80c790e0b96097bafb633fb944ccd",
+      "length": 574,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris?\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "1a40367df322e3bc216d59aad1d7b2f42a9d7f1da709e7cdd1fff9bde2e80619",
+      "length": 958,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "system-and-tools/rows": {
+    "first": {
+      "sha256": "40231a1554a7fdd8f414ce63e33469dab7f80c790e0b96097bafb633fb944ccd",
+      "length": 574,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris?\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "1a40367df322e3bc216d59aad1d7b2f42a9d7f1da709e7cdd1fff9bde2e80619",
+      "length": 958,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "tool-calls-with-results/stream": {
+    "first": {
+      "sha256": "c508c70844c241594902ece8873901ed15274c722ccf4a7436c26dcd7ed67f33",
+      "length": 1285,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qLhJWVaft\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\n{\\n  \\\"temp\\\": 21\\n}\",\"tool_call_id\":\"qLhJWVaft\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"0F4hRzP0f\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"London\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nrainy, 14C\",\"tool_call_id\":\"0F4hRzP0f\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "fd8d8a4511d47cff30deb557d0b445912b21b9d9c6e060d4ca0331e1c45de618",
+      "length": 1669,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qLhJWVaft\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\n{\\n  \\\"temp\\\": 21\\n}\",\"tool_call_id\":\"qLhJWVaft\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"0F4hRzP0f\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"London\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nrainy, 14C\",\"tool_call_id\":\"0F4hRzP0f\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":\"thanks\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "tool-calls-with-results/rows": {
+    "first": {
+      "sha256": "c508c70844c241594902ece8873901ed15274c722ccf4a7436c26dcd7ed67f33",
+      "length": 1285,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qLhJWVaft\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\n{\\n  \\\"temp\\\": 21\\n}\",\"tool_call_id\":\"qLhJWVaft\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"0F4hRzP0f\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"London\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nrainy, 14C\",\"tool_call_id\":\"0F4hRzP0f\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "fd8d8a4511d47cff30deb557d0b445912b21b9d9c6e060d4ca0331e1c45de618",
+      "length": 1669,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qLhJWVaft\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\n{\\n  \\\"temp\\\": 21\\n}\",\"tool_call_id\":\"qLhJWVaft\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"0F4hRzP0f\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"London\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nrainy, 14C\",\"tool_call_id\":\"0F4hRzP0f\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":\"thanks\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "parallel-tool-calls/stream": {
+    "first": {
+      "sha256": "f8bd4dacd2ff09e5204d1353f5f1a78692eedd0a567c43a3f8017669f5d1a2c1",
+      "length": 1137,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nalpha\",\"tool_call_id\":\"kerpIsw3t\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"summarise\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "2533bcebec64944845bb7cae950439645c127711fdf0335550592625c6b14e1c",
+      "length": 1521,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nalpha\",\"tool_call_id\":\"kerpIsw3t\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"summarise\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "parallel-tool-calls/rows": {
+    "first": {
+      "sha256": "f8bd4dacd2ff09e5204d1353f5f1a78692eedd0a567c43a3f8017669f5d1a2c1",
+      "length": 1137,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nalpha\",\"tool_call_id\":\"kerpIsw3t\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"summarise\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "2533bcebec64944845bb7cae950439645c127711fdf0335550592625c6b14e1c",
+      "length": 1521,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nalpha\",\"tool_call_id\":\"kerpIsw3t\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"summarise\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "orphan-tool-call/stream": {
+    "first": {
+      "sha256": "f8c901ace0267235772df81de5d3e26411b5be956a63a6912aeba8bf8e49afe4",
+      "length": 747,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"CwUVqHr36\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/lost.txt\\\"}\"}}]},{\"role\":\"user\",\"content\":\"never mind, say hi\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "b63f0d791a30c0acbb87ae50cbcd65f4247fba147638ae72ef7bb5ea3f6e35cb",
+      "length": 1131,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"CwUVqHr36\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/lost.txt\\\"}\"}}]},{\"role\":\"user\",\"content\":\"never mind, say hi\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "orphan-tool-call/rows": {
+    "first": {
+      "sha256": "f8c901ace0267235772df81de5d3e26411b5be956a63a6912aeba8bf8e49afe4",
+      "length": 747,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"CwUVqHr36\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/lost.txt\\\"}\"}}]},{\"role\":\"user\",\"content\":\"never mind, say hi\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "b63f0d791a30c0acbb87ae50cbcd65f4247fba147638ae72ef7bb5ea3f6e35cb",
+      "length": 1131,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"CwUVqHr36\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/lost.txt\\\"}\"}}]},{\"role\":\"user\",\"content\":\"never mind, say hi\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "orphan-tool-result/stream": {
+    "first": {
+      "sha256": "3762ae2eb1d536f0715c02f58f5f4aef7d64c5874b22b7f3744bf32774bb8402",
+      "length": 779,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nfrom nowhere\",\"tool_call_id\":\"tNcKWJMm2\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":\"continue\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "58ddccd8c99812fe55aa398fa43e3927abc310fc2b7627c2118df679db6fc0d9",
+      "length": 1163,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nfrom nowhere\",\"tool_call_id\":\"tNcKWJMm2\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":\"continue\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "orphan-tool-result/rows": {
+    "first": {
+      "sha256": "3762ae2eb1d536f0715c02f58f5f4aef7d64c5874b22b7f3744bf32774bb8402",
+      "length": 779,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nfrom nowhere\",\"tool_call_id\":\"tNcKWJMm2\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":\"continue\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "58ddccd8c99812fe55aa398fa43e3927abc310fc2b7627c2118df679db6fc0d9",
+      "length": 1163,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nfrom nowhere\",\"tool_call_id\":\"tNcKWJMm2\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":\"continue\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "interleaved-tool-results/stream": {
+    "first": {
+      "sha256": "3baa64c638b503ee858edcaff54094e7c4ddb7bda741c5a83d21c9448b47f2d8",
+      "length": 1067,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"hurry up\"},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":\"good\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "61c815f8acbc0afe2d206cbcee8b4635f08f402f2637078004703715faa0ef75",
+      "length": 1451,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"hurry up\"},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":\"good\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "interleaved-tool-results/rows": {
+    "first": {
+      "sha256": "3baa64c638b503ee858edcaff54094e7c4ddb7bda741c5a83d21c9448b47f2d8",
+      "length": 1067,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"hurry up\"},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":\"good\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "61c815f8acbc0afe2d206cbcee8b4635f08f402f2637078004703715faa0ef75",
+      "length": 1451,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"kerpIsw3t\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/a.txt\\\"}\"}},{\"id\":\"6ewNE1WM1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/b.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nbeta\",\"tool_call_id\":\"6ewNE1WM1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"hurry up\"},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":\"good\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "displaced-tool-result/stream": {
+    "first": {
+      "sha256": "31a8e885178f6ef14a962034bef2cf4ba35a842366b1ba46ed5e8a0d9ad8f945",
+      "length": 1200,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"EAHeaXApF\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/1.txt\\\"}\"}}]},{\"role\":\"assistant\",\"content\":\"while waiting\"},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"MruIl5dU1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/2.txt\\\"}\"}},{\"id\":\"FpO0Sd782\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/3.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntwo\",\"tool_call_id\":\"MruIl5dU1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"done?\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "236c44be0519d560c58ff4e91a6898ccdd73e8ce286cfe27deebdd66a6001f45",
+      "length": 1584,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"EAHeaXApF\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/1.txt\\\"}\"}}]},{\"role\":\"assistant\",\"content\":\"while waiting\"},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"MruIl5dU1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/2.txt\\\"}\"}},{\"id\":\"FpO0Sd782\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/3.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntwo\",\"tool_call_id\":\"MruIl5dU1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"done?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "displaced-tool-result/rows": {
+    "first": {
+      "sha256": "31a8e885178f6ef14a962034bef2cf4ba35a842366b1ba46ed5e8a0d9ad8f945",
+      "length": 1200,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"EAHeaXApF\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/1.txt\\\"}\"}}]},{\"role\":\"assistant\",\"content\":\"while waiting\"},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"MruIl5dU1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/2.txt\\\"}\"}},{\"id\":\"FpO0Sd782\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/3.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntwo\",\"tool_call_id\":\"MruIl5dU1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"done?\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "236c44be0519d560c58ff4e91a6898ccdd73e8ce286cfe27deebdd66a6001f45",
+      "length": 1584,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"EAHeaXApF\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/1.txt\\\"}\"}}]},{\"role\":\"assistant\",\"content\":\"while waiting\"},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"MruIl5dU1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/2.txt\\\"}\"}},{\"id\":\"FpO0Sd782\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/3.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntwo\",\"tool_call_id\":\"MruIl5dU1\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"done?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "tool-id-shapes/stream": {
+    "first": {
+      "sha256": "d088f3d7656c1b63fe7a34f58451e63ef2dc26443ab50a4a9302862e47a08292",
+      "length": 1402,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/x\\\"}\"}},{\"id\":\"gcmjBzBaz\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nx-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\ncold\",\"tool_call_id\":\"gcmjBzBaz\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ny-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "8e0024d77577cdc6f4cf31945221eedc5a61dfc0449cdd27b43f99a93135c4fc",
+      "length": 1786,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/x\\\"}\"}},{\"id\":\"gcmjBzBaz\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nx-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\ncold\",\"tool_call_id\":\"gcmjBzBaz\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ny-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"end\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "tool-id-shapes/rows": {
+    "first": {
+      "sha256": "d088f3d7656c1b63fe7a34f58451e63ef2dc26443ab50a4a9302862e47a08292",
+      "length": 1402,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/x\\\"}\"}},{\"id\":\"gcmjBzBaz\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nx-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\ncold\",\"tool_call_id\":\"gcmjBzBaz\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ny-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "8e0024d77577cdc6f4cf31945221eedc5a61dfc0449cdd27b43f99a93135c4fc",
+      "length": 1786,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/x\\\"}\"}},{\"id\":\"gcmjBzBaz\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nx-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\ncold\",\"tool_call_id\":\"gcmjBzBaz\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VQ5H0c93P\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ny-body\",\"tool_call_id\":\"VQ5H0c93P\",\"name\":\"read_file\"},{\"role\":\"user\",\"content\":\"end\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "reasoning-thinking/stream": {
+    "first": {
+      "sha256": "9d6f241519b7e00cdedead9dbe02692a88736e625f3986b9c4277323034f3ed8",
+      "length": 1017,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":\"first answer\"},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"wNUgGWJDG\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nsunny\",\"tool_call_id\":\"wNUgGWJDG\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"It is sunny.\"},{\"role\":\"user\",\"content\":\"and tomorrow?\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "79de24ccec773e4f15413d87ebf4760f36db10ffda10ed528bffe3f979e8797c",
+      "length": 1401,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":\"first answer\"},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"wNUgGWJDG\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nsunny\",\"tool_call_id\":\"wNUgGWJDG\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"It is sunny.\"},{\"role\":\"user\",\"content\":\"and tomorrow?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "reasoning-thinking/rows": {
+    "first": {
+      "sha256": "9d6f241519b7e00cdedead9dbe02692a88736e625f3986b9c4277323034f3ed8",
+      "length": 1017,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":\"first answer\"},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"wNUgGWJDG\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nsunny\",\"tool_call_id\":\"wNUgGWJDG\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"It is sunny.\"},{\"role\":\"user\",\"content\":\"and tomorrow?\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "79de24ccec773e4f15413d87ebf4760f36db10ffda10ed528bffe3f979e8797c",
+      "length": 1401,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":\"first answer\"},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"wNUgGWJDG\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nget_weather\\n\\nerror:\\n\\n\\noutput:\\nsunny\",\"tool_call_id\":\"wNUgGWJDG\",\"name\":\"get_weather\"},{\"role\":\"assistant\",\"content\":\"It is sunny.\"},{\"role\":\"user\",\"content\":\"and tomorrow?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "thinking-only-chain/stream": {
+    "first": {
+      "sha256": "345633c0b2eaa9a01d89a9595ca3ad163d7fe31606433f90480aac128c60c455",
+      "length": 330,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"assistant\",\"content\":\"part one\"},{\"role\":\"assistant\",\"content\":\"part two\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "01f630306ad9c7ea16e2fcea8462fe05b00859e3625d073504d8c43fbde7309c",
+      "length": 714,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"assistant\",\"content\":\"part one\"},{\"role\":\"assistant\",\"content\":\"part two\"},{\"role\":\"user\",\"content\":\"next\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "thinking-only-chain/rows": {
+    "first": {
+      "sha256": "345633c0b2eaa9a01d89a9595ca3ad163d7fe31606433f90480aac128c60c455",
+      "length": 330,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"assistant\",\"content\":\"part one\"},{\"role\":\"assistant\",\"content\":\"part two\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "01f630306ad9c7ea16e2fcea8462fe05b00859e3625d073504d8c43fbde7309c",
+      "length": 714,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"assistant\",\"content\":\"part one\"},{\"role\":\"assistant\",\"content\":\"part two\"},{\"role\":\"user\",\"content\":\"next\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "media-inline-image/stream": {
+    "first": {
+      "sha256": "b775a7142df980a903e5e8dc21706eb01b450de72bf0dd42d04a5e5626dc8bd4",
+      "length": 565,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"and the url one?\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.test/pixel.png\"}}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "14f8f5e01fe560559233b37f5522b2c403e34c9e8fe163859740b2177eada0e8",
+      "length": 949,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"and the url one?\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.test/pixel.png\"}}]},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "media-inline-image/rows": {
+    "first": {
+      "sha256": "b775a7142df980a903e5e8dc21706eb01b450de72bf0dd42d04a5e5626dc8bd4",
+      "length": 565,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"and the url one?\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.test/pixel.png\"}}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "14f8f5e01fe560559233b37f5522b2c403e34c9e8fe163859740b2177eada0e8",
+      "length": 949,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"and the url one?\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.test/pixel.png\"}}]},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "media-reference-image/stream": {
+    "first": {
+      "sha256": "99ca64a000f9e11a5df76b0445c19b1475c2cccecabc6b162fe350bcafaeb0fb",
+      "length": 376,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "cf53613c42a77d46dca04758553c7ed6f6c7850f6d838d5564bb67068831447a",
+      "length": 760,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "media-reference-image/rows": {
+    "first": {
+      "sha256": "99ca64a000f9e11a5df76b0445c19b1475c2cccecabc6b162fe350bcafaeb0fb",
+      "length": 376,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "cf53613c42a77d46dca04758553c7ed6f6c7850f6d838d5564bb67068831447a",
+      "length": 760,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "unicode-edges/stream": {
+    "first": {
+      "sha256": "79220eb1819066fa1a54b6666f52cad719d3c4ea17d18f2852f932bada077e90",
+      "length": 1063,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"FcOyQu3oh\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"2\\\":\\\"two\\\",\\\"10\\\":\\\"ten\\\",\\\"path\\\":\\\"/ü/雪.txt\\\",\\\"b\\\":1,\\\"a\\\":[1,2,{\\\"z\\\":null}]}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nline1\\nline2\\t\\\"quoted\\\"\",\"tool_call_id\":\"FcOyQu3oh\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "e841748aa985d5ab6ddc993737715b1605a9dafcf0f9da91397588656e278065",
+      "length": 1447,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"FcOyQu3oh\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"2\\\":\\\"two\\\",\\\"10\\\":\\\"ten\\\",\\\"path\\\":\\\"/ü/雪.txt\\\",\\\"b\\\":1,\\\"a\\\":[1,2,{\\\"z\\\":null}]}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nline1\\nline2\\t\\\"quoted\\\"\",\"tool_call_id\":\"FcOyQu3oh\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":\"end\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "unicode-edges/rows": {
+    "first": {
+      "sha256": "79220eb1819066fa1a54b6666f52cad719d3c4ea17d18f2852f932bada077e90",
+      "length": 1063,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"FcOyQu3oh\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"2\\\":\\\"two\\\",\\\"10\\\":\\\"ten\\\",\\\"path\\\":\\\"/ü/雪.txt\\\",\\\"b\\\":1,\\\"a\\\":[1,2,{\\\"z\\\":null}]}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nline1\\nline2\\t\\\"quoted\\\"\",\"tool_call_id\":\"FcOyQu3oh\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "e841748aa985d5ab6ddc993737715b1605a9dafcf0f9da91397588656e278065",
+      "length": 1447,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"FcOyQu3oh\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"2\\\":\\\"two\\\",\\\"10\\\":\\\"ten\\\",\\\"path\\\":\\\"/ü/雪.txt\\\",\\\"b\\\":1,\\\"a\\\":[1,2,{\\\"z\\\":null}]}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nline1\\nline2\\t\\\"quoted\\\"\",\"tool_call_id\":\"FcOyQu3oh\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":\"end\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-tail-user/stream": {
+    "first": {
+      "sha256": "4dc4d48e32e9bdd2f29e9216ca634939c74232ed25fdfa2b15ecd21c2f37cbc3",
+      "length": 768,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":\"seven\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "3ee5c7da7df335a96572d757bc77ab1bb0ce1617a97fdd6b09988070a6b87a2d",
+      "length": 1152,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":\"seven\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-tail-user/rows": {
+    "first": {
+      "sha256": "4dc4d48e32e9bdd2f29e9216ca634939c74232ed25fdfa2b15ecd21c2f37cbc3",
+      "length": 768,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":\"seven\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "3ee5c7da7df335a96572d757bc77ab1bb0ce1617a97fdd6b09988070a6b87a2d",
+      "length": 1152,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":\"seven\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-tail-tool-result/stream": {
+    "first": {
+      "sha256": "2809bd752145df1542c5c92dd89573509f8babf0591ff25bc02bf1d04fd17b68",
+      "length": 845,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qddPWpets\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/t.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntail body\",\"tool_call_id\":\"qddPWpets\",\"name\":\"read_file\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "6040900479ae0d09cf5d3905e0cf510d9abb2796dda9cf168aa5a4ee1d8ea198",
+      "length": 1229,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qddPWpets\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/t.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntail body\",\"tool_call_id\":\"qddPWpets\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-tail-tool-result/rows": {
+    "first": {
+      "sha256": "2809bd752145df1542c5c92dd89573509f8babf0591ff25bc02bf1d04fd17b68",
+      "length": 845,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qddPWpets\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/t.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntail body\",\"tool_call_id\":\"qddPWpets\",\"name\":\"read_file\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "6040900479ae0d09cf5d3905e0cf510d9abb2796dda9cf168aa5a4ee1d8ea198",
+      "length": 1229,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"qddPWpets\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/t.txt\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\ntail body\",\"tool_call_id\":\"qddPWpets\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-tail-assistant/stream": {
+    "first": {
+      "sha256": "dc4ddef8fc85c9aaa612e5f5ac83b6c94105f0f47c0d50f03c8872e827d61ba8",
+      "length": 289,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "fa3f42fc10a17be0ad4014f330d78c3570e9190c895486d44124d3eff059e8f6",
+      "length": 673,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-tail-assistant/rows": {
+    "first": {
+      "sha256": "dc4ddef8fc85c9aaa612e5f5ac83b6c94105f0f47c0d50f03c8872e827d61ba8",
+      "length": 289,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "fa3f42fc10a17be0ad4014f330d78c3570e9190c895486d44124d3eff059e8f6",
+      "length": 673,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-anchor/stream": {
+    "first": {
+      "sha256": "df838a580744574a9679e8cad5f2fcc36d3a75f72ba359c796cddeb19643f0be",
+      "length": 379,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":\"acknowledged\"},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":\"another question\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "2b337ef40721addc68a4f7441660f04ba8456cd3144a42225bf10c8baada4439",
+      "length": 763,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":\"acknowledged\"},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":\"another question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-anchor/rows": {
+    "first": {
+      "sha256": "df838a580744574a9679e8cad5f2fcc36d3a75f72ba359c796cddeb19643f0be",
+      "length": 379,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":\"acknowledged\"},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":\"another question\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "2b337ef40721addc68a4f7441660f04ba8456cd3144a42225bf10c8baada4439",
+      "length": 763,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"Stable system prompt.\"},{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":\"acknowledged\"},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":\"another question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-tail-thinking/stream": {
+    "first": {
+      "sha256": "aaae026fb7e1c2078c798b6f68ef8cc90d31e29bbc80f6d251fab8cb1bc38f98",
+      "length": 228,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"visible answer\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "0ca1276b2ce116b981fea49a8b21ffad6e9f42d5f4d414d47ed60833303a2908",
+      "length": 612,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"visible answer\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-tail-thinking/rows": {
+    "first": {
+      "sha256": "aaae026fb7e1c2078c798b6f68ef8cc90d31e29bbc80f6d251fab8cb1bc38f98",
+      "length": 228,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"visible answer\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "0ca1276b2ce116b981fea49a8b21ffad6e9f42d5f4d414d47ed60833303a2908",
+      "length": 612,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"visible answer\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-media-purge-boundary/stream": {
+    "first": {
+      "sha256": "9ce7c5adca87487bffad020ee2371e8ba83035b0cb91bee6918dad4fec5ddefd",
+      "length": 451,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"stable prefix\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":\"tail\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "ac8208c19f45151ccd4f6be497c4071c7553bee06bef6b4e550213f9d14cc74c",
+      "length": 835,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"stable prefix\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":\"tail\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "cache-media-purge-boundary/rows": {
+    "first": {
+      "sha256": "9ce7c5adca87487bffad020ee2371e8ba83035b0cb91bee6918dad4fec5ddefd",
+      "length": 451,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"stable prefix\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":\"tail\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "ac8208c19f45151ccd4f6be497c4071c7553bee06bef6b4e550213f9d14cc74c",
+      "length": 835,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"stable prefix\"},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":\"tail\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "responses-stateful-parent/stream": {
+    "first": {
+      "sha256": "86f01fb211caa6be8e2156a77570515608bd129bc5274b8da0e06da8403eddd7",
+      "length": 795,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"IPkrF38I2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/s.txt\\\"}\"}}]}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "fe7663d0182c54940b4d0ea8d822c590f23a89e95cc588ac34a1c8fc92e10d0d",
+      "length": 1179,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"IPkrF38I2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/s.txt\\\"}\"}}]},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "responses-stateful-parent/rows": {
+    "first": {
+      "sha256": "86f01fb211caa6be8e2156a77570515608bd129bc5274b8da0e06da8403eddd7",
+      "length": 795,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"IPkrF38I2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/s.txt\\\"}\"}}]}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "fe7663d0182c54940b4d0ea8d822c590f23a89e95cc588ac34a1c8fc92e10d0d",
+      "length": 1179,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"IPkrF38I2\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"/s.txt\\\"}\"}}]},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"description\":\"Read a file\",\"parameters\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}}],\"tool_choice\":\"auto\",\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "blockless-row/stream": {
+    "first": {
+      "sha256": "afdcc7ee4f66a4360c848a496b0514f8b2536f5a8a1c0afed26ae8f9ca80af20",
+      "length": 254,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":\"after\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "b8b614a2eb997e94f9d74098bf468a8e4411b24cf624b6827458fec3dd47bbfe",
+      "length": 638,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":\"after\"},{\"role\":\"user\",\"content\":\"end\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  },
+  "blockless-row/rows": {
+    "first": {
+      "sha256": "afdcc7ee4f66a4360c848a496b0514f8b2536f5a8a1c0afed26ae8f9ca80af20",
+      "length": 254,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":\"after\"},{\"role\":\"user\",\"content\":\"end\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    },
+    "continuation": {
+      "sha256": "b8b614a2eb997e94f9d74098bf468a8e4411b24cf624b6827458fec3dd47bbfe",
+      "length": 638,
+      "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":\"after\"},{\"role\":\"user\",\"content\":\"end\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_continuation\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"SF\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_continuation\",\"content\":\"[Tool call acknowledged - awaiting execution]\",\"name\":\"get_weather\"},{\"role\":\"user\",\"content\":\"The tool calls above have been registered. Please continue with your response.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "contentLength": "present"
+    }
+  }
+}

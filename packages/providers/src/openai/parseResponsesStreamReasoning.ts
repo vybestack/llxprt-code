@@ -20,17 +20,7 @@ import type {
 export const OPENAI_REASONING_STREAM_ID_PREFIX = 'openai-responses-reasoning';
 
 export function appendReasoningDelta(current: string, delta: string): string {
-  if (!delta) {
-    return current;
-  }
-  if (!current) {
-    return delta;
-  }
-  const lastChar = current[current.length - 1];
-  const nextChar = delta[0];
-  const needsSpace =
-    /[\w)]/.test(lastChar) && /[\w(]/.test(nextChar) && !/\s/.test(nextChar);
-  return needsSpace ? `${current} ${delta}` : `${current}${delta}`;
+  return current + delta;
 }
 
 export function allocateReasoningStreamId(state: DispatchState): {

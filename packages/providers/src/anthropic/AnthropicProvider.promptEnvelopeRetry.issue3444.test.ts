@@ -26,7 +26,7 @@ import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
 } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import sharp from 'sharp';
@@ -118,7 +118,6 @@ function make429RateLimitError(message = 'Rate limit exceeded'): Error {
 function setupProvider(): {
   provider: AnthropicProvider;
   runtimeContext: ProviderRuntimeContext;
-  config: ReturnType<typeof createRuntimeConfigStub>;
   settingsService: SettingsService;
 } {
   const result = createProviderWithRuntime<AnthropicProvider>(
@@ -141,9 +140,8 @@ function setupProvider(): {
     },
   );
   const { provider, runtime, settingsService: svc } = result;
-  const config = createRuntimeConfigStub(svc);
 
-  return { provider, runtimeContext: runtime, config, settingsService: svc };
+  return { provider, runtimeContext: runtime, settingsService: svc };
 }
 
 function mediaMessages(png: string): IContent[] {
@@ -168,114 +166,124 @@ function errorMessage(error: unknown): string {
 }
 
 describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
-  it('retries a projected media turn with a fresh envelope instead of the spent token', async () => {
-    vi.clearAllMocks();
-    // Leftover mock*Once queue entries leak across tests (a failed prep
-    // never consumes its queued response); flush them explicitly.
-    mockMessagesCreate.mockReset();
-    const png = await pngBase64(64, 64);
-    const { provider, runtimeContext, config, settingsService } =
-      setupProvider();
-    mockMessagesCreate
-      .mockRejectedValueOnce(make429RateLimitError())
-      .mockResolvedValueOnce(createMockStream('recovered'));
+  registerAnthropicBehavior1();
 
-    const callOptions = createProviderCallOptions({
-      providerName: provider.name,
-      contents: mediaMessages(png),
-      settings: settingsService,
-      runtime: runtimeContext,
-      config,
-      ephemerals: { retries: 2, retrywait: 0 },
-      resolved: { streaming: true },
-    } as Parameters<typeof createProviderCallOptions>[0]);
-
-    // The agent seam mints the projection and hands the token to the
-    // orchestrator-wrapped provider, exactly as the production entry does.
-    const projection = await provider.projectPromptEnvelope(callOptions);
-    expect(projection.transportToken).toBeDefined();
-
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 2,
-      initialDelayMs: 0,
-    });
-
-    const chunks: string[] = [];
-    let error: unknown;
-    try {
-      const gen = orchestrator.generateChatCompletion({
-        ...callOptions,
-        promptEnvelopeTransportToken: projection.transportToken,
-      });
-      for await (const chunk of gen) {
-        const text = chunk.blocks.find((b) => b.type === 'text');
-        if (text !== undefined) chunks.push(text.text);
-      }
-    } catch (e) {
-      error = e;
-    }
-
-    expect(error).toBeUndefined();
-    expect(chunks.join('')).toContain('recovered');
-    // Attempt 1 (429) + attempt 2 (recovered): both reached the transport.
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
-    // Both attempts carried the full media payload — the image survives the
-    // retry instead of being silently dropped with it.
-    for (const call of mockMessagesCreate.mock.calls) {
-      expect(JSON.stringify(call[0].messages)).toContain('base64');
-    }
-    expect(errorMessage(error)).not.toContain(RELEASE_ERROR);
-  });
-
-  it('surfaces the terminal transport error, never the media-release error, when retries exhaust', async () => {
-    vi.clearAllMocks();
-    // Leftover mock*Once queue entries leak across tests (a failed prep
-    // never consumes its queued response); flush them explicitly.
-    mockMessagesCreate.mockReset();
-    const png = await pngBase64(64, 64);
-    const { provider, runtimeContext, config, settingsService } =
-      setupProvider();
-    const firstError = make429RateLimitError('first SDK rate limit');
-    const finalError = make429RateLimitError('final SDK rate limit');
-    mockMessagesCreate
-      .mockRejectedValueOnce(firstError)
-      .mockRejectedValueOnce(finalError);
-
-    const callOptions = createProviderCallOptions({
-      providerName: provider.name,
-      contents: mediaMessages(png),
-      settings: settingsService,
-      runtime: runtimeContext,
-      config,
-      ephemerals: { retries: 2, retrywait: 0 },
-    } as Parameters<typeof createProviderCallOptions>[0]);
-
-    const projection = await provider.projectPromptEnvelope(callOptions);
-
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 2,
-      initialDelayMs: 0,
-    });
-
-    let caught: unknown;
-    try {
-      const gen = orchestrator.generateChatCompletion({
-        ...callOptions,
-        promptEnvelopeTransportToken: projection.transportToken,
-      });
-      for await (const _chunk of gen) {
-        // The exhaust case yields nothing on the final failed attempt.
-      }
-    } catch (e) {
-      caught = e;
-    }
-
-    expect(caught).toBeDefined();
-    // The real transport failure (rate limit) is what the consumer sees.
-    expect(errorMessage(caught)).toContain('final SDK rate limit');
-    expect(errorMessage(caught)).not.toContain('first SDK rate limit');
-    expect(errorMessage(caught)).not.toContain(RELEASE_ERROR);
-    // Both physical attempts reached the SDK; neither died in preparation.
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
-  });
+  registerAnthropicBehavior2();
 });
+
+function registerAnthropicBehavior1(): void {
+  describe('behavior 1', () => {
+    it('retries a projected media turn with a fresh envelope instead of the spent token', async () => {
+      vi.clearAllMocks();
+      // Leftover mock*Once queue entries leak across tests (a failed prep
+      // never consumes its queued response); flush them explicitly.
+      mockMessagesCreate.mockReset();
+      const png = await pngBase64(64, 64);
+      const { provider, runtimeContext, settingsService } = setupProvider();
+      mockMessagesCreate
+        .mockRejectedValueOnce(make429RateLimitError())
+        .mockResolvedValueOnce(createMockStream('recovered'));
+
+      const callOptions = streamCallOptions({
+        providerName: provider.name,
+        contents: mediaMessages(png),
+        settings: settingsService,
+        runtime: runtimeContext,
+        config: createRuntimeConfigStub(settingsService),
+        ephemerals: { retries: 2, retrywait: 0 },
+        resolved: { streaming: true },
+      });
+
+      // The agent seam mints the projection and hands the token to the
+      // orchestrator-wrapped provider, exactly as the production entry does.
+      const projection = await provider.projectPromptEnvelope(callOptions);
+      expect(projection.transportToken).toBeDefined();
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 0,
+      });
+
+      const chunks: string[] = [];
+      let error: unknown;
+      try {
+        const gen = orchestrator.generateChatCompletion({
+          ...callOptions,
+          promptEnvelopeTransportToken: projection.transportToken,
+        });
+        for await (const chunk of gen) {
+          const text = chunk.blocks.find((b) => b.type === 'text');
+          if (text !== undefined) chunks.push(text.text);
+        }
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error).toBeUndefined();
+      expect(chunks.join('')).toContain('recovered');
+      // Attempt 1 (429) + attempt 2 (recovered): both reached the transport.
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+      // Both attempts carried the full media payload — the image survives the
+      // retry instead of being silently dropped with it.
+      for (const call of mockMessagesCreate.mock.calls) {
+        expect(JSON.stringify(call[0].messages)).toContain('base64');
+      }
+      expect(errorMessage(error)).not.toContain(RELEASE_ERROR);
+    });
+  });
+}
+
+function registerAnthropicBehavior2(): void {
+  describe('behavior 2', () => {
+    it('surfaces the terminal transport error, never the media-release error, when retries exhaust', async () => {
+      vi.clearAllMocks();
+      // Leftover mock*Once queue entries leak across tests (a failed prep
+      // never consumes its queued response); flush them explicitly.
+      mockMessagesCreate.mockReset();
+      const png = await pngBase64(64, 64);
+      const { provider, runtimeContext, settingsService } = setupProvider();
+      const firstError = make429RateLimitError('first SDK rate limit');
+      const finalError = make429RateLimitError('final SDK rate limit');
+      mockMessagesCreate
+        .mockRejectedValueOnce(firstError)
+        .mockRejectedValueOnce(finalError);
+
+      const callOptions = streamCallOptions({
+        providerName: provider.name,
+        contents: mediaMessages(png),
+        settings: settingsService,
+        runtime: runtimeContext,
+        config: createRuntimeConfigStub(settingsService),
+        ephemerals: { retries: 2, retrywait: 0 },
+      });
+
+      const projection = await provider.projectPromptEnvelope(callOptions);
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 0,
+      });
+
+      let caught: unknown;
+      try {
+        const gen = orchestrator.generateChatCompletion({
+          ...callOptions,
+          promptEnvelopeTransportToken: projection.transportToken,
+        });
+        for await (const _chunk of gen) {
+          // The exhaust case yields nothing on the final failed attempt.
+        }
+      } catch (e) {
+        caught = e;
+      }
+
+      expect(caught).toBeDefined();
+      // The real transport failure (rate limit) is what the consumer sees.
+      expect(errorMessage(caught)).toContain('final SDK rate limit');
+      expect(errorMessage(caught)).not.toContain('first SDK rate limit');
+      expect(errorMessage(caught)).not.toContain(RELEASE_ERROR);
+      // Both physical attempts reached the SDK; neither died in preparation.
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+    });
+  });
+}

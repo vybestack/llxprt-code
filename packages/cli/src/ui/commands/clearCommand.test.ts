@@ -1,3 +1,4 @@
+import { createTurnStore } from '../stores/turn/turnStore.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -52,9 +53,9 @@ import { setImmediate } from 'node:timers/promises';
 import { createClearCommand } from './clearCommand.js';
 import { bindClearSession } from './simpleCommandHost.js';
 import { createContinueCommandForTest } from './__tests__/continue-command-test-owner.js';
-import type { HistoryItemWithoutId } from '../types.js';
 import type { AgentHooks } from '../../../../agents/src/api/config-types.js';
 
+import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
@@ -230,6 +231,11 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     if (path === undefined) throw new Error('Expected old recording');
     oldPath = path;
     uiEvents = [];
+    const turn = createTurnStore();
+    turn.commands.bindJournal(() => ({
+      appendDisplay: agent.session.appendDisplay.bind(agent.session),
+      length: () => agent.session.getJournalLength(),
+    }));
     context = createMockCommandContext({
       recordingOwner: 'agent',
       services: { config, agent },
@@ -243,10 +249,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
         clear: () => {
           uiEvents.push('clear');
         },
-        addItem: (item: HistoryItemWithoutId) => {
-          if ('text' in item && item.text !== undefined)
-            uiEvents.push(item.text);
-        },
+        addItem: turn.commands.addItem,
       },
     });
   });
@@ -264,6 +267,22 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       else process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
     }
   });
+  async function expectJournaledStartNotice(): Promise<void> {
+    await agent.session.flushRecording();
+    const path = agent.session.getRecording().path;
+    if (!path) throw new Error('Missing new session journal');
+    const cursor = await NativeJournalCursor.open(path, {}, 10);
+    try {
+      expect(
+        (await cursor.pageBack(10)).entries.flatMap((entry) =>
+          entry.kind === 'projected' ? [entry.item.text] : [],
+        ),
+      ).toStrictEqual(['SessionStart feedback']);
+    } finally {
+      await cursor.close();
+    }
+    expect(uiEvents).not.toContain('SessionStart feedback');
+  }
 
   async function inputs(): Promise<Array<z.infer<typeof hookInput>>> {
     return (await readFile(join(directory, 'hooks.jsonl'), 'utf8'))
@@ -296,7 +315,9 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       expect(pending.content).not.toContain('cancel');
       expect(agent.session.getSessionId()).toBe(oldId);
       expect(
-        (await agent.getHistory()).flatMap((item) => item.blocks),
+        (await Array.fromAsync(agent.streamHistory())).flatMap(
+          (item) => item.blocks,
+        ),
       ).toContainEqual({ type: 'text', text: 'old question' });
       expect(uiEvents).not.toContain('clear');
       expect(uiEvents).not.toContain('tokens:0');
@@ -313,7 +334,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
         expect(messages).toHaveLength(1);
         await clearAction(context, '');
         expect(agent.session.getSessionId()).not.toBe(oldId);
-        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
         expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
       } finally {
         unsubscribe();
@@ -338,8 +359,8 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     expect(hooks[1].session_id).not.toBe(oldId);
     expect(hooks[1].session_id).toBe(agent.session.getSessionId());
     expect(config.getSessionId()).toBe(hooks[1].session_id);
-    expect(await agent.getHistory()).toStrictEqual([]);
-    expect(uiEvents).toContain('SessionStart feedback');
+    expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
+    await expectJournaledStartNotice();
     expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
   });
 
@@ -365,7 +386,9 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     const history = await agent.session.resumeSession(result.sessionRef);
     expect(history.id).toBe(oldId);
     expect(
-      (await agent.getHistory()).flatMap((item) => item.blocks),
+      (await Array.fromAsync(agent.streamHistory())).flatMap(
+        (item) => item.blocks,
+      ),
     ).toStrictEqual([
       { type: 'text', text: 'old question' },
       { type: 'text', text: 'old answer' },
@@ -374,6 +397,8 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
 
   it('resumes the pre-clear session through startup --continue after an immediate exit', async () => {
     await clearAction(context, '');
+    await expectJournaledStartNotice();
+    const displayOnlySessionId = agent.session.getSessionId();
     await agent.session.setRecording({ enabled: false });
     const request = new Proxy(config, {
       get(target, property, receiver) {
@@ -387,12 +412,16 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       () => agent.session.listBrowserTargetsDetailed(),
       { listSessions: false, deleteSession: undefined },
       null,
-    ).then(({ history }) => history);
-    expect(resumed?.flatMap((item) => item.blocks)).toStrictEqual([
+    ).then(({ resumedBoot }) => resumedBoot);
+    if (resumed === null) throw new Error('Expected resumed rows');
+    const resumedRows = await Array.fromAsync(resumed.streamRows());
+    expect(resumedRows.flatMap((item) => item.blocks)).toStrictEqual([
       { type: 'text', text: 'old question' },
       { type: 'text', text: 'old answer' },
     ]);
-    expect(await agent.session.listSessions()).toHaveLength(1);
+    expect(
+      (await agent.session.listSessions()).map((session) => session.id).sort(),
+    ).toStrictEqual([oldId, displayOnlySessionId].sort());
   });
 
   it.each(['SessionEnd', 'SessionStart'])(
@@ -401,7 +430,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       await writeFile(join(directory, 'failure'), event);
       await clearAction(context, '');
       expect(agent.session.getSessionId()).not.toBe(oldId);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
       expect(
         (await inputs()).map((input) => input.hook_event_name),
       ).toStrictEqual(['SessionEnd', 'SessionStart']);
@@ -421,12 +450,13 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
 
   it('uses the explicit Agent without needing Config on the command context', async () => {
     const explicit = createMockCommandContext({
+      recordingOwner: 'agent',
       services: { config: null, agent },
       ui: context.ui,
     });
     await clearAction(explicit, '');
     expect(agent.session.getSessionId()).not.toBe(oldId);
-    expect(await agent.getHistory()).toStrictEqual([]);
-    expect(uiEvents).toContain('SessionStart feedback');
+    expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
+    await expectJournaledStartNotice();
   });
 });

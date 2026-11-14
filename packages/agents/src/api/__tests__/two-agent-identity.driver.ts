@@ -153,7 +153,7 @@ async function snapshot(agent: Agent): Promise<object> {
       contextWindowUsed: stats.contextWindowUsed,
       totalApiLatencyMs: stats.totalApiLatencyMs,
     },
-    history: await agent.getHistory(),
+    history: await agent.session.getHistory(),
   };
 }
 
@@ -170,10 +170,17 @@ async function writeEffect(agent: Agent, content: string): Promise<void> {
   expect(result.error).toBeUndefined();
 }
 
+const turnNumbers = new WeakMap<Agent, number>();
+
 async function turn(agent: Agent, text: string): Promise<void> {
+  const turnNumber = (turnNumbers.get(agent) ?? 0) + 1;
+  turnNumbers.set(agent, turnNumber);
   successful(
     await collect(
-      agent.stream(text, { mcpDiscovery: 'skip', promptId: 'equal-prompt' }),
+      agent.stream(text, {
+        mcpDiscovery: 'skip',
+        promptId: `equal-prompt-${turnNumber}`,
+      }),
     ),
   );
 }
@@ -285,10 +292,10 @@ async function assertStreams(
     expect(JSON.stringify(request)).not.toContain('A private history marker');
     expect(JSON.stringify(request)).not.toContain('private-a-credential');
   }
-  expect(JSON.stringify(await b.getHistory())).toContain(
+  expect(JSON.stringify(await b.session.getHistory())).toContain(
     'B surviving root marker',
   );
-  expect(JSON.stringify(await b.getHistory())).not.toContain(
+  expect(JSON.stringify(await b.session.getHistory())).not.toContain(
     'A private history marker',
   );
   expect(b.getStats().apiRequests).toBe(3);

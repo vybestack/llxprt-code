@@ -7,35 +7,39 @@
 import * as fs from 'fs/promises';
 import path from 'path';
 import {
+  type CommandContext,
   type SlashCommand,
   type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-
-import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type {
+  IContent,
+  WorkspaceCheckpointOperations,
+} from '@vybestack/llxprt-code-core';
+import {
+  openDiskCheckpoint,
+  type DiskCheckpoint,
+} from './checkpoint-restore-source.js';
 
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
-type LoadHistory = UseHistoryManagerReturn['loadHistory'];
-type AddItem = UseHistoryManagerReturn['addItem'];
-type ClientHistory = Parameters<Agent['setHistory']>[0];
 
 export interface RestoreCommandOperations {
   readonly enabled: boolean;
   readonly checkpointDirectory: string | undefined;
-  readonly setClientHistory: (history: ClientHistory) => Promise<void>;
-  readonly restoreProjectSnapshot:
-    | ((commitHash: string) => Promise<void>)
+  readonly replaceHistoryFromSource: (
+    rows: AsyncIterable<IContent>,
+    signal: AbortSignal,
+  ) => Promise<void>;
+  readonly git:
+    | Pick<
+        WorkspaceCheckpointOperations,
+        | 'createFileSnapshot'
+        | 'getCurrentCommitHash'
+        | 'restoreProjectFromSnapshot'
+      >
     | undefined;
-}
-
-interface ToolCallCheckpoint {
-  history?: Parameters<NonNullable<LoadHistory>>[0];
-  clientHistory?: ClientHistory;
-  commitHash?: string;
-  toolCall: { name: string; args: Record<string, unknown> };
 }
 
 function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
@@ -54,33 +58,101 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
   };
 }
 
+type CheckpointGit = NonNullable<RestoreCommandOperations['git']>;
+
+/**
+ * Rewrites the project files from a snapshot and can put them back.
+ *
+ * The history replacement is the step that can still fail after the files
+ * change, and the replaced history cannot be recovered once published. The
+ * files are therefore the side that rolls back: the working tree is captured
+ * in a snapshot before the restore touches it, and `rollback` restores that
+ * snapshot.
+ */
+interface ProjectFileRestore {
+  restore(): Promise<void>;
+  /** Returns the failure to report, joined with any rollback failure. */
+  rollback(failure: unknown): Promise<unknown>;
+}
+
+function createProjectFileRestore(
+  git: CheckpointGit | undefined,
+  snapshot: string | undefined,
+  signal: AbortSignal,
+): ProjectFileRestore {
+  let priorState: string | undefined;
+  return {
+    async restore() {
+      signal.throwIfAborted();
+      if (git === undefined || snapshot === undefined) return;
+      const created = await git.createFileSnapshot('Project before /restore');
+      // A snapshot of a tree identical to HEAD commits nothing and returns ''.
+      priorState = created === '' ? await git.getCurrentCommitHash() : created;
+      await git.restoreProjectFromSnapshot(snapshot);
+      signal.throwIfAborted();
+    },
+    async rollback(failure) {
+      if (git === undefined || priorState === undefined) return failure;
+      try {
+        await git.restoreProjectFromSnapshot(priorState);
+      } catch (rollbackError) {
+        return new AggregateError(
+          [failure, rollbackError],
+          `Restore failed and the project files could not be rolled back: ${String(failure)}; ${String(rollbackError)}`,
+        );
+      }
+      return failure;
+    },
+  };
+}
+
 async function applyCheckpointRestoration(
-  loadHistory: LoadHistory,
-  addItem: AddItem,
+  context: CommandContext,
+  checkpoint: DiskCheckpoint,
   operations: RestoreCommandOperations,
-  data: ToolCallCheckpoint,
 ): Promise<void> {
-  if (Array.isArray(data.history)) {
-    loadHistory(data.history);
+  const { data, rows } = checkpoint;
+  const snapshot =
+    typeof data.commitHash === 'string' && data.commitHash.length > 0
+      ? data.commitHash
+      : undefined;
+  const files = createProjectFileRestore(
+    operations.git,
+    snapshot,
+    context.signal,
+  );
+  try {
+    if (rows !== undefined) {
+      // The files change at the end of the admission source, before the
+      // history is published; a later failure rolls them back below.
+      await operations.replaceHistoryFromSource(
+        (async function* () {
+          yield* rows;
+          await checkpoint.close();
+          await files.restore();
+        })(),
+        context.signal,
+      );
+    } else {
+      await checkpoint.close();
+      await files.restore();
+    }
+  } catch (error) {
+    throw await files.rollback(error);
   }
-  if (Array.isArray(data.clientHistory)) {
-    await operations.setClientHistory(data.clientHistory);
-  }
-  if (typeof data.commitHash === 'string' && data.commitHash.length > 0) {
-    await operations.restoreProjectSnapshot?.(data.commitHash);
-    addItem(
+  context.ui.clear();
+  if (snapshot !== undefined)
+    context.ui.addItem(
       {
         type: 'info',
         text: 'Restored project to the state before the tool call.',
       },
       Date.now(),
     );
-  }
 }
 
 async function restoreFromDirectory(
-  loadHistory: LoadHistory,
-  addItem: AddItem,
+  context: CommandContext,
   operations: RestoreCommandOperations,
   checkpointDirectory: string,
   args: string,
@@ -100,18 +172,16 @@ async function restoreFromDirectory(
       };
     }
     const filePath = path.join(checkpointDirectory, selectedFile);
-    const text = await fs.readFile(filePath, 'utf-8');
-    const checkpoint = JSON.parse(text) as ToolCallCheckpoint;
-    await applyCheckpointRestoration(
-      loadHistory,
-      addItem,
-      operations,
-      checkpoint,
-    );
+    const checkpoint = await openDiskCheckpoint(filePath, context.signal);
+    try {
+      await applyCheckpointRestoration(context, checkpoint, operations);
+    } finally {
+      await checkpoint.close();
+    }
     return {
       type: 'tool',
-      toolName: checkpoint.toolCall.name,
-      toolArgs: checkpoint.toolCall.args,
+      toolName: checkpoint.data.toolCall.name,
+      toolArgs: checkpoint.data.toolCall.args,
     };
   } catch (error) {
     return {
@@ -125,8 +195,6 @@ async function restoreFromDirectory(
 export function createRestoreCommand(
   operations: RestoreCommandOperations,
   readFuzzyFiltering: () => boolean,
-  loadHistory: LoadHistory,
-  addItem: AddItem,
 ): SlashCommand | null {
   if (!operations.enabled) return null;
 
@@ -162,7 +230,7 @@ export function createRestoreCommand(
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
     schema: restoreSchema,
-    action: async (_invocation, args) => {
+    action: async (invocation, args) => {
       if (!checkpointDirectory) {
         return {
           type: 'message',
@@ -171,8 +239,7 @@ export function createRestoreCommand(
         };
       }
       return restoreFromDirectory(
-        loadHistory,
-        addItem,
+        invocation,
         operations,
         checkpointDirectory,
         args,

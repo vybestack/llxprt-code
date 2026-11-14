@@ -40,7 +40,7 @@ interface ImageSlot {
  * undefined for URL media and for blocks whose size cannot be trusted. Those
  * are neither counted nor retired so the resolver still reports them.
  */
-function countedBytes(block: ContentBlock): number | undefined {
+export function countedBytes(block: ContentBlock): number | undefined {
   if (block.type !== 'media' || block.encoding === 'url') {
     return undefined;
   }
@@ -75,7 +75,7 @@ function isReadableFilename(filename: string | undefined): filename is string {
  * showed and never offers a handle the tools cannot resolve: a re-read is
  * only suggested when the block carries a usable file name.
  */
-function retirementNote(slot: ImageSlot): string {
+export function retirementNote(slot: ImageSlot): string {
   const { block } = slot;
   const filename = isReadableFilename(block.filename)
     ? block.filename

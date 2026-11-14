@@ -1,9 +1,11 @@
+import type { JournalMaintenanceScope } from '@vybestack/llxprt-code-core/journal/deferred-maintenance.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ApprovalLifecycleRecord } from '@vybestack/llxprt-code-core/scheduler/approval-lifecycle.js';
 /**
  * @requirement REQ-LOOP-002
  *
@@ -125,6 +127,7 @@ export interface AgenticLoopRuntime {
  * Display callbacks observe tool/output updates without owning completion.
  */
 export interface AgenticLoopOptions {
+  readonly maintenanceScope?: JournalMaintenanceScope;
   streamModel: (
     message: AgentMessageInput,
     signal: AbortSignal,
@@ -133,6 +136,14 @@ export interface AgenticLoopOptions {
     modelParameters?: AdmittedModelParameters,
   ) => AsyncGenerator<ServerAgentStreamEvent>;
   recordToolHistory: (calls: CompletedToolCall[]) => Promise<void>;
+  recordToolPresentations: (
+    calls: CompletedToolCall[],
+    origin?: object,
+  ) => Promise<void>;
+  persistApproval: (
+    record: ApprovalLifecycleRecord,
+    origin?: object,
+  ) => Promise<void>;
   config: AgenticLoopRuntime;
   tools: TurnToolExecutionOwner;
   /**

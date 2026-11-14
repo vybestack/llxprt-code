@@ -166,10 +166,6 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
       'gpt-4o',
       'openai',
       undefined,
-      {} as Parameters<typeof processStreamingResponse>[4],
-      [],
-      {} as Parameters<typeof processStreamingResponse>[6],
-      undefined,
       undefined,
       {
         toolCallPipeline: new ToolCallPipeline(),
@@ -183,11 +179,11 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
           error: vi.fn(),
         },
         getBaseURL: () => undefined,
-      } as unknown as Parameters<typeof processStreamingResponse>[9],
+      } as unknown as Parameters<typeof processStreamingResponse>[5],
       async function* () {
         continuationRequested = true;
         yield* [] as IContent[];
-      } as Parameters<typeof processStreamingResponse>[10],
+      } as Parameters<typeof processStreamingResponse>[6],
     );
 
     const results = await collectResults(iterator);
@@ -237,10 +233,6 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
         'accounts/fireworks/models/kimi-k2-instruct-0905',
         'openai',
         undefined,
-        {} as Parameters<typeof processStreamingResponse>[4],
-        [],
-        {} as Parameters<typeof processStreamingResponse>[6],
-        undefined,
         undefined,
         {
           toolCallPipeline: new ToolCallPipeline(),
@@ -254,11 +246,11 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
             error: vi.fn(),
           },
           getBaseURL: () => 'https://api.fireworks.ai/inference/v1',
-        } as unknown as Parameters<typeof processStreamingResponse>[9],
+        } as unknown as Parameters<typeof processStreamingResponse>[5],
         async function* () {
           continuationRequested = true;
           yield* [] as IContent[];
-        } as Parameters<typeof processStreamingResponse>[10],
+        } as Parameters<typeof processStreamingResponse>[6],
       ),
     );
 
@@ -324,10 +316,6 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
         'gpt-4o',
         'openai',
         undefined,
-        {} as Parameters<typeof processStreamingResponse>[4],
-        [],
-        {} as Parameters<typeof processStreamingResponse>[6],
-        undefined,
         undefined,
         {
           toolCallPipeline: new ToolCallPipeline(),
@@ -341,10 +329,10 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
             error: vi.fn(),
           },
           getBaseURL: () => undefined,
-        } as unknown as Parameters<typeof processStreamingResponse>[9],
+        } as unknown as Parameters<typeof processStreamingResponse>[5],
         async function* () {
           yield* [] as IContent[];
-        } as Parameters<typeof processStreamingResponse>[10],
+        } as Parameters<typeof processStreamingResponse>[6],
       ),
     );
 

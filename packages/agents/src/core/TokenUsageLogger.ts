@@ -24,13 +24,13 @@ import {
   type SerializedTokenUsageRecord,
   type TokenUsageAttemptOutcome,
 } from './tokenUsageRecords.js';
-import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
+import { RequestShapeTracker } from './tokenUsageRequestShape.js';
 import { toSummaryTurnRecord } from './tokenUsageSummaryRecord.js';
 
 // Re-export for backward compatibility — SerializedTokenUsageRecord now lives
 // in the schema module as an alias of SerializedTokenUsageTurnRecord.
 export type { SerializedTokenUsageRecord } from './tokenUsageRecords.js';
-export type { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
+export type { RequestShapeTracker } from './tokenUsageRequestShape.js';
 
 export type TokenEstimatorType =
   | 'openai-tiktoken'
@@ -179,12 +179,7 @@ export class TokenUsageLogger {
   private readonly errorLogger = new DebugLogger('llxprt:token-usage-logger');
   private dirEnsured = false;
   private writeChain: Promise<void> = Promise.resolve();
-  /**
-   * Per-session request-shape memory for the AC-5 new-vs-carried split and
-   * the AC-6 prefix-fingerprint change detection. Lives on the logger because
-   * the logger is already per-session; bounded internally.
-   */
-  private readonly shapeMemory = new RequestShapeSessionMemory();
+  private readonly shapeMemory = new RequestShapeTracker();
   /** The level of the request in flight; see {@link beginRequest}. */
   private level: TokenUsageLogLevel;
 
@@ -215,7 +210,7 @@ export class TokenUsageLogger {
    * effect from the next request. Pending attempts and request-shape memory
    * survive level changes. A request sent at `off` is not observed, so the
    * shape memory is told it missed one (see
-   * {@link RequestShapeSessionMemory.noteUnobservedRequest}).
+   * {@link RequestShapeTracker.noteUnobservedRequest}).
    */
   beginRequest(): TokenUsageLogLevel {
     this.level = this.readLevel();
@@ -223,11 +218,7 @@ export class TokenUsageLogger {
     return this.level;
   }
 
-  /**
-   * Per-session request-shape memory (callId tracking + fingerprint history).
-   * Used by the request-shape seam helper to compute AC-5/AC-6 values.
-   */
-  getShapeMemory(): RequestShapeSessionMemory {
+  getShapeMemory(): RequestShapeTracker {
     return this.shapeMemory;
   }
 

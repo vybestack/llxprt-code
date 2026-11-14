@@ -42,15 +42,12 @@ import { useCommandView } from './useCommandView.js';
 import { useShallowMemo } from './useShallowMemo.js';
 
 import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
-import {
-  bindCommandHistoryLoader,
-  bindResumedHistoryReplay,
-} from './commandHistoryLoaderHost.js';
+
 import type {
   ResumeSessionReads,
   bindCommandRawResume,
 } from './commandRawResumeHost.js';
-import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
+
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 import type { useHistoryCommandOwners } from './useHistoryCommandOwners.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
@@ -199,7 +196,6 @@ export interface UseSlashCommandProcessorCoreArgs
   registerChatCommands: RegisterChatCommands;
   registerSubagentCommand: RegisterSubagentCommand;
   resumeOwnedCommand: ResumeOwnedCommand;
-  replaceCommandHistory: Agent['setHistory'];
   bindRawCommandResume: (
     config: CommandResumeRuntime | null,
     callbacks: RecordingSwapCallbacks | undefined,
@@ -217,7 +213,6 @@ export interface UseSlashCommandProcessorCoreArgs
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   clearItems: UseHistoryManagerReturn['clearItems'];
-  loadHistory: UseHistoryManagerReturn['loadHistory'];
   refreshStatic: () => void;
   toggleVimEnabled: () => Promise<boolean>;
   setIsProcessing: (isProcessing: boolean) => void;
@@ -297,7 +292,7 @@ function bindOwnedCommandResume(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandHandlerDeps['resumeOwnedSession'] {
   return args.recordingOwner === 'agent'
-    ? bindCommandOwnerResume(args.resumeOwnedCommand, args.loadHistory)
+    ? bindCommandOwnerResume(args.resumeOwnedCommand, args.clearItems)
     : null;
 }
 
@@ -309,13 +304,8 @@ function buildHandlerDeps(
   cancellation: SlashCommandCancellation,
 ): SlashCommandHandlerDeps {
   return {
+    writeOutput: args.writeOutput,
     resumeOwnedSession: bindOwnedCommandResume(args),
-    loadCommandHistory: bindCommandHistoryLoader(
-      args.replaceCommandHistory,
-      () => resolveEmojiFilterMode(args.ports.emojiFilter),
-      commandContext.ui.clear,
-      args.addItem,
-    ),
     recordCommandError: bindCommandErrorRecorder(
       args.recordCommandEvent,
       args.recordingOwner,
@@ -340,11 +330,7 @@ function buildHandlerDeps(
       args.ports.resumeSession,
       args.recordingSwapCallbacks,
     ),
-    replayResumedHistory: bindResumedHistoryReplay(
-      () => resolveEmojiFilterMode(args.ports.emojiFilter),
-      commandContext.ui.clear,
-      args.addItem,
-    ),
+    refreshResumedHistory: commandContext.ui.clear,
     confirmationLogger,
     slashCommandLogger,
     beginSlashCommandAction: cancellation.beginSlashCommandAction,
@@ -637,13 +623,12 @@ function useProcessorRegistration(
       ),
       ports.history,
       settings,
-      args.loadHistory,
       args.addItem,
       args.compressHistory,
       args.readRawHistory,
       args.isHistoryInitialized,
       args.readHistory,
-      args.replaceHistory,
+      args.replaceHistoryFromSource,
       readSessionSetting,
       writeSessionSetting,
       args.readDumpHistory,

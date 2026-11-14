@@ -222,19 +222,21 @@ index 1ff7c4c..5825b42 100644
      private restoreConsole?;
      private readonly unsubscribeResize?;
 diff --git a/node_modules/ink/build/ink.js b/node_modules/ink/build/ink.js
-index 0dc50a2..208dacf 100644
+index 0dc50a2..970bda9 100644
 --- a/node_modules/ink/build/ink.js
 +++ b/node_modules/ink/build/ink.js
-@@ -21,6 +21,8 @@ import { calculateScroll } from './scroll.js';
+@@ -20,7 +20,10 @@ import { calculateScroll } from './scroll.js';
+ // eslint-disable-next-line @typescript-eslint/consistent-type-imports
  import { ResizeObserverEntry } from './resize-observer.js';
  import { Selection } from './selection.js';
++import { internal_resetToStyledCharactersCache } from './measure-text.js';
  const noop = () => { };
 +const MAX_RETAINED_STATIC_OUTPUT_CODE_UNITS = 4 * 1024 * 1024;
 +const MAX_RETAINED_STATIC_OUTPUT_CHUNKS = 1024;
  const rainbowColors = [
      'red',
      'green',
-@@ -51,9 +53,8 @@ export default class Ink {
+@@ -51,9 +54,8 @@ export default class Ink {
      lastCursorPosition;
      container;
      rootNode;
@@ -246,7 +248,7 @@ index 0dc50a2..208dacf 100644
      exitPromise;
      restoreConsole;
      unsubscribeResize;
-@@ -112,21 +113,14 @@ export default class Ink {
+@@ -112,21 +114,14 @@ export default class Ink {
          // Store last output to only rerender when needed
          this.lastOutput = '';
          this.lastOutputHeight = 0;
@@ -271,7 +273,7 @@ index 0dc50a2..208dacf 100644
          }
          if (options.patchConsole) {
              this.patchConsole();
-@@ -138,6 +132,28 @@ export default class Ink {
+@@ -138,6 +133,28 @@ export default class Ink {
              };
          }
      }
@@ -300,7 +302,7 @@ index 0dc50a2..208dacf 100644
      resized = () => {
          this.calculateLayout();
          this.onRender();
-@@ -211,10 +227,10 @@ export default class Ink {
+@@ -211,10 +228,10 @@ export default class Ink {
          // If <Static> output isn't empty, it means new children have been added to it
          const hasStaticOutput = staticOutput && staticOutput !== '\n';
          if (this.options.debug) {
@@ -315,7 +317,7 @@ index 0dc50a2..208dacf 100644
              return;
          }
          if (isInCi) {
-@@ -226,10 +242,10 @@ export default class Ink {
+@@ -226,10 +243,10 @@ export default class Ink {
              return;
          }
          if (this.options.alternateBuffer) {
@@ -330,7 +332,7 @@ index 0dc50a2..208dacf 100644
              this.lastOutput = output;
              return;
          }
-@@ -267,22 +283,17 @@ export default class Ink {
+@@ -267,22 +284,17 @@ export default class Ink {
              return;
          }
          if (hasStaticOutput) {
@@ -358,6 +360,16 @@ index 0dc50a2..208dacf 100644
              return;
          }
          // To ensure static output is cleanly rendered before main output, clear main output first
+@@ -393,6 +405,9 @@ export default class Ink {
+         // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+         reconciler.flushSyncWork();
+         instances.delete(this.options.stdout);
++        // Batched terminal rows must not outlive the renderer in this shared cache.
++        // Other roots can repopulate it without changing their rendered output.
++        internal_resetToStyledCharactersCache();
+         if (error instanceof Error) {
+             this.rejectExitPromise(error);
+         }
 diff --git a/node_modules/ink/build/measure-text.d.ts b/node_modules/ink/build/measure-text.d.ts
 index 5619c54..e6b6254 100644
 --- a/node_modules/ink/build/measure-text.d.ts

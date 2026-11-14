@@ -1,9 +1,20 @@
+import { isDeepStrictEqual } from 'node:util';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { REVIEW_INPUT_FRACTION } from './reviewBudget.js';
+
+export class ReviewWindowTooLarge extends Error {
+  constructor() {
+    super('The review window exceeds the reviewer input budget.');
+  }
+}
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type {
   ContentBlock,
   IContent,
@@ -46,6 +57,10 @@ export interface ReviewWindow {
   /** The exact history the window was cut from, for the commit-time check. */
   readonly snapshot: readonly IContent[];
   readonly locations: ReadonlyMap<string, EntryLocation>;
+  readonly sourceOrdinals?: readonly number[];
+  readonly pendingSourceOrdinals?: ReadonlyMap<number, number>;
+  readonly pendingSnapshot?: readonly IContent[];
+  readonly isCurrent?: () => boolean;
 }
 
 /** One block of the pending user turn whose text a rewrite replaces. */
@@ -374,4 +389,122 @@ export function applyPendingEdits(
   edits: readonly PendingEdit[],
 ): IContent[] {
   return applyBlockEdits(contents, edits);
+}
+
+/** Reads the reviewable suffix from a pinned journal without retaining older rows. */
+export async function openReviewWindow(
+  history: HistoryService,
+  pending: readonly IContent[],
+  contextLimit: number,
+): Promise<ReviewWindow> {
+  await history.waitForCommit();
+  const isCurrent = history.historyMutationGuard();
+  const snapshot = await history.openDumpSnapshot();
+  try {
+    const rows = snapshot.callerOwnedRows;
+    if (rows === undefined)
+      throw new Error('Review requires indexed journal rows');
+    const budget = reviewRetentionBudget(contextLimit);
+    for (const row of pending) budget.retain(row);
+    const { selected, boundary, summary, goal } = await readReviewSuffix(
+      rows,
+      budget,
+    );
+    selected.reverse();
+    if (
+      summary !== undefined &&
+      !selected.some((entry) => entry.ordinal === summary.ordinal)
+    ) {
+      const boundarySeq = boundary === undefined ? undefined : seqOf(boundary);
+      const summarySeq = seqOf(summary.row);
+      if (
+        boundarySeq === undefined ||
+        summarySeq === undefined ||
+        summarySeq > boundarySeq
+      ) {
+        budget.retain(summary.row);
+        selected.unshift(summary);
+      }
+    }
+    const pendingSourceOrdinals = new Map<number, number>();
+    const committed = selected.filter(({ row, ordinal }) => {
+      const index = pending.findIndex(
+        (waiting) =>
+          waiting.metadata?.turnId !== undefined &&
+          waiting.metadata.turnId === row.metadata?.turnId &&
+          waiting.speaker === row.speaker &&
+          isDeepStrictEqual(waiting.blocks, row.blocks),
+      );
+      if (index < 0) return true;
+      pendingSourceOrdinals.set(index, ordinal);
+      return false;
+    });
+    const window = buildReviewWindow(
+      committed.map((entry) => entry.row),
+      pending,
+    );
+    return {
+      ...window,
+      goal: window.goal ?? goal,
+      sourceOrdinals: committed.map((entry) => entry.ordinal),
+      pendingSourceOrdinals,
+      pendingSnapshot: pending,
+      isCurrent,
+    };
+  } finally {
+    await snapshot.close();
+  }
+}
+
+interface ReviewSuffix {
+  readonly selected: Array<{ ordinal: number; row: IContent }>;
+  readonly boundary: IContent | undefined;
+  readonly summary: { ordinal: number; row: IContent } | undefined;
+  readonly goal: string | undefined;
+}
+
+function reviewRetentionBudget(contextLimit: number): {
+  retain(row: IContent): void;
+} {
+  const limit = Math.floor(contextLimit * REVIEW_INPUT_FRACTION);
+  let tokens = 0;
+  let bytes = 0;
+  return {
+    retain(row) {
+      const serialized = JSON.stringify(row);
+      bytes += Buffer.byteLength(serialized);
+      for (const block of row.blocks) {
+        const entry = blockEntry(row, block);
+        tokens += estimateTokens(
+          entry.editable || entry.kind === 'user'
+            ? entry.text
+            : clip(entry.text, CONTEXT_TEXT_LIMIT),
+        );
+        tokens += 1;
+      }
+      if (tokens > limit || bytes > limit * 64)
+        throw new ReviewWindowTooLarge();
+    },
+  };
+}
+
+async function readReviewSuffix(
+  rows: ProviderRequestRows,
+  budget: ReturnType<typeof reviewRetentionBudget>,
+): Promise<ReviewSuffix> {
+  const selected: Array<{ ordinal: number; row: IContent }> = [];
+  let boundary: IContent | undefined;
+  let summary: { ordinal: number; row: IContent } | undefined;
+  let goal: string | undefined;
+  for (let ordinal = rows.count - 1; ordinal >= 0; ordinal--) {
+    const row = await rows.readAt(ordinal);
+    if (boundary === undefined) {
+      budget.retain(row);
+      selected.push({ ordinal, row });
+      if (isProviderResponse(row)) boundary = row;
+    }
+    if (summary === undefined && isSummary(row)) summary = { ordinal, row };
+    goal ??= latestGoal([row]);
+  }
+  return { selected, boundary, summary, goal };
 }

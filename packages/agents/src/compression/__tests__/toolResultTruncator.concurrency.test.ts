@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,6 +12,7 @@
  * history is concurrently mutated, preventing stale-index corruption.
  */
 
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
@@ -23,6 +25,7 @@ import {
   truncateLargestToolResponses,
   truncateOversizedToolResponsesUnified,
 } from '../toolResultTruncator.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function makeToolResponse(
   callId: string,
@@ -66,7 +69,7 @@ const noopLogger = new DebugLogger('test');
 function buildTruncatorDeps(
   historyService: HistoryService,
   opts?: {
-    computeProjected?: () => number;
+    computeProjected?: () => number | Promise<number>;
     estimateBlockTokensAsync?: (block: ContentBlock) => Promise<number>;
   },
 ) {
@@ -78,8 +81,8 @@ function buildTruncatorDeps(
       (async (block: ContentBlock) => estimateBlockByLength(block)),
     computeProjected:
       opts?.computeProjected ??
-      (() => {
-        const raw = historyService.getRawHistory();
+      (async () => {
+        const raw = await collectRawHistory(historyService);
         let total = 0;
         for (const entry of raw) {
           for (const block of entry.blocks) {
@@ -97,7 +100,7 @@ describe('Unified truncation actually stops on concurrent history mutation (issu
   let historyService: HistoryService;
 
   beforeEach(() => {
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
   });
 
   it('stops the loop (not skips) when history is mutated mid-replacement', async () => {
@@ -105,7 +108,7 @@ describe('Unified truncation actually stops on concurrent history mutation (issu
       await observeStopsTheLoopNotSkipsWhenHistoryIsMutatedMidReplacement();
     expect(result.replacedCount).toBe(1);
     expect(result.success).toBe(false);
-    expect(historyService.getRawHistory().length).toBe(3);
+    expect((await collectRawHistory(historyService)).length).toBe(3);
   });
 
   const observeStopsTheLoopNotSkipsWhenHistoryIsMutatedMidReplacement =
@@ -134,7 +137,7 @@ describe('Unified truncation actually stops on concurrent history mutation (issu
             historyService.add(makeTextEntry('human', 'concurrent'));
           }
           let total = 0;
-          for (const entry of historyService.getRawHistory()) {
+          for (const entry of await collectRawHistory(historyService)) {
             for (const block of entry.blocks) {
               total += estimateBlockByLength(block);
             }
@@ -158,7 +161,7 @@ describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () =
   let historyService: HistoryService;
 
   beforeEach(() => {
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
   });
 
   it('aborts safely when history is concurrently cleared during ranking', async () => {
@@ -176,17 +179,20 @@ describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () =
       await historyService.waitForTokenUpdates();
 
       let estimateCallCount = 0;
+      let cleared: Promise<void> | undefined;
       const deps = buildTruncatorDeps(historyService, {
         estimateBlockTokensAsync: async (block: ContentBlock) => {
           estimateCallCount++;
           if (estimateCallCount === 1) {
-            historyService.clear();
+            cleared = historyService.clear();
           }
           return estimateBlockByLength(block);
         },
       });
 
       const result = await truncateLargestToolResponses(deps, 50);
+      await cleared;
+      expect(historyService.length()).toBe(0);
 
       return { result };
     };
@@ -196,7 +202,7 @@ describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () =
       await observeAbortsSafelyWhenHistoryIsConcurrentlyMutatedMidReplacement();
     expect(result.replacedCount).toBe(1);
     expect(result.success).toBe(false);
-    expect(historyService.getRawHistory().length).toBe(3);
+    expect((await collectRawHistory(historyService)).length).toBe(3);
   });
 
   const observeAbortsSafelyWhenHistoryIsConcurrentlyMutatedMidReplacement =
@@ -211,14 +217,14 @@ describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () =
 
       let projectionCallCount = 0;
       const deps = buildTruncatorDeps(historyService, {
-        computeProjected: () => {
+        computeProjected: async () => {
           projectionCallCount++;
           // On the first projection call (after first replacement), add an entry.
           if (projectionCallCount === 1) {
             historyService.add(makeTextEntry('human', 'concurrent'));
           }
           let total = 0;
-          for (const entry of historyService.getRawHistory()) {
+          for (const entry of await collectRawHistory(historyService)) {
             for (const block of entry.blocks) {
               total += estimateBlockByLength(block);
             }

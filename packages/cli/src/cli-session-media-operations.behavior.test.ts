@@ -1,20 +1,36 @@
+import { ScratchRootOwner } from '../../core/src/storage/scratch-root.js';
+import {
+  testNamedWriters,
+  withTestNamedWriters,
+} from './__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach, describe, expect, it } from 'bun:test';
+import {
+  afterAll as afterRecordingTests,
+  afterEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   LocalMediaStore,
-  SessionRecordingService,
+  createLockedSessionRecorder,
   getProjectHash,
 } from '@vybestack/llxprt-code-core';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { CliSessionPersistence } from './cliSessionPersistence.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 describe('CLI recording media operations', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const cleanups: Array<() => Promise<void>> = [];
   afterEach(async () => {
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -29,29 +45,37 @@ describe('CLI recording media operations', () => {
       quotaBytes: 4096,
     });
     cleanups.push(() => media.close());
-    const recording = await SessionRecordingService.createLocked({
-      sessionId: crypto.randomUUID(),
-      chatsDir,
-      projectHash: getProjectHash(root),
-      workspaceDirs: [root],
-      cwd: root,
-      provider: 'fake',
-      model: 'fake-model',
-      mediaStore: media,
-    });
+    const recording = await createLockedSessionRecorder(
+      withTestNamedWriters({
+        sessionId: crypto.randomUUID(),
+        chatsDir,
+        projectHash: getProjectHash(root),
+        workspaceDirs: [root],
+        cwd: root,
+        provider: 'fake',
+        model: 'fake-model',
+        mediaStore: media,
+      }),
+    );
     cleanups.push(() => recording.dispose());
     const reference = await media.admit({
       bytes: new TextEncoder().encode('attachment body'),
       mimeType: 'text/plain',
       semanticMetadata: { mediaType: 'document' },
     });
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'attached source' }, reference],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'attached source' }, reference],
+      },
+    ]);
     const owner = new CliSessionPersistence(
       { projectRoot: root, chatsDir },
-      { mediaStore: media },
+      {
+        namedWriters: testNamedWriters,
+        scratchRoots: recordingScratchRoots,
+        mediaStore: media,
+      },
     );
     await owner.createCheckpoint(recording, 'source', false);
     const listing = await owner.listBrowserTargetsDetailed();

@@ -6,9 +6,7 @@
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
-type HistorySource = Parameters<
-  RecordingIntegration['onHistoryServiceReplaced']
->[0];
+type HistorySource = Parameters<RecordingIntegration['subscribeToJournal']>[0];
 export type HistoryTokenSubscription = (
   publish: (count: number) => void,
 ) => () => void;
@@ -80,7 +78,7 @@ export function bindRecordingHistorySubscription(
       const history = readHistory();
       if (history === null || history === current) return;
       current = history;
-      recording.current?.onHistoryServiceReplaced(history);
+      void recording.current?.subscribeToJournal(history);
       tokenLogger.debug('RecordingIntegration subscribed to HistoryService');
     }, 100);
     return () => {

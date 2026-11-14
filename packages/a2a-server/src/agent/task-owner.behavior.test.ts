@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { collectRowsForAssertions } from '../../../test-utils/src/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners } from '../../../cli/src/__tests__/command-owner-fixture.js';
@@ -58,16 +59,18 @@ describe('task session operation ownership', () => {
     const task = ownedTask(owner);
     const siblingTask = ownedTask(sibling);
     expect((await collect(task)).map((event) => event.type)).toContain('done');
-    expect(JSON.stringify(await owner.getHistory())).toContain(
-      'task-owned request',
-    );
-    expect(await sibling.getHistory()).toHaveLength(0);
+    await collectRowsForAssertions(owner.streamHistory(), (rows) => {
+      expect(JSON.stringify(rows)).toContain('task-owned request');
+    });
+    await collectRowsForAssertions(sibling.streamHistory(), (rows) => {
+      expect(rows).toHaveLength(0);
+    });
     await task.dispose();
     expect((await collect(siblingTask)).map((event) => event.type)).toContain(
       'done',
     );
-    expect(JSON.stringify(await sibling.getHistory())).toContain(
-      'task-owned request',
-    );
+    await collectRowsForAssertions(sibling.streamHistory(), (rows) => {
+      expect(JSON.stringify(rows)).toContain('task-owned request');
+    });
   });
 });

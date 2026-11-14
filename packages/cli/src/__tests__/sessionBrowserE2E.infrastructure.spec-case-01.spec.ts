@@ -17,6 +17,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
+import { readRecordedFacts, readRecordedRows } from './journal-recording.js';
 import {
   PROJECT_HASH,
   cleanupSessionBrowserTestState,
@@ -36,7 +37,7 @@ describe('Test infrastructure verification #1', () => {
     await cleanupSessionBrowserTestState(state);
   });
 
-  it('createTestSession creates real JSONL files', async () => {
+  it('createTestSession creates real journal files', async () => {
     const { filePath, sessionId } = await createTestSession(state.chatsDir, {
       messages: [
         { speaker: 'user', text: 'Hello world' },
@@ -48,29 +49,18 @@ describe('Test infrastructure verification #1', () => {
     const stat = await fs.stat(filePath);
     expect(stat.isFile()).toBe(true);
 
-    // Verify file has content
-    const content = await fs.readFile(filePath, 'utf-8');
-    const lines = content.trim().split('\n');
-
-    // Should have session_start + 2 content events = 3 lines
-    expect(lines.length).toBe(3);
-
-    // First line should be session_start
-    const firstLine = JSON.parse(lines[0]);
-    expect(firstLine.type).toBe('session_start');
-    expect(firstLine.payload.sessionId).toBe(sessionId);
-    expect(firstLine.payload.projectHash).toBe(PROJECT_HASH);
-
-    // Second line should be human content
-    const secondLine = JSON.parse(lines[1]);
-    expect(secondLine.type).toBe('content');
-    expect(secondLine.payload.content.speaker).toBe('human');
-    expect(secondLine.payload.content.blocks[0].text).toBe('Hello world');
-
-    // Third line should be ai content
-    const thirdLine = JSON.parse(lines[2]);
-    expect(thirdLine.type).toBe('content');
-    expect(thirdLine.payload.content.speaker).toBe('ai');
-    expect(thirdLine.payload.content.blocks[0].text).toBe('Hi there!');
+    const facts = await readRecordedFacts(filePath);
+    expect(facts.sessionId).toBe(sessionId);
+    expect(facts.start.projectHash).toBe(PROJECT_HASH);
+    const rows = await readRecordedRows(filePath);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Hello world' }],
+    });
+    expect(rows[1]).toMatchObject({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hi there!' }],
+    });
   });
 });

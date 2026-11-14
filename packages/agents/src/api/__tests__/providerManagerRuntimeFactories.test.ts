@@ -163,7 +163,10 @@ describe('individually owned provider factories', () => {
         release,
         undefined,
       );
-      callerTokenizer = configureProviderTokenizer(callerManager);
+      callerTokenizer = configureProviderTokenizer(
+        callerManager,
+        selectedConfig.scratchRoots,
+      );
       await settingsOwner.startTelemetry(callerConfig);
       callerManager.setRuntimeContext(
         createProviderRuntimeContext({
@@ -194,11 +197,21 @@ describe('individually owned provider factories', () => {
   it('binds only the selected tokenizer and acquires independent content generators', async () => {
     await openCaller('independent-factory-owners', 'gpt-5.6-sol', {});
     const installed = callerTokenizer;
-    expect(configureProviderTokenizer(callerManager)).toBe(installed);
-    const selected = createRuntimeTokenizerFactory();
-    expect(configureProviderTokenizer(callerManager, selected)).toBe(selected);
+    expect(
+      configureProviderTokenizer(callerManager, callerConfig.scratchRoots),
+    ).toBe(installed);
+    const selected = createRuntimeTokenizerFactory(callerConfig.scratchRoots);
+    expect(
+      configureProviderTokenizer(
+        callerManager,
+        callerConfig.scratchRoots,
+        selected,
+      ),
+    ).toBe(selected);
     expect(callerManager.getTokenizerFactory()).toBe(selected);
-    expect(configureProviderTokenizer(callerManager)).toBe(selected);
+    expect(
+      configureProviderTokenizer(callerManager, callerConfig.scratchRoots),
+    ).toBe(selected);
     const prepare = requirePrepareTokenizer(selected);
     await prepare('openai', 'gpt-5.6-sol');
     const tokenizer = selected.getTokenizer('openai', 'gpt-5.6-sol');
@@ -224,10 +237,13 @@ describe('individually owned provider factories', () => {
 
     const manager = callerManager;
 
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, callerConfig.scratchRoots);
 
     const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
-    const tokenizerFactory = configureProviderTokenizer(manager);
+    const tokenizerFactory = configureProviderTokenizer(
+      manager,
+      callerConfig.scratchRoots,
+    );
 
     expect(contentGeneratorFactory).toBeDefined();
     expect(tokenizerFactory).toBeDefined();
@@ -272,7 +288,7 @@ describe('individually owned provider factories', () => {
       source: 'issue2835',
     });
 
-    configureProviderTokenizer(callerManager);
+    configureProviderTokenizer(callerManager, callerConfig.scratchRoots);
     const tokenizerFactory = callerTokenizer;
     expect(tokenizerFactory).toBeDefined();
 
@@ -311,7 +327,7 @@ describe('individually owned provider factories', () => {
    * the request path. This exercises the runtime tokenizer factory directly.
    */
   it('estimates a Claude 5 point release with the family calibration', async () => {
-    const factory = createRuntimeTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory(callerConfig.scratchRoots);
     const result = await factory.estimatePrompt(
       buildClaudeEstimateRequest('claude-fable-5-1'),
     );
@@ -332,11 +348,13 @@ describe('individually owned provider factories', () => {
       {},
     );
 
-    const injectedFactory = createRuntimeTokenizerFactory();
+    const injectedFactory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+    );
     callerManager.setTokenizerFactory(injectedFactory);
 
     try {
-      configureProviderTokenizer(callerManager);
+      configureProviderTokenizer(callerManager, callerConfig.scratchRoots);
 
       expect(callerManager.getTokenizerFactory()).toBe(injectedFactory);
     } finally {
@@ -345,7 +363,7 @@ describe('individually owned provider factories', () => {
   });
 
   it('prepares sanctioned GPT-5.6 readiness before exact runtime tokenization', async () => {
-    const factory = createRuntimeTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory(callerConfig.scratchRoots);
     expect(factory.prepareTokenizer).toBeDefined();
 
     await factory.prepareTokenizer?.('codex-alias', 'gpt-5.6-sol');
@@ -359,7 +377,7 @@ describe('individually owned provider factories', () => {
   });
 
   it('prepares GPT-6 Astra for exact o200k runtime counting and prompt estimation', async () => {
-    const factory = createRuntimeTokenizerFactory();
+    const factory = createRuntimeTokenizerFactory(callerConfig.scratchRoots);
     const prepareTokenizer = factory.prepareTokenizer;
     if (prepareTokenizer === undefined) {
       throw new Error('runtime tokenizer factory has no readiness operation');
@@ -417,7 +435,10 @@ describe('individually owned provider factories', () => {
           }),
       };
     };
-    const factory = createRuntimeTokenizerFactory(loadModule);
+    const factory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+      loadModule,
+    );
     const prepareTokenizer = factory.prepareTokenizer;
     if (prepareTokenizer === undefined) {
       throw new Error('runtime tokenizer factory has no readiness operation');
@@ -452,8 +473,9 @@ describe('individually owned provider factories', () => {
 
   it('fails Astra preparation when the shared o200k codec cannot initialize', async () => {
     const loaderFailure = new Error('Astra codec initialization exploded');
-    const factory = createRuntimeTokenizerFactory(() =>
-      Promise.reject(loaderFailure),
+    const factory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+      () => Promise.reject(loaderFailure),
     );
     const prepareTokenizer = factory.prepareTokenizer;
     if (prepareTokenizer === undefined) {
@@ -483,7 +505,10 @@ describe('individually owned provider factories', () => {
       loadCount += 1;
       return import('@dqbd/tiktoken');
     };
-    const factory = createRuntimeTokenizerFactory(loadModule);
+    const factory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+      loadModule,
+    );
     const prepareTokenizer = factory.prepareTokenizer;
     if (prepareTokenizer === undefined) {
       throw new Error('runtime tokenizer factory has no readiness operation');
@@ -504,8 +529,9 @@ describe('individually owned provider factories', () => {
 
   it('does not load the GPT-5.6 encoder while preparing another model', async () => {
     const loaderFailure = new Error('GPT codec loader must remain unused');
-    const factory = createRuntimeTokenizerFactory(() =>
-      Promise.reject(loaderFailure),
+    const factory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+      () => Promise.reject(loaderFailure),
     );
     expect(factory.prepareTokenizer).toBeDefined();
 
@@ -527,7 +553,10 @@ describe('individually owned provider factories', () => {
       await loaderGate;
       return import('@dqbd/tiktoken');
     };
-    const factory = createRuntimeTokenizerFactory(loadModule);
+    const factory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+      loadModule,
+    );
     const prepareTokenizer = requirePrepareTokenizer(factory);
 
     const readiness = Promise.all([
@@ -573,7 +602,10 @@ describe('individually owned provider factories', () => {
         }),
       } as unknown as Awaited<ReturnType<TiktokenModuleLoader>>;
     };
-    const factory = createRuntimeTokenizerFactory(loadModule);
+    const factory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+      loadModule,
+    );
     const prepareTokenizer = requirePrepareTokenizer(factory);
     const estimateRequest = {
       activeProvider: 'codex-a',
@@ -616,8 +648,9 @@ describe('individually owned provider factories', () => {
 
   it('reports preparation failure with estimator context and causal details', async () => {
     const loaderFailure = new Error('relocated codec initialization exploded');
-    const factory = createRuntimeTokenizerFactory(() =>
-      Promise.reject(loaderFailure),
+    const factory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+      () => Promise.reject(loaderFailure),
     );
     expect(factory.prepareTokenizer).toBeDefined();
 
@@ -646,7 +679,10 @@ describe('individually owned provider factories', () => {
   it('reports readiness probe encode failure with exact context and cause identity', async () => {
     const encodeFailure = new Error('readiness probe encode exploded');
     const loadModule = createEncodeFailingLoader(encodeFailure);
-    const factory = createRuntimeTokenizerFactory(loadModule);
+    const factory = createRuntimeTokenizerFactory(
+      callerConfig.scratchRoots,
+      loadModule,
+    );
 
     const prepareTokenizer = requirePrepareTokenizer(factory);
     const error = await captureRejection(

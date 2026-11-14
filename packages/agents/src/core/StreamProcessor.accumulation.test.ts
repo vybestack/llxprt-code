@@ -21,6 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { arrivalHistoryFixture } from './__tests__/support/arrival-history-fixture.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -28,6 +29,7 @@ import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.
 
 function createMockRuntimeContext() {
   return {
+    state: { model: 'test' },
     ephemerals: {
       reasoning: {
         includeInContext: () => false,
@@ -49,14 +51,7 @@ function createMockConversationManager() {
   };
 }
 
-function createMockHistoryService() {
-  return {
-    add: vi.fn(),
-    getAll: () => [],
-    generateTurnKey: () => `turn-${crypto.randomUUID()}`,
-    waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-  };
-}
+const createMockHistoryService = arrivalHistoryFixture();
 
 function makeChunk(text: string): ModelStreamChunk {
   return toModelStreamChunk({
@@ -80,24 +75,63 @@ function createUserInput(): IContent {
   } as IContent;
 }
 
-describe('StreamProcessor.processStreamResponse — accumulation efficiency (#2852)', () => {
-  let processor: StreamProcessor;
-
-  beforeEach(() => {
-    processor = Object.create(StreamProcessor.prototype);
-    Object.assign(processor, {
-      ports: createMockRuntimeContext(),
-      compressionHandler: createMockCompressionHandler(),
-      conversationManager: createMockConversationManager(),
-      historyService: createMockHistoryService(),
-      logger: new DebugLogger('test'),
-      eagerlyRecordedToolResponseCallIds: new Set<string>(),
-    });
-    (processor as unknown as Record<string, unknown>)[
-      '_finalizeStreamProcessing'
-    ] = vi.fn().mockResolvedValue(undefined);
+function createProcessor(): StreamProcessor {
+  const created: StreamProcessor = Object.create(StreamProcessor.prototype);
+  Object.assign(created, {
+    ports: createMockRuntimeContext(),
+    compressionHandler: createMockCompressionHandler(),
+    conversationManager: createMockConversationManager(),
+    historyService: createMockHistoryService(),
+    logger: new DebugLogger('test'),
+    eagerlyRecordedToolResponseCallIds: new Set<string>(),
+    _finalizeStreamProcessing: vi.fn().mockResolvedValue(undefined),
   });
+  return created;
+}
 
+/**
+ * Streams `chunkCount` 100-char chunks plus a finish chunk through a fresh
+ * processor and reports the CPU time this process spent doing it, including a
+ * full collection of the garbage the stream produced. CPU time, unlike wall
+ * time, does not grow while the runner schedules other jobs, and collecting
+ * before and inside the measurement charges each run for its own garbage.
+ */
+async function measureStreamCpu(
+  chunkCount: number,
+): Promise<{ cpuMs: number; yieldedCount: number }> {
+  const streamProcessor = createProcessor();
+  const payload = 'x'.repeat(100);
+  async function* stream(): AsyncGenerator<ModelStreamChunk> {
+    for (let i = 0; i < chunkCount; i++) {
+      yield makeChunk(payload);
+    }
+    yield makeFinishChunk('');
+  }
+  Bun.gc(true);
+  const start = process.cpuUsage();
+  let yieldedCount = 0;
+  for await (const _chunk of streamProcessor.processStreamResponse(
+    stream(),
+    createUserInput(),
+  )) {
+    yieldedCount++;
+  }
+  Bun.gc(true);
+  const used = process.cpuUsage(start);
+  return { cpuMs: (used.user + used.system) / 1000, yieldedCount };
+}
+
+function median(samples: readonly number[]): number {
+  const sorted = [...samples].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+let processor: StreamProcessor;
+
+describe('StreamProcessor.processStreamResponse — accumulation efficiency (#2852)', () => {
+  beforeEach(() => {
+    processor = createProcessor();
+  });
   it('produces correct final accumulated output with many text chunks', async () => {
     const { yielded, words } =
       await observeProducesCorrectFinalAccumulatedOutputWithManyTextChunks();
@@ -133,7 +167,6 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
 
       return { yielded, words };
     };
-
   it('accumulates metadata from later chunks (finishReason, usage)', async () => {
     const usageChunk: ModelStreamChunk = {
       content: { speaker: 'ai', blocks: [] },
@@ -167,46 +200,36 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       totalTokens: 300,
     });
   });
+  it('does not grow quadratically — 4x the chunks costs about 4x the CPU time', async () => {
+    // The O(N²) defect: accumulateModelStreamChunk built a new blocks array
+    // containing ALL prior blocks plus the new chunk on every call, N*(N+1)/2
+    // copies in total. Quadrupling the chunk count then multiplies the cost
+    // by up to 16, while per-chunk (linear) processing multiplies it by at
+    // most 4. A fixed wall-clock budget cannot tell these apart on a loaded CI
+    // runner, so the test compares CPU time for N and 4N chunks measured in
+    // the same process. The current linear processing measured 2.8 to 3.3,
+    // idle and with every core saturated by competing processes; putting the
+    // per-chunk copy of the accumulated blocks back into processStreamResponse
+    // measured 8.6 to 8.9. The median of three interleaved rounds per size
+    // keeps one disturbed sample from deciding the ratio.
+    const smallCount = 10000;
+    const largeCount = smallCount * 4;
+    const rounds = 3;
 
-  it('does not grow quadratically — large stream completes in bounded time', async () => {
-    // The O(N²) defect: accumulateModelStreamChunk creates a new blocks
-    // array containing ALL prior blocks plus the new chunk on every call.
-    // At chunk i, a new array of length i+1 is allocated. Total copies:
-    // N*(N+1)/2. For N=20000 that's 200M copies, taking ~2.8s in V8.
-    //
-    // The fix collects chunk blocks in an append-only list and materializes
-    // the full accumulated output once, achieving O(N).
-    //
-    // We use 100-char payloads so block objects are non-trivial, making
-    // the timing difference between O(N²) (~1.4s) and O(N) (<10ms)
-    // clearly discriminating.
-    const chunkCount = 20000;
-    const payload = 'x'.repeat(100);
-
-    async function* hugeStream(): AsyncGenerator<ModelStreamChunk> {
-      for (let i = 0; i < chunkCount; i++) {
-        yield makeChunk(payload);
-      }
-      yield makeFinishChunk('');
+    await measureStreamCpu(smallCount);
+    const small: number[] = [];
+    const large: number[] = [];
+    for (let round = 0; round < rounds; round++) {
+      const smallRun = await measureStreamCpu(smallCount);
+      const largeRun = await measureStreamCpu(largeCount);
+      expect(smallRun.yieldedCount).toBe(smallCount + 1);
+      expect(largeRun.yieldedCount).toBe(largeCount + 1);
+      small.push(smallRun.cpuMs);
+      large.push(largeRun.cpuMs);
     }
 
-    const start = performance.now();
-    let yieldedCount = 0;
-    for await (const _chunk of processor.processStreamResponse(
-      hugeStream(),
-      createUserInput(),
-    )) {
-      yieldedCount++;
-    }
-    const elapsed = performance.now() - start;
-
-    expect(yieldedCount).toBe(chunkCount + 1);
-    // O(N²) takes ~2800ms for 20000 chunks. O(N) takes <50ms.
-    // 500ms threshold gives 10x headroom over O(N) while clearly
-    // rejecting O(N²) behavior.
-    expect(elapsed).toBeLessThan(500);
-  });
-
+    expect(median(large) / median(small)).toBeLessThan(6);
+  }, 60_000);
   it('preserves block order across mixed block types', async () => {
     const textChunk = makeChunk('before');
     const toolCallChunk: ModelStreamChunk = toModelStreamChunk({
@@ -241,11 +264,11 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
 
     expect(types).toStrictEqual(['text', 'tool_call', 'text', 'text']);
   });
-
   it('passes includeThoughts flag to finalize', async () => {
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
       ports: {
+        state: { model: 'test' },
         ephemerals: {
           reasoning: {
             includeInContext: () => true,

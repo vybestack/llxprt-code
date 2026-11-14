@@ -1,8 +1,10 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { collectResumeRows } from './resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -77,13 +79,14 @@ describe('Error handling #2', () => {
       currentSessionId: 'different-session',
     });
 
-    const result = await performResume('latest', context);
+    const result = await performResume('latest', withTestNamedWriters(context));
 
     expect(result.ok).toBe(true);
     assertTruthy(result.ok);
+    const restoredRows = await collectResumeRows(result.history);
     // Should have skipped the empty session and picked the one with content
     expect(result.metadata.sessionId).toBe(contentSessionId);
-    expect(result.history[0].blocks[0]).toMatchObject({
+    expect(restoredRows[0].blocks[0]).toMatchObject({
       type: 'text',
       text: 'has content',
     });

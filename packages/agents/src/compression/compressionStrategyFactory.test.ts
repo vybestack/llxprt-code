@@ -158,7 +158,7 @@ describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () =>
 
   describe('interface contract across all strategies @requirement REQ-CS-001.2', () => {
     for (const strategyName of COMPRESSION_STRATEGIES) {
-      it(`${strategyName}: name matches, requiresLLM is boolean, compress is function`, () => {
+      it(`${strategyName}: name matches, requiresLLM is boolean, compressDisk is function`, () => {
         const strategy = getCompressionStrategy(
           strategyName,
           undefined,
@@ -166,9 +166,12 @@ describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () =>
           undefined,
           undefined,
         );
+
         expect(strategy.name).toBe(strategyName);
         expect(typeof strategy.requiresLLM).toBe('boolean');
-        expect(typeof strategy.compress).toBe('function');
+        expect('compressDisk' in strategy && typeof strategy.compressDisk).toBe(
+          'function',
+        );
       });
     }
   });

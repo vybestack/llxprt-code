@@ -8,7 +8,6 @@ import {
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
-  type IContent,
 } from '@vybestack/llxprt-code-core';
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -45,7 +44,9 @@ export interface SessionDispatchOptions {
   settings: LoadedSettings;
   workspaceRoot: string;
   recordingOwner?: 'agent';
-  resumedHistory?: IContent[] | null;
+  resumedBoot?:
+    | Parameters<typeof startInteractiveUIForTest>[5]['resumedBoot']
+    | null;
   /** Session-resume warnings the user must see (unreadable recordings, resume failures). */
   recordingStartupWarnings?: readonly string[];
   hasPipedInput: boolean;
@@ -63,7 +64,7 @@ export function createSessionDispatch(
       runtimeSettings,
       recordingOwner,
       workspaceRoot,
-      resumedHistory,
+      resumedBoot,
       skillOperations,
       restartExtension,
       suppressStartupWelcome,
@@ -88,7 +89,7 @@ export function createSessionDispatch(
             runtimeSettings,
             skillOperations,
             restartExtension,
-            resumedHistory: resumedHistory ?? undefined,
+            resumedBoot: resumedBoot ?? undefined,
             suppressStartupWelcome,
           },
         );

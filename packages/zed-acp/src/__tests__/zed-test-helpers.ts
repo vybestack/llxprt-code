@@ -591,7 +591,7 @@ export function createSession(
     readContextLimit: () => agent.getProviderContextLimit(),
     readApprovalMode: () => agent.getApprovalMode(),
     writeApprovalMode: (mode) => agent.setApprovalMode(mode),
-    readHistory: () => agent.getHistory(),
+    readHistory: (signal) => agent.streamHistory(signal),
     compressHistory: (options) => agent.compress(options),
     retireAgent: () => agent.dispose(),
     lookupTool: (name) => agent.tools.get(name),

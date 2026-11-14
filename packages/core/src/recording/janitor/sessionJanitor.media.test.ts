@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from '../../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,7 +25,7 @@ import type {
   MediaReferenceBlock,
 } from '../../services/history/IContent.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
-import { SessionRecordingService } from '../SessionRecordingService.js';
+import { JournalRecordingService } from '../journalRecordingService.js';
 import { runSessionCleanup } from './sessionJanitor.js';
 
 const PROJECT_HASH = 'a'.repeat(64);
@@ -118,17 +119,20 @@ describe('SessionJanitor media reclamation', () => {
     });
     await store.reserve(reserved, 'in-flight-request');
 
-    const recording = new SessionRecordingService({
-      sessionId: 'janitor-media-session',
-      projectHash: PROJECT_HASH,
-      chatsDir: join(projectDir, 'chats'),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      mediaStore: store,
-    });
-    recording.recordContent(referenceContent(kept));
-    recording.recordContent(referenceContent(kept));
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'janitor-media-session',
+        projectHash: PROJECT_HASH,
+        chatsDir: join(projectDir, 'chats'),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+        mediaStore: store,
+      }),
+    );
+    await (
+      await recording.session()
+    ).append([referenceContent(kept), referenceContent(kept)]);
     await recording.flush();
     await recording.dispose();
 
@@ -196,17 +200,19 @@ describe('SessionJanitor media reclamation', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
-      sessionId: 'janitor-failure-session',
-      projectHash: PROJECT_HASH,
-      chatsDir: join(projectDir, 'chats'),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
+    const recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'janitor-failure-session',
+        projectHash: PROJECT_HASH,
+        chatsDir: join(projectDir, 'chats'),
+        workspaceDirs: [],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
 
     try {
-      recording.recordContent(referenceContent(reference));
+      await (await recording.session()).append([referenceContent(reference)]);
       await recording.flush();
       const malformedActiveHistory: IContent[] = [
         {

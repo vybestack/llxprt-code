@@ -4,14 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
-  CheckpointService,
+  createCheckpointService,
   SessionDiscovery,
   SessionLockManager,
   deleteSession,
   type ContinueTarget,
+  type JournalSessionOptions,
   type UnreadableRecording,
   type LocalMediaStore,
-  type SessionRecordingService,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 export type BrowserListing = {
   readonly targets: readonly ContinueTarget[];
@@ -63,13 +64,13 @@ export function bindRawBrowserCatalog(
 export function bindRawBrowserTargetDelete(
   chatsDir: string,
   projectHash: string,
-  readRecording: () => SessionRecordingService | null,
-  mediaStore: LocalMediaStore | undefined,
+  readRecording: () => SessionRecordingPort | null,
+  journal: JournalSessionOptions,
 ): BrowserTargetDeleter {
   return async (target) => {
     if (target.kind === 'checkpoint') {
       const recording = readRecording();
-      const checkpoints = new CheckpointService(mediaStore);
+      const checkpoints = createCheckpointService(journal);
       if (recording?.getSessionId() === target.source.sessionId) {
         await checkpoints.deleteCheckpoint(
           recording,

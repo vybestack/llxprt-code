@@ -1,15 +1,28 @@
+import {
+  afterAll as afterRecordingTests,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../../../core/src/storage/scratch-root.js';
+import {
+  testNamedWriters,
+  withTestNamedWriters,
+} from '../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { bindCommandRawResume } from './commandRawResumeHost.js';
 import { performResume } from '../../services/performResume.js';
 
-import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import {
-  SessionRecordingService,
+  createLockedSessionRecorder,
+  type SessionRecordingPort,
   LocalMediaStore,
   getProjectHash,
   type RecordingIntegration,
@@ -29,6 +42,9 @@ import {
   type SlashCommandHandlerDeps,
 } from './slashCommandHandlers.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
+
 function unused(): never {
   throw new Error('Unexpected dialog action');
 }
@@ -65,19 +81,23 @@ async function resumeRaw(owner: Agent, decoy: Agent): Promise<void> {
   const root = owner.workspace.getWorkingDirectory();
   const chatsDir = join(root, 'chats');
   const sourceId = crypto.randomUUID();
-  const locked = await SessionRecordingService.createLocked({
-    sessionId: sourceId,
-    projectHash: getProjectHash(root),
-    chatsDir,
-    workspaceDirs: [root],
-    cwd: root,
-    provider: 'fake',
-    model: 'fake-model',
-  });
-  locked.recordContent({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'raw owner replay' }],
-  });
+  const locked = await createLockedSessionRecorder(
+    withTestNamedWriters({
+      sessionId: sourceId,
+      projectHash: getProjectHash(root),
+      chatsDir,
+      workspaceDirs: [root],
+      cwd: root,
+      provider: 'fake',
+      model: 'fake-model',
+    }),
+  );
+  await recordRowsForTest(locked, [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'raw owner replay' }],
+    },
+  ]);
   await locked.dispose();
   const media = new LocalMediaStore({
     rootDirectory: join(root, 'resume-media'),
@@ -85,10 +105,14 @@ async function resumeRaw(owner: Agent, decoy: Agent): Promise<void> {
   });
   const persistence = new CliSessionPersistence(
     { projectRoot: root, chatsDir },
-    { mediaStore: media },
+    {
+      namedWriters: testNamedWriters,
+      scratchRoots: recordingScratchRoots,
+      mediaStore: media,
+    },
   );
   const active: {
-    recording: SessionRecordingService | null;
+    recording: SessionRecordingPort | null;
     integration: RecordingIntegration | null;
     lock: LockHandle | null;
   } = { recording: null, integration: null, lock: null };
@@ -97,9 +121,10 @@ async function resumeRaw(owner: Agent, decoy: Agent): Promise<void> {
     getCurrentRecording: () => active.recording,
     getCurrentIntegration: () => active.integration,
     getCurrentLockHandle: () => active.lock,
+    getCurrentMetadata: () => null,
     setRecording: (
-      recording: SessionRecordingService,
-      integration: RecordingIntegration,
+      recording: SessionRecordingPort | null,
+      integration: RecordingIntegration | null,
       lock: LockHandle | null,
     ) => {
       active.recording = recording;
@@ -165,7 +190,9 @@ async function resumeRaw(owner: Agent, decoy: Agent): Promise<void> {
     recordCommandError: async (message) => {
       throw new Error(message);
     },
-    loadCommandHistory: async () => {},
+    writeOutput: async (item) => {
+      await appendJournalUiItem(owner.session, owner.session, item);
+    },
     resumeOwnedSession: null,
     isMcpDiscoveryPending: () => false,
     resumeRawSession: bindCommandRawResume(
@@ -176,7 +203,7 @@ async function resumeRaw(owner: Agent, decoy: Agent): Promise<void> {
       new DebugLogger('raw-owner'),
       performResume,
     ),
-    replayResumedHistory: () => {},
+    refreshResumedHistory: () => {},
   };
   try {
     await processSlashCommand(deps, '/continue ' + sourceId);
@@ -190,6 +217,8 @@ async function resumeRaw(owner: Agent, decoy: Agent): Promise<void> {
 }
 
 describe('raw command resume owner', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   const makeOwner = useCommandOwners();
   it('restores the captured history owner with sibling invocation and independent disposal', async () => {
     const owner = await makeOwner('owner');

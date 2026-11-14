@@ -1,26 +1,14 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- *
- * Issue #4036: a refused provider attempt is an audit-only `refusal` journal
- * record. It materializes the session file, and replay accepts it without
- * touching history or reporting an unknown event type.
- */
-
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { replaySession } from './ReplayEngine.js';
-import type { RefusalPayload } from './types.js';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, describe, expect, it } from 'bun:test';
 import {
-  assertReplayOk,
-  makeContent,
-} from './__tests__/replay-test-helpers.js';
-
-const PROJECT_HASH = 'refusal-project';
+  withTestNamedWriters,
+  testJournalOptions,
+} from '../journal/__tests__/support/namedWriterOwner.js';
+import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { RefusalPayloadSchema, type RefusalPayload } from './refusalPayload.js';
+import { textsOf } from './__tests__/refusal-rewrite-test-helpers.js';
 
 const REFUSAL: RefusalPayload = {
   time: '2026-11-11T21:12:00.000Z',
@@ -35,101 +23,89 @@ const REFUSAL: RefusalPayload = {
   action: 'stop',
 };
 
-describe('refusal journal record (issue #4036)', () => {
-  let chatsDir: string;
-  const services: SessionRecordingService[] = [];
-
-  beforeEach(async () => {
-    chatsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-refusal-'));
-  });
-
+describe('refusal journal record', () => {
+  const directory = useTempDir('native-recording-refusal-');
+  const services: JournalRecordingService[] = [];
   afterEach(async () => {
     for (const service of services.splice(0)) await service.dispose();
-    await fs.rm(chatsDir, { recursive: true, force: true });
   });
-
-  function createService(): SessionRecordingService {
-    const service = new SessionRecordingService({
-      sessionId: 'refusal-session-0001',
-      projectHash: PROJECT_HASH,
-      chatsDir,
-      workspaceDirs: [chatsDir],
-      provider: 'claudecode',
-      model: 'claude-opus-5-5',
-    });
+  function createService(): JournalRecordingService {
+    const service = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'refusal-session-0001',
+        projectHash: 'refusal-project',
+        chatsDir: directory(),
+        workspaceDirs: [],
+        provider: 'claudecode',
+        model: 'claude-opus-5-5',
+      }),
+    );
     services.push(service);
     return service;
   }
-
+  async function payload(
+    service: JournalRecordingService,
+    action = 'stop',
+  ): Promise<unknown> {
+    const value = await (
+      await service.session()
+    ).store.getState(`refusal:prompt-1:0:${action}`);
+    if (value === undefined) throw new Error('Missing refusal audit');
+    return JSON.parse(new TextDecoder().decode(value));
+  }
   it('materializes a session whose only event is a refused first request', async () => {
     const service = createService();
-
     service.recordRefusal(REFUSAL);
     await service.flush();
-
-    const filePath = service.getFilePath();
-    expect(filePath).not.toBeNull();
-    const lines = (await fs.readFile(filePath!, 'utf-8')).trim().split('\n');
-    expect(lines.map((line) => JSON.parse(line).type)).toStrictEqual([
-      'session_start',
-      'refusal',
-    ]);
+    expect(service.getFilePath()).not.toBeNull();
+    expect(await payload(service)).toStrictEqual(REFUSAL);
   });
-
   it('writes the refusal payload verbatim', async () => {
     const service = createService();
-
     service.recordRefusal(REFUSAL);
     await service.flush();
-
-    const lines = (await fs.readFile(service.getFilePath()!, 'utf-8'))
-      .trim()
-      .split('\n');
-    expect(JSON.parse(lines[1]).payload).toStrictEqual(REFUSAL);
+    expect(await payload(service)).toStrictEqual(REFUSAL);
   });
-
-  it('replays a refusal-only session with empty history and no warnings', async () => {
+  it('cold opens a refusal-only session with empty history', async () => {
     const service = createService();
     service.recordRefusal(REFUSAL);
     await service.flush();
-
-    const result = await replaySession(service.getFilePath()!, PROJECT_HASH);
-
-    assertReplayOk(result);
-    expect({
-      history: result.history,
-      warnings: result.warnings,
-    }).toStrictEqual({
-      history: [],
-      warnings: [],
-    });
+    const path = service.getFilePath();
+    if (path === null) throw new Error('Missing session');
+    await service.dispose();
+    const session = await JournalSession.open(path, testJournalOptions());
+    try {
+      expect(await textsOf(contents(session))).toStrictEqual([]);
+    } finally {
+      await session.close();
+    }
   });
-
-  it('leaves the history of surrounding content unchanged on replay', async () => {
+  it('leaves surrounding content unchanged through cold reopen', async () => {
     const service = createService();
-    service.recordContent(makeContent('first question', 'human'));
-    service.recordContent(makeContent('first answer', 'ai'));
-    service.recordRefusal(REFUSAL);
-    service.recordContent(makeContent('second question', 'human'));
-    await service.flush();
-
-    const result = await replaySession(service.getFilePath()!, PROJECT_HASH);
-
-    assertReplayOk(result);
-    expect(
-      result.history.map((content) => ({
-        speaker: content.speaker,
-        blocks: content.blocks,
-      })),
-    ).toStrictEqual([
+    const session = await service.session();
+    await session.append([
       { speaker: 'human', blocks: [{ type: 'text', text: 'first question' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'first answer' }] },
+    ]);
+    service.recordRefusal(REFUSAL);
+    await service.flush();
+    await session.append([
       { speaker: 'human', blocks: [{ type: 'text', text: 'second question' }] },
     ]);
-    expect(result.warnings).toStrictEqual([]);
+    const path = session.path;
+    await service.dispose();
+    const opened = await JournalSession.open(path, testJournalOptions());
+    try {
+      expect(await textsOf(contents(opened))).toStrictEqual([
+        'first question',
+        'first answer',
+        'second question',
+      ]);
+    } finally {
+      await opened.close();
+    }
   });
-
-  it('keeps the requested backoff of a retry record through replay', async () => {
+  it('keeps the requested backoff through reopen', async () => {
     const service = createService();
     const retry: RefusalPayload = {
       ...REFUSAL,
@@ -138,63 +114,52 @@ describe('refusal journal record (issue #4036)', () => {
     };
     service.recordRefusal(retry);
     await service.flush();
-
-    const lines = (await fs.readFile(service.getFilePath()!, 'utf-8'))
-      .trim()
-      .split('\n');
-    const result = await replaySession(service.getFilePath()!, PROJECT_HASH);
-
-    assertReplayOk(result);
-    expect({
-      payload: JSON.parse(lines[1]).payload,
-      warnings: result.warnings,
-    }).toStrictEqual({ payload: retry, warnings: [] });
+    const file = service.getFilePath();
+    if (file === null) throw new Error('Missing refusal journal');
+    await service.dispose();
+    const opened = await JournalSession.open(file, testJournalOptions());
+    try {
+      const bytes = await opened.store.getState('refusal:prompt-1:0:retry');
+      if (bytes === undefined) throw new Error('Missing retry audit');
+      expect(
+        RefusalPayloadSchema.parse(JSON.parse(new TextDecoder().decode(bytes))),
+      ).toStrictEqual(retry);
+      expect(await textsOf(contents(opened))).toStrictEqual([]);
+    } finally {
+      await opened.close();
+    }
   });
-
-  it('reports a retry record with a negative backoff as malformed', async () => {
-    const service = createService();
-    service.recordContent(makeContent('first question', 'human'));
-    await service.flush();
-    const filePath = service.getFilePath()!;
-    await fs.appendFile(
-      filePath,
-      `${JSON.stringify({
-        v: 1,
-        seq: 3,
-        ts: '2026-11-11T21:12:00.000Z',
-        type: 'refusal',
-        payload: { ...REFUSAL, action: 'retry', delayMs: -1 },
-      })}\n`,
-    );
-
-    const result = await replaySession(filePath, PROJECT_HASH);
-
-    assertReplayOk(result);
-    expect(result.warnings.some((w) => w.includes('malformed refusal'))).toBe(
-      true,
-    );
-  });
-
-  it('reports a refusal record with an invalid payload as malformed', async () => {
-    const service = createService();
-    service.recordContent(makeContent('first question', 'human'));
-    await service.flush();
-    const filePath = service.getFilePath()!;
-    const malformed = JSON.stringify({
-      v: 1,
-      seq: 3,
-      ts: '2026-11-11T21:12:00.000Z',
-      type: 'refusal',
-      payload: { action: 'explode' },
+  for (const [label, invalid] of [
+    ['negative backoff', { ...REFUSAL, action: 'retry', delayMs: -1 }],
+    ['invalid payload', { action: 'explode' }],
+  ]) {
+    it(`rejects a stored audit with ${label} without changing history`, async () => {
+      const service = createService();
+      const session = await service.session();
+      await session.append([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'first question' }],
+        },
+      ]);
+      await session.store.commit([
+        {
+          kind: 'setState',
+          key: 'refusal:prompt-1:0:stop',
+          value: new TextEncoder().encode(JSON.stringify(invalid)),
+          storage: 'body',
+        },
+      ]);
+      expect(
+        RefusalPayloadSchema.safeParse(await payload(service)).success,
+      ).toBe(false);
+      expect(await textsOf(contents(session))).toStrictEqual([
+        'first question',
+      ]);
     });
-    await fs.appendFile(filePath, `${malformed}\n`);
-
-    const result = await replaySession(filePath, PROJECT_HASH);
-
-    assertReplayOk(result);
-    expect(result.warnings.some((w) => w.includes('malformed refusal'))).toBe(
-      true,
-    );
-    expect(result.history).toHaveLength(1);
-  });
+  }
 });
+
+async function* contents(session: JournalSession) {
+  for await (const row of session.rows()) yield row.content;
+}

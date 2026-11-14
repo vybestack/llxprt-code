@@ -1,3 +1,6 @@
+import { persistApprovalLifecycle } from '../core/agenticLoop/approvalLifecycleRecording.js';
+import { persistToolPresentations } from '../core/agenticLoop/toolPresentationRecording.js';
+import { recordClientRequests } from './client-tool-recording.js';
 import { createClientToolChannel } from './clientToolChannel.js';
 import type { EditorCallbacks } from '../api/config-types.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
@@ -89,11 +92,17 @@ export class SessionExecutionOwner {
     onComplete: (calls: CompletedToolCall[]) => void | Promise<void>,
   ): ReturnType<typeof createClientToolChannel> {
     this.assertOpen();
-    return createClientToolChannel(
+    const client = this.currentClient;
+    if (client === undefined)
+      throw new Error('Session execution has no client');
+    const channel = createClientToolChannel(
       this.config,
       this.messageBus,
       readEditor,
-      onComplete,
+      async (calls) => {
+        await persistToolPresentations(calls, client.getHistoryService());
+        await onComplete(calls);
+      },
       this.selection,
       this.scheduler,
       () => this.settings.readToolExecutionPolicy(),
@@ -103,7 +112,18 @@ export class SessionExecutionOwner {
           ? this.config.getApprovalMode()
           : ApprovalMode.DEFAULT,
       this.settings.telemetry,
+      (record) => persistApprovalLifecycle(record, client.getHistoryService()),
     );
+    return {
+      ...channel,
+      schedule: async (request, signal) => {
+        const recorded = await recordClientRequests(
+          client.getHistoryService(),
+          request,
+        );
+        await channel.schedule(recorded, signal);
+      },
+    };
   }
 
   initialize(client: AgentClientContract): SessionExecution {
@@ -182,9 +202,11 @@ export class SessionExecutionOwner {
     try {
       signal.throwIfAborted();
       if (initializeHistory) {
-        const history = await client.getHistory();
+        await client.setHistoryFromSource(client.streamHistory(signal), {
+          signal,
+        });
         signal.throwIfAborted();
-        await client.startChat(history.length > 0 ? history : undefined);
+        await client.startChat();
       }
       signal.throwIfAborted();
       const loop = this.prepare(client);

@@ -1,3 +1,5 @@
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
+import type { ToolSelectedRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   createSessionSettingsFixture,
@@ -50,6 +52,7 @@ import {
   createRuntimeBundle,
   fakeChildScope,
   fixtureToolSelection,
+  launchForTest,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
@@ -58,7 +61,7 @@ const parentSignal = new AbortController().signal;
 const launchChild = (
   orchestrator: SubagentOrchestrator,
   request: Parameters<SubagentOrchestrator['launch']>[0],
-) => orchestrator.launch(request, parentSignal);
+) => launchForTest(orchestrator, request, parentSignal);
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
   const credentials = useOwnedCredentials();
@@ -211,9 +214,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     };
     const loadProfile = vi.fn().mockResolvedValue(childProfile);
     let loadedOptions: AgentRuntimeLoaderOptions | undefined;
-    const runtimeLoader = async (options: AgentRuntimeLoaderOptions) => {
+    const runtimeLoader = async (options: ToolSelectedRuntimeLoaderOptions) => {
       loadedOptions = options;
-      expect(options.profile.providerManager?.getActiveProvider().name).toBe(
+      expect(options.profile.providerManager?.getActiveProvider()?.name).toBe(
         childProfile.provider,
       );
       expect(options.profile.config.getModel()).toBe(childProfile.model);
@@ -256,7 +259,8 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     await expect(
       loadedOptions.mediaStore.getStoredByteLength(),
     ).rejects.toThrow(/closed/i);
-    expect(() => loadedOptions.profile.readRuntimeSettings?.()).toThrow(
+    const retiredProfile = loadedOptions.profile;
+    expect(() => retiredProfile.readRuntimeSettings?.()).toThrow(
       'Session settings owner is closed',
     );
     expect(loadedOptions.profile.config).not.toBe(foregroundConfig3);
@@ -288,7 +292,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       },
     );
     let childConfig: Config | undefined;
-    const runtimeLoader = async (options: AgentRuntimeLoaderOptions) => {
+    let childRuntimeId: string | undefined;
+    const runtimeLoader = async (options: ToolSelectedRuntimeLoaderOptions) => {
+      childRuntimeId = options.profile.state.runtimeId;
       childConfig = options.profile.config;
       return loadAgentRuntime(options);
     };
@@ -339,7 +345,11 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         expect(childConfig).not.toHaveProperty('profileManager');
         expect(childConfig).not.toHaveProperty('subagentManager');
         expect(result.identity.provider).toBe(childProfile.provider);
-        expect(result.identity.runtimeId).toBe(childConfig.getSessionId());
+        if (childRuntimeId === undefined)
+          throw new Error('Missing child runtime ID');
+        expect(result.identity.runtimeId).toBe(childRuntimeId);
+        expect(result.identity.runtimeId).not.toBe(childConfig.getSessionId());
+        expect(childConfig.getSessionId()).toMatch(/^[a-f0-9-]{36}$/);
         expect(await credentials().listProviders(0)).toStrictEqual([]);
       } finally {
         await result.dispose();
@@ -786,7 +796,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     );
   });
 
-  it('provides a dispose hook that clears runtime history and returns unique agent ids per launch', async () => {
+  it('provides a dispose hook that retires journal readers and returns unique agent ids per launch', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const loadProfile = vi.fn().mockResolvedValue(profile);
 
@@ -844,8 +854,14 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     await firstRun.dispose();
     await secondRun.dispose();
 
-    expect(firstBundle.history.clear).toHaveBeenCalled();
-    expect(secondBundle.history.clear).toHaveBeenCalled();
+    await expect(collectRawHistory(firstBundle.history)).rejects.toThrow(
+      /closed|disposed/i,
+    );
+    await expect(collectRawHistory(secondBundle.history)).rejects.toThrow(
+      /closed|disposed/i,
+    );
+    expect(firstBundle.history.getTotalTokens()).toBe(0);
+    expect(secondBundle.history.getTotalTokens()).toBe(0);
   });
 
   it('prefers history.dispose over clear during teardown', async () => {
@@ -853,13 +869,15 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loadProfile = vi.fn().mockResolvedValue(profile);
 
     const originalBundle = createRuntimeBundle('dispose');
-    const disposeSpy = vi.fn();
-    const clearSpy = vi.fn();
-    const history = {
-      ...originalBundle.history,
+    const dispose = originalBundle.history.dispose.bind(originalBundle.history);
+    const disposeSpy = vi.fn(dispose);
+    const clearSpy = vi.fn(
+      originalBundle.history.clear.bind(originalBundle.history),
+    );
+    const history = Object.assign(originalBundle.history, {
       dispose: disposeSpy,
       clear: clearSpy,
-    };
+    });
     const bundle = {
       ...originalBundle,
       history,

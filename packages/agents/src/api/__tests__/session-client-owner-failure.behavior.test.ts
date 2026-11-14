@@ -189,7 +189,10 @@ describe('Session client replacement failure', () => {
       credentials().authority,
       builtRelease,
     );
-    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtTokenizer = configureProviderTokenizer(
+      builtManager,
+      builtConfig.scratchRoots,
+    );
     const builtContent = createRuntimeContentGeneratorFactory();
     const builtOAuth = acquirePreferredOAuth(
       undefined,
@@ -359,7 +362,10 @@ describe('Session client replacement failure', () => {
       credentials().authority,
       builtRelease,
     );
-    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtTokenizer = configureProviderTokenizer(
+      builtManager,
+      builtConfig.scratchRoots,
+    );
     const builtContent = createRuntimeContentGeneratorFactory();
     const builtOAuth = acquirePreferredOAuth(
       undefined,
@@ -532,7 +538,10 @@ describe('Session client owner policy persistence at disposal', () => {
       credentials().authority,
       builtRelease,
     );
-    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtTokenizer = configureProviderTokenizer(
+      builtManager,
+      builtConfig.scratchRoots,
+    );
     const builtContent = createRuntimeContentGeneratorFactory();
     const builtOAuth = acquirePreferredOAuth(
       undefined,

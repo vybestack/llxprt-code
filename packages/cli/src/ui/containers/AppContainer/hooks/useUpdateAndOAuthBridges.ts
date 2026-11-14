@@ -27,7 +27,7 @@ import type { OAuthControl } from '../../../contexts/OAuthControlContext.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
 
 type HistoryAddItem = (
-  item: Omit<HistoryItemWithoutId, 'id'>,
+  item: HistoryItemWithoutId,
   timestamp?: number,
 ) => number;
 
@@ -70,9 +70,7 @@ function formatSettledOutcome(kind: OAuthInteractiveAuthOutcomeKind): string {
  * default). Each case constructs the precisely-typed
  * `Omit<HistoryItemWithoutId,'id'>` variant — no `any` or broad casts.
  */
-function eventToHistoryItem(
-  event: OAuthUIEvent,
-): Omit<HistoryItemWithoutId, 'id'> {
+function eventToHistoryItem(event: OAuthUIEvent): HistoryItemWithoutId {
   switch (event.type) {
     case 'info': {
       const item: HistoryItemInfo = {

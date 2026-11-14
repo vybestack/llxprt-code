@@ -31,7 +31,10 @@ export function isRefusalFinishReason(
  * refusal. Called by the stream finalizer before response validation, history
  * commit and success accounting, so none of them see the refused output.
  */
-export function throwIfRefused(accumulated: ModelOutput, turnId: string): void {
+export function throwIfRefused(
+  accumulated: Pick<ModelOutput, 'finishReason' | 'rawStopReason' | 'usage'>,
+  turnId: string,
+): void {
   if (!isRefusalFinishReason(accumulated.finishReason)) return;
   throw new ModelRefusalSignal({
     finishReason: 'refusal',

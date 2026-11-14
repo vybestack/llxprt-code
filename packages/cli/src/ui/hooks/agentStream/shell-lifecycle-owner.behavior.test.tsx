@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -76,7 +77,7 @@ const RESULT_FENCE =
 // gives it (Windows temp paths come back as either the 8.3 short form or the
 // long form), so the printed text is extracted and compared by real path.
 async function printedWorkingDirectory(owner: Agent): Promise<string> {
-  const history = await owner.getHistory();
+  const history = await collectResumeRows(owner.streamHistory());
   const texts = history.flatMap((entry) =>
     entry.blocks.flatMap((block) =>
       block.type === 'text' ? [block.text] : [],
@@ -99,11 +100,15 @@ describe('shell lifecycle session owner', () => {
     const owner = await makeOwner('shell-lifecycle-owner');
     const sibling = await makeOwner('shell-lifecycle-sibling');
     await runShell(owner, sibling, 'node -p "6 * 7"');
-    expect(JSON.stringify(await owner.getHistory())).toContain('42');
-    expect(await sibling.getHistory()).toHaveLength(0);
+    expect(
+      JSON.stringify(await collectResumeRows(owner.streamHistory())),
+    ).toContain('42');
+    expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(0);
     await owner.dispose();
     await runShell(sibling, owner, 'node -p "7 * 8"');
-    expect(JSON.stringify(await sibling.getHistory())).toContain('56');
+    expect(
+      JSON.stringify(await collectResumeRows(sibling.streamHistory())),
+    ).toContain('56');
   });
   it('executes in the captured working directory instead of a conflicting runtime', async () => {
     const owner = await makeOwner('shell-directory-owner');

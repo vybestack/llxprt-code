@@ -13,10 +13,7 @@ import { mkdtemp, rm, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import {
-  processRestorableToolCalls,
-  getToolCallDataSchema,
-} from '@vybestack/llxprt-code-core';
+import { getToolCallDataSchema } from '@vybestack/llxprt-code-core';
 
 import { buildAgent } from './helpers/agentHarness.js';
 import { makeScratchDir } from './helpers/scratch-dir.js';
@@ -26,6 +23,8 @@ import { makeScratchDir } from './helpers/scratch-dir.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { type ToolCallData } from '@vybestack/llxprt-code-core';
 
 describe('public Agent workspace checkpoint lifetime', () => {
   let promptDirectory: string;
@@ -117,25 +116,32 @@ describe('public Agent workspace checkpoint lifetime', () => {
       harness: { includeProcessCwd: false, forceConfirmations: false },
     });
     try {
-      const result = await processRestorableToolCalls(
-        [
-          {
-            callId: 'physical-call',
-            name: 'write_file',
-            args: {
-              file_path: join(project(), 'source.txt'),
-              content: 'replacement',
-            },
-            isClientInitiated: false,
-            prompt_id: 'physical-prompt',
-          },
-        ],
-        built.agent.workspace.checkpoints,
-        { getHistory: () => built.agent.getHistory() },
-      );
-      expect(result.errors).toStrictEqual([]);
-      expect(result.checkpointsToWrite.size).toBe(1);
-      for (const serialized of result.checkpointsToWrite.values()) {
+      // processRestorableToolCalls was replaced by the streamed checkpoint
+      // writer in the CLI; the same serialization is rebuilt here from the
+      // admitted workspace snapshot operation and the streamed Agent history.
+      const toolCall = {
+        name: 'write_file',
+        args: {
+          file_path: join(project(), 'source.txt'),
+          content: 'replacement',
+        },
+      };
+      const commitHash =
+        await built.agent.workspace.checkpoints.createFileSnapshot(
+          `Snapshot for ${toolCall.name}`,
+        );
+      const checkpointData: ToolCallData = {
+        history: [],
+        clientHistory: await Array.fromAsync(built.agent.streamHistory()),
+        toolCall,
+        commitHash,
+        messageId: 'physical-prompt',
+      };
+      const checkpointsToWrite = new Map([
+        ['physical-checkpoint.json', JSON.stringify(checkpointData, null, 2)],
+      ]);
+      expect(checkpointsToWrite.size).toBe(1);
+      for (const serialized of checkpointsToWrite.values()) {
         const checkpoint = getToolCallDataSchema().parse(
           JSON.parse(serialized),
         );

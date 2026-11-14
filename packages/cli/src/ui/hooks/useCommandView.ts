@@ -25,7 +25,6 @@ function useInvocationContext(
     UseSlashCommandProcessorCoreArgs,
     | 'addItem'
     | 'clearItems'
-    | 'loadHistory'
     | 'refreshStatic'
     | 'toggleVimEnabled'
     | 'setLlxprtMdFileCount'
@@ -41,7 +40,6 @@ function useInvocationContext(
   return useCommandContext({
     addItem: input.addItem,
     clearItems: input.clearItems,
-    loadHistory: input.loadHistory,
     refreshStatic: input.refreshStatic,
     toggleVimEnabled: input.toggleVimEnabled,
     setLlxprtMdFileCount: input.setLlxprtMdFileCount,

@@ -13,7 +13,7 @@ import {
 
 interface UseProviderDialogParams {
   addMessage: (msg: {
-    type: MessageType;
+    type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
     content: string;
     timestamp: Date;
   }) => void;
@@ -31,7 +31,7 @@ interface UseProviderDialogParams {
 
 function addProviderError(
   addMessage: (msg: {
-    type: MessageType;
+    type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
     content: string;
     timestamp: Date;
   }) => void,
@@ -146,7 +146,7 @@ function notifyProviderSwitch({
   infoMessages,
 }: {
   addMessage: (msg: {
-    type: MessageType;
+    type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
     content: string;
     timestamp: Date;
   }) => void;

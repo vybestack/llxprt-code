@@ -7,12 +7,13 @@
 import { describe, it, expect } from 'bun:test';
 import { resolveAuthTokenFromOptions } from './retryAuthTokenResolver.js';
 import type { GenerateChatOptions } from './IProvider.js';
+import { replayableContents } from './utils/collectContents.js';
 
 function optsWith(authToken: unknown): GenerateChatOptions {
   return {
-    contents: [],
+    contents: replayableContents([]),
     resolved: { authToken } as GenerateChatOptions['resolved'],
-  } as GenerateChatOptions;
+  };
 }
 
 describe('resolveAuthTokenFromOptions', () => {

@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
+import type { JournalRecordingService } from '../recording/journalRecordingService.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import type { ShellJobManager } from '../services/shellJobManager.js';
 import type { CancellationTree } from './cancellationTree.js';
@@ -55,8 +55,8 @@ type AsyncTaskManagerIsTaskPort = Expect<
 type ShellJobManagerIsShellJobPort = Expect<
   ShellJobManager extends ShellJobPort ? true : false
 >;
-type SessionRecordingServiceIsRecordingPort = Expect<
-  SessionRecordingService extends RecordingPort ? true : false
+type JournalRecordingServiceIsRecordingPort = Expect<
+  JournalRecordingService extends RecordingPort ? true : false
 >;
 type MessageBusIsApprovalBusPort = Expect<
   MessageBus extends ApprovalBusPort ? true : false
@@ -94,7 +94,7 @@ type CancellationTreeIsRootAndJoin = Expect<
 type ContractAssertions = [
   AsyncTaskManagerIsTaskPort,
   ShellJobManagerIsShellJobPort,
-  SessionRecordingServiceIsRecordingPort,
+  JournalRecordingServiceIsRecordingPort,
   MessageBusIsApprovalBusPort,
   SchedulerContractIsSchedulerHandle,
   PortHasExactlyFiveMembers,

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,6 +10,7 @@ import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
 import type { NetworkFetch } from '../utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -16,6 +18,7 @@ const requestFetch: NetworkFetch = () =>
 function runtime(settings: SettingsService) {
   const owner = new SessionSettingsOwner(settings);
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state: createAgentRuntimeState({
       sessionId: 'policy-validation',
       runtimeId: 'policy-validation',

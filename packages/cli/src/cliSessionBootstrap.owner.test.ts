@@ -10,7 +10,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core';
-import { setupOwnerSessionRecording as setupOwnerSessionRecordingCore } from './cliSessionBootstrap.js';
+import { readRecordedFacts } from './__tests__/journal-recording.js';
+import {
+  setupOwnerSessionRecording as setupOwnerSessionRecordingCore,
+  type OwnerResumedRows,
+} from './cliSessionBootstrap.js';
 import {
   __resetCleanupStateForTesting,
   registerCleanup,
@@ -23,6 +27,22 @@ const fixture = fileURLToPath(
     import.meta.url,
   ),
 );
+
+async function resumedRowsContain(
+  rows: OwnerResumedRows | null,
+  text: string,
+): Promise<boolean> {
+  if (rows === null) return false;
+  for await (const content of rows.streamRows()) {
+    if (
+      content.blocks.some(
+        (block) => block.type === 'text' && block.text.includes(text),
+      )
+    )
+      return true;
+  }
+  return false;
+}
 
 function setupOwnerSessionRecording(
   config: Parameters<typeof setupOwnerSessionRecordingCore>[0],
@@ -38,7 +58,7 @@ function setupOwnerSessionRecording(
     argv,
     selection,
     warnings,
-  ).then(({ history }) => history);
+  ).then(({ resumedBoot }) => resumedBoot);
 }
 
 describe('foreground noninteractive recording owner', () => {
@@ -144,15 +164,9 @@ describe('foreground noninteractive recording owner', () => {
       null,
     );
     expect(duplicateAdoption).not.toHaveBeenCalled();
-    expect(
-      history?.some((content) =>
-        content.blocks.some(
-          (block) =>
-            block.type === 'text' &&
-            block.text.includes('cli-owner-resume-seed'),
-        ),
-      ),
-    ).toBe(true);
+    expect(await resumedRowsContain(history, 'cli-owner-resume-seed')).toBe(
+      true,
+    );
     expect(resumed.agent.session.getRecording().path).toBe(path);
     await runExitCleanup();
     expect(
@@ -209,24 +223,23 @@ describe('foreground noninteractive recording owner', () => {
       type: 'directories_changed',
       directories: ['/first', '/second'],
     });
-    await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'warning',
-      message: 'first-warning',
+    expect(await readRecordedFacts(path)).toMatchObject({
+      provider: 'first-provider',
+      model: 'first-model',
+      directories: ['/first', '/second'],
     });
-    const beforeStop = await readFile(path, 'utf8');
-    expect(beforeStop).toContain('"type":"provider_switch"');
-    expect(beforeStop).toContain('"type":"directories_changed"');
-    expect(beforeStop).toContain('"type":"session_event"');
-    expect(beforeStop).toContain('first-warning');
-
     await agent.session.setRecording({ enabled: false });
+    const beforeStop = await readFile(path);
     await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'error',
-      message: 'must-not-appear',
+      type: 'provider_switch',
+      provider: 'must-not-appear',
+      model: 'must-not-appear',
     });
-    expect(await readFile(path, 'utf8')).not.toContain('must-not-appear');
+    await agent.session.recordRecordingEvent({
+      type: 'directories_changed',
+      directories: ['/must-not-appear'],
+    });
+    expect(await readFile(path)).toStrictEqual(beforeStop);
 
     const resumed = await built('owner-1', roots[0]);
     await setupOwnerSessionRecording(
@@ -245,16 +258,12 @@ describe('foreground noninteractive recording owner', () => {
       type: 'directories_changed',
       directories: ['/resumed'],
     });
-    await resumed.agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'info',
-      message: 'resumed-event',
+    expect(await readRecordedFacts(path)).toMatchObject({
+      provider: 'next-provider',
+      model: 'next-model',
+      directories: ['/resumed'],
     });
-    const afterResume = await readFile(path, 'utf8');
-    expect(afterResume).toContain('next-provider');
-    expect(afterResume).toContain('/resumed');
-    expect(afterResume).toContain('resumed-event');
-    expect(afterResume).not.toContain('must-not-appear');
+    expect(await readFile(path, 'utf8')).not.toContain('must-not-appear');
   }, 30000);
 
   it('falls back to a fresh owned recording when a continue target is missing', async () => {
@@ -297,15 +306,9 @@ describe('foreground noninteractive recording owner', () => {
       { listSessions: false, deleteSession: undefined },
       null,
     );
-    expect(
-      history?.some((content) =>
-        content.blocks.some(
-          (block) =>
-            block.type === 'text' &&
-            block.text.includes('cli-owner-checkpoint-seed'),
-        ),
-      ),
-    ).toBe(true);
+    expect(await resumedRowsContain(history, 'cli-owner-checkpoint-seed')).toBe(
+      true,
+    );
     expect(resumed.agent.session.getRecording().path).not.toBe(sourcePath);
     await runExitCleanup();
     expect(

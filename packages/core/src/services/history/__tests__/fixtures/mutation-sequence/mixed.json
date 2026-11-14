@@ -1,0 +1,320 @@
+{
+  "name": "mixed",
+  "description": "every kind of mutation in one history",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 6,
+        "prefix": "row"
+      },
+      "observed": {
+        "live": {
+          "length": 6,
+          "digest": "35f826b646d8fbc2245566e06564d53b067382fa9735d6d766e6482f1be44575",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b"
+          ]
+        },
+        "resumed": {
+          "length": 6,
+          "digest": "35f826b646d8fbc2245566e06564d53b067382fa9735d6d766e6482f1be44575",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "ai",
+          "call": {
+            "id": "m1",
+            "name": "read_file"
+          }
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 7,
+          "digest": "1c230b4dd907665d1357ab0deb856f5641b42e677230c125d4a761b776f024e4",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "bdee3df055b3adbf"
+          ]
+        },
+        "resumed": {
+          "length": 7,
+          "digest": "1c230b4dd907665d1357ab0deb856f5641b42e677230c125d4a761b776f024e4",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "bdee3df055b3adbf"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "validateAndFix"
+      },
+      "observed": {
+        "live": {
+          "length": 8,
+          "digest": "f69cb266a3a2c22864d7cd89a655e5503b3c43f6133906b54c9fc1793f7b7984",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "bdee3df055b3adbf",
+            "1979d3df30e69ade"
+          ]
+        },
+        "resumed": {
+          "length": 8,
+          "digest": "f69cb266a3a2c22864d7cd89a655e5503b3c43f6133906b54c9fc1793f7b7984",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "bdee3df055b3adbf",
+            "1979d3df30e69ade"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "density",
+        "removals": [0],
+        "replacements": [
+          [
+            2,
+            {
+              "speaker": "ai",
+              "text": "dense"
+            }
+          ]
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 7,
+          "digest": "181536f92828e2458b46a66ae536d77777bfa60c5c1c3aded960232838272337",
+          "tags": [
+            "21ceaa072194aeb9",
+            "f5217095b61f2efe",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "bdee3df055b3adbf",
+            "1979d3df30e69ade"
+          ]
+        },
+        "resumed": {
+          "length": 7,
+          "digest": "181536f92828e2458b46a66ae536d77777bfa60c5c1c3aded960232838272337",
+          "tags": [
+            "21ceaa072194aeb9",
+            "f5217095b61f2efe",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b",
+            "bdee3df055b3adbf",
+            "1979d3df30e69ade"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "truncate",
+        "keep": 5
+      },
+      "observed": {
+        "live": {
+          "length": 5,
+          "digest": "e4d12789004c82aece7328676d32c8df65c5ee3427b70131780da57b1b12a3e2",
+          "tags": [
+            "21ceaa072194aeb9",
+            "f5217095b61f2efe",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b"
+          ]
+        },
+        "resumed": {
+          "length": 5,
+          "digest": "e4d12789004c82aece7328676d32c8df65c5ee3427b70131780da57b1b12a3e2",
+          "tags": [
+            "21ceaa072194aeb9",
+            "f5217095b61f2efe",
+            "6dd6c8be9f629697",
+            "139a49d3b9d0a113",
+            "958bd748785ef86b"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "compress",
+        "summary": {
+          "speaker": "ai",
+          "text": "summary"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "2c150cd704dd909e173a5669ce829bbeabeb9e735f6811ea6f26dafa87a65774",
+          "tags": ["72ab0988fae01759"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "2c150cd704dd909e173a5669ce829bbeabeb9e735f6811ea6f26dafa87a65774",
+          "tags": ["72ab0988fae01759"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "addAll",
+        "rows": [
+          {
+            "speaker": "human",
+            "text": "q"
+          },
+          {
+            "speaker": "ai",
+            "call": {
+              "id": "m2",
+              "name": "read_file"
+            }
+          }
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "0c95be1a77c69038444845f22d6c8900864237b87405dabb1824b7552cccd110",
+          "tags": ["72ab0988fae01759", "ff56fdb961ced2bc", "3ae18b111c19556d"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "0c95be1a77c69038444845f22d6c8900864237b87405dabb1824b7552cccd110",
+          "tags": ["72ab0988fae01759", "ff56fdb961ced2bc", "3ae18b111c19556d"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "validateAndFix"
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "62e42d8ca2d72004256c77404d24e498567f07b0cebdbd05969361b47fd90902",
+          "tags": [
+            "72ab0988fae01759",
+            "ff56fdb961ced2bc",
+            "3ae18b111c19556d",
+            "47f90cb24f74bc12"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "62e42d8ca2d72004256c77404d24e498567f07b0cebdbd05969361b47fd90902",
+          "tags": [
+            "72ab0988fae01759",
+            "ff56fdb961ced2bc",
+            "3ae18b111c19556d",
+            "47f90cb24f74bc12"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "0c95be1a77c69038444845f22d6c8900864237b87405dabb1824b7552cccd110",
+          "tags": ["72ab0988fae01759", "ff56fdb961ced2bc", "3ae18b111c19556d"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "0c95be1a77c69038444845f22d6c8900864237b87405dabb1824b7552cccd110",
+          "tags": ["72ab0988fae01759", "ff56fdb961ced2bc", "3ae18b111c19556d"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "clear"
+      },
+      "observed": {
+        "live": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        },
+        "resumed": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "end"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "29a816f335806dedc4a421a922aaf026d7ad595e6bca39f892471e98534701d0",
+          "tags": ["7c60bbd2011f4cb0"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "29a816f335806dedc4a421a922aaf026d7ad595e6bca39f892471e98534701d0",
+          "tags": ["7c60bbd2011f4cb0"]
+        }
+      }
+    }
+  ]
+}

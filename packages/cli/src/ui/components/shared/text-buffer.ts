@@ -27,7 +27,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import pathMod from 'node:path';
-import { useState, useCallback, useEffect, useMemo, useReducer } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   coreEvents,
   CoreEvent,
@@ -515,7 +515,11 @@ function useBufferState(
   viewport: { width: number; height: number },
   inputFilter: UseTextBufferProps['inputFilter'],
   singleLine: boolean,
-) {
+): [
+  TextBufferState,
+  (action: TextBufferAction) => void,
+  React.MutableRefObject<TextBufferState>,
+] {
   const initialState = useMemo((): TextBufferState => {
     const lines = initialText.split('\n');
     const safeLines = lines.length === 0 ? [''] : lines;
@@ -539,11 +543,20 @@ function useBufferState(
     };
   }, [initialText, initialCursorOffset, viewport.width, viewport.height]);
 
-  return useReducer(
-    (s: TextBufferState, a: TextBufferAction) =>
-      textBufferReducer(s, a, { inputFilter, singleLine }),
-    initialState,
+  const [state, setState] = useState(initialState);
+  const currentState = useRef(initialState);
+  const dispatch = useCallback(
+    (action: TextBufferAction): void => {
+      const next = textBufferReducer(currentState.current, action, {
+        inputFilter,
+        singleLine,
+      });
+      currentState.current = next;
+      setState(next);
+    },
+    [inputFilter, singleLine],
   );
+  return [state, dispatch, currentState];
 }
 
 function useVisualScrollSync(
@@ -802,14 +815,14 @@ export function useTextBuffer({
   singleLine = false,
   getPreferredEditor,
 }: UseTextBufferProps): TextBuffer {
-  const [state, dispatch] = useBufferState(
+  const [state, dispatch, currentState] = useBufferState(
     initialText,
     initialCursorOffset,
     viewport,
     inputFilter,
     singleLine,
   );
-  return useTextBufferAssembly(
+  const buffer = useTextBufferAssembly(
     state,
     dispatch,
     viewport,
@@ -820,5 +833,22 @@ export function useTextBuffer({
     shellModeActive,
     singleLine,
     getPreferredEditor,
+  );
+  return useMemo(
+    () => ({
+      ...buffer,
+      // Input may contain paste and submit in one stdin chunk. Consumers must
+      // read the accepted edits without waiting for React's next render.
+      get text(): string {
+        return currentState.current.lines.join('\n');
+      },
+      get lines(): string[] {
+        return currentState.current.lines;
+      },
+      get cursor(): [number, number] {
+        return [currentState.current.cursorRow, currentState.current.cursorCol];
+      },
+    }),
+    [buffer, currentState],
   );
 }

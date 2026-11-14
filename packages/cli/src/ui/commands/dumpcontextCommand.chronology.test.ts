@@ -10,15 +10,24 @@
  */
 import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
+import type { ChronologyTraceEntry } from '@vybestack/llxprt-code-core';
 import { vi, describe, it, expect, type Mock } from 'bun:test';
 import { createDumpcontextCommand } from './dumpcontextCommand.js';
 import { bindDumpcontextCommand } from './dumpcontextCommandHost.js';
 
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import {
+  snapshotFixture,
+  fixtureRows,
+  captureStreamingDump,
+} from './dumpcontext-test-helpers.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
 void vi.mock('@vybestack/llxprt-code-providers', () => ({
   ...actual,
+  dumpRequestContextStream: (
+    ...args: Parameters<typeof actual.dumpRequestContextStream>
+  ) => captureStreamingDump(dumpRequestContext)(...args),
   dumpRequestContext: vi.fn().mockResolvedValue({
     baseId: '20260101-120000-anthropic-abc123',
     requestFilename: '20260101-120000-anthropic-abc123-request.json',
@@ -28,7 +37,7 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 
-const TRACE = [
+const TRACE: ChronologyTraceEntry[] = [
   {
     seq: 1,
     userTurn: 1,
@@ -44,22 +53,21 @@ const TRACE = [
 
 function contextWithTrace(): CommandOwnerFixture {
   const historyService = {
-    getAll: vi
-      .fn()
-      .mockReturnValue([
+    streamRawHistory: () =>
+      fixtureRows([
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
       ]),
-    getChronologyTrace: vi.fn().mockReturnValue(TRACE),
+    getChronologyTrace: vi.fn(async function* () {
+      yield* TRACE;
+    }),
+    openDumpSnapshot: snapshotFixture,
   };
 
   const context = createMockCommandContext({
     services: {
       agent: {
         session: {
-          readHistorySnapshot: () => ({
-            messages: historyService.getAll(),
-            chronology: historyService.getChronologyTrace(),
-          }),
+          openDumpSnapshot: () => historyService.openDumpSnapshot(),
         },
       },
       config: {} as unknown as CommandOwnerFixture['services']['config'],
@@ -83,11 +91,10 @@ const dumpAndCaptureCall = async (): Promise<unknown[]> => {
       readMode: () => context.runtimeApi.getSessionSetting('dumpcontext'),
       writeMode: (mode) =>
         context.runtimeApi.setSessionSetting('dumpcontext', mode),
-      readHistory: () =>
-        context.services.agent?.session.readHistorySnapshot() ?? null,
+      readHistory: async () =>
+        context.services.agent?.session.openDumpSnapshot() ?? null,
       readProvider: () => context.runtimeApi.getProviderDumpMetadata(),
       readOutputSettings: () => ({}),
-      readRuntimeConfig: () => context.services.config,
     }),
   );
   const action = command.action;

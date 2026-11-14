@@ -52,7 +52,7 @@ describe('request-shape measurement over hostile input (issue #3130)', () => {
       tools: undefined,
       instructionsText: undefined,
       countTokens,
-      previouslySentCallIds: new Set<string>(),
+      lastSendSequence: 0n,
     });
 
     expect(result.toolCalls).toHaveLength(1);
@@ -85,7 +85,7 @@ describe('request-shape measurement over hostile input (issue #3130)', () => {
       tools: undefined,
       instructionsText: undefined,
       countTokens,
-      previouslySentCallIds: new Set<string>(),
+      lastSendSequence: 0n,
     });
 
     expect(result.toolCalls[0].callId).toBe('sym-1');
@@ -111,7 +111,7 @@ describe('request-shape measurement over hostile input (issue #3130)', () => {
       tools: undefined,
       instructionsText: undefined,
       countTokens,
-      previouslySentCallIds: new Set<string>(),
+      lastSendSequence: 0n,
     });
 
     expect(result.historyTokens).toBeGreaterThan(0);
@@ -123,7 +123,7 @@ describe('request-shape measurement over hostile input (issue #3130)', () => {
       tools: cyclicValue(),
       instructionsText: undefined,
       countTokens,
-      previouslySentCallIds: new Set<string>(),
+      lastSendSequence: 0n,
     });
 
     expect(result.prefixFingerprint).toMatch(/^[0-9a-f]+$/);
@@ -145,14 +145,14 @@ describe('request-shape measurement over hostile input (issue #3130)', () => {
       tools: sharedTools,
       instructionsText: undefined,
       countTokens,
-      previouslySentCallIds: new Set<string>(),
+      lastSendSequence: 0n,
     });
     const withDistinct = computeRequestShape({
       requestContents: [],
       tools: distinctTools,
       instructionsText: undefined,
       countTokens,
-      previouslySentCallIds: new Set<string>(),
+      lastSendSequence: 0n,
     });
 
     expect(withShared.toolsSchemaTokens).toBe(withDistinct.toolsSchemaTokens);
@@ -178,7 +178,7 @@ describe('request-shape measurement over hostile input (issue #3130)', () => {
       tools: undefined,
       instructionsText: undefined,
       countTokens,
-      previouslySentCallIds: new Set<string>(),
+      lastSendSequence: 0n,
     });
 
     expect(JSON.stringify(result)).not.toContain('loop');

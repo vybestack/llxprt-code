@@ -14,106 +14,82 @@
  * `PendingResponseBuffer`; only the React state setters are plain holders.
  */
 
-import { describe, expect, it, vi } from 'bun:test';
-import type React from 'react';
+import { describe, expect, it } from 'bun:test';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import {
   dispatchAgentEvent,
   type AgentEventDeps,
 } from '../agentEventDispatcher.js';
-import { processContentEvent } from '../contentEventProcessor.js';
-import type { UseHistoryManagerReturn } from '../../useHistoryManager.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
+import {
+  withJournalResponse,
+  renderedOrder,
+  type Arrival,
+} from './journal-response-test-helpers.js';
 
-/** The history as the user sees it, top to bottom. */
-function render(events: readonly AgentEvent[]): string[] {
+async function render(events: readonly AgentEvent[]): Promise<string[]> {
   const shown: string[] = [];
-  let pending: HistoryItemWithoutId | null = null;
-  const pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null> =
-    {
-      get current() {
-        return pending;
+  await withJournalResponse(async (fixture) => {
+    let arrival: Arrival | undefined;
+    let pendingCommit: Promise<void> = Promise.resolve();
+    let attempt = 0;
+    const pendingHistoryItemRef: { current: HistoryItemWithoutId | null } = {
+      current: null,
+    };
+    const deps: AgentEventDeps = {
+      setLastPromptTokenCount: () => {},
+      addItem: (item) => {
+        if (item.type === 'info') shown.push(`info:${item.text}`);
       },
-      set current(value: HistoryItemWithoutId | null) {
-        pending = value;
+      flushPendingHistoryItem: () => {
+        const held = arrival;
+        if (held === undefined) return;
+        const index = shown.length;
+        shown.push('pending');
+        arrival = undefined;
+        pendingHistoryItemRef.current = null;
+        pendingCommit = held.seal({}).then(async () => {
+          const texts = renderedOrder(await fixture.items());
+          shown[index] = texts[texts.length - 1];
+        });
+      },
+      pendingHistoryItemRef,
+      loopDetectedRef: { current: false },
+      lastModelInfoRef: { current: null },
+      lastModelIdentityRef: { current: null },
+      setLastAgentActivityTime: () => {},
+      setThought: () => {},
+      handleUserCancelledEvent: () => {},
+      handleErrorEvent: () => {},
+      handleChatCompressionEvent: () => {},
+      handleFinishedNotice: () => {},
+      handleMaxSessionTurnsEvent: () => {},
+      handleContextWindowWillOverflowEvent: () => {},
+      handleCitationEvent: () => {},
+      handleStreamAttemptDiscarded: () => {
+        if (arrival !== undefined)
+          pendingCommit = arrival.interrupt('superseded');
+        arrival = undefined;
+        pendingHistoryItemRef.current = null;
       },
     };
-  let nextItemId = 1;
-  const addItem: UseHistoryManagerReturn['addItem'] = (item) => {
-    if (item.type === 'info') shown.push(`info:${item.text}`);
-    if (item.type === 'gemini' || item.type === 'gemini_content')
-      shown.push(`text:${item.text}`);
-    return nextItemId++;
-  };
-  const pendingResponse = new PendingResponseBuffer(undefined);
-  const thinkingBlocksRef = { current: [] };
-  const turnCancelledRef = { current: false };
-  const setPendingHistoryItem: AgentEventDeps['setPendingHistoryItem'] = (
-    updater,
-  ) => {
-    pending = typeof updater === 'function' ? updater(pending) : updater;
-  };
-  const flushPendingHistoryItem: AgentEventDeps['flushPendingHistoryItem'] =
-    () => {
-      if (pending !== null) {
-        shown.push(`text:${pendingResponse.materialize().text}`);
-        pendingResponse.reset();
+    for (const event of events) {
+      if (event.type === 'text') {
+        arrival ??= await fixture.open(`attempt-${attempt++}`);
+        await arrival.append({ type: 'text', text: event.text });
+        pendingHistoryItemRef.current = { type: 'gemini', text: '' };
       }
-      pending = null;
-    };
-  const sanitizeContent = (text: string) => ({ text, blocked: false });
-  const deps: AgentEventDeps = {
-    observeAssistantMessageCommitted: () => {},
-    setLastPromptTokenCount: () => {},
-    addItem,
-    sanitizeContent,
-    flushPendingHistoryItem,
-    pendingResponse,
-    pendingHistoryItemRef,
-    thinkingBlocksRef,
-    turnCancelledRef,
-    loopDetectedRef: { current: false },
-    lastModelInfoRef: { current: null },
-    lastModelIdentityRef: { current: null },
-    setPendingHistoryItem,
-    setLastAgentActivityTime: vi.fn(),
-    setThought: vi.fn(),
-    getContentPrefixIdentity: () => null,
-    handleContentEvent: (value, buffer, timestamp) =>
-      processContentEvent(value, buffer, timestamp, {
-        addItem,
-        pendingResponse,
-        sanitizeContent,
-        flushPendingHistoryItem,
-        pendingHistoryItemRef,
-        thinkingBlocksRef,
-        turnCancelledRef,
-        setPendingHistoryItem,
-        getContentPrefixIdentity: () => null,
-      }),
-    handleUserCancelledEvent: vi.fn(),
-    handleErrorEvent: vi.fn(),
-    handleChatCompressionEvent: vi.fn(),
-    handleFinishedNotice: vi.fn(),
-    handleMaxSessionTurnsEvent: vi.fn(),
-    handleContextWindowWillOverflowEvent: vi.fn(),
-    handleCitationEvent: vi.fn(),
-    handleStreamAttemptDiscarded: () => {
-      pending = null;
-      pendingResponse.reset();
-    },
-  };
-  let buffer = '';
-  for (const event of events) {
-    buffer = dispatchAgentEvent(event, deps, buffer, 1).agentMessageBuffer;
-  }
+      dispatchAgentEvent(event, deps, 1);
+      await pendingCommit;
+    }
+    await arrival?.interrupt('cancelled');
+  });
   return shown;
 }
 
 describe('dispatchAgentEvent refusal-recovery notices (issue #4036)', () => {
-  it('shows a retry notice as an info item', () => {
-    const shown = render([
+  it('shows a retry notice as an info item', async () => {
+    const shown = await render([
       {
         type: 'notice',
         source: 'refusal-recovery',
@@ -127,8 +103,8 @@ describe('dispatchAgentEvent refusal-recovery notices (issue #4036)', () => {
     ]);
   });
 
-  it('shows the notice after the refused attempt text was discarded', () => {
-    const shown = render([
+  it('shows the notice after the refused attempt text was discarded', async () => {
+    const shown = await render([
       { type: 'text', text: 'I cannot help with that.' },
       { type: 'retry' },
       { type: 'notice', source: 'refusal-recovery', message: 'retrying' },
@@ -138,8 +114,8 @@ describe('dispatchAgentEvent refusal-recovery notices (issue #4036)', () => {
     expect(shown).toStrictEqual(['info:retrying']);
   });
 
-  it('commits visible refused text before a stop summary notice', () => {
-    const shown = render([
+  it('commits visible refused text before a stop summary notice', async () => {
+    const shown = await render([
       { type: 'text', text: 'I cannot help with that.' },
       { type: 'notice', source: 'refusal-recovery', message: 'Stopping.' },
     ]);
@@ -150,8 +126,8 @@ describe('dispatchAgentEvent refusal-recovery notices (issue #4036)', () => {
     ]);
   });
 
-  it('ignores notices without a source, as before', () => {
-    const shown = render([
+  it('ignores notices without a source, as before', async () => {
+    const shown = await render([
       { type: 'notice', message: "MCP server 'x' discovery failed: boom" },
     ]);
 

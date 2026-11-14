@@ -9,9 +9,17 @@ import type OpenAI from 'openai';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import { prepareRequest } from './OpenAIRequestPreparation.js';
+import {
+  prepareRequest,
+  type ChatRowInput,
+  type RequestContext,
+} from './OpenAIRequestPreparation.js';
+import { chatMediaStage } from './OpenAISourceRoute.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
+import type { ChatPromptEstimate } from './native-chat-estimate.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
+import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
 import {
   finishMediaRequest,
   resolveRequestMedia,
@@ -81,26 +89,77 @@ interface ChatProjectionPreparationDeps {
   readonly resolveAuthToken: (
     options: NormalizedGenerateChatOptions,
   ) => Promise<string>;
+  /**
+   * The Kimi file pre-pass. Returns the media stage the body is written
+   * through when it applies and `undefined` when the request has no pre-pass.
+   */
   readonly processMedia: (
     options: NormalizedGenerateChatOptions,
     client: OpenAI,
     logger: DebugLogger,
     mediaRequest: ResolvedMediaRequest,
-  ) => Promise<NormalizedGenerateChatOptions>;
+    media: RowsMediaInput,
+  ) => Promise<ChatRowInput | undefined>;
   readonly logger: DebugLogger;
   readonly defaultModel: string;
   readonly providerName: string;
   readonly mediaTransportCapabilities: ProviderMediaTransportCapabilities;
 }
 
-export function registerOpenAIChatRequestCleanup(
+/**
+ * The prepared body belongs to the media request: finishing the request, on
+ * any outcome, releases the body, pinned row selection and estimate projection.
+ */
+export async function registerOpenAIChatRequestCleanup(
   mediaRequest: ResolvedMediaRequest,
-  requestContext: Awaited<ReturnType<typeof prepareRequest>>,
-): void {
-  mediaRequest.registerCleanup(() => {
-    requestContext.requestBody.messages.splice(0);
-    requestContext.requestBody.tools?.splice(0);
-  });
+  requestContext: RequestContext,
+): Promise<void> {
+  const { estimate } = requestContext;
+  try {
+    mediaRequest.registerCleanup(requestContext.release);
+    if (estimate !== undefined) {
+      mediaRequest.registerCleanup(() => estimate.projection.dispose());
+    }
+  } catch (error) {
+    await requestContext.release();
+    await estimate?.projection.dispose();
+    throw error;
+  }
+}
+
+export interface PreparedOpenAIChatProjection {
+  readonly requestContext: RequestContext;
+  readonly mediaRequest: ResolvedMediaRequest;
+  readonly estimate: ChatPromptEstimate;
+}
+
+/**
+ * An unprojected send builds its one chat body inside the transport and hands
+ * its lazy body to the media request, which disposes it when the call ends. The
+ * media stage comes from the Kimi pre-pass when it ran, otherwise it resolves
+ * the call's stored media as the rows are read.
+ */
+export async function prepareOwnedOpenAIChatRequest(
+  options: NormalizedGenerateChatOptions,
+  mediaRequest: ResolvedMediaRequest,
+  media: RowsMediaInput,
+  defaultModel: string,
+  logger: DebugLogger,
+  providerName: string,
+  mediaTransportCapabilities: ProviderMediaTransportCapabilities,
+  kimiRows: ChatRowInput | undefined,
+): Promise<RequestContext> {
+  const requestContext = await prepareRequest(
+    options,
+    defaultModel,
+    undefined,
+    logger,
+    providerName,
+    mediaTransportCapabilities,
+    kimiRows ?? { mediaStage: chatMediaStage(options, media, mediaRequest) },
+  );
+  await registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
+  return requestContext;
 }
 
 export async function prepareOpenAIChatProjection(
@@ -108,28 +167,24 @@ export async function prepareOpenAIChatProjection(
   deps: ChatProjectionPreparationDeps,
   mediaResolver?: RequestMediaResolutionService,
   mediaBudgetBytes?: number,
-): Promise<{
-  options: NormalizedGenerateChatOptions;
-  requestContext: Awaited<ReturnType<typeof prepareRequest>>;
-  mediaRequest: ResolvedMediaRequest;
-}> {
+): Promise<PreparedOpenAIChatProjection> {
   const support = deps.readMediaSupport();
   const needsClient =
     support?.fileUpload === true || support?.videoSupport === true;
+  const media = captureRequestMediaInput(
+    options.metadata['logicalRequestId'],
+    options.invocation.runtimeId,
+    mediaBudgetBytes,
+    mediaResolver,
+  );
   const mediaRequest = await resolveRequestMedia(
-    captureRequestMediaInput(
-      options.metadata['logicalRequestId'],
-      options.invocation.runtimeId,
-      mediaBudgetBytes,
-      mediaResolver,
-    ),
-    options.contents,
-    options.invocation.signal,
+    media,
+    [],
+    getRequestSignal(options),
   );
   try {
-    let preparedOptions = {
-      ...options,
-      contents: mediaRequest.withContents((contents) => contents),
+    let rowInput: ChatRowInput = {
+      mediaStage: chatMediaStage(options, media, mediaRequest),
     };
     if (needsClient) {
       const client = await deps.getClient({
@@ -139,23 +194,33 @@ export async function prepareOpenAIChatProjection(
           authToken: await deps.resolveAuthToken(options),
         },
       });
-      preparedOptions = await deps.processMedia(
-        preparedOptions,
-        client,
-        deps.logger,
-        mediaRequest,
-      );
+      rowInput =
+        (await deps.processMedia(
+          options,
+          client,
+          deps.logger,
+          mediaRequest,
+          media,
+        )) ?? rowInput;
     }
     const requestContext = await prepareRequest(
-      preparedOptions,
+      options,
       deps.defaultModel,
       undefined,
       deps.logger,
       deps.providerName,
       deps.mediaTransportCapabilities,
+      rowInput,
+      true,
     );
-    registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
-    return { options: preparedOptions, mediaRequest, requestContext };
+    await registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
+    const { estimate } = requestContext;
+    if (estimate === undefined) {
+      throw new Error(
+        'A projected chat request carries its estimate projection',
+      );
+    }
+    return { mediaRequest, requestContext, estimate };
   } catch (error) {
     return finishMediaRequest(mediaRequest, { status: 'failed', error });
   }

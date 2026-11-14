@@ -47,11 +47,12 @@ export interface ShardDefinition {
  * `.github/workflows/ci.yml` — `scripts/check-test-shards.ts` enforces that
  * every declared workspace is assigned to exactly one non-scripts shard.
  *
- * Shard sizing rationale (durations from CI run 30167877866):
+ * Shard sizing rationale (initial durations from CI run 30167877866;
+ * core/providers estimates from journal-test-weights.ts, 2026-10-25):
  *   cli       ~703s   (its own shard; paired with the separate cli cost issue)
- *   agents    ~289s
- *   providers ~185s
- *   core      ~130s
+ *   agents    ~1027s/leg (20 weighted partitions, issue #854)
+ *   providers ~1252s/leg (12 weighted partitions, issue #854)
+ *   core      ~1008s/leg (8 weighted partitions, issue #854)
  *   rest      ~55s    (12 small packages combined)
  *   scripts   ~270s   (root script harness, runs in parallel as its own job)
  */

@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { parseReviewReply } from './reviewVerdict.js';
@@ -17,7 +18,7 @@ const SUMMARY =
   'Mutation run: the agent kills 42 mutants in src/core/a.ts and pkill stops owned servers.';
 
 async function windowOf(): Promise<ReviewWindow> {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: new ScratchRootOwner() });
   const entries: IContent[] = [
     { speaker: 'human', blocks: [{ type: 'text', text: 'the real goal' }] },
     {
@@ -38,7 +39,7 @@ async function windowOf(): Promise<ReviewWindow> {
     },
   ];
   await service.addBatch(entries);
-  return buildReviewWindow(service.getAll());
+  return buildReviewWindow(await readRows(service));
 }
 
 function reply(value: unknown): string {
@@ -126,11 +127,13 @@ describe('review reply parsing', () => {
   });
 
   it('accepts no_change with any explanation when no entry is editable', async () => {
-    const service = new HistoryService();
+    const service = new HistoryService({
+      scratchRoots: new ScratchRootOwner(),
+    });
     await service.addBatch([
       { speaker: 'human', blocks: [{ type: 'text', text: 'the real goal' }] },
     ]);
-    const window = buildReviewWindow(service.getAll());
+    const window = buildReviewWindow(await readRows(service));
 
     const parsed = parseReviewReply(
       reply({ verdict: 'no_change', explanation: 'Nothing editable.' }),
@@ -322,3 +325,9 @@ describe('review reply parsing', () => {
     ).toContain('empty');
   });
 });
+
+async function readRows(service: HistoryService): Promise<IContent[]> {
+  const rows: IContent[] = [];
+  for await (const row of service.streamRawHistory()) rows.push(row);
+  return rows;
+}

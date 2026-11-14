@@ -274,6 +274,7 @@ class InteractiveUiAssembly {
           extensions,
           files,
           historyFilePath: source.historyFilePath,
+          getSkillCount: () => inputs.skillOperations?.list().length ?? 0,
           mcp,
           memory,
           session,

@@ -1,5 +1,6 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,7 +20,6 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
@@ -31,7 +31,8 @@ import {
 } from '../loadBalancing/contextLimitError.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 import {
   isRetryableError,
   getErrorStatus,
@@ -75,8 +76,11 @@ function overloadError(type: string): Error {
 
 function makeOptions(): GenerateChatOptions {
   return {
-    prompt: 'test prompt',
-    messages: [{ role: 'user' as const, content: 'test' }],
+    invocation: makeLoadBalancerInvocation(),
+    contents: replayableContents([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
+    ]),
   };
 }
 
@@ -168,59 +172,61 @@ function makeFailoverConfig(profileName: string): LoadBalancingProviderConfig {
   };
 }
 
-describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)', () => {
-  let settingsService: SettingsService;
-  let config: Config;
-  let providerManager: ProviderManager;
+/**
+ * Drive a failover profile to exhaustion and capture the aggregate error.
+ * Registers a fake delegate whose per-invocation behavior is supplied by
+ * `generator`, runs a real LoadBalancingProvider to completion, and asserts
+ * that the thrown value is a LoadBalancerFailoverError. Returns the aggregate
+ * plus the invocation counter so callers can assert on retryability and the
+ * number of backend attempts.
+ */
+async function captureFailoverError(
+  providerManager: ProviderManager,
+  generator: (attempt: number) => AsyncGenerator<IContent>,
+  profileName: string,
+): Promise<{ error: LoadBalancerFailoverError; counter: { value: number } }> {
+  const { provider, counter } = makeFakeProvider(generator);
+  providerManager.registerProvider(provider);
 
-  beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
-      undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
-    );
-  });
+  const lb = new LoadBalancingProvider(
+    makeFailoverConfig(profileName),
+    providerManager,
+  );
 
-  /**
-   * Drive a failover profile to exhaustion and capture the aggregate error.
-   * Registers a fake delegate whose per-invocation behavior is supplied by
-   * `generator`, runs a real LoadBalancingProvider to completion, and asserts
-   * that the thrown value is a LoadBalancerFailoverError. Returns the aggregate
-   * plus the invocation counter so callers can assert on retryability and the
-   * number of backend attempts.
-   */
-  async function captureFailoverError(
-    generator: (attempt: number) => AsyncGenerator<IContent>,
-    profileName: string,
-  ): Promise<{ error: LoadBalancerFailoverError; counter: { value: number } }> {
-    const { provider, counter } = makeFakeProvider(generator);
-    providerManager.registerProvider(provider);
-
-    const lb = new LoadBalancingProvider(
-      makeFailoverConfig(profileName),
-      providerManager,
-    );
-
-    let thrown: unknown;
-    try {
-      for await (const _chunk of lb.generateChatCompletion(makeOptions())) {
-        // consume
-      }
-    } catch (e) {
-      thrown = e;
+  let thrown: unknown;
+  try {
+    for await (const _chunk of lb.generateChatCompletion(makeOptions())) {
+      // consume
     }
-
-    expect(thrown).toBeInstanceOf(LoadBalancerFailoverError);
-    return { error: thrown as LoadBalancerFailoverError, counter };
+  } catch (e) {
+    thrown = e;
   }
+
+  expect(thrown).toBeInstanceOf(LoadBalancerFailoverError);
+  return { error: thrown as LoadBalancerFailoverError, counter };
+}
+
+function makeProviderManager(): ProviderManager {
+  const settingsService = new SettingsService();
+  const config = createRuntimeConfigStub(settingsService);
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+    undefined,
+    undefined,
+    borrowedSettings(config, settingsService),
+  );
+}
+
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 1]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
 
   it.each([
     ['server', statusError('service unavailable', 503), 'server_error'],
@@ -271,7 +277,8 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
 
   it('classifies an all-429 aggregate as retryable and does not masquerade as an HTTP 429', async () => {
     const { error, counter } = await captureFailoverError(
-      function* (): AsyncGenerator<IContent> {
+      providerManager,
+      async function* (): AsyncGenerator<IContent> {
         throw statusError('rate limited', 429);
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -281,6 +288,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     expect(error.isRetryable).toBe(true);
     expect(isRetryableError(error)).toBe(true);
     expect(counter.value).toBe(3);
+  });
+});
+
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 2]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -304,7 +318,8 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
 
   it('classifies an all-5xx aggregate as retryable', async () => {
     const { error, counter } = await captureFailoverError(
-      function* (): AsyncGenerator<IContent> {
+      providerManager,
+      async function* (): AsyncGenerator<IContent> {
         throw statusError('service unavailable', 503);
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -318,6 +333,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
 
   it('classifies a mixed (429 + 400) aggregate as RETRYABLE (issue #2712)', async () => {
     const { error, counter } = await captureFailoverError(
+      providerManager,
       generateMixedRateLimitAndBadRequest,
       'glm-mixed',
     );
@@ -333,6 +349,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
 
   it('classifies a mixed (429 + 401 auth) aggregate as RETRYABLE (issue #2712)', async () => {
     const { error, counter } = await captureFailoverError(
+      providerManager,
       generateMixedRateLimitAndUnauthorized,
       'glm-mixed-auth',
     );
@@ -345,10 +362,18 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     expect(isRetryableError(error)).toBe(true);
     expect(counter.value).toBe(3);
   });
+});
+
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 3]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
 
   it('classifies an all-overload (Anthropic body-level "overloaded_error", no HTTP status) aggregate as retryable', async () => {
     const { error, counter } = await captureFailoverError(
-      function* (): AsyncGenerator<IContent> {
+      providerManager,
+      async function* (): AsyncGenerator<IContent> {
         throw overloadError('overloaded_error');
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -362,7 +387,8 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
 
   it('classifies an all-overload (Anthropic body-level "rate_limit_error", no HTTP status) aggregate as retryable', async () => {
     const { error, counter } = await captureFailoverError(
-      function* (): AsyncGenerator<IContent> {
+      providerManager,
+      async function* (): AsyncGenerator<IContent> {
         throw overloadError('rate_limit_error');
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -386,11 +412,12 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
   it('classifies an all-RetryableQuotaError aggregate as retryable (Google quota, no HTTP status)', async () => {
     const quotaError = new RetryableQuotaError(
       'quota exceeded',
-      { code: 429, message: 'Rate limit exceeded' },
+      { code: 429, message: 'Rate limit exceeded', details: [] },
       1,
     );
     const { error, counter } = await captureFailoverError(
-      function* (): AsyncGenerator<IContent> {
+      providerManager,
+      async function* (): AsyncGenerator<IContent> {
         throw quotaError;
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -400,6 +427,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     expect(error.isRetryable).toBe(true);
     expect(isRetryableError(error)).toBe(true);
     expect(counter.value).toBe(3);
+  });
+});
+
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 4]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -413,6 +447,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
    */
   it('classifies a mixed (network-transient + 400) aggregate as RETRYABLE (issue #2712) despite the transient phrase leaking into the message', async () => {
     const { error, counter } = await captureFailoverError(
+      providerManager,
       generateMixedNetworkAndBadRequest,
       'glm-mixed-network-transient',
     );
@@ -431,7 +466,8 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
 
   it('classifies an all-network-transient aggregate as retryable', async () => {
     const { error, counter } = await captureFailoverError(
-      function* (): AsyncGenerator<IContent> {
+      providerManager,
+      async function* (): AsyncGenerator<IContent> {
         throw new Error('socket hang up');
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -445,7 +481,8 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
 
   it('classifies an all-plain-Error (no status) aggregate as NON-retryable', async () => {
     const { error, counter } = await captureFailoverError(
-      function* (): AsyncGenerator<IContent> {
+      providerManager,
+      async function* (): AsyncGenerator<IContent> {
         throw new Error('backend failed');
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -455,6 +492,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     expect(error.isRetryable).toBe(false);
     expect(isRetryableError(error)).toBe(false);
     expect(counter.value).toBe(3);
+  });
+});
+
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 5]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -474,6 +518,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
    */
   it('classifies a mixed aggregate (transient + status-less non-transient) as RETRYABLE (issue #2712)', async () => {
     const { error, counter } = await captureFailoverError(
+      providerManager,
       generateMixedThreeBackendFailures,
       'glm',
     );
@@ -487,6 +532,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     expect(error.isRetryable).toBe(true);
     expect(isRetryableError(error)).toBe(true);
     expect(counter.value).toBe(3);
+  });
+});
+
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 6]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -509,7 +561,8 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     'classifies an all-%s aggregate as NON-retryable (auth/config override)',
     async (_label, status, message, coreRetryable) => {
       const { error, counter } = await captureFailoverError(
-        function* (): AsyncGenerator<IContent> {
+        providerManager,
+        async function* (): AsyncGenerator<IContent> {
           throw statusError(message, status);
           yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
         },
@@ -546,6 +599,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
 
     expect(chunks).toHaveLength(1);
     expect(counter.value).toBe(2);
+  });
+});
+
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 7]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -604,6 +664,12 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     // Only the first backend was ever invoked; no silent cross-backend retry.
     expect(counter.value).toBe(1);
   });
+});
+
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 8]', () => {
+  beforeEach(() => {
+    makeProviderManager();
+  });
 
   it('LoadBalancerAllContextLimitsExceededError is NON-retryable', () => {
     const contextLimitError = new LoadBalancerContextLimitError({
@@ -620,7 +686,12 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     expect(error.isRetryable).toBe(false);
     expect(isRetryableError(error)).toBe(false);
   });
+});
 
+describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) [part 9]', () => {
+  beforeEach(() => {
+    makeProviderManager();
+  });
   describe('LoadBalancerFailoverError unit tests (isRetryable)', () => {
     it('isRetryable is false for an empty failures array', () => {
       const error = new LoadBalancerFailoverError('glm', []);

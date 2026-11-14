@@ -215,7 +215,10 @@ describe('Profile alias default ownership', () => {
       credentials().authority,
       callerRelease,
     );
-    const factoriesTokenizer = configureProviderTokenizer(callerManager);
+    const factoriesTokenizer = configureProviderTokenizer(
+      callerManager,
+      callerConfig.scratchRoots,
+    );
     const factoriesContent = createRuntimeContentGeneratorFactory();
     callerTokenizer = factoriesTokenizer;
     callerContent = factoriesContent;

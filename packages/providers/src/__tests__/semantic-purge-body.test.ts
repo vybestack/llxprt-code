@@ -1,0 +1,235 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { captureBodyAttempt } from '../../../test-utils/src/body-evidence-writer.js';
+import { randomUUID } from 'node:crypto';
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
+import { writeBodyFile } from '../../../test-utils/src/body-evidence-writer.js';
+import { describe, expect, it } from 'bun:test';
+
+import { join } from 'node:path';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
+import { closeInOrder } from './support/close-in-order.js';
+import { rawJournalSelection } from './support/journal-send-fixture.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+
+function bodyRow(index: number, bytes: number): IContent {
+  const text = {
+    type: 'text',
+    text: `row-${index}:${'x'.repeat(bytes)}`,
+  } as const;
+  const group = Math.floor(index / 3);
+  const id = `call-${group}`;
+  if (index % 3 === 0)
+    return {
+      speaker: 'human',
+      blocks: [
+        text,
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'image/png',
+          data: 'aW1hZ2U=',
+          caption: `caption-${index}`,
+        },
+      ],
+    };
+  if (index % 3 === 1)
+    return {
+      speaker: 'ai',
+      blocks: [
+        text,
+        { type: 'tool_call', id, name: 'inspect', parameters: { group } },
+      ],
+    };
+  return {
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: id,
+        toolName: 'inspect',
+        result: { group, result: text.text },
+      },
+    ],
+  };
+}
+
+function independentInput(size: number, explicit: boolean): unknown[] {
+  const input: unknown[] = [];
+  for (let index = 0; index < size; index++) {
+    const row = bodyRow(index, 2048);
+    const first = row.blocks[0];
+    if (row.speaker === 'human') {
+      if (first.type !== 'text') throw new Error('Expected human text');
+      if (index === 0 && !explicit)
+        input.push({ role: 'user', content: first.text });
+      else
+        input.push({
+          role: 'user',
+          content: [
+            { type: 'input_text', text: first.text },
+            {
+              type: 'input_image',
+              image_url: 'data:image/png;base64,aW1hZ2U=',
+            },
+          ],
+        });
+    } else if (row.speaker === 'ai') {
+      if (first.type !== 'text') throw new Error('Expected assistant text');
+      input.push({ role: 'assistant', content: first.text });
+      input.push({
+        type: 'function_call',
+        call_id: normalizeToOpenAIToolId(`call-${Math.floor(index / 3)}`),
+        name: 'inspect',
+        arguments: JSON.stringify({ group: Math.floor(index / 3) }),
+      });
+      if (index + 1 === size)
+        input.push({
+          type: 'function_call_output',
+          call_id: normalizeToOpenAIToolId(`call-${Math.floor(index / 3)}`),
+          output: 'Tool execution cancelled by user',
+        });
+    } else {
+      if (first.type !== 'tool_response')
+        throw new Error('Expected tool result');
+      input.push({
+        type: 'function_call_output',
+        call_id: normalizeToOpenAIToolId(first.callId),
+        output: JSON.stringify(first.result),
+      });
+    }
+  }
+  return input;
+}
+
+function response(): Response {
+  return new Response(
+    'data: {"type":"response.completed","response":{"id":"semantic-purge","status":"completed"}}\n\ndata: [DONE]\n\n',
+    { headers: { 'content-type': 'text/event-stream' } },
+  );
+}
+
+async function captureBody(
+  selection: ProviderRequestSelection,
+): Promise<string> {
+  const rows = { [Symbol.asyncIterator]: () => selection.openReader() };
+  const settings = new SettingsService();
+  settings.setProviderSetting('openai-responses', 'model', 'gpt-5.2');
+  const options = createProviderCallOptions({
+    providerName: 'openai-responses',
+    settings,
+    runtimeId: 'semantic-purge-body',
+    ephemerals: { 'prompt-caching': 'off' },
+    contents: rows,
+  });
+  const provider = new OpenAIResponsesProvider(
+    'test-key',
+    'https://api.openai.com/v1',
+  );
+  const original = globalThis.fetch;
+  const bodies: string[] = [];
+  const captureId = randomUUID();
+  globalThis.fetch = withFetchPreconnect(
+    async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      if (init?.body === undefined || init.body === null)
+        throw new Error('Missing body');
+      await captureBodyAttempt(
+        bodies,
+        init.body,
+        'openai-responses',
+        captureId,
+      );
+      return response();
+    },
+  );
+  try {
+    for await (const _chunk of provider.generateChatCompletion({
+      ...options,
+      contents: rows,
+      requestRows: selection,
+      contentCount: selection.count,
+    })) {
+      /* drain local transport */
+    }
+  } finally {
+    globalThis.fetch = original;
+  }
+  if (bodies.length !== 1)
+    throw new Error(`Expected one body, received ${bodies.length}`);
+  return bodies[0];
+}
+
+async function saveBodies(
+  size: number,
+  explicit: boolean,
+  actual: string,
+  expected: string,
+): Promise<void> {
+  const output = process.env.SEMANTIC_PURGE_BODY_OUTPUT;
+  if (output === undefined) return;
+  await writeBodyFile(
+    join(output, `body-${size}-${explicit}-actual.json`),
+    actual,
+  );
+  await writeBodyFile(
+    join(output, `body-${size}-${explicit}-expected.json`),
+    expected,
+  );
+}
+
+describe('semantic purge exact provider BODY BYTES', () => {
+  for (const size of [65]) {
+    for (const explicit of [false, true]) {
+      it(`sends every ${size}-row ${explicit ? 'pre-image cache' : 'purge candidate'} byte against an independent eager wire oracle`, async () => {
+        await withSuffixFixture(
+          size,
+          async (history) => {
+            const coordinator = new SemanticMediaPurgeStreamCoordinator(
+              history,
+              { enabled: true, explicitCacheWriteRequired: false },
+            );
+            const transaction = await coordinator.begin({ mode: 'remove' });
+            if (transaction === undefined)
+              throw new Error('Missing purge transaction');
+            const selection = await rawJournalSelection(
+              history,
+              transaction,
+              process.env.ISSUE854_PURGE_BODY_TRAP === 'flip'
+                ? !explicit
+                : explicit,
+            );
+            let failure: { readonly error: unknown } | undefined;
+            try {
+              const actual = await captureBody(selection);
+              const expected = JSON.stringify({
+                model: 'gpt-5.2',
+                input: independentInput(size, explicit),
+                stream: true,
+                instructions: 'test system prompt',
+              });
+              await saveBodies(size, explicit, actual, expected);
+              expect(Buffer.from(actual).equals(Buffer.from(expected))).toBe(
+                true,
+              );
+            } catch (error) {
+              failure = { error };
+              throw error;
+            } finally {
+              await closeInOrder(failure, selection, transaction);
+            }
+          },
+          2048,
+          bodyRow,
+        );
+      }, 120_000);
+    }
+  }
+});

@@ -1,4 +1,5 @@
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type { ApprovalLifecycleWriter } from '../scheduler/approval-lifecycle.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -64,6 +65,7 @@ export interface ToolSchedulerFactoryOptions {
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
+  persistApproval?: ApprovalLifecycleWriter;
   getPreferredEditor: () => EditorType | undefined;
   onEditorClose: () => void;
   onEditorOpen?: () => void;
@@ -81,6 +83,7 @@ export interface ToolSchedulerCallbackPayload {
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
+  persistApproval?: ApprovalLifecycleWriter;
   getPreferredEditor: () => EditorType | undefined;
   onEditorClose: () => void;
   onEditorOpen?: () => void;
@@ -98,7 +101,7 @@ export interface ToolSchedulerContract {
     signal: AbortSignal,
     hookOwner?: HookExecutionOwner,
   ): Promise<void>;
-  cancelAll(): void;
+  cancelAll(): void | Promise<void>;
   dispose(): void;
   setCallbacks(options: ToolSchedulerCallbackPayload): void;
   handleConfirmationResponse(
@@ -128,6 +131,7 @@ export interface SchedulerCallbacks {
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
+  persistApproval?: ApprovalLifecycleWriter;
   getPreferredEditor: () => EditorType | undefined;
   onEditorClose: () => void;
   onEditorOpen?: () => void;

@@ -1,3 +1,6 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { afterAll as afterRecordingTests } from 'bun:test';
+import { withTestNamedWriters } from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,13 +8,9 @@
  */
 
 /**
- * Domain-level publication of a generated exchange through a HistoryService
- * with a RecordingIntegration subscriber, using the options the agent's
- * generation append passes (`recordingCompletion: 'appended'` and an
- * `afterPublication` that rethrows a cancelled signal): a failing history batch
- * participant leaves no partial exchange in history or journal, and a held
- * participant is joined by the integration's disposal before the recording is
- * released while a cancelled exchange is rolled back.
+ * Generated exchange publication is atomic across live history and native
+ * recordings. Disposal joins an accepted publication and cancellation restores
+ * both views before the recorder is released.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
@@ -22,7 +21,11 @@ import * as path from 'node:path';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { recordedRows } from './__tests__/support/native-integration-fixture.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
 
 function text(speaker: 'human' | 'ai', value: string): IContent {
   return { speaker, blocks: [{ type: 'text', text: value }] };
@@ -43,16 +46,17 @@ function gate(): { promise: Promise<void>; release: () => void } {
 }
 
 describe('RecordingIntegration generated exchange publication', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let tempDir: string;
   let history: HistoryService;
-  let recording: SessionRecordingService;
+  let recording: JournalRecordingService;
   let integration: RecordingIntegration;
 
   async function readJournal(): Promise<string> {
     await recording.flush();
-    const journal = recording.getFilePath();
-    if (journal === null) throw new Error('Recording journal missing');
-    return fs.readFile(journal, 'utf8');
+    await history.waitForCommit();
+    return JSON.stringify(await recordedRows(recording));
   }
 
   function publishExchange(
@@ -63,7 +67,6 @@ describe('RecordingIntegration generated exchange publication', () => {
       [text('human', marker), text('ai', `${marker} reply`)],
       'written-model',
       {
-        recordingCompletion: 'appended',
         afterPublication: () => signal.throwIfAborted(),
       },
     );
@@ -71,17 +74,19 @@ describe('RecordingIntegration generated exchange publication', () => {
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-generation-'));
-    history = new HistoryService();
-    recording = new SessionRecordingService({
-      sessionId: 'recording-generation-0001',
-      projectHash: 'project-hash-recording-generation',
-      chatsDir: tempDir,
-      workspaceDirs: ['/workspace/project-a'],
-      provider: 'anthropic',
-      model: 'claude-4',
-    });
-    integration = new RecordingIntegration(recording);
-    integration.subscribeToHistory(history, {});
+    history = new HistoryService({ scratchRoots: recordingScratchRoots });
+    recording = JournalRecordingService.create(
+      withTestNamedWriters({
+        sessionId: 'recording-generation-0001',
+        projectHash: 'project-hash-recording-generation',
+        chatsDir: tempDir,
+        workspaceDirs: ['/workspace/project-a'],
+        provider: 'anthropic',
+        model: 'claude-4',
+      }),
+    );
+    integration = new RecordingIntegration(recording, recordingScratchRoots);
+    await integration.subscribeToJournal(history, {});
     // Content added before the batch materializes the journal.
     for (const content of seed) history.add(structuredClone(content));
   });
@@ -90,6 +95,7 @@ describe('RecordingIntegration generated exchange publication', () => {
     try {
       await integration.dispose();
     } finally {
+      await history.dispose();
       await recording.dispose();
       await fs.rm(tempDir, { recursive: true, force: true });
     }
@@ -97,33 +103,49 @@ describe('RecordingIntegration generated exchange publication', () => {
 
   it('propagates a failing history batch participant without a partial exchange in history or journal and stays usable', async () => {
     const failure = new Error('history publication rejected');
-    const release = history.registerBatchParticipant(async () => {
+    const reject = (): never => {
       throw failure;
-    });
+    };
+    history.on('contentBatchAdded', reject);
     try {
       await expect(publishExchange('must roll back')).rejects.toBe(failure);
-      expect(textHistory(history.getAll())).toStrictEqual(seed);
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(textHistory(rows)).toStrictEqual(seed);
+      });
       expect(await readJournal()).not.toContain('must roll back');
     } finally {
-      release();
+      history.off('contentBatchAdded', reject);
     }
 
     await publishExchange('owner still usable');
-    expect(textHistory(history.getAll()).slice(seed.length)).toStrictEqual([
-      text('human', 'owner still usable'),
-      text('ai', 'owner still usable reply'),
-    ]);
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(textHistory(rows).slice(seed.length)).toStrictEqual([
+        text('human', 'owner still usable'),
+        text('ai', 'owner still usable reply'),
+      ]);
+    });
     expect(await readJournal()).toContain('owner still usable reply');
   });
 
   it('joins a held history batch participant in integration disposal before the recording is released and rolls back a cancelled exchange', async () => {
     const entered = gate();
     const held = gate();
-    const release = history.registerBatchParticipant(async () => {
-      entered.release();
-      await held.promise;
-      return { publish: () => {}, rollback: () => {} };
-    });
+    let consumption: Promise<void> = Promise.resolve();
+    const hold = (
+      batch: import('../services/history/history-batch-values.js').HistoryBatchEvent,
+    ): void => {
+      const rows = batch.rows();
+      consumption = (async () => {
+        try {
+          await rows.next();
+          entered.release();
+          await held.promise;
+        } finally {
+          await rows.return();
+        }
+      })();
+    };
+    history.on('contentBatchAdded', hold);
     const cancellation = new AbortController();
     try {
       const outcome = publishExchange(
@@ -145,11 +167,14 @@ describe('RecordingIntegration generated exchange publication', () => {
       held.release();
       expect(await outcome).toMatchObject({ name: 'AbortError' });
       expect(await disposing).toBe('disposed');
-      expect(textHistory(history.getAll())).toStrictEqual(seed);
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(textHistory(rows)).toStrictEqual(seed);
+      });
       expect(await readJournal()).not.toContain('cancelled publication');
     } finally {
       held.release();
-      release();
+      await consumption;
+      history.off('contentBatchAdded', hold);
     }
   });
 });

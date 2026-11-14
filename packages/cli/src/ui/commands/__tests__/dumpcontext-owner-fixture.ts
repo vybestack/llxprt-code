@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
-
-import type { IContent } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getProviderDumpMetadata } from '@vybestack/llxprt-code-agents';
 export function bindDumpManager(
   context: CommandOwnerFixture,
@@ -17,11 +16,8 @@ export function bindDumpManager(
           | {
               getCurrentModel?: () => string | undefined;
               baseURL?: string;
-              buildContextDumpBody?: (
-                history: IContent[],
-                model?: string,
-                config?: unknown,
-              ) => Record<string, unknown>;
+              contextDumpVersion?: number;
+              buildContextDumpBody?: IProvider['buildContextDumpBody'];
             }
           | undefined;
       }

@@ -21,7 +21,10 @@ import {
   DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
   DEFAULT_STREAMING_JSON_CHUNK_BYTES,
   withBoundedJsonHttpBody,
+  type BoundedJsonHttpBody,
 } from '../utils/boundedJsonBody.js';
+import type { NativeAnthropicBody } from './native-anthropic-request.js';
+import { withChatHttpBody } from '../utils/chat-http-body.js';
 import { RequestBodyByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   shouldDumpSDKContext,
@@ -32,6 +35,7 @@ import {
   bestEffortDump,
   dumpSDKErrorRequestResponse,
   type RequestDumpMetadata,
+  type StreamedDumpBody,
 } from '../utils/dumpSDKContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -173,6 +177,37 @@ export async function assertAnthropicRequestBodyWithinLimit(
   await body.dispose();
 }
 
+export type AnthropicApiCall = () => Promise<{
+  data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
+  response: Response | undefined;
+}>;
+
+/** Posts one attempt of the Messages body with an exact Content-Length. */
+function postMessages(
+  client: Anthropic,
+  body: Pick<BoundedJsonHttpBody, 'stream' | 'byteLength'>,
+  streaming: boolean,
+  customHeaders: Record<string, string>,
+  signal: AbortSignal | undefined,
+) {
+  const headers = {
+    ...customHeaders,
+    'content-type': 'application/json',
+    'content-length': String(body.byteLength),
+  };
+  return client
+    .post<Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>>(
+      '/v1/messages',
+      {
+        body: body.stream,
+        headers,
+        stream: streaming,
+        ...(signal === undefined ? {} : { signal }),
+      },
+    )
+    .withResponse();
+}
+
 /**
  * Create API call closure with response headers
  */
@@ -182,44 +217,55 @@ export function createAnthropicApiCall(
   customHeaders: Record<string, string>,
   signal?: AbortSignal,
   maxRequestBodyBytes: number = DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
-): () => Promise<{
-  data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-  response: Response | undefined;
-}> {
-  const limits = {
-    maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
-    maxEnvelopeBytes: Math.min(
-      maxRequestBodyBytes,
-      DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
-    ),
-  };
+): AnthropicApiCall {
   return async () => {
     try {
       return await withBoundedJsonHttpBody(
         requestBody,
-        async (body) => {
-          const headers = {
-            ...customHeaders,
-            'content-type': 'application/json',
-            'content-length': String(body.byteLength),
-          };
-          return client
-            .post<
-              Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>
-            >('/v1/messages', {
-              body: body.stream,
-              headers,
-              stream: requestBody['stream'] === true,
-              ...(signal === undefined ? {} : { signal }),
-            })
-            .withResponse();
+        (body) =>
+          postMessages(
+            client,
+            body,
+            requestBody['stream'] === true,
+            customHeaders,
+            signal,
+          ),
+        {
+          maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+          maxEnvelopeBytes: Math.min(
+            maxRequestBodyBytes,
+            DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+          ),
         },
-        limits,
       );
     } catch (error) {
       throw toRequestBodyOverflow(error);
     }
   };
+}
+
+/**
+ * Create the API call closure for a native body. Every call opens a fresh
+ * stream and declares its planned size as the Content-Length; the request
+ * owner disposes it.
+ */
+export function createSpooledAnthropicApiCall(
+  client: Anthropic,
+  spool: NativeAnthropicBody,
+  streaming: boolean,
+  customHeaders: Record<string, string>,
+  signal?: AbortSignal,
+): AnthropicApiCall {
+  return () =>
+    withChatHttpBody(spool, (stream, byteLength) =>
+      postMessages(
+        client,
+        { stream, byteLength },
+        streaming,
+        customHeaders,
+        signal,
+      ),
+    );
 }
 
 /**
@@ -232,7 +278,8 @@ export interface ApiExecutionParams {
   }>;
   dumpMode: DumpMode | undefined;
   baseURL: string;
-  requestBody: Record<string, unknown>;
+  /** What the request dump records: the lazy body converted from the pinned rows. */
+  requestBody: Record<string, unknown> | StreamedDumpBody;
   streamingEnabled: boolean;
   headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };

@@ -1,5 +1,11 @@
+import {
+  createProjectingDelegate,
+  serializedEnvelopeTokens,
+} from './helpers/load-balancing-projection.js';
+import { releaseEstimateOnlyPromptEnvelope } from '../loadBalancing/promptEnvelopeProjection.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,8 +20,8 @@ const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
  * It must not consume round-robin or failover selection state, the
  * send-time guard still re-estimates authoritatively, and rotation drift
  * between peek and send degrades to guard behavior. The estimate-only
- * wrapper carries a fresh transport token and releases the delegate's
- * request-scoped projection within the call.
+ * wrapper carries a fresh transport token and keeps the delegate's
+ * request-scoped projection alive until the peek owner releases it.
  *
  * Anti-mock-theater: every assertion reads values the delegate projection
  * actually returned and effects the delegate's release callback actually
@@ -33,10 +39,12 @@ import {
   type LoadBalancerSubProfile,
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
-import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
-import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  collectContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 import { FailoverState } from '../loadBalancing/failoverState.js';
 import { projectNextSubProfilePromptEnvelope } from '../loadBalancing/promptEnvelopeProjection.js';
 import { resolveSubProfileModel } from '../loadBalancing/subProfileHelpers.js';
@@ -61,102 +69,6 @@ function createResolvedSubProfile(
   };
 }
 
-/**
- * A real delegate provider whose projectPromptEnvelope builds genuine
- * projections: it records the options it received, hands out
- * request-scoped transport tokens, and estimates the serialized envelope
- * (contents + tool schemas) like a real provider projection would.
- */
-interface ProjectingDelegate {
-  readonly provider: IProvider;
-  readonly projectedOptions: GenerateChatOptions[];
-  /** Model of each send attempt this delegate served, in attempt order. */
-  readonly sentModels: string[];
-  readonly delegateTokens: object[];
-}
-
-function createProjectingDelegate(spec: {
-  name: string;
-  estimateTokens: (options: GenerateChatOptions) => number;
-  releaseIfUnsent?: () => Promise<void>;
-  resolveProjection?: (
-    options: GenerateChatOptions,
-  ) => Promise<PromptEnvelopeProjection | undefined>;
-  /** Fail (throw) the first N send attempts; projection still succeeds. */
-  failFirstSends?: number;
-  /** Report this many usage tokens on the sent chunk (TPM tracking). */
-  usageTokens?: number;
-}): ProjectingDelegate {
-  const projectedOptions: GenerateChatOptions[] = [];
-  const sentModels: string[] = [];
-  const delegateTokens: object[] = [];
-  const provider: IProvider = {
-    name: spec.name,
-    async projectPromptEnvelope(options: GenerateChatOptions) {
-      projectedOptions.push(options);
-      if (spec.resolveProjection !== undefined) {
-        return spec.resolveProjection(options);
-      }
-      const transportToken = Object.freeze({ seq: delegateTokens.length });
-      delegateTokens.push(transportToken);
-      return {
-        model: options.resolved?.model ?? spec.name,
-        protocol: 'openai-chat',
-        method: 'chat/completions/v1',
-        projectionRevision: 7,
-        unsupportedMedia: [],
-        transportToken,
-        finalizedProjection: Object.freeze({ kind: 'test', promptText: 'x' }),
-        legacyEstimate: () => Promise.resolve(spec.estimateTokens(options)),
-        ...(spec.releaseIfUnsent === undefined
-          ? {}
-          : { releaseIfUnsent: spec.releaseIfUnsent }),
-      };
-    },
-    async *generateChatCompletion(
-      options: GenerateChatOptions | IContent[],
-    ): AsyncGenerator<IContent> {
-      if (Array.isArray(options)) {
-        throw new Error('legacy array overload is not exercised here');
-      }
-      projectedOptions.push(options);
-      sentModels.push(options.resolved?.model ?? spec.name);
-      if (sentModels.length <= (spec.failFirstSends ?? 0)) {
-        throw new Error(`delegate ${spec.name} send failed`);
-      }
-      const okChunk: IContent = {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'ok' }],
-      };
-      if (spec.usageTokens === undefined) {
-        yield okChunk;
-        return;
-      }
-      // Gemini wire usage shape: BackendMetricsCollector.extractTokenCount
-      // reads this compat form off the last chunk; IContent itself keeps
-      // usage in neutral metadata, so the wire fields need a cast here.
-      yield {
-        ...okChunk,
-        usageMetadata: { promptTokenCount: spec.usageTokens },
-      } as unknown as IContent;
-    },
-    getModels: async () => [],
-    getDefaultModel: () => 'delegate-default',
-  };
-  return { provider, projectedOptions, sentModels, delegateTokens };
-}
-
-/** Serialize contents + tool schemas the way an envelope estimate would. */
-function serializedEnvelopeTokens(options: GenerateChatOptions): number {
-  const contentText = options.contents
-    .map((content) => JSON.stringify(content.blocks))
-    .join('\n');
-  const toolText = (options.tools ?? [])
-    .map((tool) => JSON.stringify(tool))
-    .join('\n');
-  return Math.ceil((contentText.length + toolText.length) / 4);
-}
-
 function createLoadBalancer(
   providerManager: ProviderManager,
   overrides: Partial<LoadBalancingProviderConfig> = {},
@@ -179,430 +91,432 @@ function createLoadBalancer(
   );
 }
 
-describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () => {
-  let settingsService: SettingsService;
-  let config: Config;
-  let providerManager: ProviderManager;
+/**
+ * Unknown providers need an explicit endpoint; distinct names keep each
+ * member's sends and projections attributable to its own delegate.
+ */
+function createFailoverMembers(): ResolvedSubProfile[] {
+  return ['a', 'b', 'c'].map((name) =>
+    createResolvedSubProfile({
+      name,
+      providerName: `prov-${name}`,
+      model: `model-${name}`,
+      baseURL: `https://${name}.example.test`,
+    }),
+  );
+}
 
-  beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
-      undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
-    );
-  });
+async function consumeSend(
+  lb: LoadBalancingProvider,
+  text: string,
+): Promise<void> {
+  for await (const _chunk of lb.generateChatCompletion({
+    invocation: makeLoadBalancerInvocation(),
+    contents: replayableContents([createTextContent(text)]),
+  })) {
+    // consume
+  }
+}
 
-  it('forwards the peeked sub-profile delegate projection as an estimate-only envelope', async () => {
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: () => 1234,
+let providerManager: ProviderManager;
+
+function unitMembers(providerName: string): ResolvedSubProfile[] {
+  return ['a', 'b', 'c'].map((name) =>
+    createResolvedSubProfile({
+      name,
+      providerName,
+      model: `model-${name}`,
+      // Unknown provider names carry no default endpoint; normalization
+      // requires an explicit baseURL on the delegate resolution.
+      baseURL: 'https://unit.example.test',
+    }),
+  );
+}
+
+function unitResolvedOptions(
+  subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+  options: GenerateChatOptions,
+): GenerateChatOptions {
+  return {
+    ...options,
+    resolved: {
+      model: resolveSubProfileModel(subProfile),
+      baseURL: subProfile.baseURL,
+      authToken: subProfile.authToken,
+    },
+  };
+}
+
+function registerProjectionCase01(): void {
+  describe('delegate envelope', () => {
+    it('forwards the peeked sub-profile delegate projection as an estimate-only envelope', async () => {
+      const originalRows = [
+        createTextContent('hello envelope'),
+        createTextContent('second row'),
+      ];
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: async (options) => {
+          expect(await collectContents(options.contents)).toStrictEqual(
+            originalRows,
+          );
+          return 1234;
+        },
+      });
+      providerManager.registerProvider(delegate.provider);
+
+      const lb = createLoadBalancer(providerManager);
+      const contents = replayableContents(originalRows);
+
+      const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents,
+      });
+
+      expect(projection).toBeDefined();
+      // Estimation fields are the delegate projection's own values.
+      expect(projection?.model).toBe('model-a');
+      expect(projection?.protocol).toBe('openai-chat');
+      expect(projection?.method).toBe('chat/completions/v1');
+      expect(projection?.projectionRevision).toBe(7);
+      expect(projection?.unsupportedMedia).toStrictEqual([]);
+      expect(await projection?.legacyEstimate()).toBe(1234);
+      // No delegate accounting to forward means no accounting field at all.
+      expect('accounting' in (projection ?? {})).toBe(false);
     });
-    providerManager.registerProvider(delegate.provider);
-
-    const lb = createLoadBalancer(providerManager);
-    const contents = [createTextContent('hello envelope')];
-
-    const projection = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents,
-    });
-
-    expect(projection).toBeDefined();
-    // Estimation fields are the delegate projection's own values.
-    expect(projection?.model).toBe('model-a');
-    expect(projection?.protocol).toBe('openai-chat');
-    expect(projection?.method).toBe('chat/completions/v1');
-    expect(projection?.projectionRevision).toBe(7);
-    expect(projection?.unsupportedMedia).toStrictEqual([]);
-    expect(await projection?.legacyEstimate()).toBe(1234);
-    // No delegate accounting to forward means no accounting field at all.
-    expect('accounting' in (projection ?? {})).toBe(false);
-    // The delegate projected the caller's contents.
-    expect(delegate.projectedOptions[0]?.contents).toBe(contents);
   });
+}
 
-  it('peeks without consuming round-robin selection state, and the peek follows rotation position', async () => {
-    providerManager.registerProvider(
-      createProjectingDelegate({
+function registerProjectionCase02(): void {
+  describe('round-robin rotation', () => {
+    it('peeks without consuming round-robin selection state, and the peek follows rotation position', async () => {
+      providerManager.registerProvider(
+        createProjectingDelegate({
+          name: 'openai',
+          estimateTokens: () => 10,
+        }).provider,
+      );
+      const lb = createLoadBalancer(providerManager, {
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'a',
+            providerName: 'openai',
+            model: 'model-a',
+          }),
+          createResolvedSubProfile({
+            name: 'b',
+            providerName: 'openai',
+            model: 'model-b',
+          }),
+        ],
+      });
+
+      const firstPeek = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(firstPeek?.model).toBe('model-a');
+
+      // The peek did not consume the rotation: the next selection is still
+      // sub-profile 'a'.
+      expect(lb.selectNextSubProfile().name).toBe('a');
+
+      // The peek reflects the new position only after the caller advanced it.
+      const secondPeek = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(secondPeek?.model).toBe('model-b');
+
+      // Selection wraps back to 'a'; the peek follows the rotation.
+      expect(lb.selectNextSubProfile().name).toBe('b');
+      const thirdPeek = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(thirdPeek?.model).toBe('model-a');
+    });
+  });
+}
+
+function registerProjectionCase03(): void {
+  describe('failover index', () => {
+    it('peeks the failover start index without mutating failover state', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: async (options) => {
+          const contents = await collectContents(options.contents);
+          return Math.ceil(
+            contents.map((content) => JSON.stringify(content.blocks)).join('')
+              .length / 4,
+          );
+        },
+      });
+      providerManager.registerProvider(delegate.provider);
+
+      const lb = createLoadBalancer(providerManager, {
+        strategy: 'failover',
+        // Shared limit high enough that only member 'a' fails its own window.
+        contextLimit: 1_000_000,
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'a',
+            providerName: 'openai',
+            model: 'model-a',
+            contextWindow: 5,
+          }),
+          createResolvedSubProfile({
+            name: 'b',
+            providerName: 'openai',
+            model: 'model-b',
+            contextWindow: 1_000_000,
+          }),
+        ],
+      });
+
+      // A send over sub-profile 'a's tiny member window fails the guard, so
+      // failover lands on (and sticks to) backend 'b'.
+      const chunks: IContent[] = [];
+      for await (const chunk of lb.generateChatCompletion({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([
+          createTextContent('a request payload far larger than five tokens'),
+        ]),
+      })) {
+        chunks.push(chunk);
+      }
+      expect(chunks).toHaveLength(1);
+      expect(lb.getCurrentFailoverIndex()).toBe(1);
+
+      const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(projection?.model).toBe('model-b');
+
+      // Peeking did not move the failover index.
+      expect(lb.getCurrentFailoverIndex()).toBe(1);
+      const repeatPeek = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(repeatPeek?.model).toBe('model-b');
+      expect(lb.getCurrentFailoverIndex()).toBe(1);
+    });
+  });
+}
+
+function registerProjectionCase04(): void {
+  describe('missing delegate', () => {
+    it('resolves undefined when the delegate provider is not registered', async () => {
+      const lb = createLoadBalancer(providerManager, {
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'missing',
+            providerName: 'not-registered',
+            model: 'model-a',
+          }),
+        ],
+      });
+
+      await expect(
+        lb.projectPromptEnvelope({
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        }),
+      ).resolves.toBeUndefined();
+    });
+  });
+}
+
+function registerProjectionCase05(): void {
+  describe('missing projection capability', () => {
+    it('resolves undefined when the delegate lacks projectPromptEnvelope', async () => {
+      const plainDelegate: IProvider = {
+        name: 'openai',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'delegate-default',
+      };
+      providerManager.registerProvider(plainDelegate);
+
+      const lb = createLoadBalancer(providerManager);
+
+      await expect(
+        lb.projectPromptEnvelope({
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        }),
+      ).resolves.toBeUndefined();
+    });
+  });
+}
+
+function registerProjectionCase06(): void {
+  describe('undefined delegate projection', () => {
+    it('resolves undefined when the delegate projection resolves undefined', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: () => 0,
+        resolveProjection: () => Promise.resolve(undefined),
+      });
+      providerManager.registerProvider(delegate.provider);
+
+      const lb = createLoadBalancer(providerManager);
+
+      await expect(
+        lb.projectPromptEnvelope({
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        }),
+      ).resolves.toBeUndefined();
+    });
+  });
+}
+
+function registerProjectionCase07(): void {
+  describe('reservation ownership', () => {
+    it('returns a fresh frozen transport token, never the delegate reservation', async () => {
+      const delegate = createProjectingDelegate({
         name: 'openai',
         estimateTokens: () => 10,
-      }).provider,
-    );
-    const lb = createLoadBalancer(providerManager, {
-      subProfiles: [
-        createResolvedSubProfile({
-          name: 'a',
-          providerName: 'openai',
-          model: 'model-a',
-        }),
-        createResolvedSubProfile({
-          name: 'b',
-          providerName: 'openai',
-          model: 'model-b',
-        }),
-      ],
-    });
+      });
+      providerManager.registerProvider(delegate.provider);
 
-    const firstPeek = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [],
-    });
-    expect(firstPeek?.model).toBe('model-a');
-
-    // The peek did not consume the rotation: the next selection is still
-    // sub-profile 'a'.
-    expect(lb.selectNextSubProfile().name).toBe('a');
-
-    // The peek reflects the new position only after the caller advanced it.
-    const secondPeek = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [],
-    });
-    expect(secondPeek?.model).toBe('model-b');
-
-    // Selection wraps back to 'a'; the peek follows the rotation.
-    expect(lb.selectNextSubProfile().name).toBe('b');
-    const thirdPeek = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [],
-    });
-    expect(thirdPeek?.model).toBe('model-a');
-  });
-
-  it('peeks the failover start index without mutating failover state', async () => {
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: (options) =>
-        Math.ceil(
-          options.contents
-            .map((content) => JSON.stringify(content.blocks))
-            .join('').length / 4,
-        ),
-    });
-    providerManager.registerProvider(delegate.provider);
-
-    const lb = createLoadBalancer(providerManager, {
-      strategy: 'failover',
-      // Shared limit high enough that only member 'a' fails its own window.
-      contextLimit: 1_000_000,
-      subProfiles: [
-        createResolvedSubProfile({
-          name: 'a',
-          providerName: 'openai',
-          model: 'model-a',
-          contextWindow: 5,
-        }),
-        createResolvedSubProfile({
-          name: 'b',
-          providerName: 'openai',
-          model: 'model-b',
-          contextWindow: 1_000_000,
-        }),
-      ],
-    });
-
-    // A send over sub-profile 'a's tiny member window fails the guard, so
-    // failover lands on (and sticks to) backend 'b'.
-    const chunks: IContent[] = [];
-    for await (const chunk of lb.generateChatCompletion({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [
-        createTextContent('a request payload far larger than five tokens'),
-      ],
-    })) {
-      chunks.push(chunk);
-    }
-    expect(chunks).toHaveLength(1);
-    expect(lb.getCurrentFailoverIndex()).toBe(1);
-
-    const projection = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [],
-    });
-    expect(projection?.model).toBe('model-b');
-
-    // Peeking did not move the failover index.
-    expect(lb.getCurrentFailoverIndex()).toBe(1);
-    const repeatPeek = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [],
-    });
-    expect(repeatPeek?.model).toBe('model-b');
-    expect(lb.getCurrentFailoverIndex()).toBe(1);
-  });
-
-  it('resolves undefined when the delegate provider is not registered', async () => {
-    const lb = createLoadBalancer(providerManager, {
-      subProfiles: [
-        createResolvedSubProfile({
-          name: 'missing',
-          providerName: 'not-registered',
-          model: 'model-a',
-        }),
-      ],
-    });
-
-    await expect(
-      lb.projectPromptEnvelope({
+      const lb = createLoadBalancer(providerManager);
+      const projection = await lb.projectPromptEnvelope({
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
-      }),
-    ).resolves.toBeUndefined();
+        contents: replayableContents([createTextContent('token freshness')]),
+      });
+
+      expect(projection?.transportToken).not.toBe(delegate.delegateTokens[0]);
+      expect(Object.isFrozen(projection?.transportToken)).toBe(true);
+    });
   });
+}
 
-  it('resolves undefined when the delegate lacks projectPromptEnvelope', async () => {
-    const plainDelegate: IProvider = {
-      name: 'openai',
-      async *generateChatCompletion(): AsyncGenerator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
-      getModels: async () => [],
-      getDefaultModel: () => 'delegate-default',
-    };
-    providerManager.registerProvider(plainDelegate);
+function registerProjectionCase10(): void {
+  describe('rendered system prompt', () => {
+    it('delegate receives the sub-profile-rendered system prompt (guard-parity options)', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: () => 10,
+      });
+      providerManager.registerProvider(delegate.provider);
 
-    const lb = createLoadBalancer(providerManager);
+      const lb = createLoadBalancer(providerManager);
+      const invocations: string[] = [];
 
-    await expect(
-      lb.projectPromptEnvelope({
+      const projection = await lb.projectPromptEnvelope({
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
-      }),
-    ).resolves.toBeUndefined();
-  });
-
-  it('resolves undefined when the delegate projection resolves undefined', async () => {
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: () => 0,
-      resolveProjection: () => Promise.resolve(undefined),
-    });
-    providerManager.registerProvider(delegate.provider);
-
-    const lb = createLoadBalancer(providerManager);
-
-    await expect(
-      lb.projectPromptEnvelope({
-        invocation: makeLoadBalancerInvocation(),
-        contents: [],
-      }),
-    ).resolves.toBeUndefined();
-  });
-
-  it('returns a fresh frozen transport token, never the delegate reservation', async () => {
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: () => 10,
-    });
-    providerManager.registerProvider(delegate.provider);
-
-    const lb = createLoadBalancer(providerManager);
-    const projection = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [createTextContent('token freshness')],
-    });
-
-    expect(projection?.transportToken).not.toBe(delegate.delegateTokens[0]);
-    expect(Object.isFrozen(projection?.transportToken)).toBe(true);
-  });
-
-  it('awaits the delegate release exactly once per projection and forwards no release obligation', async () => {
-    const releases: string[] = [];
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: () => 10,
-      releaseIfUnsent: async () => {
-        releases.push(`released-${releases.length}`);
-      },
-    });
-    providerManager.registerProvider(delegate.provider);
-
-    const lb = createLoadBalancer(providerManager);
-
-    const first = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [],
-    });
-    expect(releases).toStrictEqual(['released-0']);
-    expect('releaseIfUnsent' in (first ?? {})).toBe(false);
-
-    // Each projection call releases its own delegate projection.
-    await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [],
-    });
-    expect(releases).toStrictEqual(['released-0', 'released-1']);
-  });
-
-  it('propagates a failing delegate release', async () => {
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: () => 10,
-      releaseIfUnsent: () => Promise.reject(new Error('release exploded')),
-    });
-    providerManager.registerProvider(delegate.provider);
-
-    const lb = createLoadBalancer(providerManager);
-
-    await expect(
-      lb.projectPromptEnvelope({
-        invocation: makeLoadBalancerInvocation(),
-        contents: [],
-      }),
-    ).rejects.toThrow('release exploded');
-  });
-
-  it('delegate receives the sub-profile-rendered system prompt (guard-parity options)', async () => {
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: () => 10,
-    });
-    providerManager.registerProvider(delegate.provider);
-
-    const lb = createLoadBalancer(providerManager);
-    const invocations: string[] = [];
-
-    const projection = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [createTextContent('request')],
-      systemInstruction: '[model=load-balancer]',
-      systemPromptAssembler: {
-        assemble: async (request) => {
-          invocations.push(request.model);
-          return `[model=${request.model}]`;
-        },
-      },
-    });
-
-    expect(projection?.model).toBe('model-a');
-    expect(invocations).toStrictEqual(['model-a']);
-    expect(delegate.projectedOptions[0]?.systemInstruction).toBe(
-      '[model=model-a]',
-    );
-  });
-
-  it('tool-bearing options project strictly larger than tool-less options through the LB projection', async () => {
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: serializedEnvelopeTokens,
-    });
-    providerManager.registerProvider(delegate.provider);
-
-    const lb = createLoadBalancer(providerManager);
-
-    const withoutTools = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [createTextContent('analyze this request')],
-    });
-    const withTools = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [createTextContent('analyze this request')],
-      tools: [
-        {
-          name: 'read_file',
-          description: 'Reads a file from the workspace',
-          parametersJsonSchema: { type: 'object', properties: {} },
-        },
-      ],
-    });
-
-    const without = await withoutTools?.legacyEstimate();
-    const with_ = await withTools?.legacyEstimate();
-    expect(typeof without).toBe('number');
-    expect(typeof with_).toBe('number');
-    expect(with_ as number).toBeGreaterThan(without as number);
-  });
-
-  it('forwards stateful accounting when the delegate projection carries it', async () => {
-    const delegate = createProjectingDelegate({
-      name: 'openai',
-      estimateTokens: () => 1234,
-      resolveProjection: () =>
-        Promise.resolve({
-          model: 'model-a',
-          protocol: 'openai-chat',
-          method: 'chat/completions/v1',
-          projectionRevision: 7,
-          unsupportedMedia: [],
-          transportToken: Object.freeze({ reserved: true }),
-          finalizedProjection: Object.freeze({ kind: 'test' }),
-          legacyEstimate: () => Promise.resolve(1234),
-          accounting: {
-            statefulParentUsed: true,
-            retainedBaselineTokens: 900,
-            incremental: {
-              finalizedProjection: Object.freeze({ kind: 'test-incremental' }),
-              legacyEstimate: () => Promise.resolve(334),
-            },
+        contents: replayableContents([createTextContent('request')]),
+        systemInstruction: '[model=load-balancer]',
+        systemPromptAssembler: {
+          assemble: async (request) => {
+            invocations.push(request.model);
+            return `[model=${request.model}]`;
           },
-        }),
-    });
-    providerManager.registerProvider(delegate.provider);
+        },
+      });
 
-    const lb = createLoadBalancer(providerManager);
-    const projection = await lb.projectPromptEnvelope({
-      invocation: makeLoadBalancerInvocation(),
-      contents: [],
+      expect(projection?.model).toBe('model-a');
+      expect(invocations).toStrictEqual(['model-a']);
+      expect(delegate.projectedOptions[0]?.systemInstruction).toBe(
+        '[model=model-a]',
+      );
     });
-
-    expect(projection?.accounting?.statefulParentUsed).toBe(true);
-    expect(projection?.accounting?.retainedBaselineTokens).toBe(900);
-    expect(await projection?.accounting?.incremental?.legacyEstimate()).toBe(
-      334,
-    );
   });
+}
 
-  describe('failover eligibility-aware peek (issue #3507, PR #3715)', () => {
-    /**
-     * Failover members with distinct delegate providers, so each member's
-     * sends and projections are attributable to exactly one delegate. Each
-     * carries an explicit baseURL: unknown provider names get no default
-     * endpoint, and runtime normalization rejects a delegate resolution
-     * without one.
-     */
-    function createFailoverMembers(): ResolvedSubProfile[] {
-      return [
-        createResolvedSubProfile({
-          name: 'a',
-          providerName: 'prov-a',
-          model: 'model-a',
-          baseURL: 'https://a.example.test',
-        }),
-        createResolvedSubProfile({
-          name: 'b',
-          providerName: 'prov-b',
-          model: 'model-b',
-          baseURL: 'https://b.example.test',
-        }),
-        createResolvedSubProfile({
-          name: 'c',
-          providerName: 'prov-c',
-          model: 'model-c',
-          baseURL: 'https://c.example.test',
-        }),
-      ];
-    }
+function registerProjectionCase11(): void {
+  describe('tool-aware estimate', () => {
+    it('tool-bearing options project strictly larger than tool-less options through the LB projection', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: serializedEnvelopeTokens,
+      });
+      providerManager.registerProvider(delegate.provider);
 
-    async function consumeSend(
-      lb: LoadBalancingProvider,
-      text: string,
-    ): Promise<void> {
-      for await (const _chunk of lb.generateChatCompletion({
+      const lb = createLoadBalancer(providerManager);
+
+      const withoutTools = await lb.projectPromptEnvelope({
         invocation: makeLoadBalancerInvocation(),
-        contents: [createTextContent(text)],
-      })) {
-        // consume
-      }
-    }
+        contents: replayableContents([
+          createTextContent('analyze this request'),
+        ]),
+      });
+      const withTools = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([
+          createTextContent('analyze this request'),
+        ]),
+        tools: [
+          {
+            name: 'read_file',
+            description: 'Reads a file from the workspace',
+            parametersJsonSchema: { type: 'object', properties: {} },
+          },
+        ],
+      });
 
+      const without = await withoutTools?.legacyEstimate();
+      const with_ = await withTools?.legacyEstimate();
+      expect(typeof without).toBe('number');
+      expect(typeof with_).toBe('number');
+      expect(with_ as number).toBeGreaterThan(without as number);
+    });
+  });
+}
+
+function registerProjectionCase12(): void {
+  describe('stateful accounting', () => {
+    it('forwards stateful accounting when the delegate projection carries it', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: () => 1234,
+        resolveProjection: () =>
+          Promise.resolve({
+            model: 'model-a',
+            protocol: 'openai-chat',
+            method: 'chat/completions/v1',
+            projectionRevision: 7,
+            unsupportedMedia: [],
+            transportToken: Object.freeze({ reserved: true }),
+            finalizedProjection: Object.freeze({ kind: 'test' }),
+            legacyEstimate: () => Promise.resolve(1234),
+            accounting: {
+              statefulParentUsed: true,
+              retainedBaselineTokens: 900,
+              incremental: {
+                finalizedProjection: Object.freeze({
+                  kind: 'test-incremental',
+                }),
+                legacyEstimate: () => Promise.resolve(334),
+              },
+            },
+          }),
+      });
+      providerManager.registerProvider(delegate.provider);
+
+      const lb = createLoadBalancer(providerManager);
+      const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+
+      expect(projection?.accounting?.statefulParentUsed).toBe(true);
+      expect(projection?.accounting?.retainedBaselineTokens).toBe(900);
+      expect(await projection?.accounting?.incremental?.legacyEstimate()).toBe(
+        334,
+      );
+    });
+  });
+}
+
+function registerProjectionCase13(): void {
+  describe('open-circuit eligibility', () => {
     it('skips a circuit-open start member and projects the next eligible member the next send attempts', async () => {
       const delegateA = createProjectingDelegate({
         name: 'prov-a',
@@ -638,7 +552,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
 
       const projection = await lb.projectPromptEnvelope({
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
+        contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-b');
 
@@ -650,7 +564,11 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       expect(delegateB.sentModels).toStrictEqual(['model-b', 'model-b']);
       expect(delegateA.sentModels).toStrictEqual(['model-a']);
     });
+  });
+}
 
+function registerProjectionCase14(): void {
+  describe('TPM-ineligible start', () => {
     it('skips a TPM-ineligible start member (usage below threshold) and projects the next eligible member', async () => {
       const delegateA = createProjectingDelegate({
         name: 'prov-a',
@@ -681,12 +599,16 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
 
       const projection = await lb.projectPromptEnvelope({
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
+        contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-b');
       expect(lb.getCurrentFailoverIndex()).toBe(0);
     });
+  });
+}
 
+function registerProjectionCase15(): void {
+  describe('zero TPM threshold', () => {
     it('targets the eligible start member when tpmThreshold is 0 (usage history never causes a skip)', async () => {
       const delegateA = createProjectingDelegate({
         name: 'prov-a',
@@ -707,12 +629,16 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
 
       const projection = await lb.projectPromptEnvelope({
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
+        contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-a');
       expect(lb.getCurrentFailoverIndex()).toBe(0);
     });
+  });
+}
 
+function registerProjectionCase16(): void {
+  describe('all members ineligible', () => {
     it('falls back to the start-index member when every member is ineligible, without throwing', async () => {
       const delegateA = createProjectingDelegate({
         name: 'prov-a',
@@ -755,12 +681,16 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       lb.resetFailoverIndex();
       const projection = await lb.projectPromptEnvelope({
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
+        contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-a');
       expect(lb.getCurrentFailoverIndex()).toBe(0);
     });
+  });
+}
 
+function registerProjectionCase17(): void {
+  describe('half-open recovery', () => {
     it('reads circuit state without stealing the half-open recovery probe from the next send', async () => {
       const delegateA = createProjectingDelegate({
         name: 'prov-a',
@@ -796,7 +726,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       // eligible again and the peek projects it as the next target.
       const projection = await lb.projectPromptEnvelope({
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
+        contents: replayableContents([]),
       });
       expect(projection?.model).toBe('model-a');
 
@@ -810,36 +740,10 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       expect(lb.getStats().circuitBreakerStates.a.state).toBe('closed');
     });
   });
+}
 
-  describe('projectNextSubProfilePromptEnvelope eligibility traversal (issue #3507, PR #3715)', () => {
-    function unitMembers(providerName: string): ResolvedSubProfile[] {
-      return ['a', 'b', 'c'].map((name) =>
-        createResolvedSubProfile({
-          name,
-          providerName,
-          model: `model-${name}`,
-          // Unknown provider names carry no default endpoint; normalization
-          // requires an explicit baseURL on the delegate resolution.
-          baseURL: 'https://unit.example.test',
-        }),
-      );
-    }
-
-    /** Resolve like the provider does: member model + auth onto `resolved`. */
-    function unitResolvedOptions(
-      subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-      options: GenerateChatOptions,
-    ): GenerateChatOptions {
-      return {
-        ...options,
-        resolved: {
-          model: resolveSubProfileModel(subProfile),
-          baseURL: subProfile.baseURL,
-          authToken: subProfile.authToken,
-        },
-      };
-    }
-
+function registerProjectionCase18(): void {
+  describe('round-robin traversal', () => {
     it('round-robin peek never consults the eligibility predicate', async () => {
       const delegate = createProjectingDelegate({
         name: 'prov',
@@ -861,12 +765,19 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
           throw new Error('round-robin peek must not consult eligibility');
         },
         buildDelegateResolvedOptions: unitResolvedOptions,
-        options: { contents: [] },
+        options: {
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        },
       });
 
       expect(projection?.model).toBe('model-a');
     });
+  });
+}
 
+function registerProjectionCase19(): void {
+  describe('circular failover traversal', () => {
     it('failover traversal wraps circularly to the first eligible member without moving the start index', async () => {
       const delegate = createProjectingDelegate({
         name: 'prov',
@@ -890,7 +801,10 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
         roundRobinIndex: 0,
         isBackendEligible: (name) => name === 'a',
         buildDelegateResolvedOptions: unitResolvedOptions,
-        options: { contents: [] },
+        options: {
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([]),
+        },
       });
 
       // Only 'a' passes the predicate, so the traversal from index 2 wraps
@@ -898,5 +812,118 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       expect(projection?.model).toBe('model-a');
       expect(failoverState.getIndex()).toBe(2);
     });
+  });
+}
+
+function registerProjectionReleaseCases(): void {
+  describe('estimate owner delegate release', () => {
+    it('keeps the delegate alive until the estimate owner releases it exactly once', async () => {
+      const releases: string[] = [];
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: () => 10,
+        releaseIfUnsent: async () => {
+          releases.push(`released-${releases.length}`);
+        },
+      });
+      providerManager.registerProvider(delegate.provider);
+      const lb = createLoadBalancer(providerManager);
+      const first = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(releases).toStrictEqual([]);
+      expect(await first?.legacyEstimate()).toBe(10);
+      await first?.releaseIfUnsent?.();
+      await releaseEstimateOnlyPromptEnvelope(first?.transportToken);
+      expect(releases).toStrictEqual(['released-0']);
+      const second = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      await second?.releaseIfUnsent?.();
+      await second?.releaseIfUnsent?.();
+      expect(releases).toStrictEqual(['released-0', 'released-1']);
+    });
+
+    it('propagates a failing delegate release from the estimate owner', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: () => 10,
+        releaseIfUnsent: () => Promise.reject(new Error('release exploded')),
+      });
+      providerManager.registerProvider(delegate.provider);
+      const lb = createLoadBalancer(providerManager);
+      const projection = await lb.projectPromptEnvelope({
+        invocation: makeLoadBalancerInvocation(),
+        contents: replayableContents([]),
+      });
+      expect(projection).toBeDefined();
+      await expect(projection?.releaseIfUnsent?.()).rejects.toThrow(
+        'release exploded',
+      );
+      await expect(
+        releaseEstimateOnlyPromptEnvelope(projection?.transportToken),
+      ).rejects.toThrow('release exploded');
+    });
+  });
+}
+
+describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () => {
+  beforeEach(() => {
+    const settingsService = new SettingsService();
+    const config: Config = createRuntimeConfigStub(settingsService);
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+      undefined,
+      undefined,
+      borrowedSettings(config, settingsService),
+    );
+  });
+
+  registerProjectionReleaseCases();
+  registerProjectionCase01();
+
+  registerProjectionCase02();
+
+  registerProjectionCase03();
+
+  registerProjectionCase04();
+
+  registerProjectionCase05();
+
+  registerProjectionCase06();
+
+  registerProjectionCase07();
+
+  registerProjectionCase10();
+
+  registerProjectionCase11();
+
+  registerProjectionCase12();
+
+  describe('failover eligibility-aware peek (issue #3507, PR #3715)', () => {
+    registerProjectionCase13();
+
+    registerProjectionCase14();
+
+    registerProjectionCase15();
+
+    registerProjectionCase16();
+
+    registerProjectionCase17();
+  });
+
+  describe('projectNextSubProfilePromptEnvelope eligibility traversal (issue #3507, PR #3715)', () => {
+    /** Resolve like the provider does: member model + auth onto `resolved`. */
+
+    registerProjectionCase18();
+
+    registerProjectionCase19();
   });
 });

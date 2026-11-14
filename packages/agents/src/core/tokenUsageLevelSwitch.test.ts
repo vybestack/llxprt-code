@@ -144,6 +144,7 @@ function buildChat(script: readonly ContentBlock[][]) {
       sessionId: SESSION_ID,
     }),
     history: fixture.historyService,
+    scratchRoots: fixture.historyService.scratchRoots,
     settings: {
       compressionThreshold: 0.8,
       contextLimit: 200000,

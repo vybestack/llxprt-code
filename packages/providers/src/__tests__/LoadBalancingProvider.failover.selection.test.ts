@@ -1,5 +1,6 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -10,19 +11,30 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
+
+const requestContents = replayableContents([
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
+]);
 
 async function* generateSecondBackendResponse(
   recordCall: () => number,
 ): AsyncGenerator<IContent> {
   if (recordCall() === 1) throw new Error('first backend error');
-  yield { type: 'text' as const, content: 'response from second' };
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'response from second' }],
+  };
 }
 
 async function* generateThirdBackendResponse(
@@ -31,7 +43,10 @@ async function* generateThirdBackendResponse(
   const callCount = recordCall();
   if (callCount === 1) throw new Error('first backend error');
   if (callCount === 2) throw new Error('second backend error');
-  yield { type: 'text' as const, content: 'response from third' };
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'response from third' }],
+  };
 }
 
 async function* generateModelSpecificResponse(
@@ -42,10 +57,10 @@ async function* generateModelSpecificResponse(
   const modelId = options.resolved?.model ?? '';
   if (modelId === 'model1') {
     markFirstCalled();
-    yield { type: 'text' as const, content: 'first success' };
+    yield { speaker: 'ai', blocks: [{ type: 'text', text: 'first success' }] };
   } else if (modelId === 'model2') {
     markSecondCalled();
-    yield { type: 'text' as const, content: 'second success' };
+    yield { speaker: 'ai', blocks: [{ type: 'text', text: 'second success' }] };
   }
 }
 
@@ -53,41 +68,82 @@ async function* generateCorrectFailoverResponse(
   recordCall: () => number,
 ): AsyncGenerator<IContent> {
   if (recordCall() === 1) throw new Error('first failed');
-  yield { type: 'text' as const, content: 'correct response' };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'correct response' }] };
 }
 
 async function* generateAuthIsolationResponse(
   options: GenerateChatOptions,
   recordCall: () => number,
-  capturedAuthTokens: Array<string | undefined>,
+  capturedAuthTokens: Array<
+    NonNullable<GenerateChatOptions['resolved']>['authToken']
+  >,
 ): AsyncGenerator<IContent> {
   const callCount = recordCall();
   capturedAuthTokens.push(options.resolved?.authToken);
   if (callCount === 1) throw new Error('first backend error');
-  yield { type: 'text' as const, content: 'success from second' };
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'success from second' }],
+  };
 }
 
-describe('LoadBalancingProvider - Failover Strategy', () => {
-  let settingsService: SettingsService;
-  let config: Config;
+function makeFailoverConfig(
+  profileName: string,
+  includeThird = false,
+): LoadBalancingProviderConfig {
+  return {
+    profileName,
+    strategy: 'failover',
+    subProfiles: [
+      {
+        name: 'first',
+        providerName: 'test-provider',
+        modelId: 'model1',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-1',
+      },
+      {
+        name: 'second',
+        providerName: 'test-provider',
+        modelId: 'model2',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-2',
+      },
+      ...(includeThird
+        ? [
+            {
+              name: 'third',
+              providerName: 'test-provider',
+              modelId: 'model3',
+              baseURL: 'https://api.test.com',
+              authToken: 'test-token-3',
+            },
+          ]
+        : []),
+    ],
+  };
+}
+function makeProviderManager(): ProviderManager {
+  const settingsService = new SettingsService();
+  const config = createRuntimeConfigStub(settingsService);
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+    undefined,
+    undefined,
+    borrowedSettings(config, settingsService),
+  );
+}
+
+describe('LoadBalancingProvider - Failover Strategy [part 1]', () => {
   let providerManager: ProviderManager;
-
   beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
-      undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
-    );
+    providerManager = makeProviderManager();
   });
-
   describe('Strategy Selection', () => {
     it('should accept strategy: "failover" in configuration', () => {
       const lbConfig: LoadBalancingProviderConfig = {
@@ -156,7 +212,15 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         new LoadBalancingProvider(lbConfig, providerManager);
       }).toThrow(/invalid.*strategy/i);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 2]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Strategy Selection', () => {
     it('should include both valid strategies in error message', () => {
       const lbConfig = {
         profileName: 'test-invalid',
@@ -177,12 +241,22 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }).toThrow(/(round-robin|failover)/i);
     });
   });
+});
+
+describe('LoadBalancingProvider - Failover Strategy [part 3]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
   describe('Sequential Execution on Errors', () => {
     it('should call first backend first', async () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'response from first' };
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'response from first' }],
+          };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -190,31 +264,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       providerManager.registerProvider(mockProvider);
 
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-sequential',
-        strategy: 'failover',
-        subProfiles: [
-          {
-            name: 'first',
-            providerName: 'test-provider',
-            modelId: 'model1',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-1',
-          },
-          {
-            name: 'second',
-            providerName: 'test-provider',
-            modelId: 'model2',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-2',
-          },
-        ],
-      };
+      const lbConfig = makeFailoverConfig('test-sequential');
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -224,11 +279,19 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0]).toStrictEqual({
-        type: 'text',
-        content: 'response from first',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'response from first' }],
       });
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 4]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Sequential Execution on Errors', () => {
     it('should call second backend when first fails', async () => {
       let callCount = 0;
 
@@ -242,31 +305,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       providerManager.registerProvider(mockProvider);
 
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-failover-second',
-        strategy: 'failover',
-        subProfiles: [
-          {
-            name: 'first',
-            providerName: 'test-provider',
-            modelId: 'model1',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-1',
-          },
-          {
-            name: 'second',
-            providerName: 'test-provider',
-            modelId: 'model2',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-2',
-          },
-        ],
-      };
+      const lbConfig = makeFailoverConfig('test-failover-second');
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -276,11 +320,19 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0]).toStrictEqual({
-        type: 'text',
-        content: 'response from second',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'response from second' }],
       });
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 5]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Sequential Execution on Errors', () => {
     it('should call third backend when first two fail', async () => {
       let callCount = 0;
 
@@ -294,38 +346,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       providerManager.registerProvider(mockProvider);
 
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-failover-third',
-        strategy: 'failover',
-        subProfiles: [
-          {
-            name: 'first',
-            providerName: 'test-provider',
-            modelId: 'model1',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-1',
-          },
-          {
-            name: 'second',
-            providerName: 'test-provider',
-            modelId: 'model2',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-2',
-          },
-          {
-            name: 'third',
-            providerName: 'test-provider',
-            modelId: 'model3',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-3',
-          },
-        ],
-      };
+      const lbConfig = makeFailoverConfig('test-failover-third', true);
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -335,17 +361,24 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0]).toStrictEqual({
-        type: 'text',
-        content: 'response from third',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'response from third' }],
       });
     });
+  });
+});
+
+describe('LoadBalancingProvider - Failover Strategy [part 6]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
   describe('Stop-at-First-Success Behavior', () => {
     it('should return immediately when first backend succeeds', async () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -353,31 +386,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       providerManager.registerProvider(mockProvider);
 
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-stop-at-success',
-        strategy: 'failover',
-        subProfiles: [
-          {
-            name: 'first',
-            providerName: 'test-provider',
-            modelId: 'model1',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-1',
-          },
-          {
-            name: 'second',
-            providerName: 'test-provider',
-            modelId: 'model2',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-2',
-          },
-        ],
-      };
+      const lbConfig = makeFailoverConfig('test-stop-at-success');
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -387,16 +401,26 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 7]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Stop-at-First-Success Behavior', () => {
     it('should not call second backend when first succeeds', async () => {
       let firstCalled = false;
       let secondCalled = false;
 
       const mockProvider: IProvider = {
         name: 'test-provider',
-        generateChatCompletion: (options: GenerateChatOptions) =>
+        generateChatCompletion: (
+          options: GenerateChatOptions | AsyncIterable<IContent>,
+        ) =>
           generateModelSpecificResponse(
-            options,
+            requestOptions(options),
             () => {
               firstCalled = true;
             },
@@ -410,31 +434,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       providerManager.registerProvider(mockProvider);
 
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-no-second-call',
-        strategy: 'failover',
-        subProfiles: [
-          {
-            name: 'first',
-            providerName: 'test-provider',
-            modelId: 'model1',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-1',
-          },
-          {
-            name: 'second',
-            providerName: 'test-provider',
-            modelId: 'model2',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-2',
-          },
-        ],
-      };
+      const lbConfig = makeFailoverConfig('test-no-second-call');
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -445,7 +450,15 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(firstCalled).toBe(true);
       expect(secondCalled).toBe(false);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 8]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Stop-at-First-Success Behavior', () => {
     it('should return response from successful backend', async () => {
       let callCount = 0;
 
@@ -459,31 +472,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       providerManager.registerProvider(mockProvider);
 
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-correct-response',
-        strategy: 'failover',
-        subProfiles: [
-          {
-            name: 'first',
-            providerName: 'test-provider',
-            modelId: 'model1',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-1',
-          },
-          {
-            name: 'second',
-            providerName: 'test-provider',
-            modelId: 'model2',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-2',
-          },
-        ],
-      };
+      const lbConfig = makeFailoverConfig('test-correct-response');
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -492,24 +486,36 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results[0]).toStrictEqual({
-        type: 'text',
-        content: 'correct response',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'correct response' }],
       });
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 9]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Stop-at-First-Success Behavior', () => {
     it('should NOT inherit parent resolved authToken when sub-profile omits it (issue #2132)', async () => {
-      const captured: Array<{ baseURL?: string; authToken?: string }> = [];
+      const captured: Array<{
+        baseURL?: string;
+        authToken?: NonNullable<GenerateChatOptions['resolved']>['authToken'];
+      }> = [];
 
       const mockProvider = {
         name: 'test-provider',
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncGenerator<IContent> {
+          const options = requestOptions(optionsOrStream);
           captured.push({
             baseURL: options.resolved?.baseURL,
             authToken: options.resolved?.authToken,
           });
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -541,9 +547,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       try {
         const provider = new LoadBalancingProvider(lbConfig, providerManager);
         const options: GenerateChatOptions = {
-          contents: [
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([
             { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-          ],
+          ]),
           resolved: {
             model: 'original-model',
             baseURL: 'https://original.api.com',
@@ -568,17 +575,26 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         providerManager.getProviderByName = originalGetProvider;
       }
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 10]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Stop-at-First-Success Behavior', () => {
     it('should override resolved baseURL when sub-profile provides one', async () => {
       const captured: Array<{ baseURL?: string }> = [];
 
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncGenerator<IContent> {
+          const options = requestOptions(optionsOrStream);
           captured.push({ baseURL: options.resolved?.baseURL });
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -609,8 +625,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
         resolved: {
           model: 'original-model',
           baseURL: 'https://original.api.com',
@@ -628,17 +644,28 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         { baseURL: 'https://subprofile.api.com' },
       ]);
     });
+  });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 11]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
+  describe('Stop-at-First-Success Behavior', () => {
     it('should override resolved authToken when sub-profile provides one', async () => {
-      const captured: Array<{ authToken?: string }> = [];
+      const captured: Array<{
+        authToken?: NonNullable<GenerateChatOptions['resolved']>['authToken'];
+      }> = [];
 
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncGenerator<IContent> {
+          const options = requestOptions(optionsOrStream);
           captured.push({ authToken: options.resolved?.authToken });
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -667,8 +694,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+        contents: requestContents,
         resolved: {
           model: 'original-model',
           baseURL: 'https://original.api.com',
@@ -685,17 +712,27 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(captured).toStrictEqual([{ authToken: 'subprofile-token' }]);
     });
   });
+});
 
+describe('LoadBalancingProvider - Failover Strategy [part 12]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
   describe('AuthToken isolation on failover path (issue #2132)', () => {
     it('should NOT leak parent authToken to failover delegate when sub-profile omits it', async () => {
       let callCount = 0;
-      const capturedAuthTokens: Array<string | undefined> = [];
+      const capturedAuthTokens: Array<
+        NonNullable<GenerateChatOptions['resolved']>['authToken']
+      > = [];
 
       const mockProvider = {
         name: 'test-provider',
-        generateChatCompletion: (options: GenerateChatOptions) =>
+        generateChatCompletion: (
+          options: GenerateChatOptions | AsyncIterable<IContent>,
+        ) =>
           generateAuthIsolationResponse(
-            options,
+            requestOptions(options),
             () => ++callCount,
             capturedAuthTokens,
           ),
@@ -729,9 +766,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       try {
         const provider = new LoadBalancingProvider(lbConfig, providerManager);
         const options: GenerateChatOptions = {
-          contents: [
+          invocation: makeLoadBalancerInvocation(),
+          contents: replayableContents([
             { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-          ],
+          ]),
           resolved: {
             model: 'parent-model',
             authToken: 'leaked-opus-token',
@@ -752,3 +790,11 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
     });
   });
 });
+
+function requestOptions(
+  options: GenerateChatOptions | AsyncIterable<IContent>,
+): GenerateChatOptions {
+  if (isAsyncIterableContents(options))
+    throw new Error('Expected request options');
+  return options;
+}

@@ -59,7 +59,6 @@ describe('interactive owner transcript', () => {
       await resumeOwnerSession(
         agent.session.resume.bind(agent.session),
         checkpoint.checkpointId,
-        'allowed',
         agent.session.listBrowserTargetsDetailed.bind(agent.session),
       );
       const forkPath = agent.session.getRecording().path;
@@ -89,7 +88,6 @@ describe('interactive owner transcript', () => {
       await resumeOwnerSession(
         next.session.resume.bind(next.session),
         target.session.sessionId,
-        'allowed',
         next.session.listBrowserTargetsDetailed.bind(next.session),
       );
       const resumed = render(

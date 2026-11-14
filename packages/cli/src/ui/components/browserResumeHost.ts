@@ -7,12 +7,12 @@ import { join } from 'node:path';
 import {
   getProjectHash,
   type ContinueTarget,
+  type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
 import type { ResumeSessionReads } from '../hooks/commandRawResumeHost.js';
 import type { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
-import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import {
   type ResumeContext,
@@ -22,18 +22,18 @@ import {
 
 type BrowserResult = { ok: true } | { ok: false; error: string };
 type BrowserResume = (target: ContinueTarget) => Promise<BrowserResult>;
-type EmojiMode = Parameters<typeof iContentToHistoryItems>[1];
+type EmojiMode = EmojiFilterMode;
 
 export function bindOwnerBrowserResume(
   resume: (target: ContinueTarget) => ReturnType<typeof resumeOwnerSession>,
-  loadHistory: UseHistoryManagerReturn['loadHistory'],
+  refresh: () => void,
   addItem: UseHistoryManagerReturn['addItem'],
   close: () => void,
 ): BrowserResume {
   return async (target) => {
     try {
       const replay = await resume(target);
-      loadHistory([...replay.uiHistory]);
+      refresh();
       for (const warning of replay.warnings)
         addItem({ type: 'info', text: `Warning: ${warning}` });
       close();
@@ -48,7 +48,7 @@ export function bindOwnerBrowserResume(
 
 export function bindRawBrowserResume(
   resume: ((target: ContinueTarget) => Promise<PerformResumeResult>) | null,
-  readEmojiFilterMode: () => EmojiMode,
+  _readEmojiFilterMode: () => EmojiMode,
   clear: () => void,
   addItem: UseHistoryManagerReturn['addItem'],
   close: () => void,
@@ -66,12 +66,7 @@ export function bindRawBrowserResume(
       addItem({ type: 'error', text: result.error });
       return result;
     }
-    const history = iContentToHistoryItems(
-      result.history,
-      readEmojiFilterMode(),
-    );
     clear();
-    history.forEach((item, index) => addItem(item, index));
     for (const warning of result.warnings)
       addItem({ type: 'info', text: `Warning: ${warning}` });
     close();

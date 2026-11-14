@@ -31,7 +31,6 @@ import {
 import { readPerfRecords } from '@vybestack/llxprt-code-telemetry/perf/perfRecords.js';
 import type { PerfOperationRecord } from '@vybestack/llxprt-code-telemetry/perf/perfRecords.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import {
   OperationLifecycleRegistry,
   type OperationIdentitySnapshot,
@@ -80,7 +79,7 @@ export interface LifecycleDeps {
       ) => Promise<void>)
     | null
   >;
-  pendingResponse: PendingResponseBuffer;
+  setInitError: UseSubmitQueryDeps['setInitError'];
   setIsRespondingCalls: boolean[];
 }
 
@@ -93,8 +92,7 @@ export function createLifecycleDeps(
       options?.abortControllerRef ??
       ({ current: null as AbortController | null } as never),
     runStreamRef: options?.runStreamRef ?? ({ current: null } as never),
-    pendingResponse:
-      options?.pendingResponse ?? new PendingResponseBuffer(undefined),
+    setInitError: options?.setInitError ?? (() => {}),
     setIsRespondingCalls,
   };
 }
@@ -124,11 +122,9 @@ export function buildLifecycleHookDeps(
     onAuthError: vi.fn(),
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
-    pendingResponse: deps.pendingResponse,
     pendingHistoryItemRef: {
       current: null,
     } as React.MutableRefObject<HistoryItemWithoutId | null>,
-    thinkingBlocksRef: { current: [] },
     turnCancelledRef: { current: false },
     queuedSubmissionsRef: { current: [] },
     drainSuppressedRef: { current: false },
@@ -143,7 +139,7 @@ export function buildLifecycleHookDeps(
     setIsResponding: vi.fn((value: unknown) => {
       if (typeof value === 'boolean') deps.setIsRespondingCalls.push(value);
     }) as never,
-    setInitError: vi.fn(),
+    setInitError: deps.setInitError,
     setThought: vi.fn(),
     setLastAgentActivityTime: vi.fn(),
     scheduleToolCalls: vi.fn(),

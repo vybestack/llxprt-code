@@ -7,6 +7,8 @@
 import { act } from 'react';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
+import { createRecordingProvider } from '../../../../agents/src/api/__tests__/helpers/recording-provider.js';
 import { cleanup } from '../../__tests__/render.js';
 import {
   openClientToolOwner,
@@ -58,9 +60,11 @@ describe('Agent-owned CLI client tools', () => {
         a.hook.result.current[0].map((call) => call.request.callId),
       ).toStrictEqual(['a']),
     );
-    expect(
-      b.hook.result.current[0].map((call) => call.request.callId),
-    ).toStrictEqual(['b']);
+    await waitFor(() =>
+      expect(
+        b.hook.result.current[0].map((call) => call.request.callId),
+      ).toStrictEqual(['b']),
+    );
     a.hook.unmount();
     let disposed = false;
     const disposal = a.agent.dispose().then(() => {
@@ -89,4 +93,43 @@ describe('Agent-owned CLI client tools', () => {
       ['b', 'b2'],
     );
   }, 30_000);
+  it('renders completed client tools from the journal without model resubmission or clearing the observer', async () => {
+    const model = createRecordingProvider({
+      alias: 'client-display',
+      responses: [[{ type: 'text', text: 'unused' }]],
+    });
+    const a = await owner('client-display', { modelProvider: model });
+    await a.agent.chat('Start the conversation');
+    expect(model.requests).toHaveLength(1);
+    await a.agent.session.setRecording({ enabled: true });
+    await a.release();
+    await act(async () => {
+      await a.hook.result.current[1](
+        a.request('client-display'),
+        new AbortController().signal,
+      );
+    });
+    const items = await readJournalItems(a.agent);
+    const tools = items.flatMap((item) =>
+      item.type === 'tool_group' ? item.tools : [],
+    );
+    expect(
+      tools.map((tool) => [tool.callId, tool.status, tool.resultDisplay]),
+    ).toStrictEqual([
+      [
+        'client-display',
+        'Success',
+        JSON.stringify({ output: 'recorded' }, null, 2),
+      ],
+    ]);
+    expect(
+      a.completed
+        .flat()
+        .map((call) => [
+          call.request.callId,
+          'displayCleared' in call && call.displayCleared === true,
+        ]),
+    ).toStrictEqual([['client-display', false]]);
+    expect(model.requests).toHaveLength(1);
+  });
 });

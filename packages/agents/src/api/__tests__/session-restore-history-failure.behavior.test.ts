@@ -8,7 +8,7 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { replaySession } from '@vybestack/llxprt-code-core';
+import { recordedRows } from './support/recorded-rows.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
@@ -112,8 +112,8 @@ describe('SessionControl restoreTurns over its real client', () => {
       const path = session.getRecording().path;
       if (!path) throw new Error('Recording path missing');
 
-      const original = client.restoreHistory.bind(client);
-      const fault = spyOn(client, 'restoreHistory').mockImplementationOnce(
+      const original = client.resetChat.bind(client);
+      const fault = spyOn(client, 'resetChat').mockImplementationOnce(
         async (...args) => {
           await original(...args);
           throw new Error('restore interrupted');
@@ -128,9 +128,8 @@ describe('SessionControl restoreTurns over its real client', () => {
       }
 
       await session.flushRecording();
-      const replay = await replaySession(path, basename(projectTempDir));
-      if (!replay.ok) throw new Error(replay.error);
-      expect(JSON.stringify(replay.history)).toContain('second');
+      const replay = await recordedRows(path, basename(projectTempDir));
+      expect(JSON.stringify(replay)).toContain('second');
       expect(JSON.stringify(await session.getHistory())).toContain('second');
     });
   }, 30000);

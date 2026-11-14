@@ -1,3 +1,7 @@
+import type {
+  NamedWriterOwnership,
+  ScratchRootOwner,
+} from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,6 +25,8 @@ export async function acquireTaskSession(
   contextId: string,
   agentSettings: AgentSettings,
   eventBus: ExecutionEventBus | undefined,
+  namedWriters: NamedWriterOwnership,
+  scratchRoots: ScratchRootOwner,
 ): Promise<Task> {
   const workspaceRoot = setTargetDir(agentSettings);
   loadEnvironment();
@@ -28,9 +34,11 @@ export async function acquireTaskSession(
   const extensions = loadExtensions(workspaceRoot, {
     folderTrust: settings.folderTrust,
   });
-  const agent = await createAgent(
-    createTaskAgentConfig(settings, extensions, taskId),
-  );
+  const agent = await createAgent({
+    ...createTaskAgentConfig(settings, extensions, taskId),
+    namedWriters,
+    scratchRoots,
+  });
   return new Task(
     taskId,
     contextId,

@@ -150,7 +150,7 @@ export class SessionSchedulerOwner {
         errors.push(error);
       }
       try {
-        scheduler?.cancelAll();
+        await scheduler?.cancelAll();
       } catch (error) {
         errors.push(error);
       }

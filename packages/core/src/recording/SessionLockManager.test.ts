@@ -27,9 +27,9 @@
  * the Phase 09 stub — that is correct TDD.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as os from 'os';
+import * as path from 'path';
 import {
   SessionLockManager,
   SessionLockedError,
@@ -134,7 +134,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
      * getLockPathFromFilePath extracts sessionId correctly
      */
     it('getLockPathFromFilePath derives lock path from JSONL file path', () => {
-      const jsonlPath = path.join(chatsDir, 'session-myid.jsonl');
+      const jsonlPath = path.join(chatsDir, 'session-myid.llxj');
       const result = SessionLockManager.getLockPathFromFilePath(jsonlPath);
       expect(result).toBe(path.join(chatsDir, 'myid.lock'));
     });
@@ -219,7 +219,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-      const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
+      const jsonlPath = path.join(chatsDir, `session-${sessionId}.llxj`);
 
       expect(await fileExists(lockPath)).toBe(true);
       expect(await fileExists(jsonlPath)).toBe(false);
@@ -312,7 +312,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       await handle.release();
 
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-      const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
+      const jsonlPath = path.join(chatsDir, `session-${sessionId}.llxj`);
 
       expect(await fileExists(lockPath)).toBe(false);
       expect(await fileExists(jsonlPath)).toBe(false);
@@ -649,7 +649,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
     it('cleanupOrphanedLocks removes stale lock but preserves JSONL file', async () => {
       const sessionId = 'orphan-with-jsonl';
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-      const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
+      const jsonlPath = path.join(chatsDir, `session-${sessionId}.llxj`);
 
       await writeFakeLock(lockPath, DEAD_PID, sessionId);
       await fs.writeFile(jsonlPath, '{"type":"session_start"}\n', 'utf-8');

@@ -23,6 +23,15 @@ const logger = new DebugLogger('llxprt:provider:anthropic:schema');
 // Tools are prefixed on outgoing requests and unprefixed on incoming responses
 export const TOOL_PREFIX = 'llxprt_';
 
+export function unprefixAnthropicToolName(
+  name: string,
+  isOAuth: boolean,
+): string {
+  return isOAuth && name.startsWith(TOOL_PREFIX)
+    ? name.substring(TOOL_PREFIX.length)
+    : name;
+}
+
 /**
  * Anthropic input schema format
  */

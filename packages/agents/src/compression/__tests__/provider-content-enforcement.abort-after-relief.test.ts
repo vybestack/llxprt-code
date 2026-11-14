@@ -1,3 +1,4 @@
+import { readHistory } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -41,14 +42,15 @@ describe('cancellation during compression after media relief (issue #4000 CodeRa
       if (runs === 1) throw new Error('summarizer offline on the byte pass');
       return cancelAfterPartialRewrite(history);
     });
-    const before = JSON.stringify(session.history.getAll());
+    const before = JSON.stringify(await readHistory(session.history));
 
     const error = await rejection(session.send([textTurn('next question')]));
 
     expect({
       name: errorName(error),
       sent: session.sent.length,
-      historyRestored: JSON.stringify(session.history.getAll()) === before,
+      historyRestored:
+        JSON.stringify(await readHistory(session.history)) === before,
     }).toStrictEqual({ name: 'AbortError', sent: 0, historyRestored: true });
   });
 
@@ -63,7 +65,7 @@ describe('cancellation during compression after media relief (issue #4000 CodeRa
       if (runs === 2) return undefined;
       return cancelAfterPartialRewrite(history);
     });
-    const before = JSON.stringify(session.history.getAll());
+    const before = JSON.stringify(await readHistory(session.history));
 
     const error = await rejection(session.send([textTurn('next question')]));
 
@@ -71,7 +73,8 @@ describe('cancellation during compression after media relief (issue #4000 CodeRa
       name: errorName(error),
       compressionRuns: session.compressionRuns,
       sent: session.sent.length,
-      historyRestored: JSON.stringify(session.history.getAll()) === before,
+      historyRestored:
+        JSON.stringify(await readHistory(session.history)) === before,
     }).toStrictEqual({
       name: 'AbortError',
       compressionRuns: 3,
@@ -85,7 +88,7 @@ describe('cancellation during compression after media relief (issue #4000 CodeRa
     await conversation.seedImages(3);
     conversation.seedBigText();
     session.useCompression(cancelAfterPartialRewrite);
-    const before = JSON.stringify(session.history.getAll());
+    const before = JSON.stringify(await readHistory(session.history));
 
     const error = await rejection(
       session.recomposeViaCallback([textTurn('next question')]),
@@ -93,7 +96,8 @@ describe('cancellation during compression after media relief (issue #4000 CodeRa
 
     expect({
       name: errorName(error),
-      historyRestored: JSON.stringify(session.history.getAll()) === before,
+      historyRestored:
+        JSON.stringify(await readHistory(session.history)) === before,
     }).toStrictEqual({ name: 'AbortError', historyRestored: true });
   });
 
@@ -101,7 +105,7 @@ describe('cancellation during compression after media relief (issue #4000 CodeRa
     const session = conversation.session();
     conversation.seedBigText();
     session.useCompression(cancelAfterPartialRewrite);
-    const before = JSON.stringify(session.history.getAll());
+    const before = JSON.stringify(await readHistory(session.history));
 
     const error = await rejection(
       session.recomposeViaCallback([textTurn('next question')]),
@@ -109,7 +113,8 @@ describe('cancellation during compression after media relief (issue #4000 CodeRa
 
     expect({
       name: errorName(error),
-      historyRestored: JSON.stringify(session.history.getAll()) === before,
+      historyRestored:
+        JSON.stringify(await readHistory(session.history)) === before,
     }).toStrictEqual({ name: 'AbortError', historyRestored: true });
   });
 });

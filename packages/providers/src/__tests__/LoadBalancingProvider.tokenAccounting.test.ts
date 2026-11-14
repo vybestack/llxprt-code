@@ -24,15 +24,27 @@ import {
 import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
+
+import { trackedRequestRows } from './requestRowsTestSupport.js';
+import {
+  createCountingTokenizer,
+  createFixedTokenizer,
+  createMockProvider,
+  createTokenizerFactory,
+} from './support/load-balancing-tokenizer-fixtures.js';
 
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
-function compressedProjectionEstimate(options: GenerateChatOptions): number {
-  const containsCompressedText = options.contents.some((content) =>
+async function compressedProjectionEstimate(
+  options: GenerateChatOptions,
+): Promise<number> {
+  const rows: IContent[] = [];
+  for await (const content of options.contents) {
+    rows.push(content);
+  }
+  const containsCompressedText = rows.some((content) =>
     content.blocks.some(
       (block) => block.type === 'text' && block.text === 'compressed',
     ),
@@ -63,65 +75,9 @@ function createResolvedSubProfile(
   };
 }
 
-function createMockProvider(overrides: Partial<IProvider> = {}): IProvider {
-  return {
-    name: overrides.name ?? 'mock-provider',
-    generateChatCompletion:
-      overrides.generateChatCompletion ??
-      async function* (): AsyncGenerator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
-    getModels: overrides.getModels ?? (async () => []),
-    getDefaultModel: overrides.getDefaultModel ?? (() => 'mock-model'),
-  };
-}
-
-function createCountingTokenizer(
-  spy: (text: string) => void,
-): RuntimeTokenizer {
-  return {
-    countTokens: (content: unknown) => {
-      if (typeof content !== 'string') {
-        return Promise.reject(
-          new Error(`countTokens received non-string input: ${typeof content}`),
-        );
-      }
-      spy(content);
-      return Promise.resolve(Math.ceil(content.length / 4));
-    },
-  };
-}
-
-function createFixedTokenizer(tokens: number): RuntimeTokenizer {
-  return {
-    countTokens: () => Promise.resolve(tokens),
-  };
-}
-
-function createTokenizerFactory(
-  tokenizerMap: Record<string, RuntimeTokenizer>,
-): RuntimeTokenizerFactory {
-  return {
-    getTokenizer: (
-      _providerName: string,
-      model?: string,
-    ): RuntimeTokenizer | undefined => tokenizerMap[model ?? _providerName],
-    async estimatePrompt(request) {
-      return {
-        count: await request.legacyEstimate(),
-        method: 'calibrated',
-        family: 'legacy-unregistered',
-        estimatorVersion: 'core-estimate-tokens-v1',
-        assetRevision: 'none',
-        projectionRevision: request.projectionRevision,
-      };
-    },
-  };
-}
-
 function createProjectedProvider(
   name: string,
-  tokensForOptions: (options: GenerateChatOptions) => number,
+  tokensForOptions: (options: GenerateChatOptions) => number | Promise<number>,
   sentTokens: Array<object | undefined>,
   failFirstSend = false,
 ): IProvider & { readonly projectionTokens: object[] } {
@@ -136,6 +92,9 @@ function createProjectedProvider(
         sequence: projectionTokens.length,
       });
       projectionTokens.push(transportToken);
+      // The wrapper's request lease closes when projection returns, so a
+      // projection measures the request while it is open.
+      const estimate = await tokensForOptions(options);
       return {
         model: options.resolved?.model ?? 'gpt-5.6-sol',
         protocol: 'openai-responses',
@@ -148,7 +107,7 @@ function createProjectedProvider(
           protocol: 'openai-responses',
           promptText: 'projected prompt',
         }),
-        legacyEstimate: () => Promise.resolve(tokensForOptions(options)),
+        legacyEstimate: () => Promise.resolve(estimate),
       };
     },
     async *generateChatCompletion(options): AsyncGenerator<IContent> {
@@ -536,9 +495,9 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
       },
       providerManager,
     );
-    provider.setCompressionCallback(async () => [
-      createTextContent('compressed'),
-    ]);
+    provider.setCompressionCallback(async () =>
+      trackedRequestRows([createTextContent('compressed')]),
+    );
 
     await consumeIterator(provider, [createTextContent('large request')]);
 

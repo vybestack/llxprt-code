@@ -8,6 +8,7 @@
 
 import type { ProviderPerformanceMetrics } from '../types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { ownedString } from '@vybestack/llxprt-code-core/utils/ownedString.js';
 
 /** Clamp to non-negative finite; NaN/Infinity/-negative become 0. */
 function sanitizeNonNegative(value: number): number {
@@ -176,7 +177,7 @@ export class ProviderPerformanceTracker {
     this.metrics.errors.push({
       timestamp: Date.now(),
       duration: safeDuration,
-      error: error.substring(0, 200), // Truncate long errors
+      error: ownedString(error.substring(0, 200)), // Truncate long errors; the excerpt must not keep the message alive
     });
     if (
       this.metrics.errors.length >

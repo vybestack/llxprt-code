@@ -59,12 +59,13 @@ describe('Agent-owned CLI client tools', () => {
       'stable',
     ]);
     expect(displayed).toStrictEqual([]);
-    const responses = (await a.agent.getHistory())
-      .flatMap((message) => message.blocks)
-      .filter((block) => block.type === 'tool_response');
-    expect(responses.map((response) => response.callId)).toStrictEqual([
-      'stable',
-    ]);
+    const responses: string[] = [];
+    for await (const message of a.agent.streamHistory()) {
+      for (const block of message.blocks) {
+        if (block.type === 'tool_response') responses.push(block.callId);
+      }
+    }
+    expect(responses).toStrictEqual(['stable']);
     await channel.release();
   }, 30_000);
 });

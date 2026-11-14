@@ -29,7 +29,7 @@ interface UseCoreEventHandlersOptions {
   handleNewMessage: (message: ConsoleMessageItem) => void;
   readDebugMode: () => boolean;
   recordFeedback: (
-    severity: 'warning' | 'error',
+    severity: 'warning' | 'error' | 'info',
     message: string,
   ) => void | Promise<void>;
 }
@@ -42,31 +42,16 @@ export function useCoreEventHandlers({
   // Handle core event system for surfacing internal errors
   useEffect(() => {
     const handleUserFeedback = (payload: UserFeedbackPayload) => {
-      let messageType: 'error' | 'warn' | 'info';
-      if (payload.severity === 'error') {
-        messageType = 'error';
-      } else if (payload.severity === 'warning') {
-        messageType = 'warn';
-      } else {
-        messageType = 'info';
-      }
-      handleNewMessage({
-        type: messageType,
-        content: payload.message,
-        count: 1,
-      });
-      if (payload.severity === 'error' || payload.severity === 'warning') {
-        Promise.resolve(
-          recordFeedback(payload.severity, payload.message),
-        ).catch((error: unknown) => {
+      Promise.resolve(recordFeedback(payload.severity, payload.message)).catch(
+        (error: unknown) => {
           const reason = error instanceof Error ? error.message : String(error);
           handleNewMessage({
             type: 'error',
             content: `Failed to record session event: ${reason}`,
             count: 1,
           });
-        });
-      }
+        },
+      );
     };
 
     coreEvents.on(CoreEvent.UserFeedback, handleUserFeedback);

@@ -522,7 +522,12 @@ describe('AnthropicProvider', () => {
         vi.useFakeTimers();
         try {
           const nextPromise = throttledCall.next();
-          await advanceTimersByTimeAsync(0);
+          // The body is written to a scratch spool before the throttle wait
+          // starts, which takes several turns; wait for the throttle timer.
+          for (let turn = 0; turn < 100 && vi.getTimerCount() === 0; turn++) {
+            await advanceTimersByTimeAsync(0);
+          }
+          expect(vi.getTimerCount()).toBe(1);
           expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
 
           controller.abort(reason);

@@ -1,3 +1,4 @@
+import type { ScratchRootOwner } from '../storage/scratch-root.js';
 import type { ProviderRequestDiagnostics } from './providerRequestDiagnostics.js';
 import type { RuntimeTokenizerFactory } from './contracts/RuntimeTokenizerFactory.js';
 import type { ProfileDefinitionReads } from '../services/workspace-definition-owner.js';
@@ -225,6 +226,7 @@ export type PrepareProviderInvocation = (
 ) => RuntimeInvocationContext;
 
 export interface AgentRuntimeContext {
+  readonly scratchRoots: ScratchRootOwner;
   readonly promptEstimator?: Pick<
     RuntimeTokenizerFactory,
     'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
@@ -345,6 +347,7 @@ export interface AgentRuntimeContext {
  * Supports both foreground (Config-backed) and subagent (isolated) modes.
  */
 export interface AgentRuntimeContextFactoryOptions {
+  readonly scratchRoots: ScratchRootOwner;
   readonly promptEstimator?: Pick<
     RuntimeTokenizerFactory,
     'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
@@ -423,7 +426,8 @@ export interface AgentRuntimeProviderAdapter {
  * Telemetry adapter interface supplied to runtime context.
  */
 export interface AgentRuntimeTelemetryAdapter {
-  logApiRequest(event: ApiRequestEvent): void;
+  /** The caller awaits the result, so an implementation may acknowledge asynchronously. */
+  logApiRequest(event: ApiRequestEvent): void | Promise<void>;
   logApiResponse(event: ApiResponseEvent): void;
   logApiError(event: ApiErrorEvent): void;
 }

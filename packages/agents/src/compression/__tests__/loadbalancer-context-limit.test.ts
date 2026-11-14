@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -30,6 +31,7 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { buildMockContentGenerator } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
 import { chatSessionPorts } from '../../core/chatSessionPorts.js';
+const historyScratchRoots = createTestScratchOwner();
 
 /**
  * Build a real AgentRuntimeContext whose provider adapter's active provider
@@ -103,7 +105,7 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
 
   beforeEach(() => {
     vi.clearAllMocks();
-    historyService = new HistoryService();
+    historyService = new HistoryService({ scratchRoots: historyScratchRoots });
     mockContentGenerator = buildMockContentGenerator();
   });
 

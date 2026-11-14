@@ -278,13 +278,12 @@ export function createUnconfiguredChatCommand(): SlashCommand {
       resume: unavailable,
       deleteCheckpoint: unavailable,
       renameCheckpoint: unavailable,
-      getHistory: unavailable,
+      getHistoryCount: unavailable,
       clearHistory: unavailable,
       restoreTurns: unavailable,
       nameCurrentSession: unavailable,
       getRecordingPath: unavailable,
       getModel: unavailable,
-      getEmojiFilterMode: unavailable,
     },
     () => true,
   );
@@ -366,7 +365,7 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
     copyCommand: createCopyCommand(
       bindCopyCommandHistoryRead(
         () => false,
-        async () => [],
+        async function* () {},
       ),
       bindCopyCommandClipboard(),
     ),
@@ -606,14 +605,17 @@ export function createUnconfiguredCredentialRegistry(): CredentialCommands {
 
 export function createUnconfiguredHistoryReaders(): RegisteredHistoryReads {
   return {
+    writeOutput: async () => {
+      throw new Error('Session output is unavailable');
+    },
     compressHistory: null,
     readRawHistory: () => null,
     isHistoryInitialized: () => false,
-    readHistory: async () => [],
-    replaceHistory: async () => {
+    async *readHistory() {},
+    replaceHistoryFromSource: async () => {
       throw new Error('Session agent is unavailable');
     },
-    readDumpHistory: () => null,
+    readDumpHistory: async () => null,
   };
 }
 

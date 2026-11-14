@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { prepareRequest } from './OpenAIRequestPreparation.js';
+import { prepareRequestBody as prepareRequest } from './__tests__/support/prepareRequestBody.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

@@ -295,22 +295,28 @@ export const UI_SETTINGS_SCHEMA = {
           'Caps the auto-configured Node.js max old space heap size. Overrides the default 8GB cap when auto-configure is enabled. Must be an integer.',
         showInDialog: true,
       },
-      historyMaxItems: {
+      scrollbackMarginViewports: {
         type: 'number',
-        label: 'History Max Items',
+        label: 'Scrollback Margin Viewports',
         category: 'UI',
-        requiresRestart: false,
-        default: 100,
-        description: 'Maximum number of history items to keep.',
+        requiresRestart: true,
+        default: 2,
+        minimum: 0,
+        multipleOf: 1,
+        description:
+          'Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.',
         showInDialog: false,
       },
-      historyMaxBytes: {
+      scrollbackByteFloorKiB: {
         type: 'number',
-        label: 'History Max Bytes',
+        label: 'Scrollback Byte Floor (KiB)',
         category: 'UI',
-        requiresRestart: false,
-        default: 1048576,
-        description: 'Maximum size of history in bytes.',
+        requiresRestart: true,
+        default: 256,
+        minimum: 0,
+        multipleOf: 1,
+        description:
+          'Scrollback pager residency byte floor in KiB: off-screen eviction stops once resident rows shrink to this size. Read once at startup.',
         showInDialog: false,
       },
       memoryImportFormat: {

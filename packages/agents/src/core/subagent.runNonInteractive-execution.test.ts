@@ -1,6 +1,6 @@
 import {
   createSubagentScope,
-  type SubAgentLaunchInput,
+  type SubAgentLaunchTestInput,
 } from './__tests__/helpers/create-subagent-scope.js';
 import { afterAll } from 'bun:test';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
@@ -47,6 +47,10 @@ import {
   seedSubagentSettings,
 } from './__tests__/subagent-test-helpers.js';
 import { ChatSession } from './chatSession.js';
+import {
+  messageBlocks,
+  completeToolFixture,
+} from './__tests__/support/subagent-execution-fixtures.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 
 const realEnvironmentContextModule = {
@@ -106,14 +110,14 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 describe('subagent.ts', () => {
   const retainSubagentCleanup = installSubagentCleanup();
 
-  let mockSendMessageStream: Mock;
+  let mockSendMessageStream: Mock<ChatSession['sendMessageStream']>;
 
   describe('runNonInteractive - Execution and Tool Use', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     const launchScope = (
       config: Parameters<typeof scopeInputs>[0],
-      launch: Pick<SubAgentLaunchInput, 'toolConfig' | 'outputConfig'>,
+      launch: Pick<SubAgentLaunchTestInput, 'toolConfig' | 'outputConfig'>,
       inputs: Parameters<typeof scopeInputs>[1],
     ) =>
       createSubagentScope(
@@ -186,6 +190,7 @@ describe('subagent.ts', () => {
 
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
+        { settings: configSettings },
       );
       const scope = await launchScope(
         config,
@@ -265,6 +270,7 @@ describe('subagent.ts', () => {
 
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
+          { settings: configSettings },
         );
         const scope = await launchScope(
           config,
@@ -278,7 +284,11 @@ describe('subagent.ts', () => {
           mockSendMessageStream.mock.calls[0]?.[0]?.message;
 
         const promptsTheModelToFinishOutstandingTodosBeforeCompletingObservation1 =
-          firstCallMessage?.[0]?.text ?? '';
+          messageBlocks(firstCallMessage)[0]?.type === 'text'
+            ? messageBlocks(firstCallMessage)
+                .map((block) => (block.type === 'text' ? block.text : ''))
+                .join('')
+            : '';
         return {
           scope,
           promptsTheModelToFinishOutstandingTodosBeforeCompletingObservation1,
@@ -320,6 +330,7 @@ describe('subagent.ts', () => {
 
       const { overrides: emitOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
+        { settings: configSettings },
       );
       const scope = await launchScope(
         config,
@@ -369,6 +380,7 @@ describe('subagent.ts', () => {
 
       const { overrides: emitOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
+        { settings: configSettings },
       );
       const scope = await launchScope(
         config,
@@ -425,13 +437,15 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
-        ...createCompletedToolCallResponse({
-          callId: 'call_1',
-          responseParts: [{ type: 'text', text: 'file1.txt\nfile2.ts' }],
-          resultDisplay: 'Listed 2 files',
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue(
+        completeToolFixture({
+          ...createCompletedToolCallResponse({
+            callId: 'call_1',
+            responseParts: [{ type: 'text', text: 'file1.txt\nfile2.ts' }],
+            resultDisplay: 'Listed 2 files',
+          }),
         }),
-      });
+      );
 
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry: mcpRuntime.toolSelection,
@@ -455,6 +469,7 @@ describe('subagent.ts', () => {
         {
           runtimeBundle,
           toolRegistry: mcpRuntime.toolSelection,
+          settings: configSettings,
         },
       );
 
@@ -515,17 +530,19 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
-        ...createCompletedToolCallResponse({
-          callId: 'call_fail',
-          responseParts: [
-            { type: 'text', text: 'ERROR: Tool failed catastrophically' },
-          ],
-          resultDisplay: 'Tool failed catastrophically',
-          error: new Error('Failure'),
-          errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue(
+        completeToolFixture({
+          ...createCompletedToolCallResponse({
+            callId: 'call_fail',
+            responseParts: [
+              { type: 'text', text: 'ERROR: Tool failed catastrophically' },
+            ],
+            resultDisplay: 'Tool failed catastrophically',
+            error: new Error('Failure'),
+            errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+          }),
         }),
-      });
+      );
 
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry: mcpRuntime.toolSelection,
@@ -543,6 +560,7 @@ describe('subagent.ts', () => {
         {
           runtimeBundle,
           toolRegistry: mcpRuntime.toolSelection,
+          settings: configSettings,
         },
       );
 
@@ -603,22 +621,24 @@ describe('subagent.ts', () => {
           ]),
         );
 
-        (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
-          ...createCompletedToolCallResponse({
-            callId: 'call_err',
-            responseParts: [
-              {
-                type: 'tool_response',
-                callId: 'call_err',
-                toolName: 'erroring_tool',
-                result: { error: 'Tool crashed' },
-              },
-            ],
-            resultDisplay: 'Tool crashed',
-            error: new Error('Tool crashed'),
-            errorType: ToolErrorType.UNHANDLED_EXCEPTION,
+        (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue(
+          completeToolFixture({
+            ...createCompletedToolCallResponse({
+              callId: 'call_err',
+              responseParts: [
+                {
+                  type: 'tool_response',
+                  callId: 'call_err',
+                  toolName: 'erroring_tool',
+                  result: { error: 'Tool crashed' },
+                },
+              ],
+              resultDisplay: 'Tool crashed',
+              error: new Error('Tool crashed'),
+              errorType: ToolErrorType.UNHANDLED_EXCEPTION,
+            }),
           }),
-        });
+        );
 
         const runtimeBundle = createStatelessRuntimeBundle({
           toolRegistry: mcpRuntime.toolSelection,
@@ -636,6 +656,7 @@ describe('subagent.ts', () => {
           {
             runtimeBundle,
             toolRegistry: mcpRuntime.toolSelection,
+            settings: configSettings,
           },
         );
 
@@ -648,15 +669,11 @@ describe('subagent.ts', () => {
         await scope.runNonInteractive(new ContextState());
 
         const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
-        const toolCallParts = secondCallArgs.message.filter(
-          (part: ContentBlock) =>
-            'type' in part &&
-            (part as Record<string, unknown>).type === 'tool_call',
+        const toolCallParts = messageBlocks(secondCallArgs.message).filter(
+          (part: ContentBlock) => part.type === 'tool_call',
         );
-        const hasToolResponse = secondCallArgs.message.some(
-          (p: ContentBlock) =>
-            'type' in p &&
-            (p as Record<string, unknown>).type === 'tool_response',
+        const hasToolResponse = messageBlocks(secondCallArgs.message).some(
+          (p: ContentBlock) => p.type === 'tool_response',
         );
 
         return { hasToolResponse, toolCallParts };
@@ -719,6 +736,7 @@ describe('subagent.ts', () => {
         {
           runtimeBundle,
           toolRegistry: mcpRuntime.toolSelection,
+          settings: configSettings,
         },
       );
 
@@ -738,28 +756,31 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
-        ...createCompletedToolCallResponse({
-          callId: 'call_write',
-          responseParts: [
-            {
-              type: 'tool_response',
-              callId: 'call_write',
-              toolName: 'write_file',
-              result: {
-                error: 'Tool "write_file" is disabled in the current profile.',
+      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue(
+        completeToolFixture({
+          ...createCompletedToolCallResponse({
+            callId: 'call_write',
+            responseParts: [
+              {
+                type: 'tool_response',
+                callId: 'call_write',
+                toolName: 'write_file',
+                result: {
+                  error:
+                    'Tool "write_file" is disabled in the current profile.',
+                },
               },
-            },
-          ],
-          resultDisplay:
-            'Tool "write_file" is disabled in the current profile.',
-          error: new Error(
-            'Tool "write_file" is disabled in the current profile.',
-          ),
-          errorType: ToolErrorType.TOOL_DISABLED,
-          agentId: 'test-agent',
+            ],
+            resultDisplay:
+              'Tool "write_file" is disabled in the current profile.',
+            error: new Error(
+              'Tool "write_file" is disabled in the current profile.',
+            ),
+            errorType: ToolErrorType.TOOL_DISABLED,
+            agentId: 'test-agent',
+          }),
         }),
-      });
+      );
 
       const scope = await launchScope(
         config,
@@ -810,6 +831,7 @@ describe('subagent.ts', () => {
 
       const { overrides: nudgeOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
+        { settings: configSettings },
       );
       const scope = await launchScope(
         config,
@@ -820,10 +842,11 @@ describe('subagent.ts', () => {
       await scope.runNonInteractive(new ContextState());
 
       const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
-      expect(secondCallArgs.message[0].text).toContain('required_var');
-      expect(secondCallArgs.message[0].text).toContain(
-        'You have stopped calling tools',
-      );
+      const nudge = messageBlocks(secondCallArgs.message)[0];
+      if (nudge.type !== 'text')
+        throw new Error('Expected output reminder text');
+      expect(nudge.text).toContain('required_var');
+      expect(nudge.text).toContain('You have stopped calling tools');
 
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
       expect(scope.output.emitted_vars).toStrictEqual({

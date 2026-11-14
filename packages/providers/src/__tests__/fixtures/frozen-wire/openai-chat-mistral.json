@@ -1,0 +1,680 @@
+{
+  "format": "openai-chat-mistral",
+  "description": "Frozen request-body hashes and lengths of the pre-#854 builders (issue #854 phase 0). Regenerate only deliberately with FROZEN_WIRE_CORPUS_UPDATE=1; never in CI.",
+  "pinnedClock": "2026-01-02T03:04:05.678Z",
+  "seeds": 5000,
+  "settings": [
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none"
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": null
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {},
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "none",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "normalized",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast",
+        "reasoning.includeInContext": false
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "allButLast"
+      },
+      "providerSettings": {},
+      "systemInstruction": "You are a careful assistant."
+    },
+    {
+      "form": "raw",
+      "model": "mistral-large-latest",
+      "ephemerals": {
+        "reasoning.stripFromContext": "all",
+        "reasoning.includeInContext": true
+      },
+      "providerSettings": {},
+      "systemInstruction": "Edge \"quotes\" \\ and\nnewlines \u2028 and 😀"
+    }
+  ]
+}

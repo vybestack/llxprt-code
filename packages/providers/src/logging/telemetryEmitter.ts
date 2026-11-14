@@ -10,13 +10,13 @@
  */
 
 import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-
 import {
   TokenUsageEvent,
   ApiResponseEvent,
   ConversationResponseEvent,
 } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { TokenCounts } from './tokenCounts.js';
+import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 
 export type ResponseTokenCounts = TokenCounts & {
   cache_creation_input_tokens: number | null;
@@ -173,7 +173,8 @@ export async function writeConversationLog(
   success: boolean,
   error: unknown,
   ctx: ResponseTelemetryContext,
-): Promise<void> {
+  policy?: RequestLoggingPolicy,
+): Promise<void | (() => void | Promise<void>)> {
   const event = new ConversationResponseEvent(
     ctx.providerName,
     ctx.conversationId,
@@ -184,18 +185,34 @@ export async function writeConversationLog(
     success,
     error != null ? String(error) : undefined,
   );
+  const metadata = {
+    conversationId: ctx.conversationId,
+    turnNumber: ctx.turnNumber,
+    promptId,
+    duration,
+    success,
+    error: error != null ? String(error) : undefined,
+  };
+  if (policy?.strictDurableResponse === true) {
+    const fileWriter = config.conversationFileWriter;
+    await fileWriter.writeEntryAcknowledged({
+      type: 'response',
+      provider: ctx.providerName,
+      response: redactedContent,
+      metadata,
+    });
+    if (policy.strictTelemetry)
+      return async (): Promise<void> => {
+        const accept = await config.acknowledgeTerminalTelemetry(
+          () => config.recordConversationResponse(event),
+          policy.signal,
+        );
+        accept();
+      };
+    return () => config.recordConversationResponse(event);
+  }
   config.recordConversationResponse(event);
-
-  await config.conversationFileWriter.writeResponse(
-    ctx.providerName,
-    redactedContent,
-    {
-      conversationId: ctx.conversationId,
-      turnNumber: ctx.turnNumber,
-      promptId,
-      duration,
-      success,
-      error: error != null ? String(error) : undefined,
-    },
-  );
+  const fileWriter = config.conversationFileWriter;
+  await fileWriter.writeResponse(ctx.providerName, redactedContent, metadata);
+  return undefined;
 }

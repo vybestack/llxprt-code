@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -151,7 +152,9 @@ describe('provider-internal invocations keep the owner transport', () => {
     if (provider === undefined) throw new Error('No active provider');
     const texts: string[] = [];
     for await (const content of provider.generateChatCompletion({
-      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
+      contents: callerOwnedRawProviderSource([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      ]),
       systemInstruction: 'Answer briefly.',
     })) {
       for (const block of content.blocks) {

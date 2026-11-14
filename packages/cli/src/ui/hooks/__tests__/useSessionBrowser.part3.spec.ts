@@ -1,8 +1,12 @@
+import { withTestNamedWriters } from '../../../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { seedSessionRows } from '../../../__tests__/journal-recording.js';
+
+import { displayBoot } from '../../../__tests__/resumeRows.js';
 
 import {
   rawBrowserCatalog,
@@ -39,7 +43,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
   type IContent,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -80,7 +84,7 @@ function makeContent(
 }
 
 /**
- * Create a real session file using SessionRecordingService.
+ * Create a real session file using createSessionRecorder.
  */
 async function createTestSession(
   chatsDir: string,
@@ -102,11 +106,11 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(withTestNamedWriters(config));
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
-    svc.recordContent(content);
+    await seedSessionRows(svc, [content]);
   }
   await svc.flush();
 
@@ -152,8 +156,9 @@ function makeHookProps(
       overrides.onSelect ??
       (async (): Promise<PerformResumeResult> => ({
         ok: true,
-        history: [],
+        history: displayBoot([]).streamRows(),
         metadata: {
+          kind: 'main',
           sessionId: 'resumed',
           projectHash: PROJECT_HASH,
           startTime: new Date().toISOString(),
@@ -175,26 +180,10 @@ function delay(ms: number): Promise<void> {
 // Test Suite
 // ---------------------------------------------------------------------------
 
-describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let lockHandles: Array<{ release: () => Promise<void> }>;
+let chatsDir: string;
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'use-session-browser-test-'),
-    );
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-    lockHandles = [];
-  });
-
-  afterEach(async () => {
-    await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  describe('Pagination @requirement:REQ-PG-001', () => {
+function registerPagination1(): void {
+  describe.each([0])('Pagination @requirement:REQ-PG-001', () => {
     /**
      * Test 27: 20 items per page
      * GIVEN: 25 sessions exist
@@ -244,7 +233,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('', makeKey('pagedown'));
       expect(result.current.page).toBe(1);
     });
+  });
+}
 
+function registerPagination2(): void {
+  describe.each([0])('Pagination @requirement:REQ-PG-001', () => {
     /**
      * Test 29: PgUp goes to previous page (REQ-PG-003)
      * GIVEN: On page 1
@@ -298,7 +291,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('', makeKey('pageup'));
       expect(result.current.page).toBe(0);
     });
+  });
+}
 
+function registerPagination3(): void {
+  describe.each([0])('Pagination @requirement:REQ-PG-001', () => {
     /**
      * Test 31: PgDn no-op on last page
      * GIVEN: On last page
@@ -352,8 +349,10 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(result.current.totalPages).toBe(2);
     });
   });
+}
 
-  describe('Navigation @requirement:REQ-KN-001', () => {
+function registerNavigation1(): void {
+  describe.each([0])('Navigation @requirement:REQ-KN-001', () => {
     /**
      * Test 33: Down moves selection (REQ-KN-002)
      * GIVEN: selectedIndex is 0
@@ -403,7 +402,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('', makeKey('up'));
       expect(result.current.selectedIndex).toBe(0);
     });
+  });
+}
 
+function registerNavigation2(): void {
+  describe.each([0])('Navigation @requirement:REQ-KN-001', () => {
     /**
      * Test 35: Selection clamps at bottom (REQ-SD-002)
      * GIVEN: At last item
@@ -456,7 +459,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('', makeKey('up'));
       expect(result.current.selectedIndex).toBe(0);
     });
+  });
+}
 
+function registerNavigation3(): void {
+  describe.each([0])('Navigation @requirement:REQ-KN-001', () => {
     /**
      * Test 37: Characters no-op in nav mode (REQ-KN-004)
      * GIVEN: Hook in nav mode
@@ -511,8 +518,10 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(result.current.searchTerm).toBe('abc');
     });
   });
+}
 
-  describe('Escape Precedence @requirement:REQ-EP-001', () => {
+function registerEscapePrecedence1(): void {
+  describe.each([0])('Escape Precedence @requirement:REQ-EP-001', () => {
     /**
      * Test 39: Escape dismisses delete confirmation first (REQ-EP-001)
      * GIVEN: deleteConfirmIndex is set
@@ -626,4 +635,31 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(closeCalled).toBe(true);
     });
   });
+}
+
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
+  let tempDir: string;
+  let lockHandles: Array<{ release: () => Promise<void> }>;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'use-session-browser-test-'),
+    );
+    chatsDir = path.join(tempDir, 'chats');
+    await fs.mkdir(chatsDir, { recursive: true });
+    lockHandles = [];
+  });
+
+  afterEach(async () => {
+    await Promise.all(lockHandles.map((handle) => handle.release()));
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  registerPagination1();
+  registerPagination2();
+  registerPagination3();
+  registerNavigation1();
+  registerNavigation2();
+  registerNavigation3();
+  registerEscapePrecedence1();
 });

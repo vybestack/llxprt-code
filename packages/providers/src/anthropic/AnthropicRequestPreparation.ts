@@ -23,8 +23,12 @@ import {
 } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import type { ProviderToolset } from '../IProvider.js';
-import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
+import type {
+  AnthropicConversationConversionOptions,
+  AnthropicMessage,
+} from './AnthropicMessageNormalizer.js';
 import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
 import { attachAnchorCacheControl } from './AnthropicAnchorCache.js';
 import {
@@ -59,11 +63,10 @@ import {
 } from './AnthropicImageSanitizer.js';
 
 /**
- * Request preparation context returned to caller
+ * What the transport and the response path need to know about a request,
+ * whatever form its body takes.
  */
-export interface AnthropicRequestContext {
-  requestBody: Record<string, unknown>;
-  anthropicMessages: AnthropicMessage[];
+export interface AnthropicRequestFacts {
   streamingEnabled: boolean;
   includeThinkingInResponse: boolean;
   wantCaching: boolean;
@@ -78,10 +81,19 @@ export interface AnthropicRequestContext {
 }
 
 /**
- * Parameters for request preparation
+ * Request preparation context for a request whose body is a built object (the
+ * projection route, which estimates the body before it is sent).
  */
-export interface PrepareRequestParams {
-  content: IContent[];
+export interface AnthropicRequestContext extends AnthropicRequestFacts {
+  requestBody: Record<string, unknown>;
+  anthropicMessages: AnthropicMessage[];
+}
+
+/**
+ * Parameters for the request plan: everything a request is resolved from but
+ * its history.
+ */
+export interface AnthropicPlanParams {
   tools: ProviderToolset | undefined;
   options: NormalizedGenerateChatOptions;
   isOAuth: boolean;
@@ -94,6 +106,11 @@ export interface PrepareRequestParams {
   logger: DebugLogger;
   toolsLogger: DebugLogger;
   cacheLogger: { debug: (fn: () => string) => void };
+}
+
+/** Parameters for building a request from a history array. */
+export interface PrepareRequestParams extends AnthropicPlanParams {
+  content: IContent[];
 }
 
 /**
@@ -139,7 +156,7 @@ function resolveSemanticMediaPurgeMode(
 /**
  * Reasoning settings resolved from invocation
  */
-interface ReasoningSettings extends AnthropicReasoningSettings {
+export interface ReasoningSettings extends AnthropicReasoningSettings {
   stripFromContext: 'all' | 'allButLast' | 'none' | undefined;
   includeInContext: boolean | undefined;
   includeInResponse: boolean | undefined;
@@ -148,7 +165,7 @@ interface ReasoningSettings extends AnthropicReasoningSettings {
 /**
  * Request settings resolved from options and config
  */
-interface RequestSettings {
+export interface RequestSettings {
   streamingEnabled: boolean;
   currentModel: string;
   requestOverrides: Record<string, unknown>;
@@ -176,7 +193,7 @@ function resolveRequestMaxTokens(
 /**
  * System context building result
  */
-interface SystemContextResult {
+export interface SystemContextResult {
   systemField:
     | string
     | Array<{
@@ -308,7 +325,7 @@ function resolveRequestSettings(
  * placement (WHERE the prompt goes) is independent of transport auth. The
  * vendor system field is determined separately by buildSystemField.
  */
-function placeSystemInstruction(params: {
+export function placeSystemInstruction(params: {
   placement: SystemPromptPlacement;
   anthropicMessages: readonly AnthropicMessage[];
   wantCaching: boolean;
@@ -424,47 +441,6 @@ function assertPlacementCompatibleWithAuth(
 }
 
 /**
- * Build system context (issue #3172). Placement controls WHERE the assembled
- * instruction goes; the resolved auth classification independently controls
- * the vendor-required system field. Fail fast for the impossible
- * OAuth/system-field combination rather than dropping or misplacing bytes.
- */
-function buildSystemContext(params: {
-  placement: SystemPromptPlacement;
-  isOAuth: boolean;
-  anthropicMessages: readonly AnthropicMessage[];
-  wantCaching: boolean;
-  ttl: '5m' | '1h';
-  cacheLogger: { debug: (fn: () => string) => void };
-  systemInstruction: string | undefined;
-}): SystemContextResult {
-  // OAuth requires context-prefix placement: the system field must carry ONLY
-  // the Claude Code string, so the assembled prompt must go at the top of the
-  // context. OAuth + system-field is impossible and must fail fast rather than
-  // drop or misplace prompt bytes.
-  assertPlacementCompatibleWithAuth(params.isOAuth, params.placement);
-
-  const messages = placeSystemInstruction({
-    placement: params.placement,
-    anthropicMessages: params.anthropicMessages,
-    wantCaching: params.wantCaching,
-    ttl: params.ttl,
-    cacheLogger: params.cacheLogger,
-    systemInstruction: params.systemInstruction,
-  });
-
-  const systemField = buildSystemField({
-    placement: params.placement,
-    isOAuth: params.isOAuth,
-    wantCaching: params.wantCaching,
-    ttl: params.ttl,
-    systemInstruction: params.systemInstruction,
-  });
-
-  return { systemField, messages };
-}
-
-/**
  * Build thinking configuration and request body
  */
 function buildThinkingAndRequestBody(params: {
@@ -516,12 +492,13 @@ function buildThinkingAndRequestBody(params: {
   });
 }
 
-/**
- * Convert messages and tools to Anthropic format with stable ordering
- */
-function convertMessagesAndTools(params: {
-  content: IContent[];
-  tools: ProviderToolset | undefined;
+type AnthropicToolList = Array<{
+  name: string;
+  input_schema: { properties?: unknown };
+}>;
+
+/** The options the message conversion (array route and table route) runs with. */
+function conversionOptionsOf(params: {
   isOAuth: boolean;
   reasoningSettings: ReasoningSettings;
   config: OutputLimitConfig | undefined;
@@ -530,59 +507,44 @@ function convertMessagesAndTools(params: {
   supportsUrlImages: boolean;
   unprefixToolName: (name: string, isOAuth: boolean) => string;
   logger: DebugLogger;
-}): {
-  anthropicMessages: AnthropicMessage[];
-  anthropicTools:
-    | Array<{ name: string; input_schema: { properties?: unknown } }>
-    | undefined;
-} {
-  const {
-    content,
-    tools,
-    reasoningSettings,
-    config,
-    currentModel,
-    currentBaseURL,
-    unprefixToolName,
-    logger,
-  } = params;
-
-  // Convert IContent to Anthropic API format
-  const anthropicMessages = convertToAnthropicMessages(content, {
+}): AnthropicConversationConversionOptions {
+  const { reasoningSettings } = params;
+  return {
     isOAuth: params.isOAuth,
     stripFromContext: reasoningSettings.stripFromContext,
     includeInContext: reasoningSettings.includeInContext,
     reasoningEnabled: reasoningSettings.enabled === true,
-    config,
-    currentModel,
-    currentBaseURL,
+    config: params.config,
+    currentModel: params.currentModel,
+    currentBaseURL: params.currentBaseURL,
     supportsUrlImages: params.supportsUrlImages,
-    unprefixToolName,
-    logger,
-  });
+    unprefixToolName: params.unprefixToolName,
+    logger: params.logger,
+  };
+}
 
-  // Convert tools to Anthropic format and stabilize ordering
-  let anthropicTools = convertToolsToAnthropic(tools, params.isOAuth);
-
-  if (anthropicTools && anthropicTools.length > 0) {
-    anthropicTools = [...anthropicTools]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((tool) => {
-        const schema = tool.input_schema;
-        if (schema.properties) {
-          return {
-            ...tool,
-            input_schema: {
-              ...schema,
-              properties: sortObjectKeys(schema.properties),
-            },
-          };
-        }
-        return tool;
-      });
-  }
-
-  return { anthropicMessages, anthropicTools };
+/** Convert tools to Anthropic format and stabilize ordering. */
+function convertToolset(
+  tools: ProviderToolset | undefined,
+  isOAuth: boolean,
+): AnthropicToolList | undefined {
+  const anthropicTools = convertToolsToAnthropic(tools, isOAuth);
+  if (!anthropicTools || anthropicTools.length === 0) return anthropicTools;
+  return [...anthropicTools]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((tool) => {
+      const schema = tool.input_schema;
+      if (schema.properties) {
+        return {
+          ...tool,
+          input_schema: {
+            ...schema,
+            properties: sortObjectKeys(schema.properties),
+          },
+        };
+      }
+      return tool;
+    });
 }
 
 /**
@@ -630,7 +592,7 @@ function logRequestDebugInfo(params: {
   }
 }
 
-function applyRequestCacheControls(params: {
+export function applyRequestCacheControls(params: {
   readonly systemContext: SystemContextResult;
   readonly requestSettings: RequestSettings;
   readonly cacheLogger: { debug: (fn: () => string) => void };
@@ -662,74 +624,22 @@ function applyRequestCacheControls(params: {
   );
 }
 
-function buildRequestContext(params: {
-  reasoningSettings: ReasoningSettings;
-  requestSettings: RequestSettings;
-  anthropicTools:
-    | Array<{ name: string; input_schema: { properties?: unknown } }>
-    | undefined;
-  systemContext: SystemContextResult;
-  getMaxTokensForModel: (model: string) => number;
-  providerName: string;
-  cacheLogger: { debug: (fn: () => string) => void };
-  toolsLogger: DebugLogger;
-  logger: DebugLogger;
-  wantCaching: boolean;
-  wantMediaPurgeCacheAnchor: boolean;
-}): AnthropicRequestContext {
-  const {
-    reasoningSettings,
-    requestSettings,
-    anthropicTools,
-    systemContext,
-    getMaxTokensForModel,
-    providerName,
-    cacheLogger,
-    toolsLogger,
-    logger,
-    wantCaching,
-    wantMediaPurgeCacheAnchor,
-  } = params;
-
-  const semanticMediaPurgeCacheWriteEvidence = applyRequestCacheControls({
-    systemContext,
-    requestSettings,
-    cacheLogger,
-    wantCaching,
-    wantMediaPurgeCacheAnchor,
-  });
-
-  const requestBody = buildThinkingAndRequestBody({
-    currentModel: requestSettings.currentModel,
-    reasoningSettings,
-    providerName,
-    logger,
-    anthropicMessages: systemContext.messages,
-    systemField: systemContext.systemField,
-    anthropicTools,
-    getMaxTokensForModel,
-    streamingEnabled: requestSettings.streamingEnabled,
-    requestOverrides: requestSettings.requestOverrides,
-  });
-
-  logRequestDebugInfo({
-    anthropicTools,
-    requestBody,
-    anthropicMessages: systemContext.messages,
-    toolsLogger,
-    logger,
-  });
-
+/** Everything about a request but its body. */
+export function requestFactsOf(
+  plan: AnthropicRequestPlan,
+  cacheLogger: { debug: (fn: () => string) => void },
+  semanticMediaPurgeCacheWriteEvidence:
+    | SemanticMediaPurgeCacheWriteEvidence
+    | undefined,
+): AnthropicRequestFacts {
+  const { requestSettings, reasoningSettings } = plan;
   const { maxAttempts, initialDelayMs } = getRetryConfig(
     requestSettings.configEphemerals,
   );
-
   return {
-    requestBody,
-    anthropicMessages: systemContext.messages,
     streamingEnabled: requestSettings.streamingEnabled,
     includeThinkingInResponse: reasoningSettings.includeInResponse !== false,
-    wantCaching,
+    wantCaching: plan.wantCaching,
     ttl: requestSettings.ttl,
     configEphemerals: requestSettings.configEphemerals,
     maxAttempts,
@@ -740,11 +650,63 @@ function buildRequestContext(params: {
 }
 
 /**
- * Prepare complete Anthropic API request context
+ * The request body with an empty `messages` array in its key position, and
+ * everything else final. The table route writes the messages in that position.
  */
-export async function prepareAnthropicRequest(
-  params: PrepareRequestParams,
-): Promise<AnthropicRequestContext> {
+export function buildRequestEnvelope(
+  plan: AnthropicRequestPlan,
+  params: AnthropicPlanParams,
+  anthropicMessages: AnthropicMessage[] = [],
+): Record<string, unknown> {
+  const requestBody = buildThinkingAndRequestBody({
+    currentModel: plan.requestSettings.currentModel,
+    reasoningSettings: plan.reasoningSettings,
+    providerName: params.providerName,
+    logger: params.logger,
+    anthropicMessages,
+    systemField: plan.systemField,
+    anthropicTools: plan.anthropicTools,
+    getMaxTokensForModel: params.getMaxTokensForModel,
+    streamingEnabled: plan.requestSettings.streamingEnabled,
+    requestOverrides: plan.requestSettings.requestOverrides,
+  });
+  logRequestDebugInfo({
+    anthropicTools: plan.anthropicTools,
+    requestBody,
+    anthropicMessages,
+    toolsLogger: params.toolsLogger,
+    logger: params.logger,
+  });
+  return requestBody;
+}
+
+/**
+ * Everything a request needs before its messages exist: the settings, the
+ * conversion options, the tools and the system field. The array route and the
+ * table route both start here, so they cannot disagree about the request.
+ */
+export interface AnthropicRequestPlan {
+  readonly reasoningSettings: ReasoningSettings;
+  readonly requestSettings: RequestSettings;
+  readonly conversion: AnthropicConversationConversionOptions;
+  readonly imageBudget: ImageDimensionBudget | undefined;
+  readonly anthropicTools: AnthropicToolList | undefined;
+  readonly systemField: SystemContextResult['systemField'];
+  /** Prompt caching in effect: asked for and the endpoint is native. */
+  readonly wantCaching: boolean;
+  readonly wantMediaPurgeCacheAnchor: boolean;
+}
+
+/**
+ * Resolves the plan of a request (issue #3172 placement included): placement
+ * controls WHERE the assembled instruction goes; the resolved auth
+ * classification independently controls the vendor-required system field. The
+ * impossible OAuth/system-field combination fails here rather than dropping or
+ * misplacing bytes.
+ */
+export function planAnthropicRequest(
+  params: AnthropicPlanParams,
+): AnthropicRequestPlan {
   const semanticMediaPurgeMode = resolveSemanticMediaPurgeMode(params.options);
   const reasoningSettings = resolveReasoningSettings(params.options);
 
@@ -753,41 +715,7 @@ export async function prepareAnthropicRequest(
       `[AnthropicProvider] Reasoning settings from invocation.modelBehavior (fallback to options.settings): enabled=${String(reasoningSettings.enabled)}, budgetTokens=${String(reasoningSettings.budgetTokens)}, stripFromContext=${String(reasoningSettings.stripFromContext)}, includeInContext=${String(reasoningSettings.includeInContext)}`,
   );
 
-  const configForMessages = parseOutputLimits(
-    params.options.invocation.ephemerals,
-  );
-
-  // Issue #3216: proactively sanitize oversized image blocks from the neutral
-  // history before conversion, so known-invalid bytes never reach the wire.
-  // The budget is resolved from invocation ephemerals (the stateless per-call
-  // source of truth), NOT from config.getEphemeralSettings — the stateless
-  // contract guarantees config is never accessed for request overrides.
-  // sanitizeAnthropicContentImages already returns the contents unchanged
-  // (0 replacements) when the budget is undefined, so no fallback is needed.
-  const configEphemeralsForBudget: Readonly<Record<string, unknown>> =
-    params.options.invocation.ephemerals;
-  const sanitizedContent = sanitizeAnthropicContentImages(
-    params.content,
-    resolveAnthropicImageBudget(configEphemeralsForBudget),
-  );
-
-  const { anthropicMessages, anthropicTools } = convertMessagesAndTools({
-    content: sanitizedContent.contents,
-    tools: params.tools,
-    isOAuth: params.isOAuth,
-    reasoningSettings,
-    config: configForMessages,
-    currentModel: params.options.resolved.model,
-    currentBaseURL:
-      params.options.resolved.baseURL ?? ANTHROPIC_DEFAULT_BASE_URL,
-    // Issue #3693: zai's Anthropic-compatible endpoint rejects
-    // source:{type:'url'} image blocks; url-encoded images serialize as the
-    // unsupported-media placeholder on zai hosts only.
-    supportsUrlImages: !isZaiAnthropicEndpoint(params.options.resolved.baseURL),
-    unprefixToolName: params.unprefixToolName,
-    logger: params.logger,
-  });
-
+  assertPlacementCompatibleWithAuth(params.isOAuth, params.placement);
   const requestSettings = resolveRequestSettings(
     params.options,
     params.providerName,
@@ -798,46 +726,106 @@ export async function prepareAnthropicRequest(
   // ([{type:'text', text:'...', cache_control:{...}}]). Only emit cache_control
   // when the request targets the native Anthropic API. Reusing the OAuth
   // eligibility helper avoids duplicating the hostname check.
-  const effectiveWantCaching =
+  const wantCaching =
     requestSettings.wantCaching &&
     isAnthropicOAuthBaseURL(params.options.resolved.baseURL);
 
-  if (!effectiveWantCaching && requestSettings.wantCaching) {
+  if (!wantCaching && requestSettings.wantCaching) {
     params.cacheLogger.debug(
       () =>
         `Prompt caching disabled: base URL (${params.options.resolved.baseURL ?? '<unset>'}) is not a native Anthropic endpoint`,
     );
   }
 
-  if (effectiveWantCaching) {
+  if (wantCaching) {
     params.cacheLogger.debug(
       () => `Prompt caching enabled with TTL: ${requestSettings.ttl}`,
     );
   }
 
-  const systemContext = buildSystemContext({
-    placement: params.placement,
-    isOAuth: params.isOAuth,
-    anthropicMessages,
-    wantCaching: effectiveWantCaching,
-    ttl: requestSettings.ttl,
-    cacheLogger: params.cacheLogger,
-    systemInstruction: params.options.systemInstruction,
-  });
-
-  return buildRequestContext({
+  return {
     reasoningSettings,
     requestSettings,
-    anthropicTools,
-    systemContext,
-    getMaxTokensForModel: params.getMaxTokensForModel,
-    providerName: params.providerName,
-    cacheLogger: params.cacheLogger,
-    toolsLogger: params.toolsLogger,
-    logger: params.logger,
-    wantCaching: effectiveWantCaching,
+    conversion: conversionOptionsOf({
+      isOAuth: params.isOAuth,
+      reasoningSettings,
+      config: parseOutputLimits(params.options.invocation.ephemerals),
+      currentModel: params.options.resolved.model,
+      currentBaseURL:
+        params.options.resolved.baseURL ?? ANTHROPIC_DEFAULT_BASE_URL,
+      // Issue #3693: zai's Anthropic-compatible endpoint rejects
+      // source:{type:'url'} image blocks; url-encoded images serialize as the
+      // unsupported-media placeholder on zai hosts only.
+      supportsUrlImages: !isZaiAnthropicEndpoint(
+        params.options.resolved.baseURL,
+      ),
+      unprefixToolName: params.unprefixToolName,
+      logger: params.logger,
+    }),
+    // Issue #3216: proactively sanitize oversized image blocks before
+    // conversion, so known-invalid bytes never reach the wire. The budget is
+    // resolved from invocation ephemerals (the stateless per-call source of
+    // truth), NOT from config.getEphemeralSettings; an undefined budget
+    // replaces nothing.
+    imageBudget: resolveAnthropicImageBudget(
+      params.options.invocation.ephemerals,
+    ),
+    anthropicTools: convertToolset(params.tools, params.isOAuth),
+    systemField: buildSystemField({
+      placement: params.placement,
+      isOAuth: params.isOAuth,
+      wantCaching,
+      ttl: requestSettings.ttl,
+      systemInstruction: params.options.systemInstruction,
+    }),
+    wantCaching,
     wantMediaPurgeCacheAnchor:
       semanticMediaPurgeMode === 'remove' ||
       semanticMediaPurgeMode === 'summary',
+  };
+}
+
+/**
+ * Prepare the complete Anthropic API request context as one message array.
+ *
+ * This is the array reference route: no production code calls it (the send,
+ * the projection, the estimate and the request dump go through
+ * `prepareSpooledAnthropicRequest`). Tests compare the table route's bytes
+ * with it.
+ */
+export async function prepareAnthropicRequest(
+  params: PrepareRequestParams,
+): Promise<AnthropicRequestContext> {
+  const plan = planAnthropicRequest(params);
+  const sanitizedContent = sanitizeAnthropicContentImages(
+    params.content,
+    plan.imageBudget,
+  );
+  const messages = placeSystemInstruction({
+    placement: params.placement,
+    anthropicMessages: convertToAnthropicMessages(
+      sanitizedContent.contents,
+      plan.conversion,
+    ),
+    wantCaching: plan.wantCaching,
+    ttl: plan.requestSettings.ttl,
+    cacheLogger: params.cacheLogger,
+    systemInstruction: params.options.systemInstruction,
   });
+  const semanticMediaPurgeCacheWriteEvidence = applyRequestCacheControls({
+    systemContext: { systemField: plan.systemField, messages },
+    requestSettings: plan.requestSettings,
+    cacheLogger: params.cacheLogger,
+    wantCaching: plan.wantCaching,
+    wantMediaPurgeCacheAnchor: plan.wantMediaPurgeCacheAnchor,
+  });
+  return {
+    ...requestFactsOf(
+      plan,
+      params.cacheLogger,
+      semanticMediaPurgeCacheWriteEvidence,
+    ),
+    requestBody: buildRequestEnvelope(plan, params, messages),
+    anthropicMessages: messages,
+  };
 }

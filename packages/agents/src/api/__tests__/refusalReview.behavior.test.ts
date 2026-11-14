@@ -66,7 +66,6 @@ interface JournalPayload {
     originalText: string;
     newText: string;
   }>;
-  readonly resultingHistory: readonly unknown[];
 }
 
 function payloadOf(
@@ -224,7 +223,7 @@ describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {
       .filter((record) => JSON.stringify(record).includes(ORIGINAL_PHRASE));
     expect({
       inChanges: rewrite.changes[0].originalText.includes(ORIGINAL_PHRASE),
-      inResultingHistory: JSON.stringify(rewrite.resultingHistory).includes(
+      inResultingHistory: JSON.stringify(run.replayed).includes(
         ORIGINAL_PHRASE,
       ),
       laterRecords: later.length,

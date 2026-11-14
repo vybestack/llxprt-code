@@ -15,6 +15,7 @@ import {
   type ToolCallRequestInfo,
   MessageSenderType,
   type AgentRequestInput,
+  type ContentBlock,
 } from '@vybestack/llxprt-code-core';
 import { UserPromptEvent } from '@vybestack/llxprt-code-telemetry';
 import { type SlashCommandProcessorResult } from '../../types.js';
@@ -65,6 +66,21 @@ export interface PrepareQueryDeps {
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
   ) => Promise<void>;
+}
+
+function withRawQuery(
+  input: AgentRequestInput,
+  displayText: string,
+): AgentRequestInput {
+  const blocks: ContentBlock[] = [];
+  if (typeof input === 'string') blocks.push({ type: 'text', text: input });
+  else if (Array.isArray(input)) {
+    for (const part of input) {
+      if ('blocks' in part) blocks.push(...part.blocks);
+      else blocks.push(part);
+    }
+  } else blocks.push(...input.blocks);
+  return { speaker: 'human', blocks, metadata: { displayText } };
 }
 
 export async function prepareQueryForAgent(
@@ -175,7 +191,8 @@ async function processStringQuery(
       onDebugMessage(atCommandResult.error);
       return null;
     }
-    return atCommandResult.processedQuery;
+    const processed = atCommandResult.processedQuery;
+    return processed === null ? null : withRawQuery(processed, trimmedQuery);
   }
   return trimmedQuery;
 }

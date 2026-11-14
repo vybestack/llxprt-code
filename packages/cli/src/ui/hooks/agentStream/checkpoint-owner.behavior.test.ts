@@ -24,8 +24,8 @@ function checkpointTool(filePath: string): Pick<TrackedToolCall, 'request'> {
 }
 
 function historyReader(owner: Agent, decoy: Agent) {
-  return Object.assign(() => owner.getHistory(), {
-    getHistory: () => decoy.getHistory(),
+  return Object.assign(() => owner.streamHistory(), {
+    getHistory: () => decoy.streamHistory(),
   });
 }
 
@@ -55,7 +55,6 @@ describe('checkpoint history owner', () => {
         getCurrentCommitHash: async () => 'fallback-hash',
       },
       historyReader(owner, sibling),
-      [],
       () => {},
     );
     const names = await readdir(directory);
@@ -78,7 +77,6 @@ describe('checkpoint history owner', () => {
         getCurrentCommitHash: async () => 'fallback-hash',
       },
       historyReader(sibling, owner),
-      [],
       () => {},
     );
     const siblingNames = await readdir(siblingDirectory);

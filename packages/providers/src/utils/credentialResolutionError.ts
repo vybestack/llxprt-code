@@ -30,7 +30,7 @@ function resolveProfile(options: NormalizedGenerateChatOptions): string {
  * Without a live cause, the resolver's original classification is preserved.
  */
 export function createCredentialResolutionError(
-  options: NormalizedGenerateChatOptions,
+  options: NormalizedGenerateChatOptions | undefined,
   provider: string,
   fallback: CredentialFailureFallback = {
     kind: 'no-credential-configured',
@@ -38,7 +38,7 @@ export function createCredentialResolutionError(
 ): CredentialResolutionError {
   if (fallback.cause instanceof CredentialResolutionError)
     return fallback.cause;
-  if (options.resolved.authFailure !== undefined) {
+  if (options?.resolved.authFailure !== undefined) {
     const failure = options.resolved.authFailure;
     const hasLiveCause = fallback.cause !== undefined;
     if (!hasLiveCause && fallback.remediation === undefined) return failure;
@@ -58,8 +58,8 @@ export function createCredentialResolutionError(
     fallback.kind,
     {
       provider,
-      profile: resolveProfile(options),
-      runtimeId: options.invocation.runtimeId,
+      profile: options === undefined ? 'no-profile' : resolveProfile(options),
+      runtimeId: options?.invocation.runtimeId ?? 'no-runtime',
       attemptedMechanisms: 'unknown',
       proxyMode: Boolean(process.env.LLXPRT_CREDENTIAL_SOCKET),
       proxyContacted: 'unknown',

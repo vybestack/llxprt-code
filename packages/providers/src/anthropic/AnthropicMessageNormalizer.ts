@@ -24,6 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
+import { measuredAnthropicMedia } from './anthropic-measured-media.js';
 import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
@@ -315,7 +316,7 @@ function appendLimitMessage(
   return contentPayload ? `${contentPayload}\n${limitMessage}` : limitMessage;
 }
 
-function buildAnthropicToolResultContent(
+export function buildAnthropicToolResultContent(
   contentPayload: string,
   mediaBlocks: MediaBlock[],
   supportsUrlImages: boolean,
@@ -339,10 +340,10 @@ function buildAnthropicToolResultContent(
       if (category === 'pdf') {
         return mediaBlockToAnthropicDocument(mb);
       }
-      return {
-        type: 'text' as const,
+      return measuredAnthropicMedia(mb, {
+        type: 'text',
         text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
-      };
+      });
     }),
   ];
 }
@@ -506,7 +507,7 @@ function pushHumanMessageIfPresent(
   }
 }
 
-function convertContentToMessages(
+export function convertContentToMessages(
   contents: IContent[],
   redactedIndices: Set<number>,
   options: AnthropicMessageConversionOptions,
@@ -697,7 +698,7 @@ type AnthropicContentPart =
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking'; data: string };
 
-function convertBlockToAnthropicPart(
+export function convertBlockToAnthropicPart(
   block: ContentBlock,
   contentIndex: number,
   shouldRedact: boolean,
@@ -795,6 +796,10 @@ function buildAIMessageContent(
 /**
  * Main exported function: Convert IContent[] to AnthropicMessage[]
  */
+export type AnthropicConversationConversionOptions = Parameters<
+  typeof convertToAnthropicMessages
+>[1];
+
 export function convertToAnthropicMessages(
   contents: IContent[],
   options: {

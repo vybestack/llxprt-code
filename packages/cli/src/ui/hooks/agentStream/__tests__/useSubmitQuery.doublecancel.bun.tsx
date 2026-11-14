@@ -1,3 +1,12 @@
+import {
+  afterAll as afterRecordingTests,
+  describe,
+  it,
+  expect,
+  vi,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../../../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../../../../__tests__/support/named-writer-owner.js';
 import { submissionOperations } from './submission-operations.js';
 /**
  * @license
@@ -20,7 +29,6 @@ import { submissionOperations } from './submission-operations.js';
 import { streamPolicyOperations } from './stream-policy-operations.js';
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import {
@@ -33,12 +41,11 @@ import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
 import {
   RecordingIntegration,
-  SessionRecordingService,
+  createSessionRecorder,
 } from '@vybestack/llxprt-code-core';
 import type { StreamRuntime } from '../../../cliUiRuntime.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
@@ -47,6 +54,9 @@ import {
   createMockOverrides,
   createQueueOperations,
 } from './submitQueryTestFixtures.js';
+
+const recordingScratchRoots = new ScratchRootOwner();
+
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
 // We stub them so the test can isolate the turn-lifecycle / finally logic.
 const prepareQueryForAgentMock = vi
@@ -174,7 +184,7 @@ async function createUseSubmitQueryDeps(
       undefined,
     ),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
-    removeItems: vi.fn(),
+
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
@@ -182,9 +192,9 @@ async function createUseSubmitQueryDeps(
 
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: overrides.turnCancelledRef ?? { current: false },
     setTurnCancelled: vi.fn(),
     queuedSubmissionsRef,
@@ -277,20 +287,25 @@ async function renderUseSubmitQueryWithCancellation(
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   it('suppresses stale cleanup after the cancellation path supersedes a turn', async () => {
     const turnDeferred = createDeferred<void>();
     const deps = createDeps({
       runStreamRef: { current: vi.fn(() => turnDeferred.promise) },
     });
     const recordingIntegration = new RecordingIntegration(
-      new SessionRecordingService({
-        sessionId: 'stale-turn-test',
-        projectHash: 'test-project',
-        workspaceDirs: ['/tmp'],
-        provider: 'test-provider',
-        model: 'test-model',
-        chatsDir: '/tmp/llxprt-stale-turn-test',
-      }),
+      createSessionRecorder(
+        withTestNamedWriters({
+          sessionId: 'stale-turn-test',
+          projectHash: 'test-project',
+          workspaceDirs: ['/tmp'],
+          provider: 'test-provider',
+          model: 'test-model',
+          chatsDir: '/tmp/llxprt-stale-turn-test',
+        }),
+      ),
+      recordingScratchRoots,
     );
     const flushAtTurnBoundary = vi
       .spyOn(recordingIntegration, 'flushAtTurnBoundary')

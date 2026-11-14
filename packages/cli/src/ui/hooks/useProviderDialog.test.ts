@@ -8,7 +8,7 @@ import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { MessageType } from '../types.js';
 import { bindModelSwitchRecording } from '../utils/recordActiveProviderSwitch.js';
-import { readFile } from 'node:fs/promises';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 
 /**
  * @license
@@ -101,9 +101,13 @@ describe('provider switch notices', () => {
       if (!path) throw new Error('No recording path');
       const store = createDialogStore();
       const rawWrite = vi.fn();
+      const recordedProviders: string[] = [];
       const recordProviderSwitch = bindModelSwitchRecording(
         'agent',
-        (event) => agent.session.recordRecordingEvent(event),
+        (event) => {
+          recordedProviders.push(event.provider);
+          return agent.session.recordRecordingEvent(event);
+        },
         { recordProviderSwitch: rawWrite },
       );
       const { result, unmount } = renderHook(() =>
@@ -119,11 +123,11 @@ describe('provider switch notices', () => {
       await act(async () => {
         await result.current.handleSelect('owner-provider');
       });
-      const lines = (await readFile(path, 'utf8')).split('\n');
-      expect(
-        lines.filter((line) => line.includes('provider_switch')),
-      ).toHaveLength(1);
-      expect(lines.join('\n')).toContain('owner-provider');
+      expect(await readRecordedFacts(path)).toMatchObject({
+        provider: 'owner-provider',
+        model: 'fallback-model',
+      });
+      expect(recordedProviders).toStrictEqual(['owner-provider']);
       expect(rawWrite).not.toHaveBeenCalled();
       unmount();
     } finally {

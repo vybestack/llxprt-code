@@ -15,7 +15,8 @@
  */
 
 import * as Ai from 'ai';
-import type { JSONSchema7, LanguageModel, Tool } from 'ai';
+import type { JSONSchema7, LanguageModel, ModelMessage, Tool } from 'ai';
+import { createStreamedVercelFetch } from './streamed-request.js';
 import { createOpenAI } from '@ai-sdk/openai';
 
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -25,6 +26,7 @@ import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 import { createDeveloperRoleToSystemFetch } from './vercelDeveloperRoleFetch.js';
+import { withRequestSizeReport } from './vercelRequestSizeFetch.js';
 import { createReasoningCaptureFetch } from './vercelReasoningCapture.js';
 import type { CaptureBuffer } from './vercelReasoningCapture.js';
 import type { OpenAIVercelTool } from './schemaConverter.js';
@@ -178,6 +180,7 @@ export async function createOpenAIClient(
   logger: Pick<DebugLogger, 'debug'> = new DebugLogger(
     'llxprt:provider:openaivercel',
   ),
+  messages?: () => AsyncIterable<ModelMessage>,
 ): Promise<ReturnType<typeof createOpenAI>> {
   const baseURL = options.resolved.baseURL ?? clientConfig.baseURL;
   const shouldForceSystemRole = isQwenBaseURL(baseURL);
@@ -206,9 +209,22 @@ export async function createOpenAIClient(
   }
 
   const headers = clientConfig.customHeaders;
+  // Innermost, so the reported size is that of the body actually sent.
+  const sizedFetch = withRequestSizeReport(
+    customFetch ?? options.invocation.fetch,
+    options.metadata,
+  );
+  const bodyFetch =
+    messages === undefined
+      ? sizedFetch
+      : createStreamedVercelFetch(
+          customFetch ?? options.invocation.fetch,
+          messages,
+          options.metadata,
+        );
   const fetchWithCompatibility = shouldForceSystemRole
-    ? createDeveloperRoleToSystemFetch(customFetch ?? options.invocation.fetch)
-    : (customFetch ?? options.invocation.fetch);
+    ? createDeveloperRoleToSystemFetch(bodyFetch)
+    : bodyFetch;
 
   // The @ai-sdk/openai factory validates `apiKey` via `loadApiKey`, which throws
   // `LoadAPIKeyError` for `undefined` before any request is made. The guard above
@@ -238,6 +254,7 @@ export async function createConfiguredModel(
   streamingEnabled: boolean,
   captureBuffer: CaptureBuffer,
   logger: DebugLogger,
+  messages?: () => AsyncIterable<ModelMessage>,
 ): Promise<{ model: LanguageModel }> {
   const customFetch =
     streamingEnabled && rsEnabled
@@ -252,6 +269,7 @@ export async function createConfiguredModel(
     clientConfig,
     customFetch,
     logger,
+    messages,
   );
   const modelId = options.resolved.model || defaultModel;
   const baseModel: LanguageModel =

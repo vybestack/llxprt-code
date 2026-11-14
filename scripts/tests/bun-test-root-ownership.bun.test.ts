@@ -41,7 +41,9 @@ const rootPackage = readPackageJson(join(repoRoot, 'package.json'));
  * reading package.json here would have checked a command CI never runs.
  */
 function executingScripts(): readonly string[] {
-  const scripts: string[] = SCRIPTS_SHARD_ROOTS.map(scriptsRootCommand);
+  const scripts: string[] = SCRIPTS_SHARD_ROOTS.map((root) =>
+    scriptsRootCommand(root),
+  );
   for (const relativePath of rootPackage.workspaces ?? []) {
     const workspacePackage = readPackageJson(
       join(repoRoot, relativePath, 'package.json'),

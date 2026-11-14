@@ -15,9 +15,18 @@ import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/w
 import { CoreToolHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolHostAdapter.js';
 import { ReadFileTool, type ToolSelection } from '@vybestack/llxprt-code-tools';
 
-export function installModelToolFixture(
+export interface ModelToolFixture {
+  select(): ToolSelection;
+  dispose(): Promise<void>;
+}
+
+/**
+ * Hook-free form of the fixture for processes that run outside `bun test`
+ * (memory probe children); the caller owns `dispose()`.
+ */
+export function createModelToolFixture(
   options: { readonly targetDir: string } = { targetDir: process.cwd() },
-): () => ToolSelection {
+): ModelToolFixture {
   const LocalModelConfig = Config;
   let roots: ReadonlyArray<{
     config: Config;
@@ -26,7 +35,7 @@ export function installModelToolFixture(
     settingsOwner: SessionSettingsOwner;
     trust: WorkspaceTrustLifecycle;
   }> = [];
-  afterEach(async () => {
+  const dispose = async (): Promise<void> => {
     const retiring = roots;
     roots = [];
     const results = await Promise.allSettled(
@@ -45,8 +54,8 @@ export function installModelToolFixture(
     );
     if (failures.length > 0)
       throw new AggregateError(failures, 'Model tool fixture cleanup failed');
-  });
-  return () => {
+  };
+  const select = (): ToolSelection => {
     const config = new LocalModelConfig({
       sessionId: 'local-model-tools',
       model: 'local-model-fixture',
@@ -87,4 +96,13 @@ export function installModelToolFixture(
     roots = [...roots, { config, filesystem, owner, settingsOwner, trust }];
     return owner.selection;
   };
+  return { select, dispose };
+}
+
+export function installModelToolFixture(
+  options: { readonly targetDir: string } = { targetDir: process.cwd() },
+): () => ToolSelection {
+  const fixture = createModelToolFixture(options);
+  afterEach(() => fixture.dispose());
+  return fixture.select;
 }

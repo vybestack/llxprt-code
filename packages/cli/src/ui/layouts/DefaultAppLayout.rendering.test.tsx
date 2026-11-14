@@ -29,6 +29,7 @@ import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { render } from 'ink-testing-library';
+import { act } from 'react';
 import type { DOMElement } from 'ink';
 
 const realInkModule = {
@@ -109,7 +110,8 @@ import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
 import { createTerminalStore } from '../stores/terminal/terminalStore.js';
 import { TurnProvider } from '../stores/turn/TurnContext.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
-import type { HistoryItem } from '../types.js';
+import { registerJournalPagerFixture } from '../stores/turn/journal-turn-test-helpers.js';
+const journalPager = registerJournalPagerFixture();
 import { SettingsProfileProvider } from '../stores/settings/SettingsContext.js';
 import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
 import { VimModeProvider } from '../contexts/VimModeContext.js';
@@ -189,14 +191,11 @@ async function renderLayout({
   const configSource = createConfigSource(screenReader);
   const settings = createSettings(useAlternateBuffer) as never;
 
-  // Turn-plane state lives in the TurnStore; only the history content this
-  // suite asserts on is seeded, everything else keeps store defaults.
-  const turnStore = createTurnStore(
+  const turnStore = createTurnStore();
+  const pager = await journalPager(
     historyText === undefined
-      ? {}
-      : {
-          history: [{ id: 1, type: 'user', text: historyText } as HistoryItem],
-        },
+      ? []
+      : [{ speaker: 'human', blocks: [{ type: 'text', text: historyText }] }],
   );
 
   const uiRuntime = buildUiRuntimeFromSource(
@@ -223,6 +222,15 @@ async function renderLayout({
         >
           <TurnProvider store={turnStore}>
             <DefaultAppLayout
+              scrollbackPager={{
+                store: pager,
+                viewport: {
+                  visibleKeys: [],
+                  viewportLines: 8,
+                  rowHeightLines: () => 1,
+                },
+              }}
+              subscribeContextRange={() => () => {}}
               readIdeMode={() => false}
               readIdeDiffingEnabled={() => false}
               subscribeIdeDiffing={() => () => {}}
@@ -254,14 +262,24 @@ async function renderLayout({
     </SettingsProfileProvider>,
   );
 
-  const frame = rendered.lastFrame() ?? '';
+  await act(async () => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  const frame =
+    useAlternateBuffer && !screenReader
+      ? (rendered.lastFrame() ?? '')
+      : rendered.frames.join(String.fromCharCode(10));
 
-  return {
+  const snapshot = {
     frame,
     lineCount: frame.split('\n').length,
-    mainControlsRef,
-    rootUiRef,
+    mainControlsRef: { current: mainControlsRef.current },
+    rootUiRef: { current: rootUiRef.current },
   };
+  await act(async () => {
+    rendered.unmount();
+  });
+  return snapshot;
 }
 
 describe('DefaultAppLayout rendering', () => {

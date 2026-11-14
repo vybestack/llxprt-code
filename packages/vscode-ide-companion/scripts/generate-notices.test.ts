@@ -236,6 +236,52 @@ describe('generate-notices full generator behavior', () => {
     });
   });
 
+  it('emits LF-only text when a dependency ships CRLF license and notice files', () => {
+    const result = runGeneratorWithFixtures({
+      rootPackageJson: {
+        name: 'test-pkg',
+        dependencies: { 'test-dep': '^1.0.0' },
+      },
+      lockfile: {
+        packages: {
+          'packages/vscode-ide-companion/node_modules/test-dep': {
+            version: '1.0.0',
+            resolved:
+              'https://registry.npmjs.org/test-dep/-/test-dep-1.0.0.tgz',
+          },
+        },
+      },
+      deps: {
+        'test-dep': {
+          packageJson: {
+            name: 'test-dep',
+            version: '1.0.0',
+            license: 'MIT',
+          },
+          files: {
+            LICENSE: 'MIT License\r\n\r\nCopyright (c) 2024 Someone\r\n',
+            NOTICE: 'Bundled notice\r\nsecond line\r\n',
+          },
+        },
+      },
+    });
+
+    expect({
+      status: result.status,
+      hasCarriageReturn: result.notices?.includes('\r') ?? true,
+      keepsLicenseText:
+        result.notices?.includes('MIT License\n\nCopyright (c) 2024 Someone') ??
+        false,
+      keepsNoticeText:
+        result.notices?.includes('Bundled notice\nsecond line') ?? false,
+    }).toEqual({
+      status: 0,
+      hasCarriageReturn: false,
+      keepsLicenseText: true,
+      keepsNoticeText: true,
+    });
+  });
+
   it('falls back to current year and warns when npm time has an invalid date', () => {
     const currentYear = String(new Date().getFullYear());
     const result = runGeneratorWithFixtures({

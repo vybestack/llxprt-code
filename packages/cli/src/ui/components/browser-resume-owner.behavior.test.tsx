@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { useOwnerSessionAgents } from '../hooks/__tests__/owner-session-agents.js';
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import { bindOwnerBrowserResume } from './browserResumeHost.js';
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
@@ -40,18 +41,17 @@ describe('session browser owned resume', () => {
         resumeOwnerSession(
           owner.session.resume.bind(owner.session),
           item.kind === 'session' ? item.session.sessionId : item.checkpointId,
-          'allowed',
           owner.session.listBrowserTargetsDetailed.bind(owner.session),
         ),
-      ui.commands.loadHistory,
+      ui.commands.refreshStatic,
       ui.commands.addItem,
       () => {},
     );
     await resume(target);
     expect(
-      ui.store
-        .getState()
-        .history.map((item) => ('text' in item ? item.text : item.type)),
+      (await readJournalItems(owner)).map((item) =>
+        'text' in item ? item.text : item.type,
+      ),
     ).toStrictEqual(['browser saved history']);
     expect(await owner.session.getHistory()).toMatchObject([
       {

@@ -13,18 +13,36 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const generateContentStreamMock = vi.fn();
 
-const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
+const googleGenAIConstructor = vi.fn((options: GeminiApiClientOptions) => ({
   models: {
-    generateContentStream: generateContentStreamMock,
+    async generateContent(): Promise<GenerateContentResponse> {
+      throw new Error('Unexpected non-streaming test request');
+    },
+    async generateContentStream(
+      request: GenerateContentParameters,
+    ): Promise<AsyncIterable<GenerateContentResponse>> {
+      const contents: Content[] = [];
+      if (options.requestContents !== undefined)
+        for await (const content of options.requestContents())
+          contents.push(content);
+      const converted = { ...request, contents };
+
+      return generateContentStreamMock(converted);
+    },
   },
 }));
 
-import type { CreateGeminiApiClient } from '../gemini/GeminiProvider.js';
-// The factory is injected into GeminiProvider rather than module-mocked:
-// `vi.mock` registers process-wide and bun hoists it ahead of the whole
-// run, so the stub leaked into every suite loaded alongside this one.
-const injectedClientFactory =
-  googleGenAIConstructor as unknown as CreateGeminiApiClient;
+const injectedClientFactory = async (
+  options: GeminiApiClientOptions,
+): Promise<GeminiApiClient> => googleGenAIConstructor(options);
+
+import type {
+  GeminiApiClientOptions,
+  GenerateContentParameters,
+  GenerateContentResponse,
+  Content,
+  GeminiApiClient,
+} from '../gemini/geminiWireTypes.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),

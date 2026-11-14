@@ -63,6 +63,9 @@ import {
 
 // ─── Real FakeProvider content → loop events ────────────────────────────────
 
+/** The provider-facing history is a stream (issue #854); this probe sends none. */
+async function* emptyContents(): AsyncIterable<IContent> {}
+
 /**
  * Uses a REAL FakeProvider to read the JSONL fixture, consumes its IContent
  * stream, and maps text blocks to Content ServerAgentStreamEvents wrapped as
@@ -75,7 +78,9 @@ export async function fakeProviderContentLoopEvents(
 ): Promise<AgenticLoopEvent[]> {
   const provider = new FakeProvider(fixturePath, cwd);
   const events: AgenticLoopEvent[] = [];
-  for await (const iContent of provider.generateChatCompletion([])) {
+  for await (const iContent of provider.generateChatCompletion(
+    emptyContents(),
+  )) {
     for (const block of iContent.blocks) {
       if (block.type === 'text') {
         events.push(wrapStream(streamContent(block.text)));
@@ -113,17 +118,32 @@ function makeScriptedChat(history: IContent[]): AgentChatContract {
     appendGeneration: async () => {
       throw new Error('Scripted loop does not publish detached generation');
     },
-    sendMessage: async () => emptyModelOutput(),
+    sendMessage: async (_params, promptId) => ({
+      status: 'empty',
+      promptId,
+      turnId: 'unused',
+    }),
     sendMessageStream: async () => {
       async function* emptyStream() {}
       return emptyStream();
     },
     generateDirectMessage: async () => emptyModelOutput(),
-    getHistory: () => history,
+    async *getHistory(_curated, signal) {
+      for (const row of history) {
+        signal?.throwIfAborted();
+        yield row;
+      }
+    },
+    async *streamHistory(signal) {
+      for (const row of history) {
+        signal?.throwIfAborted();
+        yield row;
+      }
+    },
     setHistory: async (nextHistory: readonly IContent[]) => {
       history.splice(0, history.length, ...nextHistory);
     },
-    clearHistory: () => {
+    clearHistory: async () => {
       history.splice(0, history.length);
     },
     getHistoryService: () => null,
@@ -131,6 +151,37 @@ function makeScriptedChat(history: IContent[]): AgentChatContract {
     performCompression: async () => PerformCompressionResult.COMPRESSED,
     takeHistoryAdmissions: () => [],
     recordCompletedToolCalls: () => {},
+  };
+}
+
+type ScriptedClientUnusedGenerators = Pick<
+  AgentClientContract,
+  | 'getContentGeneratorConfig'
+  | 'getContentGenerator'
+  | 'startChat'
+  | 'generateDirectMessage'
+  | 'generateJson'
+  | 'generateContent'
+  | 'generateEmbedding'
+>;
+
+function scriptedClientUnusedGenerators(): ScriptedClientUnusedGenerators {
+  return {
+    getContentGeneratorConfig: () => undefined,
+    getContentGenerator: () => {
+      throw new Error('not used by AgenticLoop');
+    },
+    startChat: async () => {
+      throw new Error('not used');
+    },
+    generateDirectMessage: () => {
+      throw new Error('not used');
+    },
+    generateJson: async () => ({}),
+    generateContent: () => {
+      throw new Error('not used');
+    },
+    generateEmbedding: async () => [],
   };
 }
 
@@ -153,9 +204,10 @@ function makeScriptedClientContract(
     isInitialized: () => true,
     hasChatInitialized: () => true,
     getChat: () => chat,
-    async getHistory() {
-      return history;
+    async *getHistory() {
+      yield* history;
     },
+    streamHistory: (signal) => chat.streamHistory(signal),
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
     prepareHistoryRebind: () => () => {},
@@ -171,24 +223,14 @@ function makeScriptedClientContract(
     },
     resetChat: async () => {},
     resumeChat: async () => {},
+    discardDeferredHistory: async () => {},
     setHistory: async () => {},
+    setHistoryFromSource: async () => {
+      throw new Error('Streamed history requires a real agent client');
+    },
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
-    getContentGeneratorConfig: () => undefined,
-    getContentGenerator: () => {
-      throw new Error('not used by AgenticLoop');
-    },
-    startChat: async () => {
-      throw new Error('not used');
-    },
-    generateDirectMessage: () => {
-      throw new Error('not used');
-    },
-    generateJson: async () => ({}),
-    generateContent: () => {
-      throw new Error('not used');
-    },
-    generateEmbedding: async () => [],
+    ...scriptedClientUnusedGenerators(),
     async *sendMessageStream(
       req: AgentMessageInput,
       signal: AbortSignal,

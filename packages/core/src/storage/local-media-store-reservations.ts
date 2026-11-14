@@ -8,6 +8,8 @@ import type { Dirent } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, readFile, readdir, unlink, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
+import { hostname } from 'node:os';
+import type { MediaStoredObject } from '../services/history/IContent.js';
 import type { LocalMediaStoreFiles } from './local-media-store-files.js';
 import {
   MediaStoreError,
@@ -16,6 +18,7 @@ import {
 import {
   CONTENT_ID_PREFIX,
   DIGEST_PATTERN,
+  RESERVATION_VERSION,
   digestFor,
   hasErrnoCode,
   parseReservationRecord,
@@ -72,6 +75,63 @@ export abstract class LocalMediaStoreReservations {
   private instanceLeaseRefresh: Promise<void> = Promise.resolve();
   private instanceLeaseFailure: unknown;
   private closed = false;
+
+  protected buildReservationRecord(
+    objects: readonly MediaStoredObject[],
+    ownerDigest: string,
+  ): ReservationRecord {
+    const now = Date.now();
+    return {
+      version: RESERVATION_VERSION,
+      ownerDigest,
+      instanceId: this.instanceId,
+      pid: process.pid,
+      hostname: hostname(),
+      createdAt: now,
+      expiresAt: now + this.reservationLeaseMs,
+      relatedContentIds: objects.map((object) => object.contentId),
+    };
+  }
+
+  protected reservationMatches(
+    record: ReservationRecord,
+    objects: readonly MediaStoredObject[],
+  ): boolean {
+    const contentIds = objects.map((object) => object.contentId);
+    return (
+      record.relatedContentIds.length === contentIds.length &&
+      record.relatedContentIds.every(
+        (contentId, index) => contentId === contentIds[index],
+      )
+    );
+  }
+
+  protected async rollbackReservationAfterReadFailure(
+    objects: readonly MediaStoredObject[],
+    ownerDigest: string,
+    error: unknown,
+  ): Promise<never> {
+    const failures: unknown[] = [];
+    for (const object of objects) {
+      try {
+        await this.removeReservation(object.contentId, ownerDigest);
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      }
+    }
+    try {
+      await this.files.syncDirectory(this.files.reservationDirectory);
+    } catch (cleanupError) {
+      failures.push(cleanupError);
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(
+        [error, ...failures],
+        'Media reservation and verification cleanup failed',
+      );
+    }
+    throw error;
+  }
 
   protected assertOpen(operation: string, contentId: string | undefined): void {
     if (!this.closed) return;
@@ -225,6 +285,28 @@ export abstract class LocalMediaStoreReservations {
       }
       throw wrapError('reserve reference', contentId, error);
     }
+  }
+
+  /** Removes the owner's reservations for each content id; syncs once if any existed. */
+  protected async releaseReservationsUnlocked(
+    contentIds: readonly string[],
+    ownerId: string,
+  ): Promise<void> {
+    const ownerDigest = createHash('sha256').update(ownerId).digest('hex');
+    let removedAny = false;
+    for (const contentId of contentIds) {
+      const record = await this.readReservationIfPresent(
+        contentId,
+        ownerDigest,
+      );
+      if (record === undefined) continue;
+      for (const relatedContentId of record.relatedContentIds) {
+        await this.removeReservation(relatedContentId, ownerDigest);
+      }
+      removedAny = true;
+    }
+    if (removedAny)
+      await this.files.syncDirectory(this.files.reservationDirectory);
   }
 
   protected async removeReservation(

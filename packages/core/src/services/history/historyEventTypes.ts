@@ -14,13 +14,131 @@
  * limitations under the License.
  */
 
+import type { EventEmitter } from 'events';
 import type { IContent } from './IContent.js';
+import type { SealedHistoryRow } from './sealed-history-row.js';
+import type { HistoryBatchEvent } from './history-batch-values.js';
 import type { TokensUpdatedEvent } from './HistoryEvents.js';
+
+/**
+ * Why an interior span of chronology seqs left the curated context while the
+ * surrounding entries stayed.
+ *
+ * @plan PLAN-20260917-ISSUE854.P03
+ * @requirement G3,G4
+ */
+export type RemovedInteriorReason =
+  | 'compressed'
+  | 'density-replaced'
+  | 'density-removed'
+  | 'rewound'
+  | 'cleared';
+
+/**
+ * An inclusive span of chronology seqs removed from the interior of the
+ * curated context. Spans are produced sorted by start and strictly disjoint;
+ * adjacent same-reason spans are coalesced, different-reason spans stay
+ * separate.
+ *
+ * @plan PLAN-20260917-ISSUE854.P03
+ * @requirement G3,G4
+ */
+export interface RemovedInteriorSpan {
+  /** Lowest chronology seq of the removed span (inclusive). */
+  start: number;
+  /** Highest chronology seq of the removed span (inclusive). */
+  end: number;
+  /** Which mutation removed the span. */
+  reason: RemovedInteriorReason;
+}
+
+/**
+ * Snapshot of the curated in-memory context boundary: the chronology seqs of
+ * the first and last entries of the exact history array the model sees, plus
+ * the membership projection of everything removed from its interior.
+ *
+ * @plan PLAN-20260917-ISSUE854.P01
+ * @requirement REQ-854-004
+ */
+export interface ContextRange {
+  /** Chronology seq of the first entry of the curated history. */
+  firstSeq: number;
+  /** Chronology seq of the last entry of the curated history. */
+  lastSeq: number;
+  /** Number of entries in the curated history. */
+  totalEntries: number;
+  /**
+   * Inclusive spans of chronology seqs removed from the context interior,
+   * cumulative across mutations: spans derived by earlier mutations persist
+   * in later snapshots (compressed spans are re-derived from summary
+   * metadata; density/rewound/cleared spans accumulate in the service).
+   *
+   * @plan PLAN-20260917-ISSUE854.P03
+   */
+  removedInterior: RemovedInteriorSpan[];
+  /**
+   * True when membership cannot be stated exactly because some entries lack
+   * chronology markers (unmarked legacy history); `removedInterior` is then
+   * empty.
+   *
+   * @plan PLAN-20260917-ISSUE854.P03
+   */
+  approximate: boolean;
+}
+
+/**
+ * One compression summary projection: the summary entry's own chronology seq
+ * plus the span of destroyed entries it replaced.
+ *
+ * @plan PLAN-20260917-ISSUE854.P01
+ * @requirement REQ-854-004
+ */
+export interface ContextSummaryInfo {
+  /** The summary entry's own chronology seq. */
+  seq: number;
+  /** First destroyed entry's chronology seq (from chronologyReplaced). */
+  replacedFromSeq: number;
+  /** Last destroyed entry's chronology seq (from chronologyReplaced). */
+  replacedToSeq: number;
+  /** Number of entries the summary replaced. */
+  itemCount: number;
+  /** Summary text (joined text blocks). */
+  text: string;
+}
+
+type NativeEventArguments = Parameters<Parameters<EventEmitter['on']>[1]>;
+
+export type HistoryEventRegistration<Host> = <Event extends string | symbol>(
+  event: Event,
+  listener: Event extends 'contentBatchAdded' | 'contentBatchRolledBack'
+    ? (contents: HistoryBatchEvent) => void
+    : Event extends 'contentSealed'
+      ? (row: SealedHistoryRow, origin?: object) => void
+      : Parameters<EventEmitter['on']>[1],
+) => Host;
+
+export type HistoryEventEmission = <Event extends string | symbol>(
+  event: Event,
+  ...args: Event extends 'contentBatchAdded' | 'contentBatchRolledBack'
+    ? [contents: HistoryBatchEvent]
+    : Event extends 'contentSealed'
+      ? [row: SealedHistoryRow, origin?: object]
+      : NativeEventArguments
+) => boolean;
 
 /**
  * Typed EventEmitter interface for HistoryService events.
  */
 export interface HistoryServiceEventEmitter {
+  on(
+    event: 'contentSealed',
+    listener: (row: SealedHistoryRow, origin?: object) => void,
+  ): this;
+  off(
+    event: 'contentSealed',
+    listener: (row: SealedHistoryRow, origin?: object) => void,
+  ): this;
+  emit(event: 'contentSealed', row: SealedHistoryRow, origin?: object): boolean;
   on(
     event: 'tokensUpdated',
     listener: (eventData: TokensUpdatedEvent) => void,
@@ -30,31 +148,12 @@ export interface HistoryServiceEventEmitter {
     listener: (content: IContent, origin?: object) => void,
   ): this;
   on(
+    event: 'contextRangeChanged',
+    listener: (range: ContextRange) => void,
+  ): this;
+  on(
     event: 'contentBatchAdded',
-    listener: (contents: readonly IContent[]) => void,
-  ): this;
-  /**
-   * A batch announced through `contentBatchAdded` was reverted because a later
-   * step of the same mutation failed (a finalizer or another listener). Its
-   * entries are no longer in the history. Never emitted for a batch that failed
-   * before it was published or one that committed.
-   */
-  on(
-    event: 'contentBatchRolledBack',
-    listener: (contents: readonly IContent[]) => void,
-  ): this;
-  /**
-   * A single tool-response block was replaced in place. `previous` and `next`
-   * are the whole history before and after, with the same length: entries that
-   * differ by identity are the ones the replacement rewrote (the replaced entry
-   * and any entry whose stored-parent marker it invalidated).
-   */
-  on(
-    event: 'toolResponseReplaced',
-    listener: (
-      previous: readonly IContent[],
-      next: readonly IContent[],
-    ) => void,
+    listener: (contents: HistoryBatchEvent) => void,
   ): this;
   on(event: 'compressionStarted', listener: (origin?: object) => void): this;
   on(
@@ -71,13 +170,8 @@ export interface HistoryServiceEventEmitter {
   ): this;
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
   emit(event: 'contentAdded', content: IContent, origin?: object): boolean;
-  emit(event: 'contentBatchAdded', contents: readonly IContent[]): boolean;
-  emit(event: 'contentBatchRolledBack', contents: readonly IContent[]): boolean;
-  emit(
-    event: 'toolResponseReplaced',
-    previous: readonly IContent[],
-    next: readonly IContent[],
-  ): boolean;
+  emit(event: 'contextRangeChanged', range: ContextRange): boolean;
+  emit(event: 'contentBatchAdded', contents: HistoryBatchEvent): boolean;
   emit(event: 'compressionStarted', origin?: object): boolean;
   emit(event: 'compressionLockReleased', origin?: object): boolean;
   emit(
@@ -95,19 +189,12 @@ export interface HistoryServiceEventEmitter {
     listener: (content: IContent, origin?: object) => void,
   ): this;
   off(
+    event: 'contextRangeChanged',
+    listener: (range: ContextRange) => void,
+  ): this;
+  off(
     event: 'contentBatchAdded',
-    listener: (contents: readonly IContent[]) => void,
-  ): this;
-  off(
-    event: 'contentBatchRolledBack',
-    listener: (contents: readonly IContent[]) => void,
-  ): this;
-  off(
-    event: 'toolResponseReplaced',
-    listener: (
-      previous: readonly IContent[],
-      next: readonly IContent[],
-    ) => void,
+    listener: (contents: HistoryBatchEvent) => void,
   ): this;
   off(event: 'compressionStarted', listener: (origin?: object) => void): this;
   off(

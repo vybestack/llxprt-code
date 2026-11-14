@@ -1,0 +1,35 @@
+{
+  "sourceCommit": "418d40f5c",
+  "sourceRevision": "d0eb6daeb^",
+  "rows": 6001,
+  "routes": [
+    {
+      "model": "gpt-4o",
+      "body": {
+        "bytes": 6511121,
+        "sha256": "8f4a60bdbd9d53422f3f877ebc39d3b756e30254a79544211a68d35ff218c966"
+      }
+    },
+    {
+      "model": "kimi-k2",
+      "body": {
+        "bytes": 6536384,
+        "sha256": "8549199cb074dd6105a97cdb673e69da118acaadd3885db31c656e30230018c7"
+      }
+    },
+    {
+      "model": "mistral-large",
+      "body": {
+        "bytes": 6502610,
+        "sha256": "0b5535c0539ff3a84b4848bbb91b0b11b3f495da1eac112b1e514d03786420ff"
+      }
+    },
+    {
+      "model": "gemini-3.7-flash",
+      "body": {
+        "bytes": 6673033,
+        "sha256": "2071f78a2d0562342db631ad45c48f71e2670d6f502f73c53cd736d5420b1d20"
+      }
+    }
+  ]
+}

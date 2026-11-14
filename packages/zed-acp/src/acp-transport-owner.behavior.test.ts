@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { collectRowsForAssertions } from '../../test-utils/src/core/collect-rows-for-assertions.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -41,7 +42,7 @@ function ownedTransport(agent: Agent, updates: acp.SessionUpdate[]): Session {
     readContextLimit: () => agent.getProviderContextLimit(),
     readApprovalMode: () => agent.getApprovalMode(),
     writeApprovalMode: (mode) => agent.setApprovalMode(mode),
-    readHistory: () => agent.getHistory(),
+    readHistory: (signal) => agent.streamHistory(signal),
     compressHistory: (options) => agent.compress(options),
     retireAgent: () => agent.dispose(),
     lookupTool: (name) => agent.tools.get(name),
@@ -98,10 +99,12 @@ describe('ACP transport session operations', () => {
       expect(await transport.prompt(prompt)).toMatchObject({
         stopReason: 'end_turn',
       });
-      expect(JSON.stringify(await owner.getHistory())).toContain(
-        'owner transport request',
-      );
-      expect(await sibling.getHistory()).toHaveLength(0);
+      await collectRowsForAssertions(owner.streamHistory(), (rows) => {
+        expect(JSON.stringify(rows)).toContain('owner transport request');
+      });
+      await collectRowsForAssertions(sibling.streamHistory(), (rows) => {
+        expect(rows).toHaveLength(0);
+      });
       await transport.replayLiveHistory();
       expect(JSON.stringify(updates)).toContain('owner transport request');
       await transport.dispose();
