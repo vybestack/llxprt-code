@@ -27,11 +27,12 @@ A relative path match is protected only when it looks like a path:
 - its first segment starts with `@` (`@vybestack/llxprt-code`).
 
 A bare two-segment `Word/Word` match with none of these is prose and is not
-protected. Absolute paths (`/usr/bin`), `~/` and `./` paths, Windows paths,
-URLs and anything inside a code span or fence keep their protection, because
-other patterns cover them. Losing protection for a bare `src/core` is
-accepted: the same shape is far more often prose, and the issue asks for this
-narrowing.
+protected. Sentence punctuation is trimmed before this path-shape predicate
+runs, so `Casters/SSAO.` remains prose while `src/a.ts.` remains a path.
+Absolute paths (`/usr/bin`), `~/` and `./` paths, Windows paths, URLs and
+anything inside a code span or fence keep their protection, because other
+patterns cover them. Losing protection for a bare `src/core` is accepted: the
+same shape is far more often prose, and the issue asks for this narrowing.
 
 ### Second review after dropped literals
 
@@ -47,9 +48,11 @@ narrowing.
   contract violations, refusals, failures and other rejections still stop.
   The feedback is specific to the dropped-literal case, and the other
   failures do not get better by asking again with the same input.
-- The feedback is trusted text written by LLxprt, so it is sent as its own
-  text block after the review prompt and before `<session_data>`, never inside
-  the untrusted data block.
+- Trusted feedback is host-authored text sent after the review prompt and
+  before `<session_data>`. It names only host-generated entry ids and points
+  to `previousAnswerRejected.entries` in the untrusted JSON. The exact literal
+  values stay in that JSON as `mustKeepExactly`, so they receive the same
+  encoding as the session entries and count toward the data budget.
 - The verdict check reports dropped literals for every rewritten entry, not
   only the first failing one, so one retry can fix all of them.
 - `ReviewInProgress.complete()` may resolve to another `ReviewInProgress`.
@@ -64,8 +67,11 @@ narrowing.
   stay protected.
 - `reviewVerdict.test.ts`: a reply with two rewrites that each drop a literal
   reports both entries and their literals.
-- `refusalReviewer.test.ts`: a review started with feedback sends the literals
-  outside `<session_data>`.
+- `refusalReviewer.test.ts`: a review with feedback keeps literal values out
+  of trusted text and sends them in the escaped data block.
+- `refusalReview.behavior.test.ts`: after a real dropped-literal rejection, a
+  tool-result fence with instruction-like content and a `</session_data>` code
+  literal stays out of trusted feedback and round-trips in the structured data.
 - `refusalRecovery.test.ts`: with `maxRewrites` 2, a dropped-literal review
   followed by a valid one ends in a rewrite and a retry, and the second review
   receives the literals. With `maxRewrites` 1 the same first answer stops with

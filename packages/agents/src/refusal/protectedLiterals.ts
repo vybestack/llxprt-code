@@ -86,12 +86,13 @@ function addLiteralToken(
   match: string,
   key: LiteralPattern['key'],
   trailing: string | undefined,
+  accept: LiteralPattern['accept'],
 ): void {
   const literal = trimTrailingPunctuation(
     match,
     trailing ?? SENTENCE_PUNCTUATION,
   );
-  if (literal === '') return;
+  if (literal === '' || (accept !== undefined && !accept(literal))) return;
   const token = key === undefined ? literal : key(literal);
   if (!found.has(token)) found.set(token, literal);
 }
@@ -107,9 +108,7 @@ function literalTokens(text: string): Map<string, string> {
   const found = new Map<string, string>();
   for (const { pattern, key, trailing, accept } of LITERAL_PATTERNS) {
     for (const match of text.matchAll(pattern)) {
-      if (accept === undefined || accept(match[0])) {
-        addLiteralToken(found, match[0], key, trailing);
-      }
+      addLiteralToken(found, match[0], key, trailing, accept);
     }
   }
   return found;

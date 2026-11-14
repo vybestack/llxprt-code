@@ -161,7 +161,12 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
       history.getAll(),
       request.pending?.userContents,
     );
-    const data = buildReviewData(window, request.attempt, request.retriesTried);
+    const data = buildReviewData(
+      window,
+      request.attempt,
+      request.retriesTried,
+      request.keepLiterals,
+    );
     const feedback =
       request.keepLiterals === undefined
         ? undefined

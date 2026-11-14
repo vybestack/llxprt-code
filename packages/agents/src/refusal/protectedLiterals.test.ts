@@ -43,6 +43,19 @@ describe('protected literals', () => {
   });
 
   it.each([
+    ['Enabled casters and SSAO.', 'Enabled Casters/SSAO.'],
+    ['Casters/SSAO is enabled.', 'Enabled Casters/SSAO.'],
+  ])('treats trailing punctuation as prose for %s', (replacement, original) => {
+    expect(findDroppedLiterals(original, replacement)).toStrictEqual([]);
+  });
+
+  it('still protects a relative path before sentence punctuation', () => {
+    expect(
+      findDroppedLiterals('see src/a.ts.', 'see the source file.'),
+    ).toContain('src/a.ts');
+  });
+
+  it.each([
     'src/a.ts',
     'packages/agents/src',
     'packages/agents/',

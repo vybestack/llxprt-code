@@ -235,15 +235,24 @@ describe('reviewer commit (issue #4036)', () => {
       abortBeforeCommit: false,
       keepLiterals: [{ id: 'c21389.0', literals: ['Casters/SSAO'] }],
     });
-    const blocks = providerRequests[0]?.[0]?.blocks.flatMap((block) =>
+    const blocks = providerRequests[0][0].blocks.flatMap((block) =>
       block.type === 'text' ? [block.text] : [],
     );
 
-    expect(blocks).toMatchObject([
-      expect.stringContaining('You are the refusal reviewer'),
-      'Feedback on your previous answer:\nThe previous answer was rejected because the replacement for entry c21389.0 dropped Casters/SSAO. Every listed literal must be copied exactly in any replacement of that entry.',
-      expect.stringContaining('<session_data>'),
-    ]);
+    expect({
+      prompt: blocks[0].includes('You are the refusal reviewer'),
+      feedback: blocks[1],
+      dataHasRequirements: blocks[2].includes('mustKeepExactly'),
+      dataHasLiteral: blocks[2].includes('Casters/SSAO'),
+      feedbackHasLiteral: blocks[1].includes('Casters/SSAO'),
+    }).toStrictEqual({
+      prompt: true,
+      feedback:
+        'Feedback on your previous answer:\nThe replacement for entry c21389.0 was rejected. Copy each mustKeepExactly value for this id from previousAnswerRejected.entries inside the session data.',
+      dataHasRequirements: true,
+      dataHasLiteral: true,
+      feedbackHasLiteral: false,
+    });
   });
 
   it('asks the reviewer when the window fits its context window', async () => {
