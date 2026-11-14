@@ -25,6 +25,14 @@ export type EndpointReply =
       readonly finishReason: string;
       readonly text?: string;
       readonly outputTokens: number;
+      readonly stopDetails?: {
+        readonly type: string;
+        readonly category: string | null;
+        readonly explanation: string | null;
+        readonly recommendedModel?: string;
+      };
+      readonly requestId?: string | null;
+      readonly includeUsage?: boolean;
     }
   | {
       readonly kind: 'todo-write';

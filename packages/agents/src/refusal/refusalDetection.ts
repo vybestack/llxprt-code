@@ -38,6 +38,12 @@ export function throwIfRefused(accumulated: ModelOutput, turnId: string): void {
     ...(accumulated.rawStopReason !== undefined && {
       rawStopReason: accumulated.rawStopReason,
     }),
+    ...(accumulated.stopDetails !== undefined && {
+      stopDetails: accumulated.stopDetails,
+    }),
+    ...(accumulated.requestId !== undefined && {
+      requestId: accumulated.requestId,
+    }),
     ...(accumulated.usage !== undefined && { usage: accumulated.usage }),
     turnId,
   });

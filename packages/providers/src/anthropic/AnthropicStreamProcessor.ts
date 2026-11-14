@@ -5,7 +5,11 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 4 - Part B)
  */
 
-import { mapStopReason } from './finishReasonMapping.js';
+import {
+  mapStopReason,
+  parseAnthropicStopDetails,
+} from './finishReasonMapping.js';
+import { z } from 'zod';
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ToolUseBlock,
@@ -639,6 +643,15 @@ function* handleMessageDelta(
     | undefined;
 
   const stopReason = readMessageDeltaStopReason(chunk);
+  const parsedDelta = z
+    .object({
+      delta: z.object({ stop_details: z.unknown().optional() }).passthrough(),
+    })
+    .passthrough()
+    .safeParse(chunk);
+  const stopDetails = parsedDelta.success
+    ? parseAnthropicStopDetails(parsedDelta.data.delta.stop_details)
+    : undefined;
 
   if (!usage) {
     logger.debug(
@@ -646,14 +659,17 @@ function* handleMessageDelta(
         `Received message_delta without usage metadata; stopReason=${String(stopReason)}`,
     );
 
-    if (stopReason) {
+    if (stopReason || stopDetails !== undefined) {
       yield {
         speaker: 'ai',
         blocks: [],
         metadata: {
-          ...mapStopReason(stopReason),
+          ...(stopReason === undefined || stopReason === null
+            ? {}
+            : mapStopReason(stopReason)),
+          ...(stopDetails === undefined ? {} : { stopDetails }),
         },
-      } as IContent;
+      };
     }
 
     return;
@@ -685,6 +701,7 @@ function* handleMessageDelta(
         cache_creation_input_tokens: cacheCreation,
       },
       ...(stopReason ? mapStopReason(stopReason) : {}),
+      ...(stopDetails === undefined ? {} : { stopDetails }),
     },
-  } as IContent;
+  };
 }

@@ -28,7 +28,7 @@ import type {
   UsageStats,
 } from '../services/history/IContent.js';
 import type { ToolCallRequest } from './toolCall.js';
-import type { CanonicalFinishReason } from './finishReasons.js';
+import type { CanonicalFinishReason, StopDetails } from './finishReasons.js';
 import { isRecord } from './jsonSchema.js';
 import {
   extractAfcHistory,
@@ -54,6 +54,8 @@ export interface ModelOutput {
   content: IContent;
   finishReason?: CanonicalFinishReason;
   rawStopReason?: string;
+  stopDetails?: StopDetails;
+  requestId?: string | null;
   usage?: UsageStats;
   responseId?: string;
   hookRestrictions?: HookRestrictions;
@@ -129,6 +131,13 @@ export function accumulateModelStreamChunk(
   if (rawStopReason !== undefined) {
     result.rawStopReason = rawStopReason;
   }
+
+  const stopDetails = chunk.stopDetails ?? acc.stopDetails;
+  if (stopDetails !== undefined) result.stopDetails = stopDetails;
+
+  const requestId =
+    chunk.requestId !== undefined ? chunk.requestId : acc.requestId;
+  if (requestId !== undefined) result.requestId = requestId;
 
   const usage = chunk.usage ?? acc.usage;
   if (usage !== undefined) {
@@ -273,6 +282,8 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
   if (meta?.rawStopReason !== undefined) {
     result.rawStopReason = meta.rawStopReason;
   }
+  if (meta?.stopDetails !== undefined) result.stopDetails = meta.stopDetails;
+  if (meta?.requestId !== undefined) result.requestId = meta.requestId;
 
   if (meta?.usage) {
     // Defensive copy so callers cannot mutate the original IContent metadata.

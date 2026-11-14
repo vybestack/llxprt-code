@@ -20,6 +20,10 @@ export const RefusalPayloadSchema = z.object({
   attemptIndex: z.number().int().nonnegative(),
   finishReason: z.literal('refusal'),
   rawStopReason: z.string().optional(),
+  refusal_category: z.string().nullable().optional(),
+  refusal_explanation: z.string().nullable().optional(),
+  recommended_model: z.string().optional(),
+  request_id: z.string().nullable().optional(),
   usage: z
     .object({
       promptTokens: z.number(),

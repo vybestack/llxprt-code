@@ -14,6 +14,8 @@ import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { StopDetails } from '@vybestack/llxprt-code-core/llm-types/finishReasons.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { logApiResponse, type TurnTelemetryPorts } from './turnLogging.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -31,6 +33,20 @@ import { isRefusalFinishReason } from '../refusal/refusalDetection.js';
 export interface StreamFinishInfo {
   readonly finishReason?: string;
   readonly rawStopReason?: string;
+  readonly stopDetails?: StopDetails;
+  readonly requestId?: string | null;
+}
+export function accumulateStreamFinishInfo(
+  finish: StreamFinishInfo,
+  chunk: ModelStreamChunk,
+): StreamFinishInfo {
+  return {
+    finishReason: chunk.finishReason ?? finish.finishReason,
+    rawStopReason: chunk.rawStopReason ?? finish.rawStopReason,
+    stopDetails: chunk.stopDetails ?? finish.stopDetails,
+    requestId:
+      chunk.requestId !== undefined ? chunk.requestId : finish.requestId,
+  };
 }
 
 /**
@@ -261,6 +277,18 @@ async function emitStreamTelemetry(
           ...(finish.rawStopReason !== undefined && {
             rawStopReason: finish.rawStopReason,
           }),
+          ...(finish.stopDetails === undefined
+            ? {}
+            : {
+                refusalCategory: finish.stopDetails.category,
+                refusalExplanation: finish.stopDetails.explanation,
+                ...(finish.stopDetails.recommendedModel === undefined
+                  ? {}
+                  : { recommendedModel: finish.stopDetails.recommendedModel }),
+              }),
+          ...(finish.requestId === undefined
+            ? {}
+            : { requestId: finish.requestId }),
         })
       : undefined,
   );

@@ -244,6 +244,7 @@ export interface ApiExecutionParams {
 export interface ApiExecutionResult {
   response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   responseHeaders: Headers | undefined;
+  requestId: string | null;
   rateLimitInfo?: AnthropicRateLimitInfo;
 }
 
@@ -398,9 +399,14 @@ export async function executeAnthropicApiCall(
       shouldDumpError,
       requestBaseId,
     );
+    const responseInfo = extractAnthropicRateLimitInfo(
+      result.response,
+      params.rateLimitLogger,
+    );
     return {
       response,
-      ...extractAnthropicRateLimitInfo(result.response, params.rateLimitLogger),
+      ...responseInfo,
+      requestId: responseInfo.responseHeaders?.get('request-id') ?? null,
     };
   } catch (error) {
     if (shouldDumpError) {

@@ -7,6 +7,7 @@
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { StopDetails } from '@vybestack/llxprt-code-core/llm-types/finishReasons.js';
 import type { PendingTurnContents } from './reviewTypes.js';
 import type { PendingEdit } from './reviewWindow.js';
 
@@ -18,6 +19,8 @@ import type { PendingEdit } from './reviewWindow.js';
 export interface RefusalEvidence {
   readonly finishReason: 'refusal';
   readonly rawStopReason?: string;
+  readonly stopDetails?: StopDetails;
+  readonly requestId?: string | null;
   readonly usage?: UsageStats;
   /** Canonical turn id of the refused request. */
   readonly turnId: string;

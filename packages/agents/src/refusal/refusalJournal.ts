@@ -29,6 +29,14 @@ export function toRefusalPayload(
     ...(attempt.rawStopReason !== undefined && {
       rawStopReason: attempt.rawStopReason,
     }),
+    ...(attempt.stopDetails !== undefined && {
+      refusal_category: attempt.stopDetails.category,
+      refusal_explanation: attempt.stopDetails.explanation,
+      ...(attempt.stopDetails.recommendedModel === undefined
+        ? {}
+        : { recommended_model: attempt.stopDetails.recommendedModel }),
+    }),
+    request_id: attempt.requestId ?? null,
     ...(usage !== undefined && {
       usage: {
         promptTokens: usage.promptTokens,

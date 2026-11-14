@@ -10,16 +10,32 @@ export function formatRefusalDelay(ms: number): string {
   return ms % 1000 === 0 ? `${ms / 1000} s` : `${ms} ms`;
 }
 
+function refusalDiagnosticSuffix(input: {
+  readonly category?: string | null;
+  readonly explanation?: string | null;
+}): string {
+  const details: string[] = [];
+  if (input.category !== undefined && input.category !== null) {
+    details.push(`Category: ${input.category}.`);
+  }
+  if (input.explanation !== undefined && input.explanation !== null) {
+    details.push(input.explanation);
+  }
+  return details.length === 0 ? '' : ` ${details.join(' ')}`;
+}
+
 /** Shown when a refused request is about to be resent. */
 export function describeRefusalRetry(input: {
   readonly model: string;
   readonly delayMs: number;
   readonly retryNumber: number;
   readonly retries: number;
+  readonly category?: string | null;
+  readonly explanation?: string | null;
 }): string {
   const wait =
     input.delayMs <= 0 ? 'now' : `in ${formatRefusalDelay(input.delayMs)}`;
-  return `Model ${input.model} refused the request; retrying ${wait} (retry ${input.retryNumber} of ${input.retries}).`;
+  return `Model ${input.model} refused the request; retrying ${wait} (retry ${input.retryNumber} of ${input.retries}).${refusalDiagnosticSuffix(input)}`;
 }
 
 /** One review that rewrote context, as the stop summary reports it. */

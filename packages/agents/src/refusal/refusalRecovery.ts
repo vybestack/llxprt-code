@@ -109,6 +109,8 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
           delayMs: verdict.delayMs,
           retryNumber: verdict.retryNumber,
           retries: budget.policy.retries,
+          category: attempt.stopDetails?.category,
+          explanation: attempt.stopDetails?.explanation,
         }),
       };
     }

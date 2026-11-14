@@ -686,7 +686,7 @@ export class AnthropicProvider extends BaseProvider {
       authToken,
       mediaRequest,
     );
-    const { response, rateLimitInfo } = executed;
+    const { response, rateLimitInfo, requestId } = executed;
 
     if (rateLimitInfo) this.lastRateLimitInfo = rateLimitInfo;
     yield* this.yieldResponse(
@@ -695,6 +695,7 @@ export class AnthropicProvider extends BaseProvider {
       effectiveOptions,
       isOAuth,
       rateLimitLogger,
+      requestId,
     );
   }
 
@@ -723,6 +724,7 @@ export class AnthropicProvider extends BaseProvider {
   ): Promise<{
     response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
     rateLimitInfo: AnthropicRateLimitInfo | undefined;
+    requestId: string | null;
   }> {
     try {
       const result = await this.executeApiCall(
@@ -734,7 +736,11 @@ export class AnthropicProvider extends BaseProvider {
         isOAuth,
         authToken,
       );
-      return { response: result.response, rateLimitInfo: result.rateLimitInfo };
+      return {
+        response: result.response,
+        rateLimitInfo: result.rateLimitInfo,
+        requestId: result.requestId,
+      };
     } catch (error) {
       const recovered = await this.executeImageDimensionRecovery(
         error,
@@ -784,6 +790,7 @@ export class AnthropicProvider extends BaseProvider {
           | Anthropic.Message
           | AsyncIterable<Anthropic.MessageStreamEvent>;
         rateLimitInfo: AnthropicRateLimitInfo | undefined;
+        requestId: string | null;
       }
     | undefined
   > {
@@ -835,6 +842,7 @@ export class AnthropicProvider extends BaseProvider {
     return {
       response: retryResult.response,
       rateLimitInfo: retryResult.rateLimitInfo,
+      requestId: retryResult.requestId,
     };
   }
 
@@ -994,7 +1002,9 @@ export class AnthropicProvider extends BaseProvider {
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
     rateLimitLogger: { debug: (fn: () => string) => void },
+    requestId: string | null,
   ): AsyncGenerator<IContent> {
+    yield { speaker: 'ai', blocks: [], metadata: { requestId } };
     if (requestContext.streamingEnabled) {
       if (!isAnthropicMessageStream(response)) {
         throw new Error('Anthropic streaming response was not an event stream');

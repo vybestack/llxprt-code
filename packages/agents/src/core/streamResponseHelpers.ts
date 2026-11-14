@@ -34,6 +34,18 @@ import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSession
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
+export function stripProviderAttemptDiagnostics(content: IContent): IContent {
+  const metadata = content.metadata;
+  if (metadata === undefined) return content;
+  const {
+    stopDetails: _stopDetails,
+    requestId: _requestId,
+    ...historyMetadata
+  } = metadata;
+  if (_stopDetails === undefined && _requestId === undefined) return content;
+  return { ...content, metadata: historyMetadata };
+}
+
 export function isMissingFinishReason(
   finishReason: string | null | undefined | '',
 ): boolean {

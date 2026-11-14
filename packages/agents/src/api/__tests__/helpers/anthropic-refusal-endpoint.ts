@@ -28,7 +28,7 @@ function stopReason(finishReason: string): string {
 /**
  * Renders one scripted answer as an Anthropic Messages SSE stream. A reply
  * without text is the real-world metadata-only refusal: `message_start`, then
- * a `message_delta` carrying `stop_reason: "refusal"` and zero output tokens,
+ * a `message_delta` carrying `stop_reason: \"refusal\"` and zero output tokens,
  * with no content block in between.
  */
 function renderAnthropicReply(reply: EndpointReply): string {
@@ -69,11 +69,53 @@ function renderAnthropicReply(reply: EndpointReply): string {
       delta: {
         stop_reason: stopReason(reply.finishReason),
         stop_sequence: null,
+        ...(reply.stopDetails === undefined
+          ? {}
+          : {
+              stop_details: {
+                type: reply.stopDetails.type,
+                category: reply.stopDetails.category,
+                explanation: reply.stopDetails.explanation,
+                ...(reply.stopDetails.recommendedModel === undefined
+                  ? {}
+                  : { recommended_model: reply.stopDetails.recommendedModel }),
+              },
+            }),
       },
-      usage: { output_tokens: reply.outputTokens },
+      ...(reply.includeUsage === false
+        ? {}
+        : { usage: { output_tokens: reply.outputTokens } }),
     }) +
     event('message_stop', { type: 'message_stop' })
   );
+}
+
+function renderAnthropicJsonReply(reply: EndpointReply): string {
+  if (reply.kind !== 'finish')
+    throw new Error('The Anthropic endpoint scripts finish replies only');
+  return JSON.stringify({
+    id: 'msg_scripted_json',
+    type: 'message',
+    role: 'assistant',
+    model: 'claude-opus-5-5',
+    content:
+      reply.text === undefined ? [] : [{ type: 'text', text: reply.text }],
+    stop_reason: stopReason(reply.finishReason),
+    stop_sequence: null,
+    ...(reply.stopDetails === undefined
+      ? {}
+      : {
+          stop_details: {
+            type: reply.stopDetails.type,
+            category: reply.stopDetails.category,
+            explanation: reply.stopDetails.explanation,
+            ...(reply.stopDetails.recommendedModel === undefined
+              ? {}
+              : { recommended_model: reply.stopDetails.recommendedModel }),
+          },
+        }),
+    usage: { input_tokens: PROMPT_TOKENS, output_tokens: reply.outputTokens },
+  });
 }
 
 /**
@@ -106,8 +148,23 @@ export async function startAnthropicEndpoint(
         text: 'UNSCRIPTED REQUEST: the agent asked for more than expected',
         outputTokens: 12,
       };
-      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
-      response.end(renderAnthropicReply(reply));
+      const streaming = body['stream'] !== false;
+      response.writeHead(200, {
+        'Content-Type': streaming ? 'text/event-stream' : 'application/json',
+        ...(reply.kind !== 'finish' || reply.requestId !== null
+          ? {
+              'request-id':
+                reply.kind === 'finish'
+                  ? (reply.requestId ?? `request-${index}`)
+                  : `request-${index}`,
+            }
+          : {}),
+      });
+      response.end(
+        streaming
+          ? renderAnthropicReply(reply)
+          : renderAnthropicJsonReply(reply),
+      );
     })().catch((error: unknown) =>
       response.destroy(error instanceof Error ? error : undefined),
     );

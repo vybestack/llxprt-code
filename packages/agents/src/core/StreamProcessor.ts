@@ -46,18 +46,23 @@ import {
   buildRequestContentsResult,
   buildRuntimeContext,
   contentForTelemetryPreservingUsage,
+  preserveProviderDiagnosticsAfterHook,
   logOutgoingRequest,
   prepareRequestPayload,
   selectRequestTools,
   type PreparedRequest,
   type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
-import { trackPromptTokens } from './streamResponseHelpers.js';
+import {
+  stripProviderAttemptDiagnostics,
+  trackPromptTokens,
+} from './streamResponseHelpers.js';
 import type {
   ProviderReadyRequest,
   SendRequestState,
 } from './sendRequestState.js';
 import {
+  accumulateStreamFinishInfo,
   attachStreamTiming,
   logStreamTelemetry,
   RawTokenDeltaBridge,
@@ -755,7 +760,7 @@ export class StreamProcessor {
             allowedToolNames: [...hookRestrictedAllowedTools],
           };
         }
-        const yieldedChunk =
+        const hookChunk =
           (await processAfterModelHook({
             model: this.ports.state.model,
             iContent,
@@ -764,14 +769,15 @@ export class StreamProcessor {
             hookRestrictedAllowedTools,
             owner,
           })) ?? chunk;
+        const yieldedChunk = preserveProviderDiagnosticsAfterHook(
+          chunk,
+          hookChunk,
+        );
         lastIContent = contentForTelemetryPreservingUsage(
           yieldedChunk,
           lastIContent,
         );
-        finish = {
-          finishReason: yieldedChunk.finishReason ?? finish.finishReason,
-          rawStopReason: yieldedChunk.rawStopReason ?? finish.rawStopReason,
-        };
+        finish = accumulateStreamFinishInfo(finish, yieldedChunk);
         yield yieldedChunk;
       }
     } catch (error) {
@@ -835,7 +841,7 @@ export class StreamProcessor {
         const historyChunk = await admitStreamChunkForHistory(
           this.ports,
           chunk,
-          filteredContent,
+          stripProviderAttemptDiagnostics(filteredContent),
           turnId,
         );
         admissions.push({
