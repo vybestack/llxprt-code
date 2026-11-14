@@ -103,7 +103,6 @@ const TEST_SSH_AGENT_EMPTY_WARNING =
     'Try: ssh-add ~/.ssh/id_ed25519',
   ].join('\n') + '\n';
 void vi.mock('../utils/startupWarnings.js', () => ({
-  getStartupWarnings: vi.fn(async () => []),
   getSandboxHandoffWarning: vi.fn((env: NodeJS.ProcessEnv) =>
     env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY === '1'
       ? TEST_SSH_AGENT_EMPTY_WARNING
