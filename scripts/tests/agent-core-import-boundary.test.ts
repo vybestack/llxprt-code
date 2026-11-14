@@ -290,6 +290,96 @@ describe('agent-core import boundary', () => {
     expect(scanAgentCoreBoundary(root)).toEqual([]);
   });
 
+  it('treats a for-of loop binding named document as a local binding', () => {
+    const root = fixture(
+      `export const titles = (documents: readonly string[]): string[] => {
+  const result: string[] = [];
+  for (const document of documents) result.push(document);
+  return result;
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('treats a for-in loop binding named process as a local binding', () => {
+    const root = fixture(
+      `export const keys = (values: Record<string, number>): string[] => {
+  const result: string[] = [];
+  for (const process in values) result.push(process);
+  return result;
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('treats a catch clause binding named console as a local binding', () => {
+    const root = fixture(
+      `export const message = (): string => {
+  try {
+    throw new Error('failed');
+  } catch (console) {
+    return String(console);
+  }
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('treats a destructured for-of binding named document as a local binding', () => {
+    const root = fixture(
+      `export const names = (people: ReadonlyArray<{ readonly document: string }>): string[] => {
+  const result: string[] = [];
+  for (const { document } of people) result.push(document);
+  return result;
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('treats destructured declarations and parameters as local bindings', () => {
+    const root = fixture(
+      `export const pick = ({ document }: { readonly document: string }): string => {
+  const { process } = { process: 1 };
+  return document + String(process);
+};
+`,
+    );
+    expect(scanAgentCoreBoundary(root)).toEqual([]);
+  });
+
+  it('rejects an undeclared loop target named document', () => {
+    const root = fixture(
+      `export const sweep = (documents: readonly string[]): void => {
+  for (document of documents) void document;
+};
+`,
+    );
+    expect(
+      scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
+    ).toBe(true);
+  });
+
+  it('rejects a catch binding named console used outside its catch clause', () => {
+    const root = fixture(
+      `export const log = (): void => {
+  try {
+    throw new Error('failed');
+  } catch (console) {
+    void console;
+  }
+  void console;
+};
+`,
+    );
+    expect(
+      scanAgentCoreBoundary(root).some((entry) => entry.kind === 'ambient-io'),
+    ).toBe(true);
+  });
+
   it('rejects helper barrels and unapproved external runtime exports', () => {
     const root = fixture("export * from '../../../helpers/bridge.js';", {
       'helpers/bridge.ts': "export * from 'node:fs';",
@@ -422,7 +512,8 @@ describe('agent-core import boundary', () => {
 
     expect(
       scanAgentCoreBoundary(root).some(
-        (entry) => entry.kind === 'runtime-import',
+        (entry) =>
+          entry.file.endsWith('nested.cjs') && entry.kind === 'runtime-import',
       ),
     ).toBe(true);
   });
@@ -451,15 +542,22 @@ describe('agent-core import boundary', () => {
     const root = fixture("import 'zod';", {
       'node_modules/zod/package.json': JSON.stringify({
         name: 'zod',
-        exports: { '.': { import: './index.js' } },
+        types: './index.d.ts',
+        exports: {
+          '.': { types: './index.d.ts', import: './index.js' },
+        },
       }),
+      'node_modules/zod/index.d.ts': 'export declare const value: number;',
       'node_modules/zod/index.js': "import '../outside.js';",
       'node_modules/outside.js': 'export const env = process.env;',
     });
 
     expect(
       scanAgentCoreBoundary(root).some(
-        (entry) => entry.kind === 'runtime-import',
+        (entry) =>
+          entry.file.endsWith('node_modules/zod/index.js') &&
+          entry.kind === 'runtime-import' &&
+          entry.detail.includes('outside.js'),
       ),
     ).toBe(true);
   });

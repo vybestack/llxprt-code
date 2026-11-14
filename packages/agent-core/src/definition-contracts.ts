@@ -1,0 +1,579 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { z } from 'zod';
+import { DefinitionError } from './errors.js';
+import {
+  contentSchema,
+  transcriptPartSchema,
+  TranscriptEntrySchema,
+  UsageReportSchema,
+} from './definition-replay-usage.js';
+import {
+  assertSafeDefinitionValue,
+  effectSchema,
+  instructionSchema,
+  jsonValueSchema,
+  labelledDefinitionProblems,
+  limitsSchema,
+  modelParametersSchema,
+  modelRefSchema,
+  modelSelectionSchema,
+  nonEmpty,
+  parseDefinitionValue,
+  policyLayerSchema,
+  provenanceSchema,
+  policySourceStackSchema,
+  restrictionRuleSchema,
+  validateEmbeddedPolicyDocuments,
+} from './definition.js';
+import { cloneDataDescriptors } from './plain-data.js';
+import type {
+  AgentCommand,
+  DefinitionProblem,
+  HookError,
+  HookEventResult,
+  HookModelResponse,
+  HookRequestPatch,
+  ImportNotice,
+  JournalRecord,
+  ModelToolChoice,
+  PolicyEvaluationError,
+  StoreError,
+  ToolDescriptor,
+} from './types.js';
+
+export const ToolDescriptorSchema = z
+  .object({
+    id: nonEmpty,
+    description: z.string(),
+    inputSchema: z.record(jsonValueSchema),
+    policyIdentity: z
+      .object({ name: nonEmpty, server: z.string().optional() })
+      .strict(),
+    effects: z.array(effectSchema),
+    concurrency: z.enum(['parallel', 'exclusive']),
+    resources: z.array(z.string()).optional(),
+    shell: z.object({ commandArg: nonEmpty }).strict().optional(),
+  })
+  .strict();
+export const ModelToolChoiceSchema = z
+  .object({
+    mode: z.enum(['auto', 'required', 'none']),
+    allowedToolIds: z.array(nonEmpty).optional(),
+  })
+  .strict();
+const requestBoundarySchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('absent') }).strict(),
+  z
+    .object({
+      status: z.literal('valid'),
+      boundary: z
+        .object({
+          version: z.literal(2).optional(),
+          pendingMessageStartIndex: z.number().int().nonnegative(),
+          pendingMessageCount: z.number().int().nonnegative().optional(),
+          onInvalidBoundary: z.enum(['skip-compression', 'throw']).optional(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('malformed'),
+      onInvalidBoundary: z.enum(['skip-compression', 'throw']),
+    })
+    .strict(),
+]);
+export const HookRequestPatchSchema = z
+  .object({
+    messages: z.array(TranscriptEntrySchema).optional(),
+    instructions: z.array(instructionSchema).optional(),
+    toolIds: z.array(nonEmpty).optional(),
+    model: modelRefSchema.optional(),
+    parameters: modelParametersSchema.partial().strict().optional(),
+    toolChoice: ModelToolChoiceSchema.optional(),
+    boundary: requestBoundarySchema,
+  })
+  .strict();
+const hookProvenanceSchema = z
+  .object({
+    id: nonEmpty,
+    event: nonEmpty,
+    source: nonEmpty,
+    order: z.number().int().nonnegative(),
+  })
+  .strict();
+const hookAuditEntrySchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      provenance: hookProvenanceSchema,
+      status: z.literal('success'),
+      output: jsonValueSchema.optional(),
+      diagnostic: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      provenance: hookProvenanceSchema,
+      status: z.literal('process-error'),
+      output: jsonValueSchema.optional(),
+      diagnostic: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      provenance: hookProvenanceSchema,
+      status: z.literal('timeout'),
+      diagnostic: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      provenance: hookProvenanceSchema,
+      status: z.literal('cancelled'),
+      diagnostic: z.string().optional(),
+    })
+    .strict(),
+]);
+const hookProducerSchema = z
+  .object({ path: nonEmpty, provenance: hookProvenanceSchema })
+  .strict();
+const hookControlSchema = z.union([
+  z.object({ action: z.literal('continue') }).strict(),
+  z
+    .object({
+      action: z.literal('block'),
+      reason: z.string(),
+      systemMessage: z.string().optional(),
+      response: z.lazy(() => HookModelResponseSchema).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('stop'),
+      reason: z.string(),
+      systemMessage: z.string().optional(),
+    })
+    .strict(),
+]);
+const hookEventEnvelopeSchema = z
+  .object({
+    effective: z
+      .object({
+        control: hookControlSchema,
+        value: z.unknown().optional(),
+        reason: z.string().optional(),
+        stopReason: z.string().optional(),
+        systemMessage: z.string().optional(),
+        suppressOutput: z.boolean().optional(),
+        addContext: z
+          .array(
+            z
+              .object({
+                id: nonEmpty,
+                source: nonEmpty,
+                trust: z.enum(['trusted', 'untrusted']),
+                lifetime: z.enum(['next-turn', 'until-replaced', 'session']),
+                parts: z.array(contentSchema),
+              })
+              .strict(),
+          )
+          .optional(),
+        producers: z.array(hookProducerSchema),
+      })
+      .strict(),
+    audit: z.array(hookAuditEntrySchema),
+  })
+  .strict();
+const commandBase = { id: nonEmpty.optional() };
+export const AgentCommandSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-model'),
+      selection: modelSelectionSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-preferences'),
+      layers: z.array(policyLayerSchema),
+      approvalMode: z.enum(['default', 'autoEdit', 'yolo']),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-authority'),
+      rules: z.array(restrictionRuleSchema),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-source-stacks'),
+      stacks: z.array(policySourceStackSchema),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-limits'),
+      limits: limitsSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-mode'),
+      mode: z.enum(['normal', 'plan']),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-instructions'),
+      instructions: z.array(instructionSchema),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('set-context'),
+      items: z.array(
+        z
+          .object({
+            id: nonEmpty,
+            source: nonEmpty,
+            trust: z.enum(['trusted', 'untrusted']),
+            lifetime: z.enum(['next-turn', 'until-replaced', 'session']),
+            parts: z.array(contentSchema),
+          })
+          .strict(),
+      ),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('remove-context'),
+      ids: z.array(nonEmpty),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('revoke-grant'),
+      grant: nonEmpty,
+    })
+    .strict(),
+  z.object({ ...commandBase, type: z.literal('compact') }).strict(),
+  z
+    .object({ ...commandBase, type: z.literal('rewind'), to: nonEmpty })
+    .strict(),
+  z.object({ ...commandBase, type: z.literal('clear') }).strict(),
+]);
+export const PolicyEvaluationErrorSchema = z
+  .object({
+    code: z.literal('authority-overrides-preference'),
+    authority: z
+      .object({
+        rule: nonEmpty,
+        provenance: provenanceSchema,
+        priority: z.number().finite(),
+        outcome: z.enum(['deny', 'ask']),
+      })
+      .strict(),
+    preference: z
+      .object({
+        rule: nonEmpty,
+        provenance: provenanceSchema,
+        priority: z.number().finite(),
+        outcome: z.enum(['allow', 'ask']),
+      })
+      .strict(),
+    mode: z.enum(['default', 'autoEdit', 'yolo']),
+    revision: z.number().int().nonnegative(),
+    message: z.string(),
+  })
+  .strict();
+export const HookErrorSchema = z
+  .object({
+    kind: z.enum([
+      'model-not-allowed',
+      'tool-set-widened',
+      'invalid-request-boundary',
+      'invalid-hook-output',
+    ]),
+    provenance: z
+      .object({
+        id: nonEmpty,
+        event: nonEmpty,
+        source: nonEmpty,
+        order: z.number().int().nonnegative(),
+      })
+      .strict(),
+    message: z.string(),
+  })
+  .strict();
+const hookResponsePartSchema = z
+  .object({
+    value: transcriptPartSchema,
+    accumulation: z.enum(['append', 'replace']),
+    stream: z
+      .object({ id: nonEmpty, status: z.enum(['delta', 'complete']) })
+      .strict()
+      .optional(),
+    hookFields: z
+      .object({ format: nonEmpty, data: jsonValueSchema })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export const HookModelResponseSchema = z
+  .object({
+    parts: z.array(hookResponsePartSchema),
+    finishReason: z.enum(['stop', 'tool-calls', 'length', 'other']).optional(),
+    rawStopReason: z.string().optional(),
+    declaredUsage: UsageReportSchema.optional(),
+  })
+  .strict();
+export const BeforeModelEffectSchema = z
+  .object({
+    request: HookRequestPatchSchema.optional(),
+    synthetic: HookModelResponseSchema.optional(),
+  })
+  .strict();
+export const AfterModelEffectSchema = z
+  .object({ replacement: HookModelResponseSchema.optional() })
+  .strict();
+export const StoreErrorSchema = z
+  .object({
+    kind: z.enum(['unavailable', 'corrupt', 'aborted', 'import-required']),
+    message: z.string(),
+  })
+  .strict();
+export const ImportedHistoryRecordSchema = z
+  .object({
+    kind: z.literal('imported-history'),
+    sourceDigest: nonEmpty,
+    format: nonEmpty,
+    audit: nonEmpty.optional(),
+    notices: z.array(
+      z
+        .object({
+          code: z.enum([
+            'indeterminate-effect',
+            'grants-dropped',
+            'replay-excluded',
+            'compressed-history',
+          ]),
+          sourceSequence: z.number().int().nonnegative().optional(),
+          call: nonEmpty.optional(),
+          message: z.string(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export const ImportNoticeSchema = z
+  .object({
+    code: z.enum([
+      'indeterminate-effect',
+      'grants-dropped',
+      'replay-excluded',
+      'compressed-history',
+    ]),
+    sourceSequence: z.number().int().nonnegative().optional(),
+    call: nonEmpty.optional(),
+    message: z.string(),
+  })
+  .strict();
+
+function commandPolicyDocument(command: unknown): unknown {
+  if (typeof command !== 'object' || command === null) return undefined;
+  const field = (name: string): unknown => Reflect.get(command, name);
+  const policyWith = (overrides: Record<string, unknown>) => ({
+    authority: [],
+    preferences: [],
+    sourceStacks: [],
+    approvalMode: 'default',
+    fallback: 'deny',
+    ...overrides,
+  });
+  switch (field('type')) {
+    case 'set-authority':
+      return policyWith({ authority: field('rules') });
+    case 'set-preferences':
+      return policyWith({ preferences: field('layers') });
+    case 'set-source-stacks':
+      return policyWith({ sourceStacks: field('stacks') });
+    default:
+      return undefined;
+  }
+}
+
+export function validateAgentCommand(value: unknown): AgentCommand {
+  assertSafeDefinitionValue(value, 'Invalid agent command');
+  const copy = cloneDataDescriptors(value);
+  const structural = AgentCommandSchema.safeParse(copy);
+  const problems: DefinitionProblem[] = structural.success
+    ? []
+    : labelledDefinitionProblems(structural.error, 'Invalid agent command');
+  problems.push(
+    ...validateEmbeddedPolicyDocuments([
+      { value: commandPolicyDocument(copy), path: ['policy'] },
+    ]),
+  );
+  if (problems.length > 0) throw new DefinitionError(problems);
+  if (!structural.success)
+    throw new Error('Command parsing failed without diagnostics.');
+  return structural.data;
+}
+
+export function validatePolicyEvaluationError(
+  value: unknown,
+): PolicyEvaluationError {
+  return parseDefinitionValue(
+    PolicyEvaluationErrorSchema,
+    value,
+    'Invalid policy evaluation error',
+  );
+}
+
+export function validateHookError(value: unknown): HookError {
+  return parseDefinitionValue(HookErrorSchema, value, 'Invalid hook error');
+}
+
+export function validateStoreError(value: unknown): StoreError {
+  return parseDefinitionValue(StoreErrorSchema, value, 'Invalid store error');
+}
+
+export function validateImportedHistoryRecord(
+  value: unknown,
+): Extract<JournalRecord, { kind: 'imported-history' }> {
+  return parseDefinitionValue(
+    ImportedHistoryRecordSchema,
+    value,
+    'Invalid imported history record',
+  );
+}
+
+export function validateModelToolChoice(value: unknown): ModelToolChoice {
+  return parseDefinitionValue(
+    ModelToolChoiceSchema,
+    value,
+    'Invalid model tool choice',
+  );
+}
+
+export function validateHookRequestPatch(value: unknown): HookRequestPatch {
+  return parseDefinitionValue(
+    HookRequestPatchSchema,
+    value,
+    'Invalid hook request patch',
+  );
+}
+
+export function validateHookRequestChange(
+  value: unknown,
+  context: { readonly pinnedToolIds: readonly string[] },
+): HookRequestPatch {
+  const change = validateHookRequestPatch(value);
+  const pinnedToolIds = new Set(context.pinnedToolIds);
+  const problems: DefinitionProblem[] = [];
+  (change.toolIds ?? []).forEach((toolId, index) => {
+    if (!pinnedToolIds.has(toolId))
+      problems.push({
+        code: 'tool-set-widened',
+        path: ['toolIds', index],
+        message: `Hook request tool ${toolId} is outside the pinned request tool set.`,
+      });
+  });
+  if (problems.length > 0) throw new DefinitionError(problems);
+  return change;
+}
+
+export function validateResponseReplacement(
+  value: unknown,
+  auditRecords: ReadonlyArray<Extract<JournalRecord, { kind: 'hook-change' }>>,
+): HookModelResponse {
+  const replacement = validateHookModelResponse(value);
+  const linked = auditRecords.some(
+    (record) =>
+      record.point === 'after-model' && record.disposition.kind === 'effective',
+  );
+  if (!linked)
+    throw new DefinitionError([
+      {
+        code: 'replacement-without-audit-invalidation',
+        path: ['replacement'],
+        message:
+          'An AfterModel replacement requires an effective after-model hook-change record with its audit reference and replay invalidations.',
+      },
+    ]);
+  return replacement;
+}
+
+export function validateHookEventResult<T>(
+  value: unknown,
+  valueSchema: z.ZodType<T>,
+): HookEventResult<T> {
+  const envelope = parseDefinitionValue(
+    hookEventEnvelopeSchema,
+    value,
+    'Invalid hook event result',
+  );
+  const auditOrderProblem = envelope.audit.findIndex(
+    (entry, index) =>
+      index > 0 &&
+      envelope.audit[index - 1].provenance.order > entry.provenance.order,
+  );
+  if (auditOrderProblem >= 0)
+    throw new DefinitionError([
+      {
+        code: 'invalid-hook-audit-order',
+        path: ['audit', auditOrderProblem, 'provenance', 'order'],
+        message: 'Hook audit entries must retain configured order.',
+      },
+    ]);
+  const { value: effectiveValue, ...effective } = envelope.effective;
+  if (effectiveValue === undefined) return { effective, audit: envelope.audit };
+  return {
+    effective: {
+      ...effective,
+      value: parseDefinitionValue(
+        valueSchema,
+        effectiveValue,
+        'Invalid hook event value',
+      ),
+    },
+    audit: envelope.audit,
+  };
+}
+
+export function validateToolDescriptor(value: unknown): ToolDescriptor {
+  return parseDefinitionValue(
+    ToolDescriptorSchema,
+    value,
+    'Invalid tool descriptor',
+  );
+}
+export function validateHookModelResponse(value: unknown): HookModelResponse {
+  return parseDefinitionValue(
+    HookModelResponseSchema,
+    value,
+    'Invalid hook model response',
+  );
+}
+export function validateImportNotice(value: unknown): ImportNotice {
+  return parseDefinitionValue(
+    ImportNoticeSchema,
+    value,
+    'Invalid import notice',
+  );
+}
