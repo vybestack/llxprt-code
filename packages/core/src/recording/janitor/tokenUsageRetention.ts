@@ -67,18 +67,16 @@ interface CleanupState {
 }
 
 /**
- * Narrow test-only lifecycle hook, the token-usage twin of the janitor's
- * scan-to-mutation hook. When non-null it runs after a file was selected for
- * deletion and before the deletion takes the session lock, so a test can
- * acquire that lock, append to the file or replace it in exactly that window.
+ * Optional seams for one cleanup pass. Production callers pass none.
  */
-let scanToDeleteHook: ((filePath: string) => Promise<void>) | null = null;
-
-/** Install or clear the scan-to-delete hook for tests. */
-export function setTokenUsageScanToDeleteHookForTest(
-  fn: ((filePath: string) => Promise<void>) | null,
-): void {
-  scanToDeleteHook = fn;
+export interface TokenUsageCleanupOptions {
+  /**
+   * Runs after a file was selected for deletion and before the deletion takes
+   * the session lock, the token-usage twin of the janitor's scan-to-mutation
+   * hook. Tests use it to acquire that lock, append to the file or replace it
+   * in exactly that window.
+   */
+  readonly beforeDelete?: (filePath: string) => Promise<void> | void;
 }
 
 function rootSessionIdOf(fileName: string): string {
@@ -182,8 +180,11 @@ async function lockRootSession(
 async function deleteScanned(
   file: TokenUsageFile,
   state: CleanupState,
+  options: TokenUsageCleanupOptions,
 ): Promise<void> {
-  if (scanToDeleteHook !== null) await scanToDeleteHook(file.filePath);
+  if (options.beforeDelete !== undefined) {
+    await options.beforeDelete(file.filePath);
+  }
   const lock = await lockRootSession(file, state);
   if (lock === null) return;
   try {
@@ -255,6 +256,7 @@ export async function cleanupTokenUsageFiles(
   globalTempDir: string,
   currentSessionId: string | undefined,
   config: ResolvedRetentionConfig,
+  options: TokenUsageCleanupOptions = {},
 ): Promise<TokenUsageCleanupResult> {
   const state: CleanupState = { deleted: 0, bytesDeleted: 0, failed: 0 };
   const projectDirs = await listProjectDirs(globalTempDir, state);
@@ -280,7 +282,7 @@ export async function cleanupTokenUsageFiles(
     const overBudget = totalBytes > config.tokenUsageMaxTotalSizeBytes;
     if (!pastAge && !overBudget) continue;
     const before = state.deleted;
-    await deleteScanned(file, state);
+    await deleteScanned(file, state, options);
     if (state.deleted > before) totalBytes -= file.sizeBytes;
   }
 
