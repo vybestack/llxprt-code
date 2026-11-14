@@ -32,6 +32,7 @@ import {
 } from './__tests__/support/disk-text-fixture.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
+import { applicationRetention } from '../__tests__/support/application-retention.js';
 
 // Real sends hand the provider a request selection (requestRows), which takes
 // the source projection. Plain rows select the legacy collecting projection,
@@ -54,27 +55,39 @@ interface ProjectionFacts {
   readonly retain: boolean;
   readonly expected: { bytes: number; sha256: string };
   readonly estimate: PromptEnvelopeEstimate;
-  readonly preparedBytes: number;
-  readonly pausedUploadBytes: number;
-  readonly uploadedBytes: number;
-  readonly responseBytes: number;
+  /** Application-memory growth per checkpoint; empty when not measured. */
+  readonly heap: LifecycleHeap;
   readonly retainedCodeUnits: number;
   readonly sourceRowsRead: number;
   readonly retainedRows: number;
   readonly sourceLiveRows: number;
   readonly sourceLiveBytes: number;
   readonly largestRowBytes: number;
+  readonly largestRowTextUnits: number;
   readonly payloadBytes: number;
 }
 
-// Median of three settled readings: allocator jitter of a few hundred KiB must
-// not decide a 1 MiB gate, while retention present in every reading still does.
-async function collectHeap(): Promise<number> {
-  return median([
-    await settledHeap(),
-    await settledHeap(),
-    await settledHeap(),
-  ]);
+type LifecycleCheckpoint =
+  | 'prepared'
+  | 'pausedUpload'
+  | 'uploaded'
+  | 'response';
+const lifecycleCheckpoints: readonly LifecycleCheckpoint[] = [
+  'prepared',
+  'pausedUpload',
+  'uploaded',
+  'response',
+];
+type LifecycleHeap = Partial<Record<LifecycleCheckpoint, number>>;
+
+// Application memory of a settled heap: JSC compiler and code-block cells are
+// excluded because their churn moved raw heapSize by more than one row between
+// otherwise identical runs, and they hold no request data. A snapshot counts
+// live cells only, so allocator jitter does not enter the reading; the gate
+// takes the median over runs. Snapshots are slow, so only gate scenarios read.
+async function applicationHeap(): Promise<number> {
+  await settledHeap();
+  return applicationRetention(Bun.generateHeapSnapshot()).heap;
 }
 
 async function independentTokenCount(large: DiskTextShape): Promise<number> {
@@ -184,6 +197,7 @@ async function prepareMeasuredLease(
 async function runProjectionScenario(
   large: DiskTextShape,
   retain: boolean,
+  measureHeap = false,
 ): Promise<ProjectionFacts> {
   const http = projectionEndpoint(true);
   const setup = await projectionRuntime(
@@ -192,7 +206,14 @@ async function runProjectionScenario(
   );
   const expected = projectionWireOracle(large);
   const disk = projectionDiskRows(large, retain);
-  const baseline = await collectHeap();
+  const heap: LifecycleHeap = {};
+  const baseline = measureHeap ? await applicationHeap() : undefined;
+  // Unmeasured scenarios still settle at each checkpoint so the final
+  // source-liveness checks observe collected rows.
+  const checkpoint = async (name: LifecycleCheckpoint): Promise<void> => {
+    if (baseline === undefined) await settledHeap();
+    else heap[name] = (await applicationHeap()) - baseline;
+  };
   let stream: AsyncIterableIterator<IContent> | undefined;
   let releaseIfUnsent: (() => Promise<void>) | undefined;
   try {
@@ -202,21 +223,21 @@ async function runProjectionScenario(
       requestId: 'actual-projection',
     });
     expect(disk.state.active).toBe(0);
-    const preparedBytes = (await collectHeap()) - baseline;
+    await checkpoint('prepared');
     const retainedCodeUnits = prepared.retainedCodeUnits;
     stream = setup.provider.generateChatCompletion(prepared.options);
     const first = stream.next();
     await http.arrived.wait;
-    const pausedUploadBytes = (await collectHeap()) - baseline;
+    await checkpoint('pausedUpload');
     http.readBody.release();
     await http.uploaded.wait;
     expect(disk.state.active).toBe(0);
-    const uploadedBytes = (await collectHeap()) - baseline;
+    await checkpoint('uploaded');
     expect(disk.state.closed).toBe(false);
     http.respond.release();
     const firstResult = await first;
     expect(firstResult.done).toBe(false);
-    const responseBytes = (await collectHeap()) - baseline;
+    await checkpoint('response');
     await drainProjectionResponse(stream, firstResult.value);
     const expectedEstimate = await independentActualEstimate(setup, large);
     expect(expectedEstimate.estimatedPromptTokens).toBe(
@@ -228,12 +249,19 @@ async function runProjectionScenario(
     expect(disk.state.active).toBe(0);
     expect(activeRequestBodyCount(setup.provider.requestBodyCensus)).toBe(0);
     let largestRowBytes = 0;
+    let largestRowTextUnits = 0;
     let payloadBytes = 0;
     for (let index = 0; index < rowCount; index++) {
-      const bytes = Buffer.byteLength(
-        JSON.stringify(diskTextRow(index, large)),
-      );
+      const row = diskTextRow(index, large);
+      const bytes = Buffer.byteLength(JSON.stringify(row));
       largestRowBytes = Math.max(largestRowBytes, bytes);
+      largestRowTextUnits = Math.max(
+        largestRowTextUnits,
+        row.blocks.reduce(
+          (sum, block) => sum + (block.type === 'text' ? block.text.length : 0),
+          0,
+        ),
+      );
       payloadBytes += bytes;
     }
     const sourceLiveBytes = disk.references.reduce((sum, reference) => {
@@ -246,14 +274,12 @@ async function runProjectionScenario(
       large,
       retain,
       largestRowBytes,
+      largestRowTextUnits,
       payloadBytes,
       sourceLiveBytes,
       expected,
       estimate: prepared.estimate,
-      preparedBytes,
-      pausedUploadBytes,
-      uploadedBytes,
-      responseBytes,
+      heap,
       retainedCodeUnits,
       sourceRowsRead: disk.state.pulled,
       retainedRows: disk.retained.length,
@@ -338,11 +364,23 @@ async function abortPausedProjection(): Promise<string> {
 
 function projectionHeap(facts: ProjectionFacts): number {
   return Math.max(
-    facts.preparedBytes,
-    facts.pausedUploadBytes,
-    facts.uploadedBytes,
-    facts.responseBytes,
+    ...lifecycleCheckpoints.map((name) => {
+      const bytes = facts.heap[name];
+      if (bytes === undefined)
+        throw new Error(`Scenario did not measure the ${name} checkpoint`);
+      return bytes;
+    }),
   );
+}
+
+/**
+ * Peak memory of converting one row. While the upload is paused the decoded
+ * row's text and the converted input item's content are both live as JS
+ * strings, and JSC stores text holding any non-Latin-1 unit at two bytes per
+ * UTF-16 code unit. The item's encoded JSON wire bytes may also be in flight.
+ */
+function oneRowConversionBytes(facts: ProjectionFacts): number {
+  return 2 * 2 * facts.largestRowTextUnits + facts.largestRowBytes;
 }
 
 describe('actual Responses projection disk ownership', () => {
@@ -399,37 +437,51 @@ describe('actual Responses projection disk ownership', () => {
   }, 60000);
 
   it('does not retain context-scale text or request graphs during prepared request, HTTP pause and response lifetime', async () => {
+    // Calibration runs the same scenario and checkpoints with small rows, so
+    // fixed lifecycle costs such as the paused server request are measured
+    // like-for-like; only the one-row conversion term scales with row size.
+    // The warm run is sampled too: the first sampled scenario grows lasting
+    // state that later runs, calibration or gate, do not pay again. Both sides
+    // take the median of three runs.
     const smallestBackpressuredRows = { rowCodeUnits: 4096 };
-    await runProjectionScenario(smallestBackpressuredRows, false);
+    await runProjectionScenario(smallestBackpressuredRows, false, true);
     const calibrations: number[] = [];
     for (let run = 0; run < 3; run++)
       calibrations.push(
         projectionHeap(
-          await runProjectionScenario(smallestBackpressuredRows, false),
+          await runProjectionScenario(smallestBackpressuredRows, false, true),
         ),
       );
-    const fixedOverhead = Math.max(0, ...calibrations);
+    const fixedOverhead = median(calibrations);
     await runProjectionScenario(distributedTextRows, false);
     const gates: number[] = [];
     let allowance = 0;
     for (let run = 0; run < 3; run++) {
-      const facts = await runProjectionScenario(distributedTextRows, false);
+      const facts = await runProjectionScenario(
+        distributedTextRows,
+        false,
+        true,
+      );
       expect(facts.retainedCodeUnits).toBe(0);
-      allowance = fixedOverhead + 2 * facts.largestRowBytes;
+      allowance = fixedOverhead + oneRowConversionBytes(facts);
       expect(facts.payloadBytes).toBeGreaterThan(4 * allowance);
       gates.push(projectionHeap(facts));
     }
     expect(median(gates)).toBeLessThanOrEqual(allowance);
-    const control = await runProjectionScenario(distributedTextRows, true);
+    const control = await runProjectionScenario(
+      distributedTextRows,
+      true,
+      true,
+    );
     expect(control.sourceLiveRows).toBe(rowCount);
     expect(projectionHeap(control)).toBeGreaterThan(3 * allowance);
     const evidence = process.env['H3_ALLOWANCE_EVIDENCE'];
     if (evidence !== undefined)
       appendFileSync(
         evidence,
-        `${JSON.stringify({ suite: 'projection-gate', fixedOverhead, allowance, gates, control: projectionHeap(control) })}\n`,
+        `${JSON.stringify({ suite: 'projection-gate', calibrations, fixedOverhead, oneRow: oneRowConversionBytes(control), allowance, gates, control: projectionHeap(control) })}\n`,
       );
-  }, 120000);
+  }, 300000);
 
   it('cancels a projected actual HTTP request while the receiver is paused without opening a new row reader', async () => {
     expect(await abortPausedProjection()).toBe(
