@@ -92,24 +92,33 @@ describe('token-usage retention races (#4068)', () => {
     expect(await locks[0].ownsLock()).toBe(true);
   });
 
-  it('keeps a subagent log when its root session takes the lock after the scan', async () => {
-    const tree = await newTree();
-    const log = await writeAgedLog(
-      tree,
-      'late-root::late-root#coder#11012e6c.jsonl',
-    );
-    const beforeDelete = async () => {
-      locks.push(await SessionLockManager.acquire(tree.chats, 'late-root'));
-    };
+  // Windows cannot create '::' file names; see #4104
+  it.skipIf(process.platform === 'win32')(
+    'keeps a subagent log when its root session takes the lock after the scan',
+    async () => {
+      const tree = await newTree();
+      const log = await writeAgedLog(
+        tree,
+        'late-root::late-root#coder#11012e6c.jsonl',
+      );
+      const beforeDelete = async () => {
+        locks.push(await SessionLockManager.acquire(tree.chats, 'late-root'));
+      };
 
-    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG, {
-      beforeDelete,
-    });
+      const result = await cleanupTokenUsageFiles(
+        tree.root,
+        undefined,
+        CONFIG,
+        {
+          beforeDelete,
+        },
+      );
 
-    expect(await readIfPresent(log)).toBe('{"record_type":"turn"}\n');
-    expect(result.deleted).toBe(0);
-    expect(result.failed).toBe(0);
-  });
+      expect(await readIfPresent(log)).toBe('{"record_type":"turn"}\n');
+      expect(result.deleted).toBe(0);
+      expect(result.failed).toBe(0);
+    },
+  );
 
   it('keeps a log that a session appended to after the scan', async () => {
     const tree = await newTree();
@@ -149,27 +158,36 @@ describe('token-usage retention races (#4068)', () => {
     expect(result.deleted).toBe(0);
   });
 
-  it('still deletes an idle aged log and leaves its session lock free', async () => {
-    const tree = await newTree();
-    const log = await writeAgedLog(
-      tree,
-      'idle-root::idle-root#helper#ab12cd34.jsonl',
-    );
-    let hookRan = false;
-    const beforeDelete = async () => {
-      hookRan = true;
-    };
+  // Windows cannot create '::' file names; see #4104
+  it.skipIf(process.platform === 'win32')(
+    'still deletes an idle aged log and leaves its session lock free',
+    async () => {
+      const tree = await newTree();
+      const log = await writeAgedLog(
+        tree,
+        'idle-root::idle-root#helper#ab12cd34.jsonl',
+      );
+      let hookRan = false;
+      const beforeDelete = async () => {
+        hookRan = true;
+      };
 
-    const result = await cleanupTokenUsageFiles(tree.root, undefined, CONFIG, {
-      beforeDelete,
-    });
+      const result = await cleanupTokenUsageFiles(
+        tree.root,
+        undefined,
+        CONFIG,
+        {
+          beforeDelete,
+        },
+      );
 
-    expect(hookRan).toBe(true);
-    expect(await readIfPresent(log)).toBeNull();
-    expect(result.deleted).toBe(1);
-    // The deletion's lock was released: the session can start again.
-    const lock = await SessionLockManager.acquire(tree.chats, 'idle-root');
-    locks.push(lock);
-    expect(await lock.ownsLock()).toBe(true);
-  });
+      expect(hookRan).toBe(true);
+      expect(await readIfPresent(log)).toBeNull();
+      expect(result.deleted).toBe(1);
+      // The deletion's lock was released: the session can start again.
+      const lock = await SessionLockManager.acquire(tree.chats, 'idle-root');
+      locks.push(lock);
+      expect(await lock.ownsLock()).toBe(true);
+    },
+  );
 });
