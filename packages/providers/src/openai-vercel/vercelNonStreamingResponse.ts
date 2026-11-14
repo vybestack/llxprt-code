@@ -133,7 +133,7 @@ export function buildNonStreamingToolCallBlocks(result: {
         ? callRuntime.toolCallId
         : crypto.randomUUID();
     const rawInput = extractToolCallInput(call);
-    let argsString = '{}';
+    let argsString: string;
     try {
       argsString =
         typeof rawInput === 'string'

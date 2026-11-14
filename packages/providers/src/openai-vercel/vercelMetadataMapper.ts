@@ -101,7 +101,7 @@ export function buildToolCallBlocks(
   collectedToolCalls: StreamingState['collectedToolCalls'],
 ): ToolCallBlock[] {
   return collectedToolCalls.map((call) => {
-    let argsString = '{}';
+    let argsString: string;
     try {
       argsString =
         typeof call.input === 'string'
