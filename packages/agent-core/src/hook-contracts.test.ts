@@ -12,14 +12,29 @@ import {
   validateHookError,
   validateHookEventResult,
   validateHookModelResponse,
+  validateHookRequestChange,
   validateHookRequestPatch,
+  validateResponseReplacement,
   type AgentEvent,
   type HookModelResponse,
+  type JournalRecord,
   type ModelAttemptSource,
   type ModelResponseFrame,
   type ModelRef,
   type TranscriptEntry,
 } from '../index.js';
+
+function definitionProblems(
+  action: () => unknown,
+): DefinitionError['problems'] {
+  try {
+    action();
+  } catch (error) {
+    if (error instanceof DefinitionError) return error.problems;
+    throw error;
+  }
+  throw new Error('Expected a DefinitionError.');
+}
 
 describe('P01a D20 hook contracts', () => {
   it('retains request-local message rewrites and selected model identity', () => {
@@ -402,5 +417,85 @@ describe('P01a D20 hook contracts', () => {
         replacement: { parts: [] },
       }).success,
     ).toBe(true);
+  });
+
+  it('admits request tool subsets and rejects tool IDs outside the pinned request', () => {
+    const pinnedToolIds = ['tool/read', 'tool/write'];
+    expect(
+      validateHookRequestChange(
+        { boundary: { status: 'absent' }, toolIds: ['tool/write'] },
+        { pinnedToolIds },
+      ).toolIds,
+    ).toStrictEqual(['tool/write']);
+
+    expect(
+      definitionProblems(() =>
+        validateHookRequestChange(
+          {
+            boundary: { status: 'absent' },
+            toolIds: ['tool/read', 'tool/shell'],
+          },
+          { pinnedToolIds },
+        ),
+      ),
+    ).toStrictEqual([
+      {
+        code: 'tool-set-widened',
+        path: ['toolIds', 1],
+        message:
+          'Hook request tool tool/shell is outside the pinned request tool set.',
+      },
+    ]);
+  });
+
+  it('admits an AfterModel replacement only with its effective audit and replay invalidation record', () => {
+    type HookChangeRecord = Extract<JournalRecord, { kind: 'hook-change' }>;
+    const replacement = { parts: [] };
+    const effectiveRecord: HookChangeRecord = {
+      kind: 'hook-change',
+      attempt: 'attempt-1',
+      frame: 'frame-1',
+      provenance: {
+        id: 'after-hook',
+        event: 'after-model',
+        source: 'configuration',
+        order: 0,
+      },
+      point: 'after-model',
+      audit: 'audit-original-response',
+      disposition: { kind: 'effective' },
+      changed: 'change-replacement',
+      aggregate: 'aggregate-1',
+      invalidatedReplay: [{ entry: 'entry-1', replay: 'replay-1' }],
+    };
+    const replacementProblem = {
+      code: 'replacement-without-audit-invalidation',
+      path: ['replacement'],
+      message: expect.stringContaining('effective after-model hook-change'),
+    };
+
+    expect(
+      validateResponseReplacement(replacement, [effectiveRecord]),
+    ).toStrictEqual(replacement);
+    expect(
+      definitionProblems(() => validateResponseReplacement(replacement, [])),
+    ).toStrictEqual([replacementProblem]);
+    expect(
+      definitionProblems(() =>
+        validateResponseReplacement(replacement, [
+          {
+            ...effectiveRecord,
+            disposition: { kind: 'superseded', by: 'hook-2' },
+          },
+        ]),
+      ),
+    ).toStrictEqual([replacementProblem]);
+    expect(
+      definitionProblems(() =>
+        validateResponseReplacement(replacement, [
+          { ...effectiveRecord, point: 'before-model' },
+        ]),
+      ),
+    ).toStrictEqual([replacementProblem]);
   });
 });

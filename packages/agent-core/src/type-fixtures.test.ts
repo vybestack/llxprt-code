@@ -177,9 +177,25 @@ describe('agent-core public type contracts', () => {
         line: lineForMarker('@expect-source-stack-command'),
       });
       expect(diagnostics).toContainEqual({
-        code: 2739,
+        code: 2741,
         line: lineForMarker('@expect-replay-invalidation') - 1,
       });
+      const replayInvalidationDiagnostic = fixtureDiagnostics.find(
+        (diagnostic) =>
+          diagnostic.code === 2741 &&
+          diagnostic.file !== undefined &&
+          diagnostic.start !== undefined &&
+          diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line +
+            1 ===
+            lineForMarker('@expect-replay-invalidation') - 1,
+      );
+      expect(
+        replayInvalidationDiagnostic &&
+          ts.flattenDiagnosticMessageText(
+            replayInvalidationDiagnostic.messageText,
+            ' ',
+          ),
+      ).toContain("Property 'invalidatedReplay'");
       expect(diagnostics).toContainEqual({
         code: 2739,
         line: lineForMarker('@expect-hook-change-outcome') + 1,

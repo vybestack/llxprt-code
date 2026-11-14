@@ -12,9 +12,11 @@ import {
   UsageReportSchema,
 } from './definition-replay-usage.js';
 import {
+  assertSafeDefinitionValue,
   effectSchema,
   instructionSchema,
   jsonValueSchema,
+  labelledDefinitionProblems,
   limitsSchema,
   modelParametersSchema,
   modelRefSchema,
@@ -27,8 +29,10 @@ import {
   restrictionRuleSchema,
   validateEmbeddedPolicyDocuments,
 } from './definition.js';
+import { cloneDataDescriptors } from './plain-data.js';
 import type {
   AgentCommand,
+  DefinitionProblem,
   HookError,
   HookEventResult,
   HookModelResponse,
@@ -36,7 +40,6 @@ import type {
   ImportNotice,
   JournalRecord,
   ModelToolChoice,
-  PolicyDocument,
   PolicyEvaluationError,
   StoreError,
   ToolDescriptor,
@@ -391,30 +394,45 @@ export const ImportNoticeSchema = z
   })
   .strict();
 
-export function validateAgentCommand(value: unknown): AgentCommand {
-  const command = parseDefinitionValue(
-    AgentCommandSchema,
-    value,
-    'Invalid agent command',
-  );
-  if (
-    command.type === 'set-source-stacks' ||
-    command.type === 'set-preferences' ||
-    command.type === 'set-authority'
-  ) {
-    const policy: PolicyDocument = {
-      authority: command.type === 'set-authority' ? command.rules : [],
-      preferences: command.type === 'set-preferences' ? command.layers : [],
-      sourceStacks: command.type === 'set-source-stacks' ? command.stacks : [],
-      approvalMode: 'default',
-      fallback: 'deny',
-    };
-    const problems = validateEmbeddedPolicyDocuments([
-      { value: policy, path: ['policy'] },
-    ]);
-    if (problems.length > 0) throw new DefinitionError(problems);
+function commandPolicyDocument(command: unknown): unknown {
+  if (typeof command !== 'object' || command === null) return undefined;
+  const field = (name: string): unknown => Reflect.get(command, name);
+  const policyWith = (overrides: Record<string, unknown>) => ({
+    authority: [],
+    preferences: [],
+    sourceStacks: [],
+    approvalMode: 'default',
+    fallback: 'deny',
+    ...overrides,
+  });
+  switch (field('type')) {
+    case 'set-authority':
+      return policyWith({ authority: field('rules') });
+    case 'set-preferences':
+      return policyWith({ preferences: field('layers') });
+    case 'set-source-stacks':
+      return policyWith({ sourceStacks: field('stacks') });
+    default:
+      return undefined;
   }
-  return command;
+}
+
+export function validateAgentCommand(value: unknown): AgentCommand {
+  assertSafeDefinitionValue(value, 'Invalid agent command');
+  const copy = cloneDataDescriptors(value);
+  const structural = AgentCommandSchema.safeParse(copy);
+  const problems: DefinitionProblem[] = structural.success
+    ? []
+    : labelledDefinitionProblems(structural.error, 'Invalid agent command');
+  problems.push(
+    ...validateEmbeddedPolicyDocuments([
+      { value: commandPolicyDocument(copy), path: ['policy'] },
+    ]),
+  );
+  if (problems.length > 0) throw new DefinitionError(problems);
+  if (!structural.success)
+    throw new Error('Command parsing failed without diagnostics.');
+  return structural.data;
 }
 
 export function validatePolicyEvaluationError(
@@ -459,6 +477,46 @@ export function validateHookRequestPatch(value: unknown): HookRequestPatch {
     value,
     'Invalid hook request patch',
   );
+}
+
+export function validateHookRequestChange(
+  value: unknown,
+  context: { readonly pinnedToolIds: readonly string[] },
+): HookRequestPatch {
+  const change = validateHookRequestPatch(value);
+  const pinnedToolIds = new Set(context.pinnedToolIds);
+  const problems: DefinitionProblem[] = [];
+  (change.toolIds ?? []).forEach((toolId, index) => {
+    if (!pinnedToolIds.has(toolId))
+      problems.push({
+        code: 'tool-set-widened',
+        path: ['toolIds', index],
+        message: `Hook request tool ${toolId} is outside the pinned request tool set.`,
+      });
+  });
+  if (problems.length > 0) throw new DefinitionError(problems);
+  return change;
+}
+
+export function validateResponseReplacement(
+  value: unknown,
+  auditRecords: ReadonlyArray<Extract<JournalRecord, { kind: 'hook-change' }>>,
+): HookModelResponse {
+  const replacement = validateHookModelResponse(value);
+  const linked = auditRecords.some(
+    (record) =>
+      record.point === 'after-model' && record.disposition.kind === 'effective',
+  );
+  if (!linked)
+    throw new DefinitionError([
+      {
+        code: 'replacement-without-audit-invalidation',
+        path: ['replacement'],
+        message:
+          'An AfterModel replacement requires an effective after-model hook-change record with its audit reference and replay invalidations.',
+      },
+    ]);
+  return replacement;
 }
 
 export function validateHookEventResult<T>(

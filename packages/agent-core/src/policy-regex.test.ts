@@ -177,4 +177,21 @@ describe('normalizePolicyRegex', () => {
       expect(regex.source).toBe(new RegExp(regex.source, regex.flags).source);
     }
   });
+
+  it('compares line-break commandRegex patterns with the producer source and native matching', () => {
+    const subject = '"command":"git\nstatus"';
+    for (const text of ['git\nstatus', 'git\\nstatus']) {
+      const regex = normalizePolicyRegex({
+        path: 'single-file-commandRegex',
+        text,
+      });
+      const producer = new RegExp(`"command":"${text}`);
+
+      expect(producer.test(subject)).toBe(true);
+      expect(regex.source).toBe(producer.source);
+      expect(new RegExp(regex.source, regex.flags).test(subject)).toBe(
+        producer.test(subject),
+      );
+    }
+  });
 });

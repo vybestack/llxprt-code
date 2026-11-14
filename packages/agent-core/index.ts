@@ -41,6 +41,8 @@ export {
   validateToolDescriptor,
   validateHookModelResponse,
   validateHookRequestPatch,
+  validateHookRequestChange,
+  validateResponseReplacement,
   validateHookEventResult,
   validateModelToolChoice,
   validateImportNotice,

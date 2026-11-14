@@ -199,6 +199,9 @@ const afterModelWithoutReplayInvalidation: AfterModelJournalRecord =
     provenance: { id: 'hook', event: 'after-model', source: 'test', order: 0 },
     point: 'after-model',
     audit: 'audit-1',
+    disposition: { kind: 'effective' },
+    changed: 'change-1',
+    aggregate: 'aggregate-1',
   };
 // @expect-hook-change-outcome
 const hookChangeWithoutOutcome: AfterModelJournalRecord = {

@@ -558,28 +558,36 @@ export function validateDefinition(value: unknown): AgentDefinition {
   return result.data;
 }
 
+export function assertSafeDefinitionValue(value: unknown, label: string): void {
+  if (hasSafeDescriptors(value)) return;
+  throw new DefinitionError([
+    {
+      code: 'invalid-plain-data',
+      path: [],
+      message: `${label}: values must use plain data descriptors.`,
+    },
+  ]);
+}
+
+export function labelledDefinitionProblems(
+  error: z.ZodError,
+  label: string,
+): DefinitionProblem[] {
+  return problemsFrom(error).map((problem) => ({
+    ...problem,
+    message: `${label}: ${problem.message}`,
+  }));
+}
+
 export function parseDefinitionValue<T>(
   schema: z.ZodType<T>,
   value: unknown,
   label: string,
 ): T {
-  if (!hasSafeDescriptors(value)) {
-    throw new DefinitionError([
-      {
-        code: 'invalid-plain-data',
-        path: [],
-        message: `${label}: values must use plain data descriptors.`,
-      },
-    ]);
-  }
+  assertSafeDefinitionValue(value, label);
   const result = schema.safeParse(value);
   if (!result.success)
-    throw new DefinitionError(
-      problemsFrom(result.error).map((problem) => ({
-        ...problem,
-        message: `${label}: ${problem.message}`,
-      })),
-    );
+    throw new DefinitionError(labelledDefinitionProblems(result.error, label));
   return result.data;
 }
 
