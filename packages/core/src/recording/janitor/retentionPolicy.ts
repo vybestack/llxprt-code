@@ -21,6 +21,8 @@
  * Default policy (AC-2): cleanup is enabled with a global 4 GiB aggregate size
  * budget, no default age limit, and no default count limit.  A minimum
  * retention floor of 1 day prevents deleting very recent recordings.
+ * Token-usage logs follow the same age policy under their own 1 GiB budget
+ * (#4068).
  */
 
 import type {
@@ -30,6 +32,15 @@ import type {
 
 /** Default global aggregate session budget: 4096 MiB = 4 GiB (AC-2). */
 export const DEFAULT_MAX_TOTAL_SIZE_MB = 4096;
+
+/**
+ * Default global budget for token-usage logs: 1 GiB (#4068). At the default
+ * `summary` level a record is about 1 KB, so this holds roughly a million
+ * requests; `debug` records are much larger and are evicted sooner. It also
+ * leaves room for logs written at the old full detail before an upgrade, so
+ * the first sweep does not delete recent files that have not been collected.
+ */
+export const DEFAULT_TOKEN_USAGE_MAX_TOTAL_SIZE_MB = 1024;
 
 /** Default minimum retention safety floor (AC-2). */
 export const DEFAULT_MIN_RETENTION = '1d';
@@ -109,6 +120,15 @@ export function validateRetentionConfig(
   }
 
   if (
+    userConfig.tokenUsageMaxTotalSizeMB !== undefined &&
+    !isValidMaxTotalSizeMB(userConfig.tokenUsageMaxTotalSizeMB)
+  ) {
+    throw new Error(
+      `Invalid sessionRetention.tokenUsageMaxTotalSizeMB: must be a positive number whose byte conversion is a finite safe integer, got ${String(userConfig.tokenUsageMaxTotalSizeMB)}`,
+    );
+  }
+
+  if (
     userConfig.maxCount !== undefined &&
     (typeof userConfig.maxCount !== 'number' ||
       !Number.isSafeInteger(userConfig.maxCount) ||
@@ -164,6 +184,11 @@ export function resolveRetentionConfig(
     );
   }
 
+  const tokenUsageMaxTotalSizeBytes = Math.round(
+    (userConfig?.tokenUsageMaxTotalSizeMB ??
+      DEFAULT_TOKEN_USAGE_MAX_TOTAL_SIZE_MB) * MIB,
+  );
+
   const maxAgeMs =
     userConfig?.maxAge !== undefined
       ? parseRetentionPeriod(userConfig.maxAge)
@@ -175,5 +200,12 @@ export function resolveRetentionConfig(
     userConfig?.minRetention ?? DEFAULT_MIN_RETENTION,
   );
 
-  return { enabled, maxTotalSizeBytes, maxAgeMs, maxCount, minRetentionMs };
+  return {
+    enabled,
+    maxTotalSizeBytes,
+    tokenUsageMaxTotalSizeBytes,
+    maxAgeMs,
+    maxCount,
+    minRetentionMs,
+  };
 }

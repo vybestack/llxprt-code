@@ -113,3 +113,28 @@ describe('session override authority', () => {
     expect(child.readNamedParameter('dumpcontext')).toBe('off');
   });
 });
+describe('token-usage-log level in the runtime policy (#4068)', () => {
+  async function levelFor(value: unknown): Promise<unknown> {
+    const settings = new SettingsService();
+    const owner = new SessionSettingsOwner(settings);
+    try {
+      if (value !== undefined) settings.set('token-usage-log', value);
+      return owner.readRuntimePolicy().tokenUsageLogLevel;
+    } finally {
+      await owner.dispose();
+    }
+  }
+
+  it('defaults to summary and maps legacy persisted booleans', async () => {
+    expect(await levelFor(undefined)).toBe('summary');
+    expect(await levelFor(true)).toBe('summary');
+    expect(await levelFor(false)).toBe('off');
+    expect(await levelFor('debug')).toBe('debug');
+  });
+
+  it('fails fast on a stored value outside the setting domain', async () => {
+    await expect(levelFor('verbose')).rejects.toThrow(
+      'token-usage-log must be off, summary, or debug',
+    );
+  });
+});

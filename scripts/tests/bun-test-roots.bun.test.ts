@@ -107,6 +107,7 @@ describe('BUN_TEST_ROOTS structural guarantees', () => {
   it('has exactly the expected set of root tokens', () => {
     const tokens = BUN_TEST_ROOTS.map((r) => r.root);
     expect(tokens).toEqual([
+      'agent-core',
       'a2a-server',
       'agents',
       'providers',

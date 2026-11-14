@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/agent-core.tsbuildinfo",
+    "lib": ["DOM", "DOM.Iterable", "ES2023", "ES2022.Error"],
+    "composite": false,
+    "types": ["node", "bun-types/test", "bun-types/test-globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-agent-core": ["./index.ts"],
+      "@vybestack/llxprt-code-agent-core/*": ["./src/*"]
+    }
+  },
+  "include": ["../../bun-test-corrections.d.ts", "index.ts", "src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

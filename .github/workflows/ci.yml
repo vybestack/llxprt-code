@@ -388,6 +388,9 @@ jobs:
           npm run lint:cli-boundary
           npm run lint:a2a-boundary
 
+      - name: 'Run agent-core import-boundary guard'
+        run: npm run lint:agent-core-boundary
+
       - name: 'Run Gemini containment guard'
         run: |-
           npm run lint:gemini-containment

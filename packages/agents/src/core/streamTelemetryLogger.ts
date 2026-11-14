@@ -42,6 +42,7 @@ export interface StreamTimingMeasurement {
   readonly lastTokenMs: number | null;
   readonly providerRequestMs: number;
   readonly chunkCount: number;
+  readonly rawTimingStamped: boolean;
 }
 
 function isTokenBearingBlock(block: ContentBlock): boolean {
@@ -125,6 +126,7 @@ export class StreamTimingTracker {
       lastTokenMs: this.lastTokenMs,
       providerRequestMs: performance.now() - this.startMs,
       chunkCount: this.chunkCount,
+      rawTimingStamped: this.rawTimingStamped,
     };
   }
 }
@@ -149,6 +151,41 @@ export class RawTokenDeltaBridge {
   attach(tracker: StreamTimingTracker): void {
     this.tracker = tracker;
   }
+}
+
+/**
+ * Begin one provider attempt's token-usage observation (#4068): apply the
+ * live `token-usage-log` level to the logger and return the attempt's raw
+ * token-delta bridge, or null when the attempt is not logged.
+ *
+ * The bridge and the {@link StreamTimingTracker} it feeds exist only for the
+ * token-usage turn record: the tracker's measurement reaches nothing but
+ * {@link attachStreamTiming}. API-response telemetry times the call from its
+ * own start time, the providers' AttemptRecorder receives raw deltas through
+ * its lifecycle observer independently of this sink
+ * (`resolveRawTokenDeltaNotifier`), and refusal handling (#4036) reads finish
+ * reasons from the chunks. So an `off` attempt installs neither.
+ */
+export function beginTokenUsageAttempt(
+  tokenUsageLogger: TokenUsageLogger | null | undefined,
+): RawTokenDeltaBridge | null {
+  if (tokenUsageLogger === null || tokenUsageLogger === undefined) return null;
+  return tokenUsageLogger.beginRequest() === 'off'
+    ? null
+    : new RawTokenDeltaBridge();
+}
+
+/**
+ * The attempt's timing tracker, attached to its raw-delta bridge, created at
+ * the provider-call boundary. Null when the attempt is not logged.
+ */
+export function startAttemptTiming(
+  bridge: RawTokenDeltaBridge | null | undefined,
+): StreamTimingTracker | null {
+  if (bridge === null || bridge === undefined) return null;
+  const tracker = new StreamTimingTracker();
+  bridge.attach(tracker);
+  return tracker;
 }
 
 /**
@@ -199,9 +236,23 @@ export async function logStreamTelemetry(
 }
 
 /**
+ * Which signal stamped the token window (#4068): `raw` when raw token deltas
+ * did (issue #3493), `visible` when it fell back to visible token-bearing
+ * chunks. Undefined when no token window was measured, so a retry attempt
+ * without one clears the previous attempt's source.
+ */
+function resolveTimingSource(
+  timing: StreamTimingMeasurement | undefined,
+): 'raw' | 'visible' | undefined {
+  if (timing === undefined) return undefined;
+  if (timing.firstTokenMs === null) return undefined;
+  return timing.rawTimingStamped ? 'raw' : 'visible';
+}
+
+/**
  * Attach measured stream timing to the pending token-usage entry for the
  * prompt. Guarded like logStreamTelemetry: a telemetry-side failure must
- * never escape into the stream path. All four keys are attached every
+ * never escape into the stream path. All timing keys are attached every
  * time — null where unmeasured — so a retry attempt fully replaces the
  * prior attempt's timing via the spread-merge. Also used on the
  * stream-error path so a failed attempt's partial timing (with
@@ -220,6 +271,7 @@ export function attachStreamTiming(
       lastTokenMs: timing?.lastTokenMs ?? null,
       providerRequestMs: timing?.providerRequestMs ?? null,
       chunkCount: timing?.chunkCount ?? null,
+      timingSource: resolveTimingSource(timing),
     });
   } catch (error) {
     new DebugLogger('llxprt:stream-telemetry').error(

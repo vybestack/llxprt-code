@@ -200,7 +200,7 @@ function buildCompressionHandler(logFile: string): {
     hookTrigger,
   );
 
-  const logger = new TokenUsageLogger(true, logFile);
+  const logger = new TokenUsageLogger('debug', logFile);
   handler.tokenUsageLogger = logger;
 
   return { handler, logger };
@@ -397,7 +397,7 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
     const { handler } = buildCompressionHandler(logFile);
 
     // Replace logger with a disabled one
-    handler.tokenUsageLogger = new TokenUsageLogger(false, logFile);
+    handler.tokenUsageLogger = new TokenUsageLogger('off', logFile);
 
     await handler.performCompression('test-prompt-disabled');
 

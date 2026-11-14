@@ -59,9 +59,10 @@ import type {
 } from './sendRequestState.js';
 import {
   attachStreamTiming,
+  beginTokenUsageAttempt,
   logStreamTelemetry,
-  RawTokenDeltaBridge,
-  StreamTimingTracker,
+  startAttemptTiming,
+  type RawTokenDeltaBridge,
   type StreamFinishInfo,
 } from './streamTelemetryLogger.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
@@ -110,7 +111,8 @@ export class StreamProcessor {
 
   /**
    * Raw token-delta bridge for the attempt in flight (#3493). Null when no
-   * attempt is in flight; minted fresh per attempt at the retry boundary in
+   * attempt is in flight or the attempt's token-usage level is `off`
+   * (#4068); minted fresh per attempt at the retry boundary in
    * _executeStreamApiCall — where retryWithBackoff re-invokes the apiCall
    * closure — so an abandoned attempt's stream cannot feed the next
    * attempt's tracker. The sink rides request metadata, which the
@@ -328,10 +330,14 @@ export class StreamProcessor {
     // retryWithBackoff re-invokes this closure once per attempt, so the
     // bridge is minted here: each attempt's sink closure stays pointed at
     // its own tracker even after a later attempt attaches its own (#3493).
+    // This is also the attempt's request boundary for the live token-usage
+    // level (#4068); an unlogged attempt gets no bridge.
     const apiCall = () => {
       if (requestAttempt > 0) semanticMediaPurge?.markRetryHandoff();
       requestAttempt += 1;
-      this.currentRawTokenDeltaBridge = new RawTokenDeltaBridge();
+      this.currentRawTokenDeltaBridge = beginTokenUsageAttempt(
+        this.compressionHandler.tokenUsageLogger,
+      );
       const kept = sendState?.replayable();
       if (kept !== undefined) {
         return this._resendKeptRequest(provider, kept, params, promptId);
@@ -734,20 +740,18 @@ export class StreamProcessor {
     let finish: StreamFinishInfo = {};
     // Constructed at generator-body start (first pull — the provider call
     // boundary), so provider_request_ms covers the stream lifecycle alone
-    // and excludes send-seam estimation (#3257).
-    const timing = new StreamTimingTracker();
-    // The provider stream is only iterated inside this generator body, so
-    // attach always happens before any provider code can fire a raw delta.
-    // A null bridge means no attempt context threaded a sink (#3493): the
-    // tracker then runs on visible-chunk timing alone.
-    rawTokenDeltaBridge?.attach(timing);
+    // and excludes send-seam estimation (#3257). The provider stream is only
+    // iterated inside this generator body, so attach always happens before
+    // any provider code can fire a raw delta. A null bridge means the attempt
+    // is not logged (#4068), so no tracker is created.
+    const timing = startAttemptTiming(rawTokenDeltaBridge);
 
     // The caller iterates this generator after _sendProviderRequest returned,
     // so a mid-stream failure never re-enters its try/catch; clear the failed
     // attempt's estimate here so only a successful one stays observable.
     try {
       for await (const iContent of streamResponse) {
-        timing.recordChunk(iContent);
+        timing?.recordChunk(iContent);
         this._trackPromptTokens(iContent);
         const chunk = toModelStreamChunk(iContent);
         if (hookRestrictedAllowedTools !== undefined) {
@@ -779,7 +783,7 @@ export class StreamProcessor {
       attachStreamTiming(
         this.compressionHandler.tokenUsageLogger,
         telemetryContext,
-        timing.measure(),
+        timing?.measure(),
       );
       throw error;
     }
@@ -789,7 +793,7 @@ export class StreamProcessor {
       telemetryContext,
       lastIContent,
       this.compressionHandler.tokenUsageLogger,
-      timing.measure(),
+      timing?.measure(),
       finish,
     );
   }
