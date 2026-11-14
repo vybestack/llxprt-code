@@ -1,0 +1,28 @@
+{
+  "totalExpected": 233,
+  "totalsMentioned": [
+    233
+  ],
+  "totalCorrect": true,
+  "planIds": {
+    "expected": 48,
+    "exact": 48,
+    "wrong": [],
+    "missing": [],
+    "extra": []
+  },
+  "packages": {
+    "expected": 8,
+    "exact": 8,
+    "wrong": [],
+    "missing": [],
+    "extra": []
+  },
+  "commits": {
+    "expected": 42,
+    "exact": 42,
+    "wrong": [],
+    "missing": [],
+    "extra": []
+  }
+}

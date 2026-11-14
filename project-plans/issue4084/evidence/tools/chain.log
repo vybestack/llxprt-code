@@ -1,0 +1,38 @@
+1794640814 start d-read-off
+1794640847 end d-read-off harness-exit 0
+1794640847 start d-read-on
+1794640883 end d-read-on harness-exit 0
+1794640883 start e-approve-deny-on
+1794641199 end e-approve-deny-on harness-exit 1
+1794641199 start f-escape-on
+1794641236 end f-escape-on harness-exit 0
+1794641236 start g-escape-attempts-on
+1794641329 end g-escape-attempts-on harness-exit 0
+1794641329 start i-large-output-on
+1794641394 end i-large-output-on harness-exit 0
+1794641394 start nested-approval
+1794641431 end nested-approval harness-exit 0
+1794641431 chain-done
+1794641455 start e-approve-deny-on
+1794641771 end e-approve-deny-on harness-exit 1
+1794641771 start f-control-direct
+1794641815 end f-control-direct harness-exit 0
+1794641815 start f-control-script-followup
+1794641860 end f-control-script-followup harness-exit 0
+1794641860 chain2-done
+1794644762 start e-approve-deny-on
+1794644806 end e-approve-deny-on harness-exit 0
+1794644806 start g-escape-attempts-on
+1794644858 end g-escape-attempts-on harness-exit 0
+1794644858 start h1-parent-on
+1794645019 end h1-parent-on harness-exit 0
+1794645019 start h2-subagent-off
+1794645195 end h2-subagent-off harness-exit 0
+1794645195 start h3-subagent-on
+1794645327 end h3-subagent-on harness-exit 0
+1794645327 chain-done
+1794645404 start g-escape-attempts-on
+1794645445 end g-escape-attempts-on harness-exit 0
+1794645445 start h3-subagent-on-named
+1794645576 end h3-subagent-on-named harness-exit 0
+1794645576 chain-done

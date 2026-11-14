@@ -1,0 +1,100 @@
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓  Execute tool script Check sandbox access errors while withholding environment contents and filesystem names. [tools: run_shell_comm…
+ ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││    Tool calls: 1 (1 ok)                                                                                                                │
+ ││      ✓ run_shell_command {"command":"pwd","description":"Confirm the script runner workspace."}                                        │
+ ││    Script (16 lines):                                                                                                                  │
+ ││      const cwd = await tools['run_shell_command']({ command: 'pwd', description: 'Confirm the script runner workspace.' });            │
+ ││      const results = { workspaceProbe: cwd.ok ? cwd.value.stdout.trim() : cwd.error.message };                                         │
+ ││      for (const [name, fn] of Object.entries({                                                                                         │
+ ││        processEnv: () => process.env,                                                                                                  │
+ ││        filesystemRoot: () => require('fs').readdirSync('/'),                                                                           │
+ ││        bunGlobal: () => globalThis.Bun,                                                                                                │
+ ││        fetchExample: () => fetch('https://example.com'),                                                                               │
+ ││      })) {                                                                                                                             │
+ ││      … 8 more line(s)                                                                                                                  │
+ ││    Result:                                                                                                                             │
+ ││    {"workspaceProbe":"/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code","processEnv":{"status":"error","name":"ReferenceErr
+ ││    ","message":"'process' is not defined"},"filesystemRoot":{"status":"error","name":"ReferenceError","message":"'require' is not      │
+ ││    defined"},"bunGlobal":{"status":"success","value":"undefined"},"fetchExample":{"status":"error","name":"ReferenceError","message":"'f
+ ││    ch' is not defined"}}                                                                                                               │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Updating todo status
+
+
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ TodoWrite Update todo list with 2 items                                                                                                │
+ ││                                                                                                                                        │
+ ││    ✦ Todo list updated (2 tasks).                                                                                                      │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ The script runner could not access the host environment or filesystem, and no request was made to example.com.
+
+   - process.env: ReferenceError: 'process' is not defined
+   - require('fs').readdirSync('/'): ReferenceError: 'require' is not defined
+   - globalThis.Bun: undefined (no error)
+   - fetch('https://example.com'): ReferenceError: 'fetch' is not defined
+
+  The TODO list is complete.                                                                                                               █
+                                                                                                                                           █
+╭────────────╮                                                                                                                             █
+│  > /stats  │                                                                                                                             █
+╰────────────╯                                                                                                                             █
+                                                                                                                                           █
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮█
+│                                                                                                                                         │█
+│  Session Stats                                                                                                                          │█
+│                                                                                                                                         │█
+│  Session API                                                                                                                            │█
+│  Total Requests:             5                                                                                                          │█
+│  Total Errors:               0                                                                                                          │█
+│  Avg Latency:                13.3s                                                                                                      │█
+│                                                                                                                                         │█
+│  Interaction Summary                                                                                                                    │█
+│  Session ID:                 session-1794641239143-4dyhs9t46                                                                            │█
+│  Tool Calls:                 5 ( OK 4 ERR 1 )                                                                                           │█
+│    » Total Duration:         547ms                                                                                                      │█
+│  Success Rate:               80.0%                                                                                                      │█
+│  User Agreement:             100.0% (5 reviewed)                                                                                        │█
+│                                                                                                                                         │█
+│  Performance                                                                                                                            │█
+│  Wall Time:                  1m 28s                                                                                                     │█
+│  Agent Active:               1m 6s (interval union)                                                                                     │█
+│  Accumulated Work:           1m 7s (API+Tool)                                                                                           │█
+│    » API Time:               1m 6s (99.2%)                                                                                              │█
+│    » Tool Time:              547ms (0.8%)                                                                                               │█
+│    » Throughput (TPM):       112.75k TPM (session weighted)                                                                             │█
+│    » Last Request TPM:       633.17k TPM                                                                                                │█
+│    » TTFT (last):            581ms (avg: 6381ms)                                                                                        │█
+│    » Output Gen Rate:        68.65 tok/s (session weighted) (last: 58.03)                                                               │█
+│    » Input Rate (eff):       3842.44 tok/s (ΣP/ΣTTFT) (last: 44275.75)                                                                  │█
+│    » Uncached Input:         1543.54 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │█
+│                                                                                                                                         │█
+│                                                                                                                                         │█
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │█
+│  ────────────────────────────────────────────────────────────────────────────                                                           │█
+│  gpt-6-luna                     5         49,245        73,344          2,361                                                           │█
+│    Latency: 13.3s avg / 1m 6s total                                                                                                     │█
+│                                                                                                                                         │█
+│  Savings Highlight: 73,344 (59.8%) of input tokens were served from the cache, reducing costs.                                          │█
+│                                                                                                                                         │█
+│  Quota Information                                                                                                                      │█
+│  ## Claude Code Quota Information                                                                                                       │█
+│                                                                                                                                         │█
+│    7-day window: 92.0% used (resets in 122h 31m)                                                                                        │█
+│  ## Codex Quota Information                                                                                                             │█
+│                                                                                                                                         │█
+│    5-hour limit: 20% used (resets in 160h 15m)                                                                                          │█
+│    Credits: None                                                                                                                        │█
+│                                                                                                                                         │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084)Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 25,706/262,144 tokens | TPM: 112.74k | Wait: 0ms | 04:28:48
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                lunahigh:gpt-6-luna | Tokens: 124,950

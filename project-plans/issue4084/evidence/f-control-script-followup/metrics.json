@@ -1,0 +1,43 @@
+{
+  "run": "f-control-script-followup",
+  "commit": "9e3d89e4bac581af9268296c69a7efff1d304b9f",
+  "sessionId": "7f0b9415-9f05-4602-b76e-aae7f2a9c010",
+  "harnessWallSeconds": 45,
+  "turnSeconds": 22.863,
+  "parent": {
+    "requests": 2,
+    "failedAttempts": [],
+    "inputTokens": 46383,
+    "cachedTokens": 22912,
+    "outputTokens": 152,
+    "lastRequestInputTokens": 23308,
+    "maxRequestInputTokens": 23308,
+    "toolResultTokens": 1,
+    "toolCalls": 1,
+    "toolCallsByName": {
+      "execute_tool_script": 1
+    }
+  },
+  "children": {},
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "execute_tool_script": 1
+  },
+  "nestedToolCalls": 1,
+  "nestedToolCallsByName": {
+    "run_shell_command": 1
+  },
+  "scriptRuns": [
+    {
+      "ok": false,
+      "errorCode": "CANCELLED",
+      "callCount": 1,
+      "partial": false,
+      "inputBytes": 113,
+      "finalBytes": 0,
+      "durationMs": 3635.516916999999
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 3
+}

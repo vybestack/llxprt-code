@@ -1,0 +1,100 @@
+╭───────────╮
+│  > /quit  │
+╰───────────╯
+
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                          │
+│  Agent powering down. Goodbye!                                                                                                           │
+│                                                                                                                                          │
+│  Session API                                                                                                                             │
+│  Total Requests:             3                                                                                                           │
+│  Total Errors:               0                                                                                                           │
+│  Avg Latency:                12.1s                                                                                                       │
+│                                                                                                                                          │
+│  Interaction Summary                                                                                                                     │
+│  Session ID:                 session-1794640044530-yq8j6mb3v                                                                             │
+│  Tool Calls:                 2 ( OK 2 ERR 0 )                                                                                            │
+│    » Total Duration:         813ms                                                                                                       │
+│  Success Rate:               100.0%                                                                                                      │
+│  User Agreement:             100.0% (2 reviewed)                                                                                         │
+│                                                                                                                                          │
+│  Performance                                                                                                                             │
+│  Wall Time:                  57.6s                                                                                                       │
+│  Agent Active:               37.1s (interval union)                                                                                      │
+│  Accumulated Work:           37.1s (API+Tool)                                                                                            │
+│    » API Time:               36.3s (97.8%)                                                                                               │
+│    » Tool Time:              813ms (2.2%)                                                                                                │
+│    » Throughput (TPM):       123.50k TPM (session weighted)                                                                              │
+│    » Last Request TPM:       141.77k TPM                                                                                                 │
+│    » TTFT (last):            8118ms (avg: 7353ms)                                                                                        │
+│    » Output Gen Rate:        111.65 tok/s (session weighted) (last: 167.31)                                                              │
+│    » Input Rate (eff):       3316.59 tok/s (ΣP/ΣTTFT) (last: 3227.78)                                                                    │
+│    » Uncached Input:         1204.33 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                           │
+│                                                                                                                                          │
+│                                                                                                                                          │
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                            │
+│  ────────────────────────────────────────────────────────────────────────────                                                            │
+│  gpt-6-luna                     3         26,565        46,592          1,582                                                            │
+│    Latency: 12.1s avg / 36.3s total                                                                                                      │
+│                                                                                                                                          │
+│  Savings Highlight: 46,592 (63.7%) of input tokens were served from the cache, reducing costs.                                           │
+│                                                                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+Final Session Summary
+API Requests: 3
+Total Tokens: 74,739
+Completed TPM: 123501.39
+Tool Calls: 2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pane is dead (status 0, Sat Nov 14 04:08:22 2026)

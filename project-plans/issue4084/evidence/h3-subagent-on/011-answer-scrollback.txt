@@ -1,0 +1,100 @@
+  │ PLAN-20260610-ISSUE1592.P03                         │ 1     │
+  │ PLAN-20260617-COREAPI.P14                           │ 1     │
+  │ PLAN-20260617-COREAPI.P15                           │ 1     │
+  │ PLAN-20260702-LLMTYPES.P04                          │ 1     │
+  │ PLAN-20260707-AGENTNEUTRAL.P07/P11                  │ 1     │
+  │ PLAN-20260707-AGENTNEUTRAL.P08                      │ 1     │
+  │ PLAN-20260707-AGENTNEUTRAL.P15                      │ 1     │
+  │ PLAN-20260707-AGENTNEUTRAL.P26                      │ 1     │
+  │ PLAN-20260806-ISSUE3048.P08                         │ 1     │
+  │ PLAN-20260825-SHELLMEM.P02                          │ 1     │
+  │ PLAN-20260827-ISSUE2562.P04                         │ 1     │
+  │ PLAN-20260914-HOOKWIREV2                            │ 1     │
+  │ ISSUE-3222 (written as @plan:ISSUE-3222)            │ 1     │
+  │ project-plans/issue4001.md (a file path, not an ID) │ 1     │
+  └─────────────────────────────────────────────────────┴───────┘
+
+
+  The subagent noted that PLAN-20260707-AGENTNEUTRAL.P07/P11 is composite as written. The final two entries are not plan IDs in the usual
+  form.
+
+  Count per package
+
+
+  ┌────────────────────┬───────┐
+  │ Package            │ Count │
+  ├────────────────────┼───────┤
+  │ packages/agents    │ 115   │
+  │ packages/core      │ 85    │
+  │ packages/providers │ 25    │
+  │ packages/mcp       │ 3     │
+  │ packages/settings  │ 2     │
+  │ packages/cli       │ 1     │
+  │ packages/storage   │ 1     │
+  │ packages/telemetry │ 1     │
+  └────────────────────┴───────┘
+
+
+  All 233 markers are under packages/.
+
+  Count per blame commit
+
+
+  ┌───────────────────┬───────┐
+  │ Short commit hash │ Count │
+  ├───────────────────┼───────┤
+  │ fbd20c17          │ 64    │
+  │ bf52702e          │ 21    │
+  │ c9895f44          │ 17    │
+  │ 9169c294          │ 15    │
+  │ 44dd67c8          │ 9     │
+  │ 7c598c30          │ 9     │
+  │ e5cb79a8          │ 9     │
+  │ 85da6b37          │ 8     │
+  │ 2a0cd9dd          │ 7     │
+  │ aed9b68f          │ 7     │
+  │ b1c1eb0b          │ 6     │
+  │ 205b0e5d          │ 5     │
+  │ 293093b5          │ 5     │
+  │ 20774984          │ 4     │
+  │ edbbc310          │ 4     │
+  │ 1abefc1d          │ 3     │
+  │ 4312970d          │ 3     │
+  │ 96a42daf          │ 3     │
+  │ c3ec9d30          │ 3     │
+  │ e3e41b49          │ 3     │
+  │ 065db2db          │ 2     │
+  │ 104acfbe          │ 2     │
+  │ 794c53ad          │ 2     │
+  │ 9507c471          │ 2     │
+  │ acb4a26a          │ 2     │
+  │ f43536cd          │ 2     │
+  │ 066ec971          │ 1     │
+  │ 1af23ee9          │ 1     │
+  │ 274e9e9f          │ 1     │
+  │ 3aee3d95          │ 1     │
+  │ 4f097961          │ 1     │
+  │ 6c4a1a1f          │ 1     │
+  │ 83cfce56          │ 1     │
+  │ 870d8f22          │ 1     │
+  │ a404d5d8          │ 1     │
+  │ b3cebcc5          │ 1     │
+  │ b4052a09          │ 1     │
+  │ d2effd46          │ 1     │                                                                                                            █
+  │ d860795c          │ 1     │                                                                                                            █
+  │ e0ab0cc6          │ 1     │                                                                                                            █
+  │ e6e8f1bf          │ 1     │                                                                                                            █
+  │ ff0a0faa          │ 1     │                                                                                                            █
+  └───────────────────┴───────┘                                                                                                            █
+                                                                                                                                           █
+                                                                                                                                           █
+  The subagent’s response says there are 42 distinct commits, but its table also includes a duplicate edbbc310 row marked “counted above.” █
+  The listed numeric counts sum to 233. It identified fbd20c17 as the largest source, with 64 markers.                                     █
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084* Heap: 0.4GB External: 0.3GB ArrayBuffers: 0.1GB RSS: 0.3G | Context: 24,811/262,144 tokens | TPM: 398.00k | Wait: 0ms | 05:35:23
+)
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 22,703

@@ -1,0 +1,31 @@
+{
+  "run": "h1-parent-on",
+  "commit": "5e2c1835e2001e1d158db8b44812c78f48c3e8f7",
+  "sessionId": "eaf4aef7-68fd-4370-8546-da5ed35e5925",
+  "harnessWallSeconds": 161,
+  "turnSeconds": 126.069,
+  "parent": {
+    "requests": 5,
+    "failedAttempts": [],
+    "inputTokens": 166456,
+    "cachedTokens": 125440,
+    "outputTokens": 4427,
+    "lastRequestInputTokens": 40381,
+    "maxRequestInputTokens": 40381,
+    "toolResultTokens": 14785,
+    "toolCalls": 4,
+    "toolCallsByName": {
+      "run_shell_command": 4
+    }
+  },
+  "children": {},
+  "directToolCalls": 4,
+  "directToolCallsByName": {
+    "run_shell_command": 4
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

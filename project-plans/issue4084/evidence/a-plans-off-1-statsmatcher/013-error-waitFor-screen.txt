@@ -1,0 +1,45 @@
+│  Interaction Summary                                                                                                                    │
+│  Session ID:                 session-1794638808362-0yac7djpf                                                                            │
+│  Tool Calls:                 3 ( OK 3 ERR 0 )                                                                                           │
+│    » Total Duration:         44.7s                                                                                                      │
+│  Success Rate:               100.0%                                                                                                     │
+│  User Agreement:             100.0% (3 reviewed)                                                                                        │
+│                                                                                                                                         │
+│  Performance                                                                                                                            │
+│  Wall Time:                  2m 20s                                                                                                     │
+│  Agent Active:               2m 3s (interval union)                                                                                     │
+│  Accumulated Work:           2m 3s (API+Tool)                                                                                           │
+│    » API Time:               1m 19s (63.9%)                                                                                             │
+│    » Tool Time:              44.7s (36.1%)                                                                                              │
+│    » Throughput (TPM):       113.18k TPM (session weighted)                                                                             │
+│    » Last Request TPM:       89.33k TPM                                                                                                 │
+│    » TTFT (last):            7354ms (avg: 6601ms)                                                                                       │
+│    » Output Gen Rate:        79.95 tok/s (session weighted) (last: 71.45)                                                               │
+│    » Input Rate (eff):       5497.47 tok/s (ΣP/ΣTTFT) (last: 5828.20)                                                                   │
+│    » Uncached Input:         1643.40 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │
+│  ────────────────────────────────────────────────────────────────────────────                                                           │
+│  gpt-6-luna                     4         43,391       101,760          4,203                                                           │
+│    Latency: 19.8s avg / 1m 19s total                                                                                                    │
+│                                                                                                                                         │
+│  Savings Highlight: 101,760 (70.1%) of input tokens were served from the cache, reducing costs.                                         │
+│                                                                                                                                         │
+│  Quota Information                                                                                                                      │
+│  ## Claude Code Quota Information                                                                                                       │
+│                                                                                                                                         │
+│    7-day window: 89.0% used (resets in 123h 10m)                                                                                        │
+│  ## Codex Quota Information                                                                                                             │
+│                                                                                                                                         │
+│    5-hour limit: 18% used (resets in 160h 55m)                                                                                          │
+│    Credits: None                                                                                                                        │
+│                                                                                                                                         │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084)Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 42,858/262,144 tokens | TPM: 113.17k | Wait: 0ms | 03:49:37
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                lunahigh:gpt-6-luna | Tokens: 149,354

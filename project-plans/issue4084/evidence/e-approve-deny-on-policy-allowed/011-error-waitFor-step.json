@@ -1,0 +1,10 @@
+{
+  "index": 11,
+  "step": {
+    "type": "waitFor",
+    "scope": "screen",
+    "contains": "Allow once",
+    "timeoutMs": 300000
+  },
+  "error": "Timed out waiting for step 11 (contains \"Allow once\") in screen after 300000ms"
+}

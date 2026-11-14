@@ -1,0 +1,2 @@
+startInteractiveUI version=0.12.0 stdoutTTY=true columns=140 rows=100 builtinOnly=undefined suppressStatic=undefined
+renderOptions alternateBuffer=true incrementalRendering=true stdoutColumns=140 stdoutRows=100

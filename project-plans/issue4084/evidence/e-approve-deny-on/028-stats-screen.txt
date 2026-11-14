@@ -1,0 +1,100 @@
+
+     ░██        ░██        ░██    ░██░█████████ ░█████████░██████████
+░██  ░██        ░██         ░██  ░██ ░██     ░██░██     ░██   ░██
+ ░██ ░██        ░██          ░██░██  ░██     ░██░██     ░██   ░██
+  ░██░██        ░██           ░███   ░█████████ ░█████████    ░██
+ ░██ ░██        ░██          ░██░██  ░██        ░██   ░██     ░██
+░██  ░██        ░██         ░██  ░██ ░██        ░██    ░██    ░██
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+
+Tips for getting started:
+1. Ask questions, edit files, or run commands.
+2. Be specific for the best results.
+3. /help for more information.
+
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  > Using execute_tool_script, run `git log -5 --format=%s` and then `git branch --show-current` as two separate run_shell_command calls  │
+│    in one script, and return both outputs.                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Responding with: lunahigh:gpt-6-luna
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ x                                                                                                                                      │
+ ││ Execute tool script Get the five latest commit subjects and current branch in separate shell calls. [tools: run_shell_command]         │
+ ││                                                                                                                                        │
+ ││    {"ok":false,"error":{"code":"APPROVAL_DENIED","message":"The user did not allow                                                     │
+ ││    run_shell_command."},"callCount":2,"partial":false,"completedCalls":[{"tool":"run_shell_command","status":"ok"},{"tool":"run_shell_co
+ ││    and","status":"denied"}],"logs":[]}                                                                                                 │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Second run remains incomplete
+
+ The script ran git log -5 --format=%s, but the git branch --show-current call was denied, so I can’t return both outputs.
+
+╭────────────╮
+│  > /stats  │
+╰────────────╯
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                         │
+│  Session Stats                                                                                                                          │
+│                                                                                                                                         │
+│  Session API                                                                                                                            │
+│  Total Requests:             2                                                                                                          │
+│  Total Errors:               0                                                                                                          │
+│  Avg Latency:                7.3s                                                                                                       │
+│                                                                                                                                         │
+│  Interaction Summary                                                                                                                    │
+│  Session ID:                 session-1794644767919-tle3i808g                                                                            │
+│  Tool Calls:                 3 ( OK 1 ERR 1 CNL 1 )                                                                                     │
+│    » Total Duration:         5.8s                                                                                                       │
+│  Success Rate:               33.3%                                                                                                      │
+│  User Agreement:             66.7% (3 reviewed)                                                                                         │
+│                                                                                                                                         │
+│  Performance                                                                                                                            │
+│  Wall Time:                  35.7s                                                                                                      │
+│  Agent Active:               17.6s (interval union)                                                                                     │
+│  Accumulated Work:           20.4s (API+Tool)                                                                                           │
+│    » API Time:               14.6s (71.7%)                                                                                              │
+│    » Tool Time:              5.8s (28.3%)                                                                                               │
+│    » Throughput (TPM):       192.29k TPM (session weighted)                                                                             │
+│    » Last Request TPM:       155.42k TPM                                                                                                │
+│    » TTFT (last):            8817ms (avg: 7153ms)                                                                                       │
+│    » Output Gen Rate:        6323.74 tok/s (session weighted) (last: 6323.74)                                                           │
+│    » Input Rate (eff):       3247.83 tok/s (ΣP/ΣTTFT) (last: 2651.25)                                                                   │
+│    » Uncached Input:         1646.18 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │
+│  ────────────────────────────────────────────────────────────────────────────                                                           │
+│  gpt-6-luna                     2         23,549        22,912            331                                                           │
+│    Latency: 7.3s avg / 14.6s total                                                                                                      │
+│                                                                                                                                         │
+│  Savings Highlight: 22,912 (49.3%) of input tokens were served from the cache, reducing costs.                                          │
+│                                                                                                                                         │
+│  Quota Information                                                                                                                      │
+│  ## Claude Code Quota Information                                                                                                       │
+│                                                                                                                                         │
+│    7-day window: 95.0% used (resets in 121h 33m)                                                                                        │
+│  ## Codex Quota Information                                                                                                             │
+│                                                                                                                                         │
+│    5-hour limit: 22% used (resets in 159h 17m)                                                                                          │
+│    Credits: None                                                                                                                        │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084* Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3G | Context: 23,376/262,144 tokens | TPM: 192.26k | Wait: 0ms | 05:26:45
+)
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 46,792

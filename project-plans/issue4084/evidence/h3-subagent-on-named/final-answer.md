@@ -1,0 +1,85 @@
+The subagent found **233 `@plan` markers** across 41 files, among 340 TypeScript files changed between `e3c1782b96~10` and `e3c1782b96`. It read the files at `e3c1782b96` and used blame at that commit to group markers by the commit that last touched each line. Each breakdown totals 233.
+
+**By plan ID (47 distinct):**
+```text
+PLAN-20260617-COREAPI.P10                          48
+PLAN-20260617-COREAPI.P20                          25
+PLAN-20260211-SESSIONRECORDING.P05                 20
+PLAN-20251028-STATELESS6.P06                       11
+PLAN-20251202-THINKING.P03b                        10
+PLAN-20260731-GHBROKER.P17                         10
+PLAN-20260211-SESSIONRECORDING.P14                  9
+PLAN-20251028-STATELESS6.P07                        7
+PLAN-20260211-COMPRESSION.P12                       7
+PLAN-20260707-AGENTNEUTRAL.P13                      7
+PLAN-20260707-AGENTNEUTRAL.P11                      6
+PLAN-20260608-ISSUE1586.P15                         5
+PLAN-20260707-AGENTNEUTRAL.P07                      5
+PLAN-20260731-GHBROKER.P19                         5
+PLAN-20260211-HIGHDENSITY.P15                       4
+PLAN-20260211-SESSIONRECORDING.P08                  4
+PLAN-20260603-ISSUE1584.P05                         4
+PLAN-20250823-AUTHFIXES.P14                         3
+PLAN-20260211-HIGHDENSITY.P08                       3
+PLAN-20260608-ISSUE1586.P12                         3
+PLAN-20260617-COREAPI.P22                           3
+PLAN-20260707-AGENTNEUTRAL.P19                      3
+PLAN-20260211-SESSIONRECORDING.P03                  2
+PLAN-20260603-ISSUE1584.P12                         2
+PLAN-20260608-ISSUE1588.P05                         2
+PLAN-20260610-ISSUE1592.P01                         2
+PLAN-20260617-COREAPI.P04                           2
+PLAN-20260707-AGENTNEUTRAL.P27                      2
+ISSUE-3222                                          1
+PLAN-20251027-STATELESS5.P06                        1
+PLAN-20260130-ASYNCTASK.P09                         1
+PLAN-20260216-HOOKSYSTEMREWRITE.P21                1
+PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P06         1
+PLAN-20260603-ISSUE1584.P11                         1
+PLAN-20260609-ISSUE1590.P04b                        1
+PLAN-20260610-ISSUE1592.P03                         1
+PLAN-20260617-COREAPI.P14                           1
+PLAN-20260617-COREAPI.P15                           1
+PLAN-20260702-LLMTYPES.P04                          1
+PLAN-20260707-AGENTNEUTRAL.P08                      1
+PLAN-20260707-AGENTNEUTRAL.P15                      1
+PLAN-20260707-AGENTNEUTRAL.P26                      1
+PLAN-20260806-ISSUE3048.P08                         1
+PLAN-20260825-SHELLMEM.P02                          1
+PLAN-20260827-ISSUE2562.P04                         1
+PLAN-20260914-HOOKWIREV2                            1
+project-plans                                        1
+```
+
+`project-plans` is the token following `@plan`; the subagent did not inspect its surrounding text to determine whether it was a plan ID.
+
+**By package:**
+```text
+packages/agents       115
+packages/core          85
+packages/providers     25
+packages/mcp            3
+packages/settings       2
+packages/cli            1
+packages/storage        1
+packages/telemetry      1
+```
+No markers were found outside `packages/`.
+
+**By blame commit (8-character short hash):**
+```text
+fbd20c17  64    bf52702e  21    c9895f44  17    9169c294  15
+44dd67c8   9    7c598c30   9    e5cb79a8   9    85da6b37   8
+2a0cd9dd   7    aed9b68f   7    b1c1eb0b   6    205b0e5d   5
+293093b5   5    edbbc310   4    20774984   4
+1abefc1d   3    4312970d   3    96a42daf   3    c3ec9d30   3
+e3e41b49   3
+065db2db   2    104acfbe   2    794c53ad   2    9507c471   2
+acb4a26a   2    f43536cd   2
+066ec971   1    1af23ee9   1    274e9e9f   1    3aee3d95   1
+4f097961   1    6c4a1a1f   1    83cfce56   1    870d8f22   1
+a404d5d8   1    b3cebcc5   1    b4052a09   1    d2effd46   1
+d860795c   1    e0ab0cc6   1    e6e8f1bf   1    ff0a0faa   1
+```
+
+**Total: 233 markers.**

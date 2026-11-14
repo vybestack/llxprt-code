@@ -1,0 +1,100 @@
+
+     ░██        ░██        ░██    ░██░█████████ ░█████████░██████████
+░██  ░██        ░██         ░██  ░██ ░██     ░██░██     ░██   ░██
+ ░██ ░██        ░██          ░██░██  ░██     ░██░██     ░██   ░██
+  ░██░██        ░██           ░███   ░█████████ ░█████████    ░██
+ ░██ ░██        ░██          ░██░██  ░██        ░██   ░██     ░██
+░██  ░██        ░██         ░██  ░██ ░██        ░██    ░██    ░██
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+
+Tips for getting started:
+1. Ask questions, edit files, or run commands.
+2. Be specific for the best results.
+3. /help for more information.
+
+╭───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+│  > Using execute_tool_script, write a script that runs `sleep 30` through run_shell_command and then returns "done". Do not run anything
+│    else.
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+  Responding with: lunahigh:gpt-6-luna
+
+ℹ Request cancelled.
+
+╭────────────────────────────────────────────────────────────────────────────────────╮
+│  > ps -ax | grep -E 'quickjs-wrapper|sleep 30' | grep -v grep; echo ps-check-done  │
+╰────────────────────────────────────────────────────────────────────────────────────╯
+
+$ ps -ax | grep -E 'quickjs-wrapper|sleep 30' | grep -v grep; echo ps-check-done
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ Shell Command ps -ax | grep -E 'quickjs-wrapper|sleep 30' | grep -v grep; echo ps-check-done                                           │
+ ││                                                                                                                                        │
+ ││    ps-check-done                                                                                                                       │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭────────────╮
+│  > /stats  │
+╰────────────╯
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                         │
+│  Session Stats                                                                                                                          │
+│                                                                                                                                         │
+│  Session API                                                                                                                            │
+│  Total Requests:             1                                                                                                          │
+│  Total Errors:               0                                                                                                          │
+│  Avg Latency:                3.3s                                                                                                       │
+│                                                                                                                                         │
+│  Interaction Summary                                                                                                                    │
+│  Session ID:                 session-1794641202966-k44hjrxt6                                                                            │
+│  Tool Calls:                 2 ( OK 0 ERR 0 CNL 2 )                                                                                     │
+│    » Total Duration:         6.7s                                                                                                       │
+│  Success Rate:               0.0%                                                                                                       │
+│  User Agreement:             50.0% (2 reviewed)                                                                                         │
+│                                                                                                                                         │
+│  Performance                                                                                                                            │
+│  Wall Time:                  31.4s                                                                                                      │
+│  Agent Active:               6.7s (interval union)                                                                                      │
+│  Accumulated Work:           10.0s (API+Tool)                                                                                           │
+│    » API Time:               3.3s (33.3%)                                                                                               │
+│    » Tool Time:              6.7s (66.7%)                                                                                               │
+│    » Throughput (TPM):       417.37k TPM (session weighted)                                                                             │
+│    » Last Request TPM:       417.37k TPM                                                                                                │
+│    » TTFT (last):            3290ms (avg: 3290ms)                                                                                       │
+│    » Input Rate (eff):       7010.41 tok/s (ΣP/ΣTTFT) (last: 7010.41)                                                                   │
+│    » Uncached Input:         7010.41 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │
+│  ────────────────────────────────────────────────────────────────────────────                                                           │
+│  gpt-6-luna                     1         23,066             0            128                                                           │
+│    Latency: 3.3s avg / 3.3s total                                                                                                       │
+│                                                                                                                                         │
+│  Quota Information                                                                                                                      │
+│  ## Claude Code Quota Information                                                                                                       │
+│                                                                                                                                         │
+│    7-day window: 92.0% used (resets in 122h 32m)                                                                                        │
+│  ## Codex Quota Information                                                                                                             │
+│                                                                                                                                         │
+│    5-hour limit: 20% used (resets in 160h 17m)                                                                                          │
+│    Credits: None                                                                                                                        │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084)Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 23,120/262,144 tokens | TPM: 417.23k | Wait: 0ms | 04:27:15
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 23,194

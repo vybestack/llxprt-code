@@ -1,0 +1,43 @@
+{
+  "run": "nested-approval",
+  "commit": "9e3d89e4bac581af9268296c69a7efff1d304b9f",
+  "sessionId": "08880b44-ef64-45b4-8a3a-0d0749bb477b",
+  "harnessWallSeconds": 37,
+  "turnSeconds": 7.159,
+  "parent": {
+    "requests": 2,
+    "failedAttempts": [],
+    "inputTokens": 46538,
+    "cachedTokens": 23040,
+    "outputTokens": 168,
+    "lastRequestInputTokens": 23382,
+    "maxRequestInputTokens": 23382,
+    "toolResultTokens": 69,
+    "toolCalls": 1,
+    "toolCallsByName": {
+      "execute_tool_script": 1
+    }
+  },
+  "children": {},
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "execute_tool_script": 1
+  },
+  "nestedToolCalls": 2,
+  "nestedToolCallsByName": {
+    "glob": 1,
+    "run_shell_command": 1
+  },
+  "scriptRuns": [
+    {
+      "ok": true,
+      "callCount": 2,
+      "partial": false,
+      "inputBytes": 415,
+      "finalBytes": 60,
+      "durationMs": 281.37162499999977
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

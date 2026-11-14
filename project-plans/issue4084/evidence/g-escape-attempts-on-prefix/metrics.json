@@ -1,0 +1,44 @@
+{
+  "run": "g-escape-attempts-on-prefix",
+  "commit": "9e3d89e4bac581af9268296c69a7efff1d304b9f",
+  "sessionId": "80442dc3-2c5f-48be-bc2b-77c9c001d19f",
+  "harnessWallSeconds": 93,
+  "turnSeconds": 57.72,
+  "parent": {
+    "requests": 5,
+    "failedAttempts": [],
+    "inputTokens": 122589,
+    "cachedTokens": 73344,
+    "outputTokens": 2361,
+    "lastRequestInputTokens": 25706,
+    "maxRequestInputTokens": 25706,
+    "toolResultTokens": 320,
+    "toolCalls": 4,
+    "toolCallsByName": {
+      "todo_write": 2,
+      "execute_tool_script": 2
+    }
+  },
+  "children": {},
+  "directToolCalls": 4,
+  "directToolCallsByName": {
+    "todo_write": 2,
+    "execute_tool_script": 2
+  },
+  "nestedToolCalls": 1,
+  "nestedToolCallsByName": {
+    "run_shell_command": 1
+  },
+  "scriptRuns": [
+    {
+      "ok": true,
+      "callCount": 1,
+      "partial": false,
+      "inputBytes": 169,
+      "finalBytes": 418,
+      "durationMs": 144.1922909999994
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

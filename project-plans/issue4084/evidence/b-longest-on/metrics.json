@@ -1,0 +1,35 @@
+{
+  "run": "b-longest-on",
+  "commit": "c536831a7568ba5569fe3612b2ce19d95aac82ef",
+  "sessionId": "555c1d9e-fbaf-48c0-8376-47a914b20f1c",
+  "harnessWallSeconds": 73,
+  "turnSeconds": 37.045,
+  "parent": {
+    "requests": 4,
+    "failedAttempts": [],
+    "inputTokens": 104752,
+    "cachedTokens": 75264,
+    "outputTokens": 1852,
+    "lastRequestInputTokens": 29083,
+    "maxRequestInputTokens": 29083,
+    "toolResultTokens": 4902,
+    "toolCalls": 3,
+    "toolCallsByName": {
+      "glob": 1,
+      "run_shell_command": 1,
+      "read_line_range": 1
+    }
+  },
+  "children": {},
+  "directToolCalls": 3,
+  "directToolCallsByName": {
+    "glob": 1,
+    "run_shell_command": 1,
+    "read_line_range": 1
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

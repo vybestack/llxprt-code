@@ -1,0 +1,248 @@
+{
+  "excludingTests": {
+    "includeTests": false,
+    "namedOnly": false,
+    "expectedTop10": [
+      "chatSession.ts:constructor:99",
+      "coreToolScheduler.ts:attemptExecutionOfScheduledCalls:99",
+      "boundaryRecovery.ts:recoverPendingBoundary:97",
+      "client.ts:restoreHistory:95",
+      "MessageStreamTerminalHandler.ts:handleErrorEvent:89",
+      "turn.ts:acquireFirstStreamEvent:89",
+      "turn.ts:run:87",
+      "MessageStreamOrchestrator.ts:_processStreamIteration:86",
+      "clientLlmUtilities.ts:generateJson:85",
+      "subagentNonInteractive.ts:readStreamToCompletion:85"
+    ],
+    "tiedAtCutoff": 4,
+    "rowsFound": 10,
+    "inTop10": 10,
+    "inTop10ExactLength": 10,
+    "results": [
+      {
+        "row": "| ChatSession constructor | packages/agents/src/core/chatSession.ts | 99 |",
+        "matched": "chatSession.ts:constructor:99",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| attemptExecutionOfScheduledCalls | packages/agents/src/core/coreToolScheduler.ts | 99 |",
+        "matched": "coreToolScheduler.ts:attemptExecutionOfScheduledCalls:99",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| recoverPendingBoundary | packages/agents/src/core/boundaryRecovery.ts | 97 |",
+        "matched": "boundaryRecovery.ts:recoverPendingBoundary:97",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| restoreHistory | packages/agents/src/core/client.ts | 95 |",
+        "matched": "client.ts:restoreHistory:95",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| handleErrorEvent | packages/agents/src/core/MessageStreamTerminalHandler.ts | 89 |",
+        "matched": "MessageStreamTerminalHandler.ts:handleErrorEvent:89",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| acquireFirstStreamEvent | packages/agents/src/core/turn.ts | 89 |",
+        "matched": "turn.ts:acquireFirstStreamEvent:89",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| run | packages/agents/src/core/turn.ts | 87 |",
+        "matched": "turn.ts:run:87",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| _processStreamIteration | packages/agents/src/core/MessageStreamOrchestrator.ts | 86 |",
+        "matched": "MessageStreamOrchestrator.ts:_processStreamIteration:86",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| readStreamToCompletion | packages/agents/src/core/subagentNonInteractive.ts | 85 |",
+        "matched": "subagentNonInteractive.ts:readStreamToCompletion:85",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| generateJson | packages/agents/src/core/clientLlmUtilities.ts | 85 |",
+        "matched": "clientLlmUtilities.ts:generateJson:85",
+        "inTop10": true,
+        "lengthDelta": 0
+      }
+    ]
+  },
+  "all": {
+    "includeTests": true,
+    "namedOnly": false,
+    "expectedTop10": [
+      "__tests__/subagentOrchestrator-runtime.test.ts:<anonymous>:843",
+      "chatSession.media-history.test.ts:<anonymous>:825",
+      "subagent.runNonInteractive-term.test.ts:<anonymous>:815",
+      "chatSession.runtime.history.test.ts:<anonymous>:783",
+      "TokenUsageLogger.integration.test.ts:<anonymous>:783",
+      "profile/__tests__/profileController.lifecycle.test.ts:<anonymous>:763",
+      "chatSession.issue2150.test.ts:<anonymous>:753",
+      "profile/__tests__/profileController.serialization.test.ts:<anonymous>:748",
+      "turn.preRequestTimeout.test.ts:<anonymous>:744",
+      "client.sendMessageStream-overflow.test.ts:<anonymous>:740"
+    ],
+    "tiedAtCutoff": 2,
+    "rowsFound": 10,
+    "inTop10": 0,
+    "inTop10ExactLength": 0,
+    "results": [
+      {
+        "row": "| ChatSession constructor | packages/agents/src/core/chatSession.ts | 99 |",
+        "matched": "chatSession.ts:constructor:99",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| attemptExecutionOfScheduledCalls | packages/agents/src/core/coreToolScheduler.ts | 99 |",
+        "matched": "coreToolScheduler.ts:attemptExecutionOfScheduledCalls:99",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| recoverPendingBoundary | packages/agents/src/core/boundaryRecovery.ts | 97 |",
+        "matched": "boundaryRecovery.ts:recoverPendingBoundary:97",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| restoreHistory | packages/agents/src/core/client.ts | 95 |",
+        "matched": "client.ts:restoreHistory:95",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| handleErrorEvent | packages/agents/src/core/MessageStreamTerminalHandler.ts | 89 |",
+        "matched": "MessageStreamTerminalHandler.ts:handleErrorEvent:89",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| acquireFirstStreamEvent | packages/agents/src/core/turn.ts | 89 |",
+        "matched": "turn.ts:acquireFirstStreamEvent:89",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| run | packages/agents/src/core/turn.ts | 87 |",
+        "matched": "turn.ts:run:87",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| _processStreamIteration | packages/agents/src/core/MessageStreamOrchestrator.ts | 86 |",
+        "matched": "MessageStreamOrchestrator.ts:_processStreamIteration:86",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| readStreamToCompletion | packages/agents/src/core/subagentNonInteractive.ts | 85 |",
+        "matched": "subagentNonInteractive.ts:readStreamToCompletion:85",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| generateJson | packages/agents/src/core/clientLlmUtilities.ts | 85 |",
+        "matched": "clientLlmUtilities.ts:generateJson:85",
+        "inTop10": false,
+        "lengthDelta": 0
+      }
+    ]
+  },
+  "namedIncludingTests": {
+    "includeTests": true,
+    "namedOnly": true,
+    "expectedTop10": [
+      "chatSession.media-history.test.ts:createPurgeChat:169",
+      "MessageStreamOrchestrator.todoPause.test.ts:buildOrchestrator:161",
+      "MessageStreamOrchestrator.contextOverflow.test.ts:buildOrchestrator:159",
+      "turnMediaAdmission.lifecycle.test.ts:createFixture:154",
+      "chat-session-empty-tools.test.ts:send:145",
+      "MessageStreamOrchestrator.modelinfo.test.ts:buildOrchestrator:145",
+      "subagentRuntimeSetup.assembler.test.ts:buildSubagentFixture:144",
+      "chatSession.systemPromptAssembly.test.ts:buildFixture:139",
+      "subagent.runInteractive-term.test.ts:observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall:139",
+      "coreToolScheduler.cancellation.test.ts:observeCompleteAllToolsWhenFirstToolIsCancelledMidBatch:130"
+    ],
+    "tiedAtCutoff": 1,
+    "rowsFound": 10,
+    "inTop10": 0,
+    "inTop10ExactLength": 0,
+    "results": [
+      {
+        "row": "| ChatSession constructor | packages/agents/src/core/chatSession.ts | 99 |",
+        "matched": "chatSession.ts:constructor:99",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| attemptExecutionOfScheduledCalls | packages/agents/src/core/coreToolScheduler.ts | 99 |",
+        "matched": "coreToolScheduler.ts:attemptExecutionOfScheduledCalls:99",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| recoverPendingBoundary | packages/agents/src/core/boundaryRecovery.ts | 97 |",
+        "matched": "boundaryRecovery.ts:recoverPendingBoundary:97",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| restoreHistory | packages/agents/src/core/client.ts | 95 |",
+        "matched": "client.ts:restoreHistory:95",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| handleErrorEvent | packages/agents/src/core/MessageStreamTerminalHandler.ts | 89 |",
+        "matched": "MessageStreamTerminalHandler.ts:handleErrorEvent:89",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| acquireFirstStreamEvent | packages/agents/src/core/turn.ts | 89 |",
+        "matched": "turn.ts:acquireFirstStreamEvent:89",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| run | packages/agents/src/core/turn.ts | 87 |",
+        "matched": "turn.ts:run:87",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| _processStreamIteration | packages/agents/src/core/MessageStreamOrchestrator.ts | 86 |",
+        "matched": "MessageStreamOrchestrator.ts:_processStreamIteration:86",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| readStreamToCompletion | packages/agents/src/core/subagentNonInteractive.ts | 85 |",
+        "matched": "subagentNonInteractive.ts:readStreamToCompletion:85",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| generateJson | packages/agents/src/core/clientLlmUtilities.ts | 85 |",
+        "matched": "clientLlmUtilities.ts:generateJson:85",
+        "inTop10": false,
+        "lengthDelta": 0
+      }
+    ]
+  }
+}

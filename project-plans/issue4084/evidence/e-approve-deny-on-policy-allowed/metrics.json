@@ -1,0 +1,42 @@
+{
+  "run": "e-approve-deny-on-policy-allowed",
+  "commit": "1f34cd743553cdba4f72de6a7e9034869de2bc54",
+  "sessionId": "ccc2a69e-4a35-4e4b-94ed-8bbd4e09a0a3",
+  "harnessWallSeconds": 316,
+  "turnSeconds": 3.899,
+  "parent": {
+    "requests": 2,
+    "failedAttempts": [],
+    "inputTokens": 46513,
+    "cachedTokens": 22912,
+    "outputTokens": 332,
+    "lastRequestInputTokens": 23450,
+    "maxRequestInputTokens": 23450,
+    "toolResultTokens": 188,
+    "toolCalls": 1,
+    "toolCallsByName": {
+      "execute_tool_script": 1
+    }
+  },
+  "children": {},
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "execute_tool_script": 1
+  },
+  "nestedToolCalls": 2,
+  "nestedToolCallsByName": {
+    "run_shell_command": 2
+  },
+  "scriptRuns": [
+    {
+      "ok": true,
+      "callCount": 2,
+      "partial": false,
+      "inputBytes": 629,
+      "finalBytes": 455,
+      "durationMs": 572.8391659999998
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

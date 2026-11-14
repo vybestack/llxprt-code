@@ -1,0 +1,46 @@
+{
+  "run": "h3-subagent-on",
+  "commit": "5e2c1835e2001e1d158db8b44812c78f48c3e8f7",
+  "sessionId": "0adf2a0c-ad87-4ea5-ae4b-0bff15a1a5b7",
+  "harnessWallSeconds": 132,
+  "turnSeconds": 103.098,
+  "parent": {
+    "requests": 2,
+    "failedAttempts": [],
+    "inputTokens": 47382,
+    "cachedTokens": 22400,
+    "outputTokens": 1853,
+    "lastRequestInputTokens": 24811,
+    "maxRequestInputTokens": 24811,
+    "toolResultTokens": 2098,
+    "toolCalls": 1,
+    "toolCallsByName": {
+      "task": 1
+    }
+  },
+  "children": {
+    "issue4084-gatherer-on": {
+      "requests": 10,
+      "failedAttempts": [],
+      "inputTokens": 511764,
+      "cachedTokens": 445956,
+      "outputTokens": 12515,
+      "lastRequestInputTokens": 65788,
+      "maxRequestInputTokens": 65788,
+      "toolResultTokens": 12563,
+      "toolCalls": 9,
+      "toolCallsByName": {
+        "run_shell_command": 9
+      }
+    }
+  },
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "task": 1
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

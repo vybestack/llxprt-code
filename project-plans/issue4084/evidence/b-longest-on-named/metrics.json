@@ -1,0 +1,60 @@
+{
+  "run": "b-longest-on-named",
+  "commit": "1f34cd743553cdba4f72de6a7e9034869de2bc54",
+  "sessionId": "3fdf586e-dd90-4fe3-8094-5fde2b7cf2d2",
+  "harnessWallSeconds": 87,
+  "turnSeconds": 52.992,
+  "parent": {
+    "requests": 5,
+    "failedAttempts": [],
+    "inputTokens": 134613,
+    "cachedTokens": 103680,
+    "outputTokens": 2847,
+    "lastRequestInputTokens": 30257,
+    "maxRequestInputTokens": 30257,
+    "toolResultTokens": 4609,
+    "toolCalls": 4,
+    "toolCallsByName": {
+      "discover_tool_api": 1,
+      "execute_tool_script": 3
+    }
+  },
+  "children": {},
+  "directToolCalls": 4,
+  "directToolCallsByName": {
+    "discover_tool_api": 1,
+    "execute_tool_script": 3
+  },
+  "nestedToolCalls": 3,
+  "nestedToolCallsByName": {
+    "run_shell_command": 3
+  },
+  "scriptRuns": [
+    {
+      "ok": true,
+      "callCount": 1,
+      "partial": false,
+      "inputBytes": 1994,
+      "finalBytes": 1926,
+      "durationMs": 626.2373340000049
+    },
+    {
+      "ok": true,
+      "callCount": 1,
+      "partial": false,
+      "inputBytes": 1887,
+      "finalBytes": 1819,
+      "durationMs": 293.5064580000035
+    },
+    {
+      "ok": true,
+      "callCount": 1,
+      "partial": false,
+      "inputBytes": 1859,
+      "finalBytes": 1791,
+      "durationMs": 288.6403339999961
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

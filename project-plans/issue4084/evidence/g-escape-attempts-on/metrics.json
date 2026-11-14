@@ -1,0 +1,42 @@
+{
+  "run": "g-escape-attempts-on",
+  "commit": "5e2c1835e2001e1d158db8b44812c78f48c3e8f7",
+  "sessionId": "ecf7ed40-3091-4d89-a461-201c4bcdda37",
+  "harnessWallSeconds": 41,
+  "turnSeconds": 8.2,
+  "parent": {
+    "requests": 4,
+    "failedAttempts": [],
+    "inputTokens": 93926,
+    "cachedTokens": 69504,
+    "outputTokens": 519,
+    "lastRequestInputTokens": 23779,
+    "maxRequestInputTokens": 23779,
+    "toolResultTokens": 194,
+    "toolCalls": 3,
+    "toolCallsByName": {
+      "todo_write": 2,
+      "execute_tool_script": 1
+    }
+  },
+  "children": {},
+  "directToolCalls": 3,
+  "directToolCallsByName": {
+    "todo_write": 2,
+    "execute_tool_script": 1
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [
+    {
+      "ok": true,
+      "callCount": 0,
+      "partial": false,
+      "inputBytes": 0,
+      "finalBytes": 239,
+      "durationMs": 35.780915999999706
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

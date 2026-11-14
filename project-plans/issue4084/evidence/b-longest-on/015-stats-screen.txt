@@ -1,0 +1,100 @@
+ ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Reading function context
+
+
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ ReadLineRange packages/.../core/chatSession.ts                                                                                         │
+ ││                                                                                                                                        │
+ ││    Read lines 255-375 of 1038 from packages/agents/src/core/chatSession.ts                                                             │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Labeling the constructor
+
+ Resolving top-ten tie order
+
+ Selecting tie order
+
+ Labeling the constructor: **Resolving top-ten tie order** **Selecting tie order**
+
+ Counted from each function-like declaration’s first line through its closing line, inclusive. Test and fixture files are excluded. The
+ 10th-place length is tied at 85 lines.
+
+
+  ┌──────────────────────────────────┬──────────────────────────────────────────────────────────┬───────┐
+  │ Function                         │ File path                                                │ Lines │
+  ├──────────────────────────────────┼──────────────────────────────────────────────────────────┼───────┤
+  │ ChatSession constructor          │ packages/agents/src/core/chatSession.ts                  │ 99    │
+  │ attemptExecutionOfScheduledCalls │ packages/agents/src/core/coreToolScheduler.ts            │ 99    │
+  │ recoverPendingBoundary           │ packages/agents/src/core/boundaryRecovery.ts             │ 97    │
+  │ restoreHistory                   │ packages/agents/src/core/client.ts                       │ 95    │
+  │ handleErrorEvent                 │ packages/agents/src/core/MessageStreamTerminalHandler.ts │ 89    │
+  │ acquireFirstStreamEvent          │ packages/agents/src/core/turn.ts                         │ 89    │
+  │ run                              │ packages/agents/src/core/turn.ts                         │ 87    │
+  │ _processStreamIteration          │ packages/agents/src/core/MessageStreamOrchestrator.ts    │ 86    │
+  │ readStreamToCompletion           │ packages/agents/src/core/subagentNonInteractive.ts       │ 85    │
+  │ generateJson                     │ packages/agents/src/core/clientLlmUtilities.ts           │ 85    │
+  └──────────────────────────────────┴──────────────────────────────────────────────────────────┴───────┘
+
+
+╭────────────╮
+│  > /stats  │
+╰────────────╯
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                         │
+│  Session Stats                                                                                                                          │
+│                                                                                                                                         │
+│  Session API                                                                                                                            │
+│  Total Requests:             4                                                                                                          │
+│  Total Errors:               0                                                                                                          │
+│  Avg Latency:                10.9s                                                                                                      │
+│                                                                                                                                         │
+│  Interaction Summary                                                                                                                    │
+│  Session ID:                 session-1794640207318-y2gdhq07m                                                                            │
+│  Tool Calls:                 3 ( OK 3 ERR 0 )                                                                                           │
+│    » Total Duration:         1.3s                                                                                                       │
+│  Success Rate:               100.0%                                                                                                     │
+│  User Agreement:             100.0% (3 reviewed)                                                                                        │
+│                                                                                                                                         │
+│  Performance                                                                                                                            │
+│  Wall Time:                  1m 1s                                                                                                      │▄
+│  Agent Active:               45.1s (interval union)                                                                                     │█
+│  Accumulated Work:           45.1s (API+Tool)                                                                                           │█
+│    » API Time:               43.8s (97.1%)                                                                                              │█
+│    » Tool Time:              1.3s (2.9%)                                                                                                │█
+│    » Throughput (TPM):       146.08k TPM (session weighted)                                                                             │█
+│    » Last Request TPM:       121.87k TPM                                                                                                │█
+│    » TTFT (last):            5669ms (avg: 6862ms)                                                                                       │█
+│    » Output Gen Rate:        115.98 tok/s (session weighted) (last: 86.97)                                                              │█
+│    » Input Rate (eff):       3816.35 tok/s (ΣP/ΣTTFT) (last: 5130.19)                                                                   │█
+│    » Uncached Input:         1074.31 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │█
+│                                                                                                                                         │█
+│                                                                                                                                         │█
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │█
+│  ────────────────────────────────────────────────────────────────────────────                                                           │█
+│  gpt-6-luna                     4         29,488        75,264          1,852                                                           │█
+│    Latency: 10.9s avg / 43.8s total                                                                                                     │█
+│                                                                                                                                         │█
+│  Savings Highlight: 75,264 (71.8%) of input tokens were served from the cache, reducing costs.                                          │█
+│                                                                                                                                         │█
+│  Quota Information                                                                                                                      │█
+│  ## Claude Code Quota Information                                                                                                       │█
+│                                                                                                                                         │█
+│    7-day window: 90.0% used (resets in 122h 48m)                                                                                        │█
+│  ## Codex Quota Information                                                                                                             │█
+│                                                                                                                                         │█
+│    5-hour limit: 19% used (resets in 160h 33m)                                                                                          │█
+│    Credits: None                                                                                                                        │█
+│                                                                                                                                         │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084*Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 29,083/262,144 tokens | TPM: 146.08k | Wait: 0ms | 04:11:09
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                lunahigh:gpt-6-luna | Tokens: 106,604

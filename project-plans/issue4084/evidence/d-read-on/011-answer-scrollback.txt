@@ -1,0 +1,100 @@
+
+     ░██        ░██        ░██    ░██░█████████ ░█████████░██████████
+░██  ░██        ░██         ░██  ░██ ░██     ░██░██     ░██   ░██
+ ░██ ░██        ░██          ░██░██  ░██     ░██░██     ░██   ░██
+  ░██░██        ░██           ░███   ░█████████ ░█████████    ░██
+ ░██ ░██        ░██          ░██░██  ░██        ░██   ░██     ░██
+░██  ░██        ░██         ░██  ░██ ░██        ░██    ░██    ░██
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+
+Tips for getting started:
+1. Ask questions, edit files, or run commands.
+2. Be specific for the best results.
+3. /help for more information.
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  > What does packages/agents/src/tools/task.ts export? Read it and explain. Do the work yourself in this session; do not delegate to a  │
+│    subagent.                                                                                                                            │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Responding with: lunahigh:gpt-6-luna
+[lunahigh:gpt-6-luna]
+ Reading the file
+
+
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ ReadFile packages/agents/src/tools/task.ts                                                                                             │
+ ││                                                                                                                                        │
+ ││                                                                                                                                        │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Clarifying exported interfaces
+
+ packages/agents/src/tools/task.ts has three named exports:
+
+   - `TaskToolParams`: the input shape for the tool. It includes the subagent name and goal, optional behavior prompts, tool whitelist,
+     expected outputs, context, timeout and turn limits, and an async flag.
+   - `TaskToolDependencies`: the dependencies needed to create the tool, including the child-launch function, task-policy and
+     tool-governance readers, and a message bus. It also accepts optional display, environment, registry, and launch-owner dependencies.
+   - `TaskTool`: the tool class itself. It registers as task, validates and normalizes parameters, then creates an invocation that launches
+     a subagent. It supports foreground execution with streaming, timeout and cancellation handling, and async execution. It can also be
+     copied with child-display callbacks using withChildDisplay().
+
+  TaskTool requires a concrete message bus and a child-launch function; its constructor throws if either is missing. The invocation class
+  and the helper imports are not exported from this file.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084* Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3G | Context: 29,371/262,144 tokens | TPM: 385.25k | Wait: 0ms | 04:21:20
+)
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 23,134

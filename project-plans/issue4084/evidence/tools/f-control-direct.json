@@ -1,0 +1,194 @@
+{
+  "description": "Phase E control for F: direct",
+  "tmux": {
+    "cols": 140,
+    "rows": 100,
+    "historyLimit": 50000,
+    "scrollbackLines": 8000,
+    "initialWaitMs": 8000
+  },
+  "yolo": true,
+  "startCommand": [
+    "bun",
+    "scripts/start.ts",
+    "--profile-load",
+    "lunahigh",
+    "--set",
+    "code-mode=off"
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "capture",
+      "label": "ready"
+    },
+    {
+      "type": "line",
+      "text": "Run `sleep 30` with run_shell_command and then reply done. Do not use execute_tool_script and do not run anything else.",
+      "postTypeMs": 1500
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "prompt-submitted"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Running: sleep 30",
+      "timeoutMs": 300000
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "nested-running"
+    },
+    {
+      "type": "key",
+      "key": "Escape"
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "after-escape"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "cancelled"
+    },
+    {
+      "type": "line",
+      "text": "!ps -ax | grep -E 'quickjs-wrapper|sleep 30' | grep -v grep; echo ps-check-done"
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "ps-check-done",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "ps-check"
+    },
+    {
+      "type": "key",
+      "key": "Escape"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "shell mode enabled",
+      "timeoutMs": 15000
+    },
+    {
+      "type": "capture",
+      "label": "shell-mode-off"
+    },
+    {
+      "type": "line",
+      "text": "Reply with the single word ok and call no tools.",
+      "postTypeMs": 1500
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "followup-submitted"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 300000
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "followup-answer"
+    },
+    {
+      "type": "line",
+      "text": "/stats",
+      "postTypeMs": 800
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Session Stats",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "stats"
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": [
+        "Enter",
+        "Enter"
+      ]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 60000
+    }
+  ]
+}

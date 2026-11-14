@@ -1,0 +1,31 @@
+{
+  "run": "g-escape-attempts-on-refused",
+  "commit": "5e2c1835e2001e1d158db8b44812c78f48c3e8f7",
+  "sessionId": "3f7d1f1e-2ffc-4d06-9e68-74f1455ab77f",
+  "harnessWallSeconds": 52,
+  "turnSeconds": 12.714,
+  "parent": {
+    "requests": 3,
+    "failedAttempts": [],
+    "inputTokens": 70772,
+    "cachedTokens": 46464,
+    "outputTokens": 820,
+    "lastRequestInputTokens": 23988,
+    "maxRequestInputTokens": 23988,
+    "toolResultTokens": 106,
+    "toolCalls": 2,
+    "toolCallsByName": {
+      "todo_write": 2
+    }
+  },
+  "children": {},
+  "directToolCalls": 2,
+  "directToolCallsByName": {
+    "todo_write": 2
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

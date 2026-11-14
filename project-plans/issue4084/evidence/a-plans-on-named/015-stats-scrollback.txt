@@ -1,0 +1,100 @@
+  ├────────────────────┼───────┤
+  │ packages/agents    │ 115   │
+  │ packages/cli       │ 1     │
+  │ packages/core      │ 85    │
+  │ packages/mcp       │ 3     │
+  │ packages/providers │ 25    │
+  │ packages/settings  │ 2     │
+  │ packages/storage   │ 1     │
+  │ packages/telemetry │ 1     │
+  └────────────────────┴───────┘
+
+
+  By short commit hash from git blame
+
+
+  ┌─────────┬───────┬─────────┬───────┐
+  │ Commit  │ Count │ Commit  │ Count │
+  ├─────────┼───────┼─────────┼───────┤
+  │ 065db2d │ 2     │ 066ec97 │ 1     │
+  │ 104acfb │ 2     │ 1abefc1 │ 3     │
+  │ 1af23ee │ 1     │ 205b0e5 │ 5     │
+  │ 2077498 │ 4     │ 274e9e9 │ 1     │
+  │ 293093b │ 5     │ 2a0cd9d │ 7     │
+  │ 3aee3d9 │ 1     │ 4312970 │ 3     │
+  │ 44dd67c │ 9     │ 4f09796 │ 1     │
+  │ 6c4a1a1 │ 1     │ 7c598c3 │ 9     │
+  │ 794c53a │ 2     │ 83cfce5 │ 1     │
+  │ 85da6b3 │ 8     │ 870d8f2 │ 1     │
+  │ 9169c29 │ 15    │ 9507c47 │ 2     │
+  │ 96a42da │ 3     │ a404d5d │ 1     │
+  │ acb4a26 │ 2     │ aed9b68 │ 7     │
+  │ b1c1eb0 │ 6     │ b3cebcc │ 1     │
+  │ b4052a0 │ 1     │ bf52702 │ 21    │
+  │ c3ec9d3 │ 3     │ c9895f4 │ 17    │
+  │ d2effd4 │ 1     │ d860795 │ 1     │
+  │ e0ab0cc │ 1     │ e3e41b4 │ 3     │
+  │ e5cb79a │ 9     │ e6e8f1b │ 1     │
+  │ edbbc31 │ 4     │ f43536c │ 2     │
+  │ fbd20c1 │ 64    │ ff0a0fa │ 1     │
+  └─────────┴───────┴─────────┴───────┘
+
+
+╭────────────╮
+│  > /stats  │
+╰────────────╯
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                         │
+│  Session Stats                                                                                                                          │
+│                                                                                                                                         │
+│  Session API                                                                                                                            │
+│  Total Requests:             5                                                                                                          │
+│  Total Errors:               0                                                                                                          │
+│  Avg Latency:                19.2s                                                                                                      │
+│                                                                                                                                         │
+│  Interaction Summary                                                                                                                    │
+│  Session ID:                 session-1794640338459-pr7cl7mnu                                                                            │
+│  Tool Calls:                 70 ( OK 68 ERR 2 )                                                                                         │
+│    » Total Duration:         1m 13s                                                                                                     │
+│  Success Rate:               97.1%                                                                                                      │
+│  User Agreement:             100.0% (70 reviewed)                                                                                       │
+│                                                                                                                                         │▄
+│  Performance                                                                                                                            │█
+│  Wall Time:                  2m 29s                                                                                                     │█
+│  Agent Active:               2m 13s (interval union)                                                                                    │█
+│  Accumulated Work:           2m 49s (API+Tool)                                                                                          │█
+│    » API Time:               1m 36s (56.8%)                                                                                             │█
+│    » Tool Time:              1m 13s (43.2%)                                                                                             │█
+│    » Throughput (TPM):       83.89k TPM (session weighted)                                                                              │█
+│    » Last Request TPM:       65.05k TPM                                                                                                 │█
+│    » TTFT (last):            7605ms (avg: 8988ms)                                                                                       │█
+│    » Output Gen Rate:        77.26 tok/s (session weighted) (last: 74.64)                                                               │█
+│    » Input Rate (eff):       2888.00 tok/s (ΣP/ΣTTFT) (last: 3817.16)                                                                   │█
+│    » Uncached Input:         660.77 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                           │█
+│                                                                                                                                         │█
+│                                                                                                                                         │█
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │█
+│  ────────────────────────────────────────────────────────────────────────────                                                           │█
+│  gpt-6-luna                     5         29,696       100,096          4,604                                                           │█
+│    Latency: 19.2s avg / 1m 36s total                                                                                                    │█
+│                                                                                                                                         │█
+│  Savings Highlight: 100,096 (77.1%) of input tokens were served from the cache, reducing costs.                                         │█
+│                                                                                                                                         │█
+│  Quota Information                                                                                                                      │█
+│  ## Claude Code Quota Information                                                                                                       │█
+│                                                                                                                                         │█
+│    7-day window: 90.0% used (resets in 122h 45m)                                                                                        │█
+│  ## Codex Quota Information                                                                                                             │█
+│                                                                                                                                         │█
+│    5-hour limit: 19% used (resets in 160h 29m)                                                                                          │█
+│    Credits: None                                                                                                                        │█
+│                                                                                                                                         │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084*)Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 29,028/262,144 tokens | TPM: 83.89k | Wait: 0ms | 04:14:49
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                lunahigh:gpt-6-luna | Tokens: 134,396

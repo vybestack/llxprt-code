@@ -1,0 +1,33 @@
+{
+  "totalExpected": 233,
+  "totalsMentioned": [
+    233,
+    233
+  ],
+  "totalCorrect": true,
+  "planIds": {
+    "expected": 48,
+    "exact": 45,
+    "wrong": [
+      "PLAN-20260707-AGENTNEUTRAL.P11: expected 6, got 7",
+      "PLAN-20260707-AGENTNEUTRAL.P07: expected 4, got 5",
+      "PLAN-20260707-AGENTNEUTRAL.P07/P11: expected 1, got 234"
+    ],
+    "missing": [],
+    "extra": []
+  },
+  "packages": {
+    "expected": 8,
+    "exact": 8,
+    "wrong": [],
+    "missing": [],
+    "extra": []
+  },
+  "commits": {
+    "expected": 42,
+    "exact": 42,
+    "wrong": [],
+    "missing": [],
+    "extra": []
+  }
+}

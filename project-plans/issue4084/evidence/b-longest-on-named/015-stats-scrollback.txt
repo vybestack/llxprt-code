@@ -1,0 +1,100 @@
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ Execute tool script Produce the top 10 named production function spans while excluding test files and test directories. [tools: run_sh…│
+ ││                                                                                                                                        │
+ ││    Purpose: Produce the top 10 named production function spans while excluding test files and test directories.                        │
+ ││    Status: completed in 289 ms                                                                                                         │
+ ││    Tool calls: 1 (1 ok)                                                                                                                │
+ ││      ✓ run_shell_command {"command":"bun - <<'TS'\nimport ts from 'typescript'; import {readdirSync,readFileSync} from 'node:fs'; import
+ ││    {join,relative} from 'nod…                                                                                                          │
+ ││    Script (1 line):                                                                                                                    │
+ ││      const r = await tools["run_shell_command"]({command:"bun - <<'TS'\nimport ts from 'typescript'; import {readdirSync,readFileSync} │
+ ││    from 'node:fs'; import {join,r                                                                                                      │
+ ││    Result: {"exitCode":0,"stdout":"[\n {\n \"file\": \"packages/agents/src/core/coreToolScheduler.ts\",\n \"name\":                    │
+ ││    \"attemptExecutionOfScheduledCalls\",\n \"start\": 710,\n \"end\": 808,\n \"lines\": 99\n },\n {\n \"file\":                        │
+ ││    \"packages/agents/src/core/boundaryRecovery.ts\",\n \"name\": \"recoverPendingBoundary\",\n \"start\": 313,\n \"end\": 409,\n       │
+ ││    \"lines\": 97\n },\n {\n \"file\": \"packages/agents/src/core/client.ts\",\n \"name\": \"restoreHistory\",\n \"start\": 661,\n \"end\
+ ││    755,\n \"lines\": 95\n },\n {\n \"file\": \"packages/agents/src/core/MessageStreamTerminalHandler.ts\",\n \"name\": \"handl…        │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Using TypeScript AST line spans, the 10 longest named production functions and methods in packages/agents/src/core are:
+
+
+  ┌────┬──────────────────────────────────┬──────────────────────────────────────────────────────────┬───────┐
+  │ #  │ Function                         │ File                                                     │ Lines │
+  ├────┼──────────────────────────────────┼──────────────────────────────────────────────────────────┼───────┤
+  │ 1  │ attemptExecutionOfScheduledCalls │ packages/agents/src/core/coreToolScheduler.ts            │ 99    │
+  │ 2  │ recoverPendingBoundary           │ packages/agents/src/core/boundaryRecovery.ts             │ 97    │
+  │ 3  │ restoreHistory                   │ packages/agents/src/core/client.ts                       │ 95    │
+  │ 4  │ handleErrorEvent                 │ packages/agents/src/core/MessageStreamTerminalHandler.ts │ 89    │
+  │ 5  │ acquireFirstStreamEvent          │ packages/agents/src/core/turn.ts                         │ 89    │
+  │ 6  │ run                              │ packages/agents/src/core/turn.ts                         │ 87    │
+  │ 7  │ _processStreamIteration          │ packages/agents/src/core/MessageStreamOrchestrator.ts    │ 86    │
+  │ 8  │ generateJson                     │ packages/agents/src/core/clientLlmUtilities.ts           │ 85    │
+  │ 9  │ readStreamToCompletion           │ packages/agents/src/core/subagentNonInteractive.ts       │ 85    │
+  │ 10 │ processFunctionCalls             │ packages/agents/src/core/subagentToolProcessing.ts       │ 85    │
+  └────┴──────────────────────────────────┴──────────────────────────────────────────────────────────┴───────┘
+
+
+  Test and declaration files were excluded. Length is the inclusive source-line span of each function-like AST node.
+
+╭────────────╮
+│  > /stats  │
+╰────────────╯
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮▄
+│                                                                                                                                         │█
+│  Session Stats                                                                                                                          │█
+│                                                                                                                                         │█
+│  Session API                                                                                                                            │█
+│  Total Requests:             5                                                                                                          │█
+│  Total Errors:               0                                                                                                          │█
+│  Avg Latency:                11.8s                                                                                                      │█
+│                                                                                                                                         │█
+│  Interaction Summary                                                                                                                    │█
+│  Session ID:                 session-1794640533991-n2im44it7                                                                            │█
+│  Tool Calls:                 7 ( OK 7 ERR 0 )                                                                                           │█
+│    » Total Duration:         2.5s                                                                                                       │█
+│  Success Rate:               100.0%                                                                                                     │█
+│  User Agreement:             100.0% (7 reviewed)                                                                                        │█
+│                                                                                                                                         │█
+│  Performance                                                                                                                            │█
+│  Wall Time:                  1m 19s                                                                                                     │█
+│  Agent Active:               1m (interval union)                                                                                        │█
+│  Accumulated Work:           1m 1s (API+Tool)                                                                                           │█
+│    » API Time:               59.2s (95.9%)                                                                                              │█
+│    » Tool Time:              2.5s (4.1%)                                                                                                │█
+│    » Throughput (TPM):       139.35k TPM (session weighted)                                                                             │█
+│    » Last Request TPM:       278.90k TPM                                                                                                │█
+│    » TTFT (last):            674ms (avg: 5998ms)                                                                                        │█
+│    » Output Gen Rate:        98.28 tok/s (session weighted) (last: 56.30)                                                               │█
+│    » Input Rate (eff):       4488.85 tok/s (ΣP/ΣTTFT) (last: 44913.22)                                                                  │█
+│    » Uncached Input:         1031.50 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │█
+│                                                                                                                                         │█
+│                                                                                                                                         │█
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │█
+│  ────────────────────────────────────────────────────────────────────────────                                                           │█
+│  gpt-6-luna                     5         30,933       103,680          2,847                                                           │█
+│    Latency: 11.8s avg / 59.2s total                                                                                                     │█
+│                                                                                                                                         │█
+│  Savings Highlight: 103,680 (77.0%) of input tokens were served from the cache, reducing costs.                                         │█
+│                                                                                                                                         │█
+│  Quota Information                                                                                                                      │█
+│  ## Claude Code Quota Information                                                                                                       │█
+│                                                                                                                                         │█
+│    7-day window: 91.0% used (resets in 122h 43m)                                                                                        │█
+│  ## Codex Quota Information                                                                                                             │█
+│                                                                                                                                         │█
+│    5-hour limit: 19% used (resets in 160h 27m)                                                                                          │█
+│    Credits: None                                                                                                                        │█
+│                                                                                                                                         │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084* Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3G | Context: 30,257/262,144 tokens | TPM: 139.34k | Wait: 0ms | 04:16:55
+)
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                lunahigh:gpt-6-luna | Tokens: 137,460

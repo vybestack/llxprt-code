@@ -1,0 +1,31 @@
+{
+  "run": "f-control-direct",
+  "commit": "9e3d89e4bac581af9268296c69a7efff1d304b9f",
+  "sessionId": "7ad8a23c-ca1e-46d1-8fc2-da8cf33d5506",
+  "harnessWallSeconds": 44,
+  "turnSeconds": 23.753,
+  "parent": {
+    "requests": 2,
+    "failedAttempts": [],
+    "inputTokens": 45058,
+    "cachedTokens": 22272,
+    "outputTokens": 39,
+    "lastRequestInputTokens": 22589,
+    "maxRequestInputTokens": 22589,
+    "toolResultTokens": 1,
+    "toolCalls": 1,
+    "toolCallsByName": {
+      "run_shell_command": 1
+    }
+  },
+  "children": {},
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "run_shell_command": 1
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 3
+}

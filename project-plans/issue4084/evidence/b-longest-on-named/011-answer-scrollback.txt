@@ -1,0 +1,100 @@
+
+
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ Execute tool script Parse TypeScript ASTs under packages/agents/src/core and rank function-like declarations by source line count. [to…│
+ ││                                                                                                                                        │
+ ││    Purpose: Parse TypeScript ASTs under packages/agents/src/core and rank function-like declarations by source line count.             │
+ ││    Status: completed in 626 ms                                                                                                         │
+ ││    Tool calls: 1 (1 ok)                                                                                                                │
+ ││      ✓ run_shell_command {"command":"bun - <<'TS'\nimport ts from 'typescript';\nimport { readdirSync, readFileSync } from             │
+ ││    'node:fs';\nimport { join, relative } f…                                                                                            │
+ ││    Script (1 line):                                                                                                                    │
+ ││      const r = await tools["run_shell_command"]({command:"bun - <<'TS'\nimport ts from 'typescript';\nimport { readdirSync, readFileSync
+ ││    from 'node:fs';\nimport {                                                                                                           │
+ ││    Result: {"exitCode":0,"stdout":"[\n {\n \"file\": \"packages/agents/src/core/__tests__/subagentOrchestrator-runtime.test.ts\",\n    │
+ ││    \"name\": \"<anonymous>\",\n \"start\": 63,\n \"end\": 905,\n \"lines\": 843\n },\n {\n \"file\":                                   │
+ ││    \"packages/agents/src/core/chatSession.media-history.test.ts\",\n \"name\": \"<anonymous>\",\n \"start\": 49,\n \"end\": 873,\n     │
+ ││    \"lines\": 825\n },\n {\n \"file\": \"packages/agents/src/core/subagent.runNonInteractive-term.test.ts\",\n \"name\":               │
+ ││    \"<anonymous>\",\n \"start\": 114,\n \"end\": 928,\n \"lines\": 815\n },\n {\n \"file\": \"packages/agents/src/core/chatSession.runti
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Narrowing the function scan
+
+ Filtering named functions
+
+ Narrowing the function scan: **Filtering named functions**
+                                                                                                                                           █
+                                                                                                                                           █
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ ││ ✓                                                                                                                                      █
+ ││ Execute tool script Rank named production functions in packages/agents/src/core by AST line span, excluding tests. [tools: run_shell_c…█
+ ││                                                                                                                                        █
+ ││    Purpose: Rank named production functions in packages/agents/src/core by AST line span, excluding tests.                             █
+ ││    Status: completed in 294 ms                                                                                                         █
+ ││    Tool calls: 1 (1 ok)                                                                                                                █
+ ││      ✓ run_shell_command {"command":"bun - <<'TS'\nimport ts from 'typescript';\nimport { readdirSync, readFileSync } from             █
+ ││    'node:fs';\nimport { join, relative } f…                                                                                            █
+ ││    Script (1 line):                                                                                                                    █
+ ││      const r = await tools["run_shell_command"]({command:"bun - <<'TS'\nimport ts from 'typescript';\nimport { readdirSync, readFileSyn█
+ ││    from 'node:fs';\nimport {                                                                                                           █
+ ││    Result: {"exitCode":0,"stdout":"[\n {\n \"file\": \"packages/agents/src/core/coreToolScheduler.ts\",\n \"name\":                    █
+ ││    \"attemptExecutionOfScheduledCalls\",\n \"start\": 710,\n \"end\": 808,\n \"lines\": 99\n },\n {\n \"file\":                        █
+ ││    \"packages/agents/src/core/boundaryRecovery.ts\",\n \"name\": \"recoverPendingBoundary\",\n \"start\": 313,\n \"end\": 409,\n       █
+ ││    \"lines\": 97\n },\n {\n \"file\": \"packages/agents/src/core/client.ts\",\n \"name\": \"restoreHistory\",\n \"start\": 661,\n \"end█
+ ││    755,\n \"lines\": 95\n },\n {\n \"file\": \"packages/agents/src/core/MessageStreamTerminalHandler.ts\",\n \"name\": \"handl…        █
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Rerunning the path filter                                                                                                                 █
+                                                                                                                                           █
+                                                                                                                                           █
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ ││ ✓                                                                                                                                      █
+ ││ Execute tool script Produce the top 10 named production function spans while excluding test files and test directories. [tools: run_sh…█
+ ││                                                                                                                                        █
+ ││    Purpose: Produce the top 10 named production function spans while excluding test files and test directories.                        █
+ ││    Status: completed in 289 ms                                                                                                         █
+ ││    Tool calls: 1 (1 ok)                                                                                                                █
+ ││      ✓ run_shell_command {"command":"bun - <<'TS'\nimport ts from 'typescript'; import {readdirSync,readFileSync} from 'node:fs'; impor█
+ ││    {join,relative} from 'nod…                                                                                                          █
+ ││    Script (1 line):                                                                                                                    █
+ ││      const r = await tools["run_shell_command"]({command:"bun - <<'TS'\nimport ts from 'typescript'; import {readdirSync,readFileSync} █
+ ││    from 'node:fs'; import {join,r                                                                                                      █
+ ││    Result: {"exitCode":0,"stdout":"[\n {\n \"file\": \"packages/agents/src/core/coreToolScheduler.ts\",\n \"name\":                    █
+ ││    \"attemptExecutionOfScheduledCalls\",\n \"start\": 710,\n \"end\": 808,\n \"lines\": 99\n },\n {\n \"file\":                        █
+ ││    \"packages/agents/src/core/boundaryRecovery.ts\",\n \"name\": \"recoverPendingBoundary\",\n \"start\": 313,\n \"end\": 409,\n       █
+ ││    \"lines\": 97\n },\n {\n \"file\": \"packages/agents/src/core/client.ts\",\n \"name\": \"restoreHistory\",\n \"start\": 661,\n \"end█
+ ││    755,\n \"lines\": 95\n },\n {\n \"file\": \"packages/agents/src/core/MessageStreamTerminalHandler.ts\",\n \"name\": \"handl…        █
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Using TypeScript AST line spans, the 10 longest named production functions and methods in packages/agents/src/core are:                   █
+                                                                                                                                           █
+                                                                                                                                           █
+  ┌────┬──────────────────────────────────┬──────────────────────────────────────────────────────────┬───────┐                             █
+  │ #  │ Function                         │ File                                                     │ Lines │                             █
+  ├────┼──────────────────────────────────┼──────────────────────────────────────────────────────────┼───────┤                             █
+  │ 1  │ attemptExecutionOfScheduledCalls │ packages/agents/src/core/coreToolScheduler.ts            │ 99    │                             █
+  │ 2  │ recoverPendingBoundary           │ packages/agents/src/core/boundaryRecovery.ts             │ 97    │                             █
+  │ 3  │ restoreHistory                   │ packages/agents/src/core/client.ts                       │ 95    │                             █
+  │ 4  │ handleErrorEvent                 │ packages/agents/src/core/MessageStreamTerminalHandler.ts │ 89    │                             █
+  │ 5  │ acquireFirstStreamEvent          │ packages/agents/src/core/turn.ts                         │ 89    │                             █
+  │ 6  │ run                              │ packages/agents/src/core/turn.ts                         │ 87    │                             █
+  │ 7  │ _processStreamIteration          │ packages/agents/src/core/MessageStreamOrchestrator.ts    │ 86    │                             █
+  │ 8  │ generateJson                     │ packages/agents/src/core/clientLlmUtilities.ts           │ 85    │                             █
+  │ 9  │ readStreamToCompletion           │ packages/agents/src/core/subagentNonInteractive.ts       │ 85    │                             █
+  │ 10 │ processFunctionCalls             │ packages/agents/src/core/subagentToolProcessing.ts       │ 85    │                             █
+  └────┴──────────────────────────────────┴──────────────────────────────────────────────────────────┴───────┘                             █
+                                                                                                                                           █
+                                                                                                                                           █
+  Test and declaration files were excluded. Length is the inclusive source-line span of each function-like AST node.                       █
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084* Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3G | Context: 30,257/262,144 tokens | TPM: 121.89k | Wait: 0ms | 04:16:52
+)
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                lunahigh:gpt-6-luna | Tokens: 106,874

@@ -6,7 +6,7 @@
 - Phase B: done (run owner, nested execution seam, `execute_tool_script` behind a construction flag, bundle packaging; see "Phase B record")
 - Phase D: done (nested approvals in the CLI, fail-fast hosts, script card, `tool_script_event` recording and resume, script telemetry, default policy; see "Phase D record"). Done before Phase C on purpose: without it a nested approval in the CLI would wait forever once the setting exists.
 - Phase C: done (settings, live surface, `discover_tool_api`, declarations and API revision, subagents, hook restriction, scenario scripts and ground truth; see "Phase C record")
-- Phase E: in progress (see "Phase E" progress log)
+- Phase E: done (real-model scenarios A-I with `lunahigh`, one product fix, evidence in `project-plans/issue4084/evidence/README.md`; see the Phase E progress log)
 
 ## Fixed decisions
 
@@ -99,7 +99,7 @@ Progress log:
 - [x] `scripts/tmux-script.issue4084-nested-approval.llxprt.json`
 - [x] D5 full verification, PLAN record, commit
 
-### Phase E: tmux scenarios and evidence (in progress)
+### Phase E: tmux scenarios and evidence (done)
 
 - Run the issue's real-model scenarios A-I with `lunahigh`, including before/after comparisons and ground truth.
 - Commit captures, artifacts and the evidence table under `project-plans/issue4084/evidence/`.
@@ -153,6 +153,11 @@ Progress log (update after each scenario; after context loss read this and `git 
 - [x] E15 `h2-subagent-off` (5e2c1835e2): parent (code mode off) made one `task` call; the `issue4084-gatherer-off` child (claudecode `claude-haiku-5-5`) used 12 `run_shell_command`, 2 `replace` and 1 `self_emitvalue` calls in 16 requests. The working tree was unchanged afterwards (`git status`), so the `replace` calls edited something outside the repository (the child's transcript is not in the parent recording; not investigated further). Exact match: 233, 48/48, 8/8, 42/42. Parent: 2 requests, input 49,174 (22,400 cached), output 1,504, last request 26,603. Child: input 1,022,164 (938,257 cached), output 23,706, last request 83,875. Turn 146 s. Artifacts `runs/h2-subagent-off`.
 - [x] E16 `h3-subagent-on` (5e2c1835e2): the `issue4084-gatherer-on` child had both code mode tools (its tool schema 13,312 tokens vs 12,740 for the off child) and did not use them: 9 direct `run_shell_command` calls in 10 requests. Exact match: 233, 48/48, 8/8, 42/42. Parent: 2 requests, input 47,382 (22,400 cached), output 1,853, last request 24,811. Child: input 511,764 (445,956 cached), output 12,515, last request 65,788. Turn 103 s. Artifacts `runs/h3-subagent-on`.
 - Supplementary `h3-subagent-on-named` added (goal starts "Using execute_tool_script, do this: "), to measure a child that runs a script; `a-plans-on-named` already is the named H1 configuration. Script tests 41 pass.
+- Commit bdb7fca979: G prompt framing and the named H3 script.
+- [x] E17 `g-escape-attempts-on` (5e2c1835e2 plus the G prompt, committed as bdb7fca979): one `execute_tool_script` with `tools: []` (accepted after the fix), 0 nested calls, 239-byte result. `process` and `require` and `fetch` are `ReferenceError ... is not defined`; `globalThis.Bun` is `undefined`. 4 requests (2 `todo_write`), input 93,926 (69,504 cached), output 519. Artifacts `runs/g-escape-attempts-on`.
+- [x] E18 `h3-subagent-on-named` (bdb7fca979): the child ran two scripts (62 and 51 nested `run_shell_command` calls; the second handed 2,603,895 bytes to the guest and returned 2,507). The child's script events are recorded in the parent session through the child display. Answer: 233, 8/8 packages, 42/42 commits, 45/48 plan IDs (P07/P11 counted as P07; `project-plans/issue4001.md` reported under a different name). Parent: 2 requests, input 49,707 (22,400 cached), output 1,517, last request 27,128. Child: 4 requests, input 195,747 (135,800 cached), output 15,942, last request 59,939. Turn 101 s. `/stats` model rows match the token logs (gpt-6-luna 27,307 + 22,400 cached; claude-haiku-5-5 59,947 + 135,800 cached). Artifacts `runs/h3-subagent-on-named`.
+- [x] E19 evidence: `tmp/verify4084/phaseE/collect.sh` copied every run directory to `project-plans/issue4084/evidence/<run>/` (captures, session recording with encrypted reasoning removed, token logs, metrics, final answer, score; the raw `pane-output.log` left out, nothing over 2 MB), the ground truth and the run tools (`evidence/tools/`). `evidence/README.md` has the verdict-first summary, the A/B/H before/after table, per-scenario notes and the limits.
+- Open items: (1) a cancelled tool group (any tool, not only scripts) disappears on Escape instead of showing a cancelled card; (2) a failed `execute_tool_script` shows its error JSON instead of the formatted card, because the CLI renders a failed tool's error message; (3) the user policy file on this machine (`auto-saved.toml`) holds rules for `test_tool` and `simple-tool`, which suggests some test writes to the real user policy; not investigated; (4) whether models use code mode unprompted: `gpt-6-luna` and `claude-haiku-5-5` did not in any of 5 runs where a shell was available.
 
 ## Acceptance criteria map
 
@@ -189,8 +194,8 @@ Test file names below are planned owners; criteria move to done only when the na
 | API revision mismatch fails with `API_CHANGED` | C (done) | `tool-declarations.test.ts`: "runs a script pinned to the current revision and refuses a stale one with API_CHANGED", "changes the revision when a schema, adapter or limit changes, and only then"; disabled tools: "lists the callable tools with the revision, leaving out a disabled tool and refusing to describe it" |
 | Enabled subagent runs code mode within own whitelist and agent attribution | C (done) | `code-mode-subagent.test.ts` (real `task` launch; both child paths): "runs a script within the child whitelist, attributed to the child agent, and refuses tools outside it", "leaves code mode off in a child whose profile does not enable it, even with the parent on", "keeps an explicit empty task whitelist empty", "cannot raise the caller limits", "cancels a running child script when the parent aborts the task" |
 | Tool-selection hook restriction applies inside scripts | C (done) | `code-mode-hook-restriction.test.ts`: "refuses a script tool the hook restricted, allows one it kept, and leaves it out of discovery" |
-| tmux scenarios with lunahigh, evidence and before/after table committed | E (scripts written and validated in C) | `scripts/tmux-script.issue4084-*.llxprt.json` (validated by `scripts/tests/issue-4084-tmux-scripts.bun.test.ts`), ground truth `scripts/issue4084-ground-truth.ts`, plus `project-plans/issue4084/evidence/README.md` in E |
-| Required test/lint/typecheck/format/build and off/on lunahigh smoke checks pass | E | Verification commands recorded in this plan and CI evidence |
+| tmux scenarios with lunahigh, evidence and before/after table committed | E (done) | `scripts/tmux-script.issue4084-*.llxprt.json` (validated by `scripts/tests/issue-4084-tmux-scripts.bun.test.ts`), ground truth `scripts/issue4084-ground-truth.ts`, plus `project-plans/issue4084/evidence/README.md` in E |
+| Required test/lint/typecheck/format/build and off/on lunahigh smoke checks pass | E (done) | Phase E progress log, "Verification of the fix" (logs `tmp/verify4084/phaseE/verify-*.log`) |
 
 ## Phase A record
 

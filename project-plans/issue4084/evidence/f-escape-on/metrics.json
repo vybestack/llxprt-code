@@ -1,0 +1,41 @@
+{
+  "run": "f-escape-on",
+  "commit": "9e3d89e4bac581af9268296c69a7efff1d304b9f",
+  "sessionId": "9d07c6fd-bb15-4e3a-add0-fc4f8d88292e",
+  "harnessWallSeconds": 37,
+  "turnSeconds": 0,
+  "parent": {
+    "requests": 1,
+    "failedAttempts": [],
+    "inputTokens": 23066,
+    "cachedTokens": 0,
+    "outputTokens": 128,
+    "lastRequestInputTokens": 23066,
+    "maxRequestInputTokens": 23066,
+    "toolResultTokens": 0,
+    "toolCalls": 0,
+    "toolCallsByName": {}
+  },
+  "children": {},
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "execute_tool_script": 1
+  },
+  "nestedToolCalls": 1,
+  "nestedToolCallsByName": {
+    "run_shell_command": 1
+  },
+  "scriptRuns": [
+    {
+      "ok": false,
+      "errorCode": "CANCELLED",
+      "callCount": 1,
+      "partial": false,
+      "inputBytes": 113,
+      "finalBytes": 0,
+      "durationMs": 3567.4069169999984
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 2
+}

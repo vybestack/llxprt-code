@@ -1,0 +1,100 @@
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓  Shell bun -e 'import ts from "typescript"; import { Glob } from "bun"; const root="packages/agents/src/core"; const files=[...new
+ ││    Glob("**/*.ts").scanSync(root)].filter(f=>!f.includes("__tests__/")&&!f.endsWith(".test.ts")&&!f.endsWith(".spec.ts")); const
+ ││    found=[]; const sf=[]; for(const rel of files){const p=`${root}/${rel}`; const source=await Bun.file(p).text(); const
+ ││    file=ts.createSourceFile(p,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS); const
+ ││    visit=(n)=>{if(ts.isFunctionLike(n)&&n.body){const start=file.getLineAndCharacterOfPosition(n.getStart(file)).line+1; const
+ ││    end=file.getLineAndCharacterOfPosition(n.end).line+1; let name=n.name?.getText(file); if(!name &&
+ ││    ts.isVariableDeclaration(n.parent)) name=n.parent.name.getText(file); if(!name && ts.isPropertyAssignment(n.parent))
+ ││    name=n.parent.name.getText(file); if(!name && ts.isMethodDeclaration(n)) name="(method)"; if(!name) name="(anonymous)";
+ ││    found.push({name,path:p,start,end,lines:end-start+1});} ts.forEachChild(n,visit);}; visit(file);}
+ ││    found.sort((a,b)=>b.lines-a.lines); console.log(JSON.stringify(found.slice(0,20),null,2));' [in
+ ││    /Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code] (Count function-like AST nodes in core source files, excluding tests)
+ ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││        "start": 149,                                                                                                                   │
+ ││        "end": 231,                                                                                                                     │
+ ││        "lines": 83                                                                                                                     │
+ ││      },                                                                                                                                │
+ ││      {                                                                                                                                 │
+ ││        "name": "handleRunError",                                                                                                       │
+ ││        "path": "packages/agents/src/core/turn.ts",                                                                                     │
+ ││        "start": 516,                                                                                                                   │
+ ││        "end": 598,                                                                                                                     │
+ ││        "lines": 83                                                                                                                     │
+ ││      },                                                                                                                                │
+ ││      {                                                                                                                                 │
+ ││        "name": "_enforceAndSendProviderRequest",                                                                                       │
+ ││        "path": "packages/agents/src/core/TurnProcessor.ts",                                                                            │
+ ││        "start": 598,                                                                                                                   │
+ ││        "end": 679,                                                                                                                     │
+ ││        "lines": 82                                                                                                                     │
+ ││      },                                                                                                                                │
+ ││      {                                                                                                                                 │
+ ││        "name": "createChatObject",                                                                                                     │
+ ││        "path": "packages/agents/src/core/subagentRuntimeSetup.ts",                                                                     │
+ ││        "start": 607,                                                                                                                   │
+ ││        "end": 688,                                                                                                                     │
+ ││        "lines": 82                                                                                                                     │
+ ││      },                                                                                                                                │
+ ││      {                                                                                                                                 │
+ ││        "name": "executeSaveRoute",                                                                                                     │
+ ││        "path": "packages/agents/src/core/profile/controllerSave.ts",                                                                   │
+ ││        "start": 88,                                                                                                                    │
+ ││        "end": 169,                                                                                                                     │
+ ││        "lines": 82                                                                                                                     │
+ ││      },                                                                                                                                │
+ ││      {                                                                                                                                 │
+ ││        "name": "_runStreamAttempt",                                                                                                    │
+ ││        "path": "packages/agents/src/core/TurnProcessor.ts",                                                                            │
+ ││        "start": 410,                                                                                                                   │
+ ││        "end": 490,                                                                                                                     │
+ ││        "lines": 81                                                                                                                     │
+ ││      }                                                                                                                                 │
+ ││    ]                                                                                                                                   │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Reading function context
+
+                                                                                                                                           █
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ ││ ✓                                                                                                                                      █
+ ││ ReadLineRange packages/.../core/chatSession.ts                                                                                         █
+ ││                                                                                                                                        █
+ ││    Read lines 255-375 of 1038 from packages/agents/src/core/chatSession.ts                                                             █
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Labeling the constructor                                                                                                                  █
+                                                                                                                                           █
+ Resolving top-ten tie order                                                                                                               █
+                                                                                                                                           █
+ Selecting tie order                                                                                                                       █
+                                                                                                                                           █
+ Labeling the constructor: **Resolving top-ten tie order** **Selecting tie order**                                                         █
+                                                                                                                                           █
+ Counted from each function-like declaration’s first line through its closing line, inclusive. Test and fixture files are excluded. The    █
+ 10th-place length is tied at 85 lines.                                                                                                    █
+                                                                                                                                           █
+                                                                                                                                           █
+  ┌──────────────────────────────────┬──────────────────────────────────────────────────────────┬───────┐                                  █
+  │ Function                         │ File path                                                │ Lines │                                  █
+  ├──────────────────────────────────┼──────────────────────────────────────────────────────────┼───────┤                                  █
+  │ ChatSession constructor          │ packages/agents/src/core/chatSession.ts                  │ 99    │                                  █
+  │ attemptExecutionOfScheduledCalls │ packages/agents/src/core/coreToolScheduler.ts            │ 99    │                                  █
+  │ recoverPendingBoundary           │ packages/agents/src/core/boundaryRecovery.ts             │ 97    │                                  █
+  │ restoreHistory                   │ packages/agents/src/core/client.ts                       │ 95    │                                  █
+  │ handleErrorEvent                 │ packages/agents/src/core/MessageStreamTerminalHandler.ts │ 89    │                                  █
+  │ acquireFirstStreamEvent          │ packages/agents/src/core/turn.ts                         │ 89    │                                  █
+  │ run                              │ packages/agents/src/core/turn.ts                         │ 87    │                                  █
+  │ _processStreamIteration          │ packages/agents/src/core/MessageStreamOrchestrator.ts    │ 86    │                                  █
+  │ readStreamToCompletion           │ packages/agents/src/core/subagentNonInteractive.ts       │ 85    │                                  █
+  │ generateJson                     │ packages/agents/src/core/clientLlmUtilities.ts           │ 85    │                                  █
+  └──────────────────────────────────┴──────────────────────────────────────────────────────────┴───────┘                                  █
+                                                                                                                                           █
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084*Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 29,083/262,144 tokens | TPM: 146.08k | Wait: 0ms | 04:11:07
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                lunahigh:gpt-6-luna | Tokens: 106,604
