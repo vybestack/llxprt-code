@@ -238,6 +238,10 @@ const AgentSkillDefinitionSchema = z
   })
   .strict();
 
+// Shape only: host device checks belong to the launch host, not to a remote
+// API caller that may be describing a different machine.
+const AgentSandboxDevicesSchema = z.array(z.string()).max(64).optional();
+
 const AgentSandboxMountSchema = z
   .object({
     from: z.string(),
@@ -251,6 +255,7 @@ const AgentSandboxSchema = z.union([
     .object({
       command: z.enum(['docker', 'podman', 'sandbox-exec']),
       image: z.string(),
+      devices: AgentSandboxDevicesSchema,
     })
     .strict(),
   z
@@ -260,6 +265,7 @@ const AgentSandboxSchema = z.union([
       env: z.record(z.string()).optional(),
       network: z.enum(['on', 'off', 'proxied']).optional(),
       sshAgent: z.enum(['auto', 'on', 'off']).optional(),
+      devices: AgentSandboxDevicesSchema,
     })
     .strict(),
 ]);

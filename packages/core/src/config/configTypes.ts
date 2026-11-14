@@ -252,6 +252,7 @@ interface SandboxConfigBase {
   readonly network?: 'on' | 'off' | 'proxied';
   readonly sshAgent?: 'auto' | 'on' | 'off';
   readonly resources?: SandboxProfileResourcesConfig;
+  readonly devices?: readonly string[];
 }
 
 export type SandboxConfig =
