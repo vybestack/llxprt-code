@@ -72,6 +72,15 @@ export class CommittedIdNodes {
     for (const child of node.children) this.copyTranscript(child.ref, target);
   }
 
+  /** Puts far outnumber trims; an iterator per put cost more than the map writes. */
+  private trimNodeExtents(): void {
+    if (this.nodeExtents.size <= MAX_KNOWN_NODE_EXTENTS) return;
+    for (const previous of this.nodeExtents.keys()) {
+      if (this.nodeExtents.size <= MAX_KNOWN_NODE_EXTENTS) break;
+      this.nodeExtents.delete(previous);
+    }
+  }
+
   private appender(target: RecordAppender): RecordAppender {
     return {
       get nextOffset() {
@@ -89,10 +98,7 @@ export class CommittedIdNodes {
             offset,
             frameLength(record.kindHeader.length, 0),
           );
-          for (const previous of this.nodeExtents.keys()) {
-            if (this.nodeExtents.size <= MAX_KNOWN_NODE_EXTENTS) break;
-            this.nodeExtents.delete(previous);
-          }
+          this.trimNodeExtents();
         }
         if (
           record.kind === RECORD_KIND.ITNODE ||

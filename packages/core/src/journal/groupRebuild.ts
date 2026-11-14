@@ -277,7 +277,8 @@ export async function buildRebuilt(
   const pass = new RebuildPass(ctx, plan.nextLabel, segments, appender, facts);
   const algebra = ctx.algebra(slotKindsOf(plan.base.slots));
   let tree = await bulkBuildRowTree(appender, algebra, pass.entries());
-  let roots = await commitRebuiltFacts(finishFacts(facts), appender);
+  // The contribution pass reads the facts through the batch, so they are
+  // committed once, after it: an earlier commit would rewrite every fact.
   if (
     tree !== undefined &&
     (tree.root.aggregate.toolCallBlocks > 0 ||
@@ -292,8 +293,8 @@ export async function buildRebuilt(
     );
     if (tree === undefined)
       throw new JournalFormatError('Contribution rebuild lost its rows');
-    roots = await commitRebuiltFacts(finishFacts(facts), appender);
   }
+  const roots = await commitRebuiltFacts(finishFacts(facts), appender);
   const stateRoot = await commitState(ctx, plan, appender);
   const { first, last } = pass;
   return {

@@ -10,6 +10,8 @@ import { MapLookupCache } from './map-lookup-cache.js';
 export const ID_NODE_CACHE_BYTES = 64 * 1024;
 /** What a cached node costs beyond its bytes: the typed array, the map slot and the key. */
 export const ID_NODE_CACHE_ENTRY_OVERHEAD = 48;
+/** The root and the two levels below it: the shallow paths every lookup shares. */
+const SHALLOW_NODES = 1 + 16 + 16 * 16;
 
 /**
  * Nodes are immutable and a reader only reads below the published
@@ -79,16 +81,19 @@ export class BoundedIdNodeCache implements IdNodeCache {
       (shallow ? this.shallowNodes : this.nodes).set(offset, kindHeader);
       this.charged += cost;
     }
-    for (const [previousOffset, previous] of this.shallowNodes) {
-      if (this.shallowNodes.size <= 1 + 16 + 16 * 16) break;
-      this.shallowNodes.delete(previousOffset);
-      this.charged -= previous.length + ID_NODE_CACHE_ENTRY_OVERHEAD;
-    }
+    if (this.shallowNodes.size > SHALLOW_NODES)
+      for (const [previousOffset, previous] of this.shallowNodes) {
+        if (this.shallowNodes.size <= SHALLOW_NODES) break;
+        this.shallowNodes.delete(previousOffset);
+        this.charged -= previous.length + ID_NODE_CACHE_ENTRY_OVERHEAD;
+      }
     this.evictToCap(this.nodes);
     this.evictToCap(this.shallowNodes);
   }
 
   private evictToCap(nodes: Map<number, Uint8Array>): void {
+    // Puts far outnumber evictions; an iterator per put cost more than the map writes.
+    if (this.charged <= this.capBytes) return;
     for (const [offset, node] of nodes) {
       if (this.charged <= this.capBytes) return;
       nodes.delete(offset);
