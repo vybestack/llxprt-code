@@ -16,8 +16,10 @@ import type {
   AgentSchedulerHandle,
 } from '../api/config-types.js';
 import { SessionSchedulerOwner } from './sessionSchedulerOwner.js';
-import type { ApprovalHandler } from '../core/agenticLoop/types.js';
-import type { NestedExecutionComposition } from '../scheduler/nested-execution.js';
+import type {
+  NestedCodeModeInputs,
+  NestedExecutionComposition,
+} from '../scheduler/nested-execution.js';
 import { logToolScriptRun } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 
 export type SchedulerConstruction = (
@@ -57,7 +59,7 @@ export function bindSchedulerOwner(
   getToolGovernance: CoreToolSchedulerOptions['getToolGovernance'],
   readApprovalMode: CoreToolSchedulerOptions['readApprovalMode'],
   telemetry: CoreToolSchedulerOptions['telemetry'],
-  nested?: { readonly approval: ApprovalHandler | undefined },
+  nested?: NestedCodeModeInputs,
 ): (callbacks: SchedulerCallbacks) => SessionSchedulerOwner {
   const label = config.getSessionId();
   const base: Omit<CoreToolSchedulerOptions, keyof SchedulerCallbacks> = {
@@ -70,29 +72,10 @@ export function bindSchedulerOwner(
     toolRegistry,
     toolContextInteractiveMode: interactiveMode,
   };
-  // Nested (code mode) runs get fresh schedulers from the same options but
-  // without a nested composition, so a script cannot start another script.
-  const nestedExecution: NestedExecutionComposition | undefined =
+  const nestedExecution =
     nested === undefined
       ? undefined
-      : {
-          messageBus,
-          approval: nested.approval,
-          interactiveMode,
-          selection: toolRegistry,
-          readGovernance: getToolGovernance,
-          createScheduler: (callbacks, { promptsAvailable }) =>
-            assembleSchedulerOwner(
-              `${label}#script`,
-              {
-                ...base,
-                ...callbacks,
-                confirmationPromptsAvailable: promptsAvailable,
-              },
-              construct,
-            ),
-          logScriptRun: (event) => logToolScriptRun(config, event, telemetry),
-        };
+      : composeNestedExecution(label, base, construct, nested);
   return (callbacks) =>
     assembleSchedulerOwner(
       label,
@@ -103,6 +86,46 @@ export function bindSchedulerOwner(
       },
       construct,
     );
+}
+
+export type NestedSchedulerBase = Omit<
+  CoreToolSchedulerOptions,
+  keyof SchedulerCallbacks
+>;
+
+/**
+ * The code mode composition of a caller's scheduler (issue #4084). Nested
+ * runs get fresh schedulers from the same options but without a nested
+ * composition, so a script cannot start another script. Used by the session
+ * loop and by subagent schedulers.
+ */
+export function composeNestedExecution(
+  label: string,
+  base: NestedSchedulerBase,
+  construct: SchedulerConstruction,
+  inputs: NestedCodeModeInputs,
+): NestedExecutionComposition {
+  return {
+    messageBus: base.messageBus,
+    approval: inputs.approval,
+    interactiveMode: base.toolContextInteractiveMode === true,
+    selection: base.toolRegistry,
+    readGovernance: base.getToolGovernance,
+    createScheduler: (callbacks, { promptsAvailable }) =>
+      assembleSchedulerOwner(
+        `${label}#script`,
+        {
+          ...base,
+          ...callbacks,
+          confirmationPromptsAvailable: promptsAvailable,
+        },
+        construct,
+      ),
+    logScriptRun: (event) =>
+      logToolScriptRun(base.config, event, base.telemetry),
+    readCodeModeLimits: inputs.readCodeModeLimits,
+    readDeadline: inputs.readDeadline ?? (() => undefined),
+  };
 }
 
 /**

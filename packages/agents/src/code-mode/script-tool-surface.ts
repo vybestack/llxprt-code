@@ -62,7 +62,7 @@ function notScriptable(name: string): ScriptToolPreflight {
 
 function admitted(
   name: string,
-  composition: NestedExecutionComposition,
+  composition: Pick<NestedExecutionComposition, 'selection' | 'readGovernance'>,
   hookRestrictedAllowedTools: readonly string[] | undefined,
 ): boolean {
   if (isToolBlocked(name, composition.readGovernance())) return false;
@@ -72,6 +72,19 @@ function admitted(
     hookRestrictedAllowedTools
       .map(canonicalizeToolName)
       .includes(canonicalizeToolName(name))
+  );
+}
+
+/**
+ * The script-callable tools this caller admits, in the v1 set's order: what
+ * `discover_tool_api` lists and what the API revision covers.
+ */
+export function admittedScriptTools(
+  composition: Pick<NestedExecutionComposition, 'selection' | 'readGovernance'>,
+  hookRestrictedAllowedTools: readonly string[] | undefined,
+): string[] {
+  return SCRIPT_CALLABLE_TOOLS.filter((name) =>
+    admitted(name, composition, hookRestrictedAllowedTools),
   );
 }
 

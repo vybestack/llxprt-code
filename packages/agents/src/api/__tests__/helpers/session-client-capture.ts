@@ -8,6 +8,7 @@ import { acquireSessionClient } from '../../../session/session-client-binding.js
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { buildAgentClientFactory } from '../../agentBootstrap.js';
+import { readCodeModeSettings } from '../../../code-mode/code-mode-settings.js';
 
 const builtClients = new WeakMap<SessionClientOwner, AgentClientContract[]>();
 const createSessionOwner = SessionClientOwner.create;
@@ -103,6 +104,11 @@ export async function createCapturedSessionOwner(
       requestInteractiveAuth: async () => {
         throw new Error('This fixture has no interactive OAuth host');
       },
+      readCodeMode: () =>
+        readCodeModeSettings(
+          (key) => settingsOwner.readNamedParameter(key),
+          false,
+        ),
     },
   );
   builtClients.set(owner, built);

@@ -26,6 +26,7 @@ import type {
 } from '../core/agenticLoop/types.js';
 import { TurnToolExecutionOwner } from './turn-tool-execution-owner.js';
 import { bindTurnModel } from './bind-turn-model.js';
+import { readCodeModeLimits } from '../code-mode/code-mode-settings.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import {
   bindSchedulerOwner,
@@ -357,7 +358,13 @@ export class SessionExecutionOwner {
               ? this.config.getApprovalMode()
               : ApprovalMode.DEFAULT,
           this.settings.telemetry,
-          { approval: this.approval },
+          {
+            approval: this.approval,
+            readCodeModeLimits: () =>
+              readCodeModeLimits((key) =>
+                this.settings.readNamedParameter(key),
+              ),
+          },
         ),
       ),
       displayCallbacks: this.display,

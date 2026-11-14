@@ -33,7 +33,13 @@ import {
   type ToolScriptRunView,
 } from './tool-script-card.js';
 import { QuickJsProcessRuntime } from './quickjs-process-runtime.js';
-import type { CodeModeRuntime, JsonValue } from './runtime-contract.js';
+import type {
+  CodeModeLimits,
+  CodeModeRuntime,
+  JsonValue,
+} from './runtime-contract.js';
+import { boundWallTimeout } from './code-mode-settings.js';
+import { computeApiRevision, readScriptApi } from './tool-declarations.js';
 import {
   EXECUTE_TOOL_SCRIPT,
   SCRIPT_CALLABLE_TOOLS,
@@ -44,8 +50,9 @@ export interface ExecuteToolScriptParams {
   readonly source: string;
   readonly tools: readonly string[];
   /**
-   * Accepted but not checked yet: discovery (`discover_tool_api`) and the
-   * revision it hands out arrive in a later phase of #4084.
+   * Optional. When present it must equal the caller's current script API
+   * revision (what `discover_tool_api` returned), or the run fails with
+   * API_CHANGED before it starts.
    */
   readonly api_revision?: string;
   readonly purpose: string;
@@ -57,7 +64,7 @@ const schema = {
     source: {
       type: 'string',
       description:
-        'JavaScript async function body. Call tools as `await tools["name"](args)`; each call resolves to {ok:true,value,completeness} or {ok:false,error:{code,message}}. Text tools give value {text}; run_shell_command gives {stdout,stderr,exitCode,streamsMerged}. `return` one JSON value.',
+        'JavaScript async function body (no imports, no TypeScript). Call tools as `await tools["name"](args)`; each call resolves to {ok:true,value,completeness} or {ok:false,error:{code,message}}. Text tools give value {text}; run_shell_command gives {stdout,stderr,exitCode,streamsMerged}. `return` one JSON value.',
     },
     tools: {
       type: 'array',
@@ -66,7 +73,8 @@ const schema = {
     },
     api_revision: {
       type: 'string',
-      description: 'API revision from discover_tool_api, when available.',
+      description:
+        'Optional api_revision from discover_tool_api. When given, the run fails with API_CHANGED if the tools changed since.',
     },
     purpose: {
       type: 'string',
@@ -76,8 +84,25 @@ const schema = {
   required: ['source', 'tools', 'purpose'],
 };
 
-/** Factory for the sandbox runtime of one run. */
-export type CodeModeRuntimeFactory = () => CodeModeRuntime;
+/** Factory for the sandbox runtime of one run, under that run's limits. */
+export type CodeModeRuntimeFactory = (
+  limits: Partial<CodeModeLimits>,
+) => CodeModeRuntime;
+
+const EXECUTE_DESCRIPTION = [
+  'Runs a short JavaScript program (an async function body) in a sandbox. The program calls read/search tools and foreground shell commands as `await tools["name"](args)`, loops over, filters, joins and counts their results, and returns one compact JSON value. Only that value enters the conversation.',
+  'Use it for mechanical gathering: the same lookup over many files, commits or directories, joins across tool outputs, counting, or large outputs you do not need to read yourself.',
+  'Do not use it for one small lookup, or for content you must read yourself to edit or explain: call that tool directly.',
+  'List every tool the script calls in `tools`. Scripts cannot write files, start agents or reach the network; every call they make goes through the normal policy and approval checks. discover_tool_api gives the exact argument and result types.',
+  'Example:',
+  'const counts = {};',
+  'for (const dir of ["packages/core/src", "packages/cli/src"]) {',
+  '  const r = await tools["run_shell_command"]({ command: `git ls-files ${dir} | wc -l` });',
+  '  if (!r.ok) throw new Error(r.error.message);',
+  '  counts[dir] = Number(r.value.stdout.trim());',
+  '}',
+  'return counts;',
+].join('\n');
 
 interface ScriptSummary {
   readonly [key: string]: JsonValue;
@@ -195,9 +220,30 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
     );
     if (!preflight.ok)
       return preflightFailure(preflight.code, preflight.message);
+    const { composition } = port;
+    const limits = composition.readCodeModeLimits();
+    const revision = this.params.api_revision;
+    if (revision !== undefined) {
+      const current = computeApiRevision(
+        readScriptApi(composition, scope.hookRestrictedAllowedTools),
+        limits,
+      );
+      if (current !== revision)
+        return preflightFailure(
+          'API_CHANGED',
+          `The script API changed since revision ${revision}; it is now ${current}. Call discover_tool_api again, or leave out api_revision.`,
+        );
+    }
     let latest: ToolScriptRunView | undefined;
     const owner = new CodeModeRunOwner({
-      runtime: this.createRuntime(),
+      runtime: this.createRuntime({
+        maxCalls: limits.maxCalls,
+        maxResultBytes: limits.maxResultBytes,
+        wallTimeoutMs: boundWallTimeout(
+          limits.wallTimeoutMs,
+          composition.readDeadline(),
+        ),
+      }),
       request: {
         language: 'javascript',
         source: this.params.source,
@@ -240,8 +286,8 @@ export class ExecuteToolScriptTool extends BaseDeclarativeTool<
 
   constructor(
     messageBus: IToolMessageBus,
-    private readonly createRuntime: CodeModeRuntimeFactory = () =>
-      new QuickJsProcessRuntime(),
+    private readonly createRuntime: CodeModeRuntimeFactory = (limits) =>
+      new QuickJsProcessRuntime({ limits }),
     private readonly display?: ScriptRunDisplay,
   ) {
     // Kind.Think, like `task`: the script tool has no effect of its own, so
@@ -251,7 +297,7 @@ export class ExecuteToolScriptTool extends BaseDeclarativeTool<
     super(
       EXECUTE_TOOL_SCRIPT,
       'Execute tool script',
-      'Runs a short JavaScript program that calls read/search tools and foreground shell commands as async functions, loops over and filters their results in a sandbox, and returns one compact JSON value. Use it for mechanical gathering over many files or commands; read content directly when you need to see it yourself. Every tool call the script makes goes through the normal policy and approval checks.',
+      EXECUTE_DESCRIPTION,
       Kind.Think,
       schema,
       false,

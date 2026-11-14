@@ -35,7 +35,12 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
+import type { NestedSchedulerBase } from '../session/assembleSchedulerOwner.js';
+import {
+  assembleSubagentSchedulerOwner,
+  type SubagentCodeMode,
+} from './subagent-scheduler-owner.js';
+import { advertisedDeclarations } from '../code-mode/code-mode-surface.js';
 import {
   executeToolCall,
   type ToolExecutionConfig,
@@ -139,6 +144,8 @@ export interface SubAgentRuntimeInput {
   readonly toolsView: ToolRegistryView;
   readonly settingsSnapshot: ReadonlySettingsSnapshot;
   readonly foregroundConfig: Config;
+  /** Code mode as the subagent's own settings allow it (issue #4084). */
+  readonly codeMode?: SubagentCodeMode;
 }
 
 export interface SubAgentOperationPorts {
@@ -187,6 +194,8 @@ export class SubAgentScope implements ChildAgentScope {
   onOutputReset?: () => void;
 
   private timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  /** When the run's own timeout fires (epoch ms); bounds script runs. */
+  private deadline: number | undefined;
   private activeRun: Promise<void> | undefined;
   private disposal: Promise<void> | undefined;
   private closed = false;
@@ -283,6 +292,7 @@ export class SubAgentScope implements ChildAgentScope {
       return;
     }
     const timeoutMs = this.launch.run.max_time_minutes * 60 * 1000;
+    this.deadline = Date.now() + timeoutMs;
     if (timeoutMs <= 0) {
       if (!abortController.signal.aborted) {
         this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
@@ -338,10 +348,15 @@ export class SubAgentScope implements ChildAgentScope {
     const abortController = new AbortController();
     this.activeAbortController = abortController;
     this.bindParentSignal(abortController);
-    const functionDeclarations = buildRuntimeFunctionDeclarations(
+    const declared = buildRuntimeFunctionDeclarations(
       this.admission.runtimeContext.tools,
       this.admission.toolConfig,
     );
+    const { codeMode } = this.runtime;
+    const functionDeclarations =
+      codeMode === undefined
+        ? declared
+        : advertisedDeclarations(declared, codeMode.readSettings());
     if (this.launch.outputConfig?.outputs) {
       functionDeclarations.push(
         ...getScopeLocalFuncDefs(this.launch.outputConfig),
@@ -450,23 +465,10 @@ export class SubAgentScope implements ChildAgentScope {
    * branch (no break/continue) and avoids the always-truthy while(true).
    */
   private async initScheduler(options: SubagentExecutionOptions | undefined) {
-    const messageBus = this.operations.messageBus;
     const registry = this.admission.toolExecutorContext.getToolRegistry();
     return initInteractiveScheduler(options, {
       createSchedulerOwner: (callbacks) =>
-        assembleSchedulerOwner(this.subagentId, {
-          telemetry: this.admission.toolExecutorContext.telemetry,
-          config: this.runtime.foregroundConfig,
-          messageBus,
-          toolRegistry: registry,
-          readApprovalMode: this.admission.toolExecutorContext.readApprovalMode,
-          getToolGovernance: () =>
-            this.admission.toolExecutorContext.readGovernance(),
-          readExecutionPolicy: () =>
-            this.admission.toolExecutorContext.readExecutionPolicy(),
-          toolContextInteractiveMode: true,
-          ...callbacks,
-        }),
+        this.createSchedulerOwner(registry, true, callbacks),
       onMessage: this.onMessage,
       messageBus: this.operations.messageBus,
       subagentId: this.subagentId,
@@ -771,25 +773,37 @@ export class SubAgentScope implements ChildAgentScope {
   ): Promise<NonInteractiveToolExecutionResult> {
     const registry = this.admission.toolExecutorContext.getToolRegistry();
     const completed = await executeToolCall(
-      (callbacks) =>
-        assembleSchedulerOwner(this.subagentId, {
-          telemetry: this.admission.toolExecutorContext.telemetry,
-          config: this.runtime.foregroundConfig,
-          messageBus: this.operations.messageBus,
-          toolRegistry: registry,
-          readApprovalMode: this.admission.toolExecutorContext.readApprovalMode,
-          getToolGovernance: () =>
-            this.admission.toolExecutorContext.readGovernance(),
-          readExecutionPolicy: () =>
-            this.admission.toolExecutorContext.readExecutionPolicy(),
-          toolContextInteractiveMode: false,
-          ...callbacks,
-        }),
+      (callbacks) => this.createSchedulerOwner(registry, false, callbacks),
       request,
       signal,
       this.operations.hooks,
     );
     return { status: completed.status, response: completed.response };
+  }
+
+  private createSchedulerOwner(
+    registry: ToolSelection,
+    interactive: boolean,
+    callbacks: Parameters<typeof assembleSubagentSchedulerOwner>[4],
+  ) {
+    const context = this.admission.toolExecutorContext;
+    const base: NestedSchedulerBase = {
+      telemetry: context.telemetry,
+      config: this.runtime.foregroundConfig,
+      messageBus: this.operations.messageBus,
+      toolRegistry: registry,
+      readApprovalMode: context.readApprovalMode,
+      getToolGovernance: () => context.readGovernance(),
+      readExecutionPolicy: () => context.readExecutionPolicy(),
+      toolContextInteractiveMode: interactive,
+    };
+    return assembleSubagentSchedulerOwner(
+      this.subagentId,
+      base,
+      this.runtime.codeMode,
+      () => this.deadline,
+      callbacks,
+    );
   }
 
   private async readTodoCompletionPrompt(): Promise<string | null> {

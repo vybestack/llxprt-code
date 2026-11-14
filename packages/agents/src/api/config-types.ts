@@ -357,8 +357,10 @@ export interface AgentConfig
   readonly memory?: string;
   readonly skillsSupport?: boolean;
   /**
-   * Registers the code mode `execute_tool_script` tool (issue #4084). Off by
-   * default; a later phase maps the `code-mode` setting onto this flag.
+   * The host's default for the `code-mode` setting (issue #4084) when the
+   * session has no value for it. The setting, read live, decides whether the
+   * session lists and advertises `execute_tool_script` and
+   * `discover_tool_api`; `/set code-mode` and profiles override this default.
    */
   readonly codeMode?: boolean;
   readonly disabledSkills?: readonly string[];

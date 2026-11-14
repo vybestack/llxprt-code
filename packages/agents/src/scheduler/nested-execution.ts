@@ -26,6 +26,7 @@ import type {
 import type { ToolScriptRunEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { ApprovalHandler } from '../core/agenticLoop/types.js';
 import type { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
+import type { CodeModeSettingLimits } from '../code-mode/code-mode-settings.js';
 
 /** A finished call's post-hook result, before model-token formatting. */
 export interface ToolResultDelivery {
@@ -68,6 +69,20 @@ export interface NestedExecutionComposition {
   ) => SessionSchedulerOwner;
   /** Exports one script run's lifecycle metrics through session telemetry. */
   readonly logScriptRun: (event: ToolScriptRunEvent) => void;
+  /**
+   * The caller's code mode limits for a run started now (a subagent's are
+   * already lowered to its caller's). Read once per run and frozen for it.
+   */
+  readonly readCodeModeLimits: () => CodeModeSettingLimits;
+  /** The caller's own deadline (epoch ms), when it has one. */
+  readonly readDeadline: () => number | undefined;
+}
+
+/** The code mode inputs a caller adds to its scheduler composition. */
+export interface NestedCodeModeInputs {
+  readonly approval: ApprovalHandler | undefined;
+  readonly readCodeModeLimits: () => CodeModeSettingLimits;
+  readonly readDeadline?: () => number | undefined;
 }
 
 /**
