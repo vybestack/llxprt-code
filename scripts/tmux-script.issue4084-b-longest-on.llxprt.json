@@ -29,7 +29,7 @@
     },
     {
       "type": "line",
-      "text": "List the 10 longest functions in packages/agents/src/core by line count, with file path and length.",
+      "text": "List the 10 longest functions in packages/agents/src/core by line count, with file path and length. Do the work yourself in this session; do not delegate to a subagent.",
       "postTypeMs": 1500
     },
     {

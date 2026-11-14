@@ -29,7 +29,7 @@
     },
     {
       "type": "line",
-      "text": "What does packages/agents/src/tools/task.ts export? Read it and explain.",
+      "text": "What does packages/agents/src/tools/task.ts export? Read it and explain. Do the work yourself in this session; do not delegate to a subagent.",
       "postTypeMs": 1500
     },
     {

@@ -193,6 +193,21 @@ describe('issue4084 ground truth', () => {
     ]);
   });
 
+  it('leaves anonymous callbacks out when asked for named functions only', () => {
+    const named = computeLongestFunctions(repo, 'core', {
+      includeTests: true,
+      namedOnly: true,
+      limit: 2,
+    });
+
+    expect(
+      named.map(({ file, name, lines }) => [file, name, lines]),
+    ).toStrictEqual([
+      ['core/long.ts', 'method', 5],
+      ['core/long.ts', 'shortOne', 3],
+    ]);
+  });
+
   it('lists every function tied with the last of the top entries', () => {
     const { top, tiedAtCutoff } = longestWithTies(repo, 'core', {
       ref: 'HEAD',

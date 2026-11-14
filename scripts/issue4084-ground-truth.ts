@@ -16,9 +16,10 @@
  *    package (`packages/<name>`), and per commit that last touched the marker
  *    line according to `git blame <base> -- <file>`.
  * B: the longest functions under a directory by line count (first line of the
- *    declaration through its closing line), reported both for every
- *    TypeScript file and with test files left out, because the prompt does
- *    not say which a model should count. The B prompt reads the working tree,
+ *    declaration through its closing line), reported for every TypeScript
+ *    file, with test files left out, and for named functions only (test files
+ *    included, anonymous callbacks such as test bodies left out), because the
+ *    prompt does not say which a model should count. The B prompt reads the working tree,
  *    so the report also says whether the ranking at `--ref` (default HEAD)
  *    gives the same files, names and lengths as the base commit.
  *
@@ -169,6 +170,8 @@ export function computePlanMarkers(
   };
 }
 
+const ANONYMOUS = '<anonymous>';
+
 /** Function kinds that carry their own name. */
 const SELF_NAMED = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.FunctionDeclaration,
@@ -200,7 +203,7 @@ function holderName(node: ts.Node): string | undefined {
 
 function functionName(node: ts.Node): string {
   if (ts.isConstructorDeclaration(node)) return 'constructor';
-  return ownName(node) ?? holderName(node) ?? '<anonymous>';
+  return ownName(node) ?? holderName(node) ?? ANONYMOUS;
 }
 
 function isFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaration {
@@ -243,10 +246,18 @@ function isTestFile(file: string): boolean {
   return /\.(test|spec)\.tsx?$/.test(file) || file.includes('/__tests__/');
 }
 
+export interface LongestOptions {
+  readonly ref?: string;
+  readonly limit?: number;
+  readonly includeTests: boolean;
+  /** Leave out anonymous functions (callbacks such as test bodies). */
+  readonly namedOnly?: boolean;
+}
+
 export function computeLongestFunctions(
   repo: string,
   directory: string,
-  options: { ref?: string; limit?: number; includeTests: boolean },
+  options: LongestOptions,
 ): FunctionLength[] {
   const ref = options.ref ?? 'HEAD';
   const files = git(repo, [
@@ -264,6 +275,7 @@ export function computeLongestFunctions(
     .flatMap((file) =>
       functionLengths(file, git(repo, ['show', `${ref}:${file}`])),
     )
+    .filter((entry) => options.namedOnly !== true || entry.name !== ANONYMOUS)
     .sort(
       (left, right) =>
         right.lines - left.lines ||
@@ -280,7 +292,7 @@ export function computeLongestFunctions(
 export function longestWithTies(
   repo: string,
   directory: string,
-  options: { ref: string; limit: number; includeTests: boolean },
+  options: LongestOptions & { ref: string; limit: number },
 ): { top: FunctionLength[]; tiedAtCutoff: FunctionLength[] } {
   const ranked = computeLongestFunctions(repo, directory, {
     ...options,
@@ -313,16 +325,22 @@ function main(argv: readonly string[]): void {
   ]).trim();
   const base = git(repo, ['rev-parse', SCENARIO_BASE]).trim();
   const directory = 'packages/agents/src/core';
-  const longest = (at: string, includeTests: boolean) =>
-    longestWithTies(repo, directory, { ref: at, limit: 10, includeTests });
-  const atBase = {
-    all: longest(base, true),
-    excludingTests: longest(base, false),
-  };
-  const atRef = {
-    all: longest(ref, true),
-    excludingTests: longest(ref, false),
-  };
+  // The prompt says neither whether test files count nor whether anonymous
+  // callbacks (test bodies) are functions, so three readings are reported.
+  const readings = {
+    all: { includeTests: true },
+    excludingTests: { includeTests: false },
+    namedIncludingTests: { includeTests: true, namedOnly: true },
+  } as const;
+  const rank = (at: string) =>
+    Object.fromEntries(
+      Object.entries(readings).map(([reading, options]) => [
+        reading,
+        longestWithTies(repo, directory, { ...options, ref: at, limit: 10 }),
+      ]),
+    );
+  const atBase = rank(base);
+  const atRef = rank(ref);
   const report = {
     base,
     ref,
@@ -330,14 +348,12 @@ function main(argv: readonly string[]): void {
     b: {
       directory,
       ...atBase,
-      sameRankingAtRef:
-        rankingKey(atBase.all.tiedAtCutoff) ===
-          rankingKey(atRef.all.tiedAtCutoff) &&
-        rankingKey(atBase.all.top) === rankingKey(atRef.all.top) &&
-        rankingKey(atBase.excludingTests.top) ===
-          rankingKey(atRef.excludingTests.top) &&
-        rankingKey(atBase.excludingTests.tiedAtCutoff) ===
-          rankingKey(atRef.excludingTests.tiedAtCutoff),
+      sameRankingAtRef: Object.keys(readings).every(
+        (reading) =>
+          rankingKey(atBase[reading].top) === rankingKey(atRef[reading].top) &&
+          rankingKey(atBase[reading].tiedAtCutoff) ===
+            rankingKey(atRef[reading].tiedAtCutoff),
+      ),
     },
   };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
