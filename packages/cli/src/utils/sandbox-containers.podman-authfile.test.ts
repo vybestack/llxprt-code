@@ -11,7 +11,6 @@ import path from 'node:path';
 import { addContainerEnvVars } from './sandbox-containers.js';
 
 const PODMAN_CONFIG = { command: 'podman', image: 'test' } as const;
-const posixOnly = process.platform === 'win32' ? it.skip : it;
 
 function authfileOperand(args: readonly string[]): string {
   const index = args.indexOf('--authfile');
@@ -50,13 +49,16 @@ describe('podman --authfile for sandbox containers', () => {
     expect(JSON.parse(fs.readFileSync(authfile, 'utf-8'))).toStrictEqual({});
   });
 
-  posixOnly('creates the auth file readable only by its owner', () => {
-    const authfile = authfileOperand(podmanArgs());
+  it.skipIf(process.platform === 'win32')(
+    'creates the auth file readable only by its owner',
+    () => {
+      const authfile = authfileOperand(podmanArgs());
 
-    expect(fs.statSync(authfile).mode & 0o077).toBe(0);
-  });
+      expect(fs.statSync(authfile).mode & 0o077).toBe(0);
+    },
+  );
 
-  posixOnly(
+  it.skipIf(process.platform === 'win32')(
     'does not overwrite a file reached through a symlink planted at the old fixed path',
     () => {
       const victim = path.join(tempRoot, 'victim.txt');

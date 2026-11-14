@@ -10,8 +10,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createKeepDecision } from './conflict-resolution.js';
 
-const posixOnly = process.platform === 'win32' ? it.skip : it;
-
 describe('createKeepDecision review copies', () => {
   let baseDir: string;
   let emptySourceDir: string;
@@ -72,7 +70,7 @@ describe('createKeepDecision review copies', () => {
     expect(decision).toStrictEqual({ action: 'resolved' });
   });
 
-  posixOnly(
+  it.skipIf(process.platform === 'win32')(
     'does not write through a dangling symlink planted at the review path',
     async () => {
       const elsewhere = path.join(baseDir, 'elsewhere.txt');

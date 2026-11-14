@@ -12,8 +12,6 @@ import * as path from 'path';
 import { createInitCommand } from './initCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
-const posixOnly = process.platform === 'win32' ? it.skip : it;
-
 describe('initCommand', () => {
   let mockContext: CommandOwnerFixture;
   let targetDir: string;
@@ -75,7 +73,7 @@ describe('initCommand', () => {
     );
   });
 
-  posixOnly(
+  it.skipIf(process.platform === 'win32')(
     'should not create a file through a dangling LLXPRT.md symlink',
     async () => {
       const elsewhere = path.join(targetDir, 'elsewhere.txt');
