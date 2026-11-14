@@ -19,7 +19,17 @@
     },
     {
       "type": "keys",
-      "keys": ["\u001b[200~STARTUP_PASTE_ADMISSION\u001b[201~\r"]
+      "keys": ["\u001b[200~STARTUP_PASTE_ADMISSION\u001b[201~"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "STARTUP_PASTE_ADMISSION",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "keys",
+      "keys": ["\r"]
     },
     {
       "type": "waitFor",

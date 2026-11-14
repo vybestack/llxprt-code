@@ -182,9 +182,10 @@ function bufferFastReturn(
     } else {
       keypressHandler(key);
     }
-    // A paste-end marker closes the payload. An Enter after that boundary is
-    // an explicit submit even when startup buffering delivers both together.
-    lastKeyTime = key.name === 'paste' ? Number.NEGATIVE_INFINITY : now;
+    // Pastes start the window too: a live Enter right after a paste is treated
+    // as part of the pasted text. Input held during startup is replayed above,
+    // outside the window, so a paste and Enter typed ahead still submit.
+    lastKeyTime = now;
   };
 }
 

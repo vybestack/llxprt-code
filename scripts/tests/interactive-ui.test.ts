@@ -246,19 +246,28 @@ describe('Interactive UI (tmux harness)', () => {
       );
     }
   }
-  for (const delay of ['ready', 'zero']) {
+  for (const { name, script, title } of [
+    {
+      name: 'ready',
+      script: 'tmux-script.startup-input.fake.json',
+      title: 'a paste at the ready composer followed by Enter',
+    },
+    {
+      name: 'zero',
+      script: 'tmux-script.startup-zero-input.fake.json',
+      title: 'a prompt and Enter typed before the UI starts',
+    },
+    {
+      name: 'zero-paste',
+      script: 'tmux-script.startup-zero-paste.fake.json',
+      title: 'a paste and Enter held in one chunk before the UI starts',
+    },
+  ]) {
     runTmuxE2E(
-      `first startup paste followed immediately by Enter is submitted and journaled (${delay})`,
+      `${title} is submitted and journaled`,
       async () => {
-        const testName = `startup-input-admission-${delay}`;
-        assertHarnessSuccess(
-          runHarness(
-            delay === 'zero'
-              ? 'tmux-script.startup-zero-input.fake.json'
-              : 'tmux-script.startup-input.fake.json',
-            testName,
-          ),
-        );
+        const testName = `startup-input-admission-${name}`;
+        assertHarnessSuccess(runHarness(script, testName));
         const directory = getArtifactDir(testName);
         const journals = readdirSync(directory, {
           recursive: true,

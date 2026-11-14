@@ -5,7 +5,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { createKeypressPipeline, PASTE_TIMEOUT } from './KeypressContext.js';
+import {
+  createKeypressPipeline,
+  FAST_RETURN_TIMEOUT,
+  PASTE_TIMEOUT,
+} from './KeypressContext.js';
 
 type ParsedKey = {
   name: string;
@@ -61,7 +65,35 @@ describe('bracketed paste decoding (AC4)', () => {
   });
 
   it('submits an Enter outside a completed paste even in the same startup chunk', () => {
+    const keys: ParsedKey[] = [];
+    const push = createKeypressPipeline((key) => keys.push(key), {
+      isStartupInput: () => true,
+    });
+    push('\x1b[200~first prompt\x1b[201~\r');
+    expect(
+      keys.map((key) => [key.name, key.sequence, key.shift]),
+    ).toStrictEqual([
+      ['paste', 'first prompt', false],
+      ['return', '\r', false],
+    ]);
+  });
+
+  it('keeps a live Enter arriving with a completed paste as pasted text', () => {
     const keys = feed(['\x1b[200~first prompt\x1b[201~\r']);
+    expect(
+      keys.map((key) => [key.name, key.sequence, key.shift]),
+    ).toStrictEqual([
+      ['paste', 'first prompt', false],
+      ['return', '\r', true],
+    ]);
+  });
+
+  it('submits a live Enter pressed after the paste protection window', () => {
+    const keys: ParsedKey[] = [];
+    const push = createKeypressPipeline((key) => keys.push(key));
+    push('\x1b[200~first prompt\x1b[201~');
+    vi.advanceTimersByTime(FAST_RETURN_TIMEOUT + 1);
+    push('\r');
     expect(
       keys.map((key) => [key.name, key.sequence, key.shift]),
     ).toStrictEqual([
