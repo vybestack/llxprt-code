@@ -42,6 +42,10 @@ import {
   readDumpAttemptContext,
 } from '../utils/dumpAttemptContext.js';
 import {
+  observeFirstResponseByte,
+  readRefusalAuditTiming,
+} from '../utils/refusalAuditTiming.js';
+import {
   type AnthropicRateLimitInfo,
   applyRateLimitThrottling,
 } from './AnthropicRateLimitHandler.js';
@@ -301,11 +305,16 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     authLogger.debug(() => 'Creating fresh client instance (stateless)');
+    const refusalAuditTiming = readRefusalAuditTiming(options.metadata);
+    const fetcher = observeFirstResponseByte(
+      options.invocation.fetch,
+      refusalAuditTiming,
+    );
     const client = instantiateClient(
       (token) => this.classifyOAuthToken(token),
       authToken,
       baseURL,
-      options.invocation.fetch,
+      fetcher,
     );
 
     telemetry?.record?.('stateless-provider.call', {
@@ -1006,6 +1015,7 @@ export class AnthropicProvider extends BaseProvider {
         rateLimitLogger,
         includeThinkingInResponse: requestContext.includeThinkingInResponse,
         commitState: findRequestCommitState(options),
+        refusalAuditTiming: readRefusalAuditTiming(options.metadata),
       });
       for await (const content of stream) {
         yield withSemanticMediaPurgeCacheEvidence(content, requestContext);

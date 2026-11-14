@@ -31,6 +31,60 @@ function stopReason(finishReason: string): string {
  * a `message_delta` carrying `stop_reason: \"refusal\"` and zero output tokens,
  * with no content block in between.
  */
+function renderAnthropicContentBlocks(
+  reply: Extract<EndpointReply, { kind: 'finish' }>,
+): string {
+  const text =
+    reply.text === undefined
+      ? ''
+      : event('content_block_start', {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'text', text: '' },
+        }) +
+        event('content_block_delta', {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'text_delta', text: reply.text },
+        }) +
+        event('content_block_stop', { type: 'content_block_stop', index: 0 });
+  const thinking =
+    reply.thinking === undefined
+      ? ''
+      : event('content_block_start', {
+          type: 'content_block_start',
+          index: 1,
+          content_block: { type: 'thinking', thinking: '' },
+        }) +
+        event('content_block_delta', {
+          type: 'content_block_delta',
+          index: 1,
+          delta: { type: 'thinking_delta', thinking: reply.thinking },
+        });
+  const partialToolCall =
+    reply.partialToolCall === undefined
+      ? ''
+      : event('content_block_start', {
+          type: 'content_block_start',
+          index: 2,
+          content_block: {
+            type: 'tool_use',
+            id: reply.partialToolCall.id,
+            name: reply.partialToolCall.name,
+            input: {},
+          },
+        }) +
+        event('content_block_delta', {
+          type: 'content_block_delta',
+          index: 2,
+          delta: {
+            type: 'input_json_delta',
+            partial_json: reply.partialToolCall.input,
+          },
+        });
+  return text + thinking + partialToolCall;
+}
+
 function renderAnthropicReply(reply: EndpointReply): string {
   if (reply.kind !== 'finish')
     throw new Error('The Anthropic endpoint scripts finish replies only');
@@ -47,23 +101,10 @@ function renderAnthropicReply(reply: EndpointReply): string {
       usage: { input_tokens: PROMPT_TOKENS, output_tokens: 0 },
     },
   });
-  const text =
-    reply.text === undefined
-      ? ''
-      : event('content_block_start', {
-          type: 'content_block_start',
-          index: 0,
-          content_block: { type: 'text', text: '' },
-        }) +
-        event('content_block_delta', {
-          type: 'content_block_delta',
-          index: 0,
-          delta: { type: 'text_delta', text: reply.text },
-        }) +
-        event('content_block_stop', { type: 'content_block_stop', index: 0 });
+  const contentBlocks = renderAnthropicContentBlocks(reply);
   return (
     start +
-    text +
+    contentBlocks +
     event('message_delta', {
       type: 'message_delta',
       delta: {

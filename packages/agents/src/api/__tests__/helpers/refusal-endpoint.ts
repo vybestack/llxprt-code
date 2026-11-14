@@ -34,6 +34,12 @@ export type EndpointReply = {
         readonly recommendedModel?: string;
       };
       readonly includeUsage?: boolean;
+      readonly thinking?: string;
+      readonly partialToolCall?: {
+        readonly id: string;
+        readonly name: string;
+        readonly input: string;
+      };
     }
   | {
       readonly kind: 'todo-write';

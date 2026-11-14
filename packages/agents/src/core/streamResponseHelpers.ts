@@ -94,14 +94,18 @@ export function stripProviderAttemptDiagnostics(content: IContent): IContent {
     stopDetails: _stopDetails,
     requestId: _requestId,
     dumpBaseId: _dumpBaseId,
+    refusalAuditToolInputs: _refusalAuditToolInputs,
+    firstByteToRefusalMs: _firstByteToRefusalMs,
     ...historyMetadata
   } = metadata;
-  if (
-    _stopDetails === undefined &&
-    _requestId === undefined &&
-    _dumpBaseId === undefined
-  )
-    return content;
+  const hasLegacyDiagnostics =
+    _stopDetails !== undefined ||
+    _requestId !== undefined ||
+    _dumpBaseId !== undefined;
+  const hasRefusalDiagnostics =
+    _refusalAuditToolInputs !== undefined ||
+    _firstByteToRefusalMs !== undefined;
+  if (!hasLegacyDiagnostics && !hasRefusalDiagnostics) return content;
   return { ...content, metadata: historyMetadata };
 }
 

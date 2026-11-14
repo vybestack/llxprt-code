@@ -2,7 +2,7 @@
 
 Branch: `issue4101`; current phase: P04.
 
-Status: P01-P03 are implemented and verified; P01 and P02 were already committed before this phase. P03's first full test run exposed incomplete `LoadedSettings` fixtures in sandbox tests; the fixtures were corrected, the focused tests passed, and the full rerun passed.
+Status: P04 implementation is present; P01-P03 were committed before this phase. Full-suite, typecheck, build and format results are recorded below. Lint still fails on line-count limits, and the distinct-summarizer compression-to-refusal integration scenario is missing. P05 has not started.
 
 | Phase | State | Verification |
 | --- | --- | --- |
@@ -10,7 +10,18 @@ Status: P01-P03 are implemented and verified; P01 and P02 were already committed
 | P01 | Implemented and verified | Details in `.completed/P01.md`. |
 | P02 | Implemented and verified | Corrected provider behavior, fixture initialization, and full repository verification are recorded below. |
 | P03 | Implemented and verified | Details in `.completed/P03.md`; full verification log: `tmp/verify4101/test-P03.log`. |
-| P04-P05 | Not started | Out of scope for this phase. |
+| P04 | Implemented; verification incomplete | Full test, typecheck, build and format passed; lint failed on remaining line-count constraints. The distinct-summarizer compression-to-refusal integration scenario is still missing. |
+| P05 | Not started | Out of scope for this phase. |
+
+## P04 verification record
+
+- Added audit-only refusal metadata for partial text, thinking and unfinished tool input, output tokens, first-byte timing, and context fingerprint. The unfinished tool input remains audit metadata, never an executable tool call.
+- Context baseline advances on successful commit and resets on clear/rebind/dispose. Compression summary provenance is recorded from the strategy that ran and propagated through the compression event.
+- Focused P04 behavior/tracker tests passed 6/6 initially. After compatibility fixture changes and metadata refactors, a focused regression command passed 79 tests across 5 files (`tmp/verify4101/focused-current-P04.log`, `rc=0`).
+- Full `npm run test` passed (`tmp/verify4101/test-P04.log`, `rc=0`); `grep -nE 'Native Bun test failed|^FAILED:'` returned no matches (grep exit code 1). The full test run also passed after fixes to prototype-created StreamProcessor fixtures and the compression-provenance test double.
+- `npm run typecheck`: final serial run passed (`tmp/verify4101/typecheck-P04.log`, `rc=0`). `npm run build`: passed (`tmp/verify4101/build-P04.log`, `rc=0`). `npm run format`: passed (`tmp/verify4101/format-P04.log`, `rc=0`). `git diff --check`: passed.
+- `npm run lint`: failed (`tmp/verify4101/lint-P04.log`, `rc=1`) on max-line constraints in `CompressionHandler`, `StreamProcessor`, and Anthropic `handleMessageDelta`; no rules were disabled or reduced.
+- The acceptance scenario requiring a refusal immediately after a real compression performed by a distinct summarizer model remains untested. Tracker unit coverage exercises different-author provenance; it does not prove the end-to-end compression-to-refusal path.
 
 ## P03 verification record
 

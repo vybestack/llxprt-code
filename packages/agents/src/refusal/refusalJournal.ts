@@ -40,6 +40,21 @@ export function toRefusalPayload(
     ...(attempt.dumpBaseId === undefined
       ? {}
       : { dump_base_id: attempt.dumpBaseId }),
+    ...(attempt.partialOutput === undefined
+      ? {}
+      : {
+          partial_output: {
+            ...attempt.partialOutput,
+            items: [...attempt.partialOutput.items],
+          },
+        }),
+    ...(attempt.outputTokens === undefined
+      ? {}
+      : { output_tokens: attempt.outputTokens }),
+    first_byte_to_refusal_ms: attempt.firstByteToRefusalMs,
+    ...(attempt.contextFingerprint === undefined
+      ? {}
+      : { context_fingerprint: attempt.contextFingerprint }),
     ...(usage !== undefined && {
       usage: {
         promptTokens: usage.promptTokens,

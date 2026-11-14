@@ -13,6 +13,7 @@ import {
   RAW_TOKEN_DELTA_SINK_KEY,
   DUMP_ATTEMPT_CONTEXT_KEY,
   type DumpAttemptContext,
+  REFUSAL_AUDIT_TIMING_KEY,
 } from '@vybestack/llxprt-code-providers';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type { RawTokenDeltaBridge } from './streamTelemetryLogger.js';
@@ -32,6 +33,7 @@ export function buildStreamChatOptions(
   rawTokenDeltaBridge: RawTokenDeltaBridge | null,
   dumpAttemptContext?: DumpAttemptContext,
 ): GenerateChatOptions {
+  const refusalAuditTiming = { firstByteAt: null };
   return {
     contents: requestPayload.contents,
 
@@ -61,6 +63,7 @@ export function buildStreamChatOptions(
       _retryRequestContext: params.config?.providerRequestContext,
       [LOGICAL_REQUEST_ID_KEY]: promptId,
       [RAW_TOKEN_DELTA_SINK_KEY]: rawTokenDeltaBridge?.notify,
+      [REFUSAL_AUDIT_TIMING_KEY]: refusalAuditTiming,
       ...(dumpAttemptContext === undefined
         ? {}
         : { [DUMP_ATTEMPT_CONTEXT_KEY]: dumpAttemptContext }),

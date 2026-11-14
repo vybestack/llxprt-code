@@ -8,7 +8,10 @@ import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type {
+  CompressionAuditProvenance,
+  CompressionProviderResult,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 /**
@@ -94,6 +97,7 @@ export async function emitCompressionLifecycleEvent(
   tokensBefore: number,
   tokensAfter: number,
   summary: IContent | undefined,
+  provenance?: CompressionAuditProvenance,
 ): Promise<void> {
   if (logger === null) return;
   if (!logger.isEnabled()) return;
@@ -102,16 +106,21 @@ export async function emitCompressionLifecycleEvent(
   const turnMarker = findCurrentTurnMarker(history.getRawHistory());
   const turnId = turnMarker?.turnId ?? null;
 
-  const compressionProfileName = runtimeCtx.ephemerals.compressionProfile();
-  const resolved = await resolveCompressionModelProvider(
-    resolveProvider,
-    compressionProfileName,
-  );
-
-  // Fall back to the session model/provider when the resolved result does not
-  // carry model info (e.g. no compression profile override).
-  const compressionModel = resolved.model ?? runtimeCtx.state.model;
-  const compressionProvider = resolved.provider;
+  const resolved =
+    provenance === undefined
+      ? await resolveCompressionModelProvider(
+          resolveProvider,
+          runtimeCtx.ephemerals.compressionProfile(),
+        )
+      : undefined;
+  const compressionModel =
+    provenance === undefined
+      ? (resolved?.model ?? runtimeCtx.state.model)
+      : provenance.summaryAuthorModel;
+  const compressionProvider =
+    provenance === undefined
+      ? (resolved?.provider ?? null)
+      : provenance.summaryAuthorProvider;
 
   const usage = extractCompressionUsage(summary);
 
@@ -140,6 +149,7 @@ export async function recordCompressionTelemetry(
   ) => CompressionProviderResult | Promise<CompressionProviderResult>,
   tokensBefore: number,
   summary: IContent | undefined,
+  provenance?: CompressionAuditProvenance,
 ): Promise<void> {
   // Emit the compression lifecycle event into the token-usage log (#3130
   // AC-7). Exactly-once: this branch runs only on a genuine 'applied'
@@ -155,6 +165,7 @@ export async function recordCompressionTelemetry(
     tokensBefore,
     historyService.getTotalTokens(),
     summary,
+    provenance,
   ).catch((error: unknown) => {
     logger.error('Failed to record compression telemetry', error);
   });

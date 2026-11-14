@@ -164,6 +164,8 @@ export class OneShotStrategy implements CompressionStrategy {
       finalSummary,
       capturedUsage,
       context.activeTodos,
+      provider.name,
+      resolvedOptions?.model ?? null,
     );
   }
 
@@ -219,6 +221,8 @@ export class OneShotStrategy implements CompressionStrategy {
     finalSummary: string,
     capturedUsage: UsageStats | undefined,
     activeTodos: string | undefined,
+    summaryAuthorProvider: string,
+    summaryAuthorModel: string | null,
   ): StrategyCompressionResult {
     const summaryEntry: IContent = {
       speaker: 'human' as const,
@@ -257,6 +261,11 @@ export class OneShotStrategy implements CompressionStrategy {
       topPreserved: 0,
       bottomPreserved: toKeep.length,
       middleCompressed: toCompress.length,
+      auditProvenance: {
+        summaryAuthorModel,
+        summaryAuthorProvider,
+        compressionStrategy: 'one-shot',
+      },
       ...(capturedUsage ? { usage: capturedUsage } : {}),
     };
 

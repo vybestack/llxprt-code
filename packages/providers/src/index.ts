@@ -161,6 +161,12 @@ export {
 
 // --- Provider utilities ---
 export {
+  REFUSAL_AUDIT_TIMING_KEY,
+  readRefusalAuditTiming,
+  observeFirstResponseByte,
+  type RefusalAuditTiming,
+} from './utils/refusalAuditTiming.js';
+export {
   fetchApiKeyQuota,
   detectApiKeyProvider,
   detectApiKeyProviderFromName,

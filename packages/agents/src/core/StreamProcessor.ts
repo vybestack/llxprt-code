@@ -19,6 +19,7 @@ import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompressionAuditProvenance } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
@@ -97,6 +98,8 @@ import {
 } from './runtimePorts.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
 import { throwIfRefused } from '../refusal/refusalDetection.js';
+import { RefusalContextTracker } from '../refusal/refusalContextTracker.js';
+import type { RefusalContextFingerprint } from '../refusal/refusalAudit.js';
 
 function isPreparedUserTurn(
   value: IContent | IContent[] | PreparedUserTurn,
@@ -111,6 +114,21 @@ export class StreamProcessor {
   }
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
+  private readonly refusalContextTracker = new RefusalContextTracker();
+  private readonly compressionAuditListener = (
+    _summary: IContent,
+    _itemsCompressed: number,
+    _origin?: object,
+    provenance?: CompressionAuditProvenance,
+  ): void => {
+    if (provenance !== undefined) {
+      this.refusalContextTracker.recordCompression(provenance);
+    }
+  };
+  private readonly refusalFingerprintByStream = new WeakMap<
+    AsyncGenerator<ModelStreamChunk>,
+    RefusalContextFingerprint
+  >();
 
   /** Canonical turn identity retained across retries for each logical prompt. */
   private readonly turnIdByPromptId = new Map<string, string>();
@@ -140,9 +158,12 @@ export class StreamProcessor {
     ports: StreamProcessorRuntime,
     providerFileBindings: ProviderFileBindingStore,
   ): void {
+    this.historyService.off('compressionEnded', this.compressionAuditListener);
     this.ports = ports;
     this.historyService = ports.history;
     this.providerFileBindings = providerFileBindings;
+    this.refusalContextTracker.reset();
+    this.historyService.on('compressionEnded', this.compressionAuditListener);
   }
 
   constructor(
@@ -163,7 +184,9 @@ export class StreamProcessor {
     ) => ProviderRequestCollaborators,
     private historyService: HistoryService,
     private readonly generationConfig: ChatSessionConfig,
-  ) {}
+  ) {
+    this.historyService.on('compressionEnded', this.compressionAuditListener);
+  }
 
   /** Tracks tool responses already recorded during eager client streaming. */
   markToolResponsesRecorded(callIds: readonly string[]): void {
@@ -176,6 +199,10 @@ export class StreamProcessor {
 
   releasePromptTurnIdentity(promptId: string): void {
     this.turnIdByPromptId.delete(promptId);
+  }
+
+  resetRefusalContext(): void {
+    this.refusalContextTracker.reset();
   }
 
   /** Resolves the provider, sends the request with retry, and returns a response stream. */
@@ -258,6 +285,8 @@ export class StreamProcessor {
       semanticMediaPurge,
       turnId,
       params.recordingExecution?.historyOrigin,
+      promptId,
+      this.currentAttemptIndex,
     );
   }
 
@@ -267,7 +296,9 @@ export class StreamProcessor {
     prepared: PreparedUserTurn | undefined,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
     turnId: string,
-    origin?: object,
+    origin: object | undefined,
+    promptId: string,
+    attemptIndex: number,
   ): AsyncGenerator<ModelStreamChunk> {
     let processedStream: AsyncGenerator<ModelStreamChunk> | undefined;
     const ensureProcessedStream = (): AsyncGenerator<ModelStreamChunk> => {
@@ -278,6 +309,9 @@ export class StreamProcessor {
         turnId,
         prepared,
         origin,
+        this.refusalFingerprintByStream.get(streamResponse),
+        promptId,
+        attemptIndex,
       );
       return processedStream;
     };
@@ -617,6 +651,10 @@ export class StreamProcessor {
         turnId: this.turnIdByPromptId.get(promptId) ?? null,
       });
 
+      const contextFingerprint = this.refusalContextTracker.snapshot(
+        this.historyService.getAll(),
+        prepared.options.contents,
+      );
       assertAdmittedRoute(params.modelParameters?.route);
       const streamResponse = provider.generateChatCompletion({
         ...prepared.options,
@@ -627,7 +665,7 @@ export class StreamProcessor {
       // what keeps this attempt's stream wired to this attempt's tracker.
       const rawTokenDeltaBridge = this.currentRawTokenDeltaBridge;
 
-      return await consumeFirstChunkAndReturn(
+      const convertedStream = await consumeFirstChunkAndReturn(
         streamResponse,
         requestPayload,
         promptId,
@@ -639,6 +677,8 @@ export class StreamProcessor {
         dumpAttemptContext,
         this._convertIContentStream.bind(this),
       );
+      this.refusalFingerprintByStream.set(convertedStream, contextFingerprint);
+      return convertedStream;
     } catch (error) {
       const durationMs = Date.now() - startTime;
       logApiError(
@@ -815,6 +855,9 @@ export class StreamProcessor {
     capturedTurnId?: string,
     preparedUserTurn?: PreparedUserTurn,
     origin?: object,
+    contextFingerprint?: RefusalContextFingerprint,
+    promptId = 'unknown',
+    attemptIndex = 0,
   ): AsyncGenerator<ModelStreamChunk> {
     const includeThoughts = this.ports.ephemerals.reasoning.includeInContext();
     const turnId = capturedTurnId ?? this.historyService.generateTurnKey();
@@ -860,7 +903,7 @@ export class StreamProcessor {
       const accumulated = accumulator.materialize();
       // Classified before validation, history commit and success accounting:
       // a refused attempt's output never reaches any of them (issue #4036).
-      throwIfRefused(accumulated, turnId);
+      throwIfRefused(accumulated, turnId, contextFingerprint);
       await this._finalizeStreamProcessing(
         accumulated,
         userInput,
@@ -869,6 +912,11 @@ export class StreamProcessor {
         preparedUserTurn,
         admissions,
         origin,
+      );
+      this.refusalContextTracker.commit(
+        this.historyService.getAll(),
+        promptId,
+        attemptIndex,
       );
       finalized = true;
     } catch (error: unknown) {

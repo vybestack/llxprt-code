@@ -8,6 +8,10 @@ import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/co
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { StopDetails } from '@vybestack/llxprt-code-core/llm-types/finishReasons.js';
+import type {
+  PartialOutputSnapshot,
+  RefusalContextFingerprint,
+} from './refusalAudit.js';
 import type { PendingTurnContents } from './reviewTypes.js';
 import type { PendingEdit } from './reviewWindow.js';
 
@@ -23,6 +27,10 @@ export interface RefusalEvidence {
   readonly requestId?: string | null;
   readonly dumpBaseId?: string;
   readonly usage?: UsageStats;
+  readonly partialOutput?: PartialOutputSnapshot;
+  readonly outputTokens?: number;
+  readonly firstByteToRefusalMs?: number | null;
+  readonly contextFingerprint?: RefusalContextFingerprint;
   /** Canonical turn id of the refused request. */
   readonly turnId: string;
 }

@@ -10,6 +10,11 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
+  buildPartialOutputSnapshot,
+  unavailableContextFingerprint,
+  type RefusalContextFingerprint,
+} from './refusalAudit.js';
+import {
   ModelRefusalSignal,
   type RefusalAttempt,
   type RefusalEvidence,
@@ -31,7 +36,11 @@ export function isRefusalFinishReason(
  * refusal. Called by the stream finalizer before response validation, history
  * commit and success accounting, so none of them see the refused output.
  */
-export function throwIfRefused(accumulated: ModelOutput, turnId: string): void {
+export function throwIfRefused(
+  accumulated: ModelOutput,
+  turnId: string,
+  contextFingerprint?: RefusalContextFingerprint,
+): void {
   if (!isRefusalFinishReason(accumulated.finishReason)) return;
   throw new ModelRefusalSignal({
     finishReason: 'refusal',
@@ -48,6 +57,20 @@ export function throwIfRefused(accumulated: ModelOutput, turnId: string): void {
       dumpBaseId: accumulated.dumpBaseId,
     }),
     ...(accumulated.usage !== undefined && { usage: accumulated.usage }),
+    partialOutput: buildPartialOutputSnapshot(accumulated),
+    ...(accumulated.usage !== undefined && {
+      outputTokens: accumulated.usage.completionTokens,
+    }),
+    firstByteToRefusalMs: accumulated.firstByteToRefusalMs ?? null,
+    contextFingerprint: {
+      ...(contextFingerprint ??
+        unavailableContextFingerprint(accumulated.usage)),
+      prompt_tokens: accumulated.usage?.promptTokens ?? null,
+      cache_read_tokens:
+        accumulated.usage?.cache_read_input_tokens ??
+        accumulated.usage?.cachedTokens ??
+        null,
+    },
     turnId,
   });
 }

@@ -20,6 +20,7 @@ import type { CompressionHandlerRuntime } from '../core/chatSessionPorts.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
+  CompressionAuditProvenance,
   CompressionContext,
   CompressionProviderResult,
   CompressionStrategyName,
@@ -98,6 +99,7 @@ export class CompressionHandler {
   private lastCompressionFailureTime: number | null = null;
   private lastSuccessfulCompressionTime: number | null = null;
   private compressionSummary: IContent | undefined;
+  private compressionAuditProvenance: CompressionAuditProvenance | undefined;
   densityDirty: boolean = true;
   private _suppressDensityDirty: boolean = false;
   private _suppressDensityDirtyDepth: number = 0;
@@ -636,6 +638,7 @@ export class CompressionHandler {
     // counter/timestamp changes entirely. (Issue #2602)
     let compressionOutcome: 'applied' | 'noop' | 'failed' = 'failed';
     this.compressionSummary = undefined;
+    this.compressionAuditProvenance = undefined;
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -656,6 +659,9 @@ export class CompressionHandler {
         compressionOutcome === 'noop' ? undefined : this.compressionSummary,
         compressionOutcome === 'noop' ? undefined : preCompressionCount,
         options?.historyOrigin,
+        compressionOutcome === 'noop'
+          ? undefined
+          : this.compressionAuditProvenance,
       );
     }
 
@@ -676,6 +682,7 @@ export class CompressionHandler {
         (profileName) => this.providerResolver(profileName),
         tokensBefore,
         this.compressionSummary,
+        this.compressionAuditProvenance,
       );
       return PerformCompressionResult.COMPRESSED;
     }
@@ -926,6 +933,11 @@ export class CompressionHandler {
     const summary = CompressionHandler.selectCompressionSummary(
       result.newHistory,
     );
+    this.compressionAuditProvenance = result.metadata.auditProvenance ?? {
+      summaryAuthorModel: null,
+      summaryAuthorProvider: null,
+      compressionStrategy: result.metadata.strategyUsed,
+    };
     await applyResult(
       result.newHistory,
       summary,

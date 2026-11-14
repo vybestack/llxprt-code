@@ -21,6 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { RefusalContextTracker } from '../refusal/refusalContextTracker.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -90,6 +91,8 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       compressionHandler: createMockCompressionHandler(),
       conversationManager: createMockConversationManager(),
       historyService: createMockHistoryService(),
+      refusalContextTracker: new RefusalContextTracker(),
+      refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });
@@ -255,6 +258,8 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       compressionHandler: createMockCompressionHandler(),
       conversationManager: createMockConversationManager(),
       historyService: createMockHistoryService(),
+      refusalContextTracker: new RefusalContextTracker(),
+      refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });

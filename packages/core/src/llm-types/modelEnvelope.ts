@@ -58,6 +58,13 @@ export interface ModelOutput {
   requestId?: string | null;
   dumpBaseId?: string;
   usage?: UsageStats;
+  refusalAuditToolInputs?: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly input: string;
+    readonly complete: boolean;
+  }>;
+  firstByteToRefusalMs?: number | null;
   responseId?: string;
   hookRestrictions?: HookRestrictions;
   providerMetadata?: Record<string, unknown>;
@@ -93,6 +100,17 @@ export function emptyModelOutput(
   speaker: 'human' | 'ai' | 'tool' = 'ai',
 ): ModelOutput {
   return { content: { speaker, blocks: [] } };
+}
+
+function mergeRefusalAuditFields(
+  result: ModelOutput,
+  acc: ModelOutput,
+  chunk: ModelStreamChunk,
+): void {
+  const toolInputs = chunk.refusalAuditToolInputs ?? acc.refusalAuditToolInputs;
+  if (toolInputs !== undefined) result.refusalAuditToolInputs = toolInputs;
+  const timing = chunk.firstByteToRefusalMs ?? acc.firstByteToRefusalMs;
+  if (timing !== undefined) result.firstByteToRefusalMs = timing;
 }
 
 /**
@@ -148,6 +166,8 @@ export function accumulateModelStreamChunk(
     // but the copied object is not shared with the input chunk/acc.
     result.usage = { ...usage };
   }
+
+  mergeRefusalAuditFields(result, acc, chunk);
 
   const responseId = chunk.responseId ?? acc.responseId;
   if (responseId !== undefined) {
@@ -215,6 +235,17 @@ export function getToolCalls(output: ModelOutput): ToolCallRequest[] {
   }
 
   return result;
+}
+function copyRefusalAuditMetadata(
+  result: ModelOutput,
+  metadata: IContent['metadata'],
+): void {
+  if (metadata?.refusalAuditToolInputs !== undefined) {
+    result.refusalAuditToolInputs = metadata.refusalAuditToolInputs;
+  }
+  if (metadata?.firstByteToRefusalMs !== undefined) {
+    result.firstByteToRefusalMs = metadata.firstByteToRefusalMs;
+  }
 }
 
 /**
@@ -288,6 +319,7 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
   if (meta?.stopDetails !== undefined) result.stopDetails = meta.stopDetails;
   if (meta?.requestId !== undefined) result.requestId = meta.requestId;
   if (meta?.dumpBaseId !== undefined) result.dumpBaseId = meta.dumpBaseId;
+  copyRefusalAuditMetadata(result, meta);
 
   if (meta?.usage) {
     // Defensive copy so callers cannot mutate the original IContent metadata.
