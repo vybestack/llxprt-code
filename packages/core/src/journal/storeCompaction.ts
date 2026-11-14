@@ -3,7 +3,9 @@ import * as fsp from 'node:fs/promises';
 import {
   compactionCandidatePath,
   compactionDue,
+  COMPACTED_BYTES_KEY,
   COMPACTION_FLOOR_BYTES,
+  decodeCompactedBytes,
   requireSameHistory,
 } from './compaction.js';
 import {
@@ -40,7 +42,10 @@ export async function transcriptCompactionDue(
   )
     return false;
   const head = decodeTranscriptHead(await readState(TRANSCRIPT_HEAD_KEY));
-  return compactionDue(version, notBefore, head.reachableBytes);
+  return compactionDue(version, notBefore, {
+    transcriptReachableBytes: head.reachableBytes,
+    compactedBytes: decodeCompactedBytes(await readState(COMPACTED_BYTES_KEY)),
+  });
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   isCheckpointKey,
   parseCheckpointEntry,
 } from './checkpointDescriptor.js';
+import { COMPACTED_BYTES_KEY, encodeCompactedBytes } from './compaction.js';
 import { JournalFormatError } from './errors.js';
 import type { CommitAck, JournalGroupWriter } from './groupWriter.js';
 import type { TrailerState } from './groupWriter.js';
@@ -16,7 +17,7 @@ import {
 } from './journalWriterOpen.js';
 import type { IdTrieNode } from './idTrieNode.js';
 import { IdTrieReader } from './idTrieReader.js';
-import { KeyedMapReader } from './keyedMap.js';
+import { KeyedMapBatch, KeyedMapReader } from './keyedMap.js';
 import { readMapEntries, readValueBody, type MapEntry } from './mapEntries.js';
 import type { JournalFileHandle } from './positionalFile.js';
 import { OFFSET } from './offsetFields.js';
@@ -127,6 +128,34 @@ async function copyTrailerState(
   };
 }
 
+/**
+ * The current version of a compaction records the size of the copy in its
+ * state map (design 16.3), as the last records before its trailer. The size
+ * is the file up to this entry, so the entry's path and the trailer, a few
+ * KiB, are not counted; the trigger's 64 MiB floor dwarfs them.
+ */
+async function recordCompactedSize(
+  copier: GroupCopier,
+  shared: CopyShared,
+  hasher: IdKeyHasher,
+  stateRoot: number,
+): Promise<number> {
+  const { appender } = copier;
+  await appender.drain();
+  const end = appender.nextOffset;
+  const batch = new KeyedMapBatch(
+    new KeyedMapReader(
+      shared.copiedAccess(end),
+      new BoundedIdNodeCache(),
+      'state',
+      hasher,
+    ),
+    stateRoot,
+  );
+  batch.set(COMPACTED_BYTES_KEY, encodeCompactedBytes(end));
+  return batch.commit(appender);
+}
+
 interface VersionJob {
   readonly version: Version;
   readonly policy: StatePolicy;
@@ -141,6 +170,7 @@ class CopySession {
   readonly versions: CopiedVersion[] = [];
   private readonly shared: CopyShared;
   private readonly copiedNodes = new BoundedIdNodeCache();
+  private readonly hasher: IdKeyHasher;
   /** The new file is readable up to here: the end of the last version written. */
   private writtenEnd = 0;
 
@@ -151,6 +181,7 @@ class CopySession {
     deps: CopyDependencies,
     private readonly observer: CopyObserver | undefined,
   ) {
+    this.hasher = deps.hasher;
     this.shared = {
       source,
       relocation: new RelocationIndex(path, writer.reader, deps.hasher),
@@ -196,7 +227,14 @@ class CopySession {
         );
         if (!job.recording && this.versions.length > 0)
           await this.shared.relocation.flushPending(appender);
-        return state;
+        if (job.policy !== 'retained') return state;
+        const stateRoot = await recordCompactedSize(
+          copier,
+          this.shared,
+          this.hasher,
+          state.stateRoot,
+        );
+        return { ...state, stateRoot };
       },
     );
     this.shared.relocation.detach();

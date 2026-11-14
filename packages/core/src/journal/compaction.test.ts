@@ -66,6 +66,23 @@ describe('compaction trigger (design 4.11)', () => {
     expect(compactionDue(await at(line + 1))).toBe(true);
   });
 
+  it('fires at twice the last compacted size plus 64 MiB when that exceeds the estimate, and not one byte below', async () => {
+    const numbers = { liveBytes: 2 * MIB, ckptBytes: 0, rows: 10 };
+    const estimate = 2 * MIB + 10 * rowEstimate;
+    const compactedBytes = 40 * MIB;
+    const line = 2 * compactedBytes + COMPACTION_FLOOR_BYTES;
+    const at = (durableEnd: number) =>
+      versionWith(directory(), { ...numbers, durableEnd });
+
+    expect(compactionDue(await at(line), 0, { compactedBytes })).toBe(false);
+    expect(compactionDue(await at(line + 1), 0, { compactedBytes })).toBe(true);
+    // A compacted size below the estimate leaves the estimate's line.
+    const estimateLine = 2 * estimate + COMPACTION_FLOOR_BYTES;
+    const small = { compactedBytes: MIB };
+    expect(compactionDue(await at(estimateLine), 0, small)).toBe(false);
+    expect(compactionDue(await at(estimateLine + 1), 0, small)).toBe(true);
+  });
+
   it('counts retained checkpoint bytes and the per-row estimate on the live side', async () => {
     const base = { durableEnd: 0, liveBytes: 0, ckptBytes: 0, rows: 0 };
     const floorPlus = COMPACTION_FLOOR_BYTES + 1;

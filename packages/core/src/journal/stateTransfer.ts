@@ -6,6 +6,7 @@ import {
   encodeCheckpointDescriptor,
   parseCheckpointEntry,
 } from './checkpointDescriptor.js';
+import { COMPACTED_BYTES_KEY } from './compaction.js';
 import type { GroupCopier } from './groupCopier.js';
 import type { IdNodeCache } from './idTrieCache.js';
 import {
@@ -42,6 +43,8 @@ export interface CopiedState {
 type Treatment = 'copy' | 'checkpoint' | 'drop';
 
 function treatmentOf(key: string, policy: StatePolicy): Treatment {
+  // A copy is a new file: compaction records its own size after the copy, and a clone was never compacted.
+  if (key === COMPACTED_BYTES_KEY) return 'drop';
   if (key.startsWith(RELEASE_KEY_PREFIX)) return 'drop';
   if (key.startsWith(CHECKPOINT_KEY_PREFIX)) {
     return policy === 'retained' ? 'checkpoint' : 'drop';

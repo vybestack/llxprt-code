@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import { encodeAggregate } from './aggregate.js';
+import { getU64, putU64, viewOf } from './bytes.js';
 import { JournalFormatError } from './errors.js';
 import type { Version } from './version.js';
 
@@ -16,20 +17,53 @@ const COMPACTION_FACTOR = 2;
 const ROW_ESTIMATE_BYTES = 1550;
 
 /**
+ * The unversioned state map entry (design 3.5) that holds the size of the
+ * file the last compaction wrote, so the trigger survives reopen, pop and
+ * restore. A file that was never compacted has no entry and reads as 0.
+ */
+export const COMPACTED_BYTES_KEY = 'compaction:bytes';
+
+export function encodeCompactedBytes(size: number): Uint8Array {
+  const bytes = new Uint8Array(8);
+  putU64(viewOf(bytes), 0, 'compactedBytes', size);
+  return bytes;
+}
+
+export function decodeCompactedBytes(bytes: Uint8Array | undefined): number {
+  if (bytes === undefined) return 0;
+  if (bytes.length !== 8)
+    throw new JournalFormatError('Invalid compacted size entry');
+  return getU64(viewOf(bytes), 0, 'compactedBytes');
+}
+
+/** What the trigger knows besides the trailer: the transcript's reachable bytes and the last compacted size. */
+export interface CompactionSizes {
+  readonly transcriptReachableBytes?: number;
+  readonly compactedBytes?: number;
+}
+
+/**
  * Whether the file has outgrown what its published version needs (design
- * 4.11), computed from the last trailer alone. `notBefore` is the file size
- * below which the answer is no, set after a refused swap.
+ * 4.11 and 16.3), computed from the last trailer and two state entries.
+ * `notBefore` is the file size below which the answer is no, set after a
+ * refused swap. The live side is the larger of the estimate and the size the
+ * last compaction wrote, so an estimate that undercounts never re-triggers a
+ * copy of a file that has not doubled since.
  */
 export function compactionDue(
   version: Version,
   notBefore = 0,
-  transcriptReachableBytes = version.aggregate.liveBytes,
+  sizes: CompactionSizes = {},
 ): boolean {
   if (version.durableEnd < notBefore) return false;
-  const live =
-    Math.max(transcriptReachableBytes, version.aggregate.liveBytes) +
+  const estimate =
+    Math.max(
+      sizes.transcriptReachableBytes ?? version.aggregate.liveBytes,
+      version.aggregate.liveBytes,
+    ) +
     version.ckptBytes +
     version.aggregate.rows * ROW_ESTIMATE_BYTES;
+  const live = Math.max(sizes.compactedBytes ?? 0, estimate);
   return version.durableEnd > COMPACTION_FACTOR * live + COMPACTION_FLOOR_BYTES;
 }
 

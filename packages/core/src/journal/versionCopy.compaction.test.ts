@@ -6,6 +6,7 @@ import {
   checkpointKey,
   parseCheckpointDescriptor,
 } from './checkpointDescriptor.js';
+import { COMPACTED_BYTES_KEY, decodeCompactedBytes } from './compaction.js';
 import { MUTATION, RECORD_KIND } from './recordKinds.js';
 import { decodeRelocationValue } from './idEntryCodecs.js';
 import type { JournalStore } from './journalStore.js';
@@ -174,6 +175,13 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
       for (const key of [...state.keys()]) {
         if (key.startsWith('ckpt:')) state.delete(key);
       }
+      // The copy records its own size in the current state map (design 16.3).
+      const compactedBytes = decodeCompactedBytes(
+        await store.getState(COMPACTED_BYTES_KEY),
+      );
+      expect(compactedBytes).toBeGreaterThan(0);
+      expect(compactedBytes).toBeLessThan(version.durableEnd);
+      state.delete(COMPACTED_BYTES_KEY);
       expect(state).toStrictEqual(expectedCurrent);
       let liveBytes = 0;
       for (const [id, descriptor] of descriptors) {
