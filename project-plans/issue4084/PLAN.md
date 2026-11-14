@@ -363,3 +363,8 @@ Policy default (orchestrator decision): `execute_tool_script` is `Kind.Think` an
 - zed-acp and a2a cannot show nested approvals; they fail fast with `APPROVAL_REQUIRED`. Surfacing nested confirmations in those hosts (as separate permission requests labelled with the script) is a possible later improvement, not required by the issue.
 - The raw (non-agent) recording owner resume path does not redraw script cards; it shows the recorded JSON response as before.
 - Subagent schedulers still lack the nested composition (Phase C).
+
+### Commits
+
+- `133a5c2733` feat(core): record code mode script events and script lifecycle telemetry (#4084)
+- `fd169e3f72` feat(agents): show nested script approvals, script cards and resumed runs (#4084)
