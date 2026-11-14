@@ -137,6 +137,84 @@ describe('row codec round trip', () => {
   });
 });
 
+/**
+ * Tool data parsed from tools and servers, with the keys an object copy can
+ * mistake for its own machinery as plain own keys at several depths.
+ */
+const OWN_KEY_JSON = [
+  '{"__proto__":{"constructor":{"prototype":{"polluted":true}},',
+  '"__proto__":[{"__proto__":null,"prototype":1},{"constructor":[]}]},',
+  '"constructor":"c","prototype":{"__proto__":"deep"},"plain":[{"__proto__":{}}]}',
+].join('');
+
+describe('own keys named like object machinery in tool data', () => {
+  const toolRow = (): IContent => ({
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: 'call-1',
+        name: 'fetch',
+        parameters: JSON.parse(OWN_KEY_JSON),
+      },
+      {
+        type: 'tool_response',
+        callId: 'call-1',
+        toolName: 'fetch',
+        result: JSON.parse(OWN_KEY_JSON),
+      },
+    ],
+  });
+
+  it('stores the keys in the block bytes', () => {
+    const draft = encodeContentRow(toolRow(), { owner: 0 });
+    const blocks = draft.blocks.map((block) =>
+      JSON.parse(new TextDecoder().decode(block.bytes)),
+    );
+
+    expect(JSON.stringify(blocks[0].parameters)).toBe(OWN_KEY_JSON);
+    expect(JSON.stringify(blocks[1].result)).toBe(OWN_KEY_JSON);
+  });
+
+  it('reads the keys back as own keys of ordinary objects', () => {
+    const [call, response] = roundTrip(toolRow()).blocks;
+    if (call.type !== 'tool_call' || response.type !== 'tool_response') {
+      throw new Error('Expected the tool call and its response');
+    }
+
+    expect(JSON.stringify(call.parameters)).toBe(OWN_KEY_JSON);
+    expect(JSON.stringify(response.result)).toBe(OWN_KEY_JSON);
+    const result: unknown = response.result;
+    if (typeof result !== 'object' || result === null) {
+      throw new Error('Expected an object result');
+    }
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(Object.keys(result)).toStrictEqual([
+      '__proto__',
+      'constructor',
+      'prototype',
+      'plain',
+    ]);
+    expect(Reflect.get({}, 'polluted')).toBeUndefined();
+  });
+
+  it('restores the fast-check counterexample with a lone __proto__ key', () => {
+    const content: IContent = {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: ' ',
+          toolName: '',
+          result: JSON.parse('{"__proto__":false}'),
+        },
+      ],
+    };
+
+    expect(JSON.stringify(roundTrip(content))).toBe(JSON.stringify(content));
+  });
+});
+
 describe('row header fields', () => {
   it('keeps chronology in the header and out of the metadata piece', () => {
     const content: IContent = {

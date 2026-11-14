@@ -66,6 +66,11 @@ describe('media-aware history cloning', () => {
     'clones HistoryService media without serializing immutable payloads',
     testBody4,
   );
+
+  it(
+    'keeps tool data keys named __proto__, constructor and prototype as own keys',
+    testBody5,
+  );
 });
 
 function testBody0(): void {
@@ -328,4 +333,48 @@ async function testBody4(): Promise<void> {
   expect(clonedBlock.providerMetadata?.['observedAt']).toBe(
     observedAt.toISOString(),
   );
+}
+
+function testBody5(): void {
+  const json = [
+    '{"__proto__":{"constructor":{"prototype":{"polluted":true}},',
+    '"__proto__":[{"__proto__":null,"prototype":1}]},',
+    '"constructor":"c","prototype":{"__proto__":"deep"}}',
+  ].join('');
+  const [call, response] = sanitizeProviderHistoryForSerialization([
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'call_1',
+          name: 'fetch',
+          parameters: JSON.parse(json),
+        },
+        {
+          type: 'tool_response',
+          callId: 'call_1',
+          toolName: 'fetch',
+          result: JSON.parse(json),
+        },
+      ],
+    },
+  ])[0].blocks;
+  if (call.type !== 'tool_call' || response.type !== 'tool_response') {
+    throw new Error('Expected cloned tool call and response blocks');
+  }
+
+  expect(JSON.stringify(call.parameters)).toBe(json);
+  expect(JSON.stringify(response.result)).toBe(json);
+  const result: unknown = response.result;
+  if (typeof result !== 'object' || result === null) {
+    throw new Error('Expected an object result');
+  }
+  expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+  expect(Object.keys(result)).toStrictEqual([
+    '__proto__',
+    'constructor',
+    'prototype',
+  ]);
+  expect(Reflect.get({}, 'polluted')).toBeUndefined();
 }

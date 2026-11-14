@@ -111,11 +111,12 @@ export function sanitizeParams(params: unknown): unknown {
     if (Array.isArray(obj)) {
       return obj.map((item) => sanitize(item));
     }
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      result[key] = sanitize(value);
-    }
-    return result;
+    // Tool data is external, so a key such as `__proto__` is an ordinary own
+    // key here. `Object.fromEntries` defines each key as an own property;
+    // assigning it would set the copy's prototype and drop the key.
+    return Object.fromEntries(
+      Object.entries(obj).map(([key, value]) => [key, sanitize(value)]),
+    );
   };
 
   try {
