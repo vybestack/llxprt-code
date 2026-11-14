@@ -371,9 +371,10 @@ export class ResultAggregator {
     const { result, callId, toolName, scheduledCall } = buffered;
     this.callbacks.deliverResult?.({ callId, toolName, result });
 
-    // A bounded result already fits this call's budget and must stay whole.
-    const outputConfig =
-      result.boundedOutput === true ? undefined : this.currentOutputConfig();
+    // Bounded script JSON is fitted before this point, including its hook
+    // decoration and the provider-visible wrapper. Keep the ordinary limiter
+    // active here so a stale or invalid bounded result fails normally.
+    const outputConfig = this.currentOutputConfig();
 
     if (result.error === undefined) {
       const responseParts = convertToFunctionResponse(

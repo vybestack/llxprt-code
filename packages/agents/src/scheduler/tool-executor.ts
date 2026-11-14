@@ -31,6 +31,10 @@ import {
 } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import type { ParsedToolOutputMaxTokens } from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
+import {
+  estimateTokens,
+  getEffectiveTokenLimit,
+} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 
 /**
  * Execution context for a single tool call.
@@ -102,6 +106,139 @@ function checkHookDecision(
  * Apply hook output decorations (systemMessage/additionalContext/suppressOutput)
  * to a tool result so they are visible to downstream model turns.
  */
+function boundedWireFits(
+  output: string,
+  toolName: string,
+  errorMessage: string | undefined,
+  limit: ParsedToolOutputMaxTokens,
+): boolean {
+  if (limit.kind === 'disabled') return true;
+  const wireText = [
+    'status:',
+    errorMessage === undefined ? 'success' : 'error',
+    '',
+    'toolName:',
+    toolName,
+    '',
+    'error:',
+    errorMessage ?? '',
+    '',
+    'output:',
+    output,
+  ].join('\n');
+  return estimateTokens(wireText) <= getEffectiveTokenLimit(limit.maxTokens);
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hookFailureEnvelope(
+  envelope: Record<string, unknown>,
+  priorOmittedCharacters: number,
+  fullHookText: string,
+): {
+  ok: false;
+  error: { code: 'RESULT_TOO_LARGE'; message: string };
+  callCount: number;
+  partial: boolean;
+  completedCalls: unknown[];
+  logs: never[];
+  hookOutput: { omitted: true; reason: string; characters: number };
+} {
+  const callCount = envelope['callCount'];
+  const completedCalls = envelope['completedCalls'];
+  const partial = envelope['partial'];
+  if (typeof callCount !== 'number' || !Array.isArray(completedCalls))
+    throw new Error('A bounded tool result is missing call accounting.');
+  return {
+    ok: false,
+    error: {
+      code: 'RESULT_TOO_LARGE',
+      message:
+        'Hook output exceeded the model output budget; hook text is recorded as omitted.',
+    },
+    callCount,
+    partial: partial === true,
+    completedCalls,
+    logs: [],
+    hookOutput: {
+      omitted: true,
+      reason: 'output budget exceeded',
+      characters: priorOmittedCharacters + fullHookText.length,
+    },
+  };
+}
+
+function boundedJsonWithHookText(
+  result: ToolResult,
+  appendedTexts: readonly string[],
+  toolName: string,
+  limit: ParsedToolOutputMaxTokens,
+): ToolResult {
+  const source =
+    typeof result.llmContent === 'string'
+      ? result.llmContent
+      : JSON.stringify(result.llmContent);
+  const parsed: unknown = JSON.parse(source);
+  if (!isObjectRecord(parsed))
+    throw new Error('A bounded tool result must be a JSON object.');
+  const envelope = parsed;
+  const priorHookText = envelope['hookOutput'];
+  const priorOmission = isObjectRecord(priorHookText)
+    ? priorHookText
+    : undefined;
+  const priorOmittedCharacters =
+    priorOmission?.['omitted'] === true &&
+    typeof priorOmission['characters'] === 'number'
+      ? priorOmission['characters']
+      : 0;
+  const newHookText = appendedTexts.join('\n\n');
+  const fullHookText = [
+    ...(typeof priorHookText === 'string' ? [priorHookText] : []),
+    newHookText,
+  ]
+    .filter((text) => text.length > 0)
+    .join('\n\n');
+  const hookOutput =
+    priorOmittedCharacters > 0
+      ? {
+          omitted: true,
+          reason: 'some hook text exceeded the output budget',
+          characters: priorOmittedCharacters,
+          includedText: newHookText,
+        }
+      : fullHookText;
+  const decorated = { ...envelope, hookOutput };
+  const decoratedText = JSON.stringify(decorated);
+  const errorMessage = result.error?.message;
+  if (boundedWireFits(decoratedText, toolName, errorMessage, limit))
+    return {
+      ...result,
+      llmContent: decoratedText,
+      structuredOutput: undefined,
+    };
+
+  const failureEnvelope = hookFailureEnvelope(
+    envelope,
+    priorOmittedCharacters,
+    fullHookText,
+  );
+  const failureText = JSON.stringify(failureEnvelope);
+  const failure =
+    'Script failed with RESULT_TOO_LARGE: ' + failureEnvelope.error.message;
+  if (!boundedWireFits(failureText, toolName, failure, limit))
+    throw new Error(
+      'The configured tool output budget cannot preserve script accounting and the hook-output omission record.',
+    );
+  return {
+    ...result,
+    llmContent: failureText,
+    error: { message: failure, type: result.error?.type },
+    structuredOutput: undefined,
+  };
+}
+
 function applyHookOutputModifications(
   hookResult:
     | {
@@ -111,6 +248,8 @@ function applyHookOutputModifications(
       }
     | undefined,
   toolResult: ToolResult,
+  toolName: string,
+  modelOutputLimit: ParsedToolOutputMaxTokens,
 ): ToolResult {
   if (!hookResult) return toolResult;
 
@@ -122,24 +261,25 @@ function applyHookOutputModifications(
   );
 
   if (appendedTexts.length > 0) {
-    const existingContent =
-      typeof finalResult.llmContent === 'string'
-        ? finalResult.llmContent
-        : JSON.stringify(finalResult.llmContent);
-    const appendText = appendedTexts.join('\n\n');
-
-    // The hook changed the text a programmatic caller would otherwise read
-    // from the typed value, so the typed value no longer describes it, and
-    // the text is no longer the tool's own bounded output.
-    const {
-      structuredOutput: _replaced,
-      boundedOutput: _rebounded,
-      ...textResult
-    } = finalResult;
-    finalResult = {
-      ...textResult,
-      llmContent: `${existingContent}\n\n${appendText}`,
-    };
+    if (finalResult.boundedOutput === true) {
+      finalResult = boundedJsonWithHookText(
+        finalResult,
+        appendedTexts,
+        toolName,
+        modelOutputLimit,
+      );
+    } else {
+      const existingContent =
+        typeof finalResult.llmContent === 'string'
+          ? finalResult.llmContent
+          : JSON.stringify(finalResult.llmContent);
+      const appendText = appendedTexts.join('\n\n');
+      const { structuredOutput: _replaced, ...textResult } = finalResult;
+      finalResult = {
+        ...textResult,
+        llmContent: `${existingContent}\n\n${appendText}`,
+      };
+    }
   }
 
   if (hookResult.suppressOutput === true) {
@@ -277,6 +417,8 @@ export class ToolExecutor {
         const beforeDecoratedResult = applyHookOutputModifications(
           beforeResult,
           toolResult,
+          toolName,
+          modelOutputLimit,
         );
         const afterResult = await triggerAfterToolHook(
           toolName,
@@ -290,6 +432,8 @@ export class ToolExecutor {
           result: applyHookOutputModifications(
             afterResult,
             beforeDecoratedResult,
+            toolName,
+            modelOutputLimit,
           ),
           invocation,
           effectiveArgs,

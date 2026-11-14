@@ -28,6 +28,7 @@ import {
   type ScriptRunDisplay,
 } from './code-mode-run-owner.js';
 import {
+  outputBudgetCallLimit,
   scriptEnvelope,
   type ScriptEnvelope,
 } from './script-result-envelope.js';
@@ -172,6 +173,72 @@ function toAnsiLines(text: string): LiveOutputUpdate {
   };
 }
 
+async function runScript({
+  params,
+  createRuntime,
+  display,
+  signal,
+  updateOutput,
+  scope,
+  port,
+  outputCallLimit,
+  limits,
+}: {
+  params: ExecuteToolScriptParams;
+  createRuntime: CodeModeRuntimeFactory;
+  display: ScriptRunDisplay | undefined;
+  signal: AbortSignal;
+  updateOutput?: (update: LiveOutputUpdate) => void;
+  scope: ToolExecutionScope;
+  port: NestedExecutionPort;
+  outputCallLimit: number;
+  limits: ReturnType<NestedExecutionPort['composition']['readCodeModeLimits']>;
+}): Promise<ToolResult> {
+  let latest: ToolScriptRunView | undefined;
+  const owner = new CodeModeRunOwner({
+    runtime: createRuntime({
+      maxCalls: outputCallLimit,
+      maxResultBytes: limits.maxResultBytes,
+      wallTimeoutMs: boundWallTimeout(
+        limits.wallTimeoutMs,
+        port.composition.readDeadline(),
+      ),
+    }),
+    request: {
+      language: 'javascript',
+      source: params.source,
+      tools: [...params.tools],
+      apiRevision: params.api_revision ?? '',
+      purpose: params.purpose,
+    },
+    scope,
+    port,
+    display,
+    onProgress: (view) => {
+      latest = view;
+      updateOutput?.(
+        toAnsiLines(formatToolScriptCard(view, { source: params.source })),
+      );
+    },
+  });
+  const report = await owner.run(signal);
+  const envelope = scriptEnvelope(report);
+  const card =
+    latest === undefined
+      ? undefined
+      : formatToolScriptCard(latest, {
+          source: params.source,
+          ...(report.result.ok
+            ? { result: JSON.stringify(report.result.value) }
+            : {}),
+        });
+  return toToolResult(
+    envelope,
+    report.result.ok ? undefined : report.result.error,
+    card,
+  );
+}
+
 class ExecuteToolScriptInvocation extends BaseToolInvocation<
   ExecuteToolScriptParams,
   ToolResult
@@ -211,6 +278,16 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
       return preflightFailure(preflight.code, preflight.message);
     const { composition } = port;
     const limits = composition.readCodeModeLimits();
+    const outputCallLimit = outputBudgetCallLimit(
+      scope.modelOutputLimit,
+      limits.maxCalls,
+      SCRIPT_CALLABLE_TOOLS,
+    );
+    if (outputCallLimit === 0)
+      return preflightFailure(
+        'OUTPUT_BUDGET_TOO_SMALL',
+        'Increase tool-output-max-tokens to preserve complete script results and call accounting.',
+      );
     const revision = this.params.api_revision;
     if (revision !== undefined) {
       const current = computeApiRevision(
@@ -223,51 +300,17 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
           `The script API changed since revision ${revision}; it is now ${current}. Call discover_tool_api again, or leave out api_revision.`,
         );
     }
-    let latest: ToolScriptRunView | undefined;
-    const owner = new CodeModeRunOwner({
-      runtime: this.createRuntime({
-        maxCalls: limits.maxCalls,
-        maxResultBytes: limits.maxResultBytes,
-        wallTimeoutMs: boundWallTimeout(
-          limits.wallTimeoutMs,
-          composition.readDeadline(),
-        ),
-      }),
-      request: {
-        language: 'javascript',
-        source: this.params.source,
-        tools: [...this.params.tools],
-        apiRevision: this.params.api_revision ?? '',
-        purpose: this.params.purpose,
-      },
+    return runScript({
+      params: this.params,
+      createRuntime: this.createRuntime,
+      display: this.display,
+      signal,
+      updateOutput,
       scope,
       port,
-      display: this.display,
-      onProgress: (view) => {
-        latest = view;
-        updateOutput?.(
-          toAnsiLines(
-            formatToolScriptCard(view, { source: this.params.source }),
-          ),
-        );
-      },
+      outputCallLimit,
+      limits,
     });
-    const report = await owner.run(signal);
-    const envelope = scriptEnvelope(report);
-    const card =
-      latest === undefined
-        ? undefined
-        : formatToolScriptCard(latest, {
-            source: this.params.source,
-            ...(report.result.ok
-              ? { result: JSON.stringify(report.result.value) }
-              : {}),
-          });
-    return toToolResult(
-      envelope,
-      report.result.ok ? undefined : report.result.error,
-      card,
-    );
   }
 }
 

@@ -159,7 +159,7 @@ describe('execute_tool_script response size (issue #4084)', () => {
       expect(message).not.toContain('truncated');
       expect(envelope.ok).toBe(false);
       expect(envelope.error?.code).toBe('RESULT_TOO_LARGE');
-      expect(envelope.error?.message).toContain('token');
+      expect(envelope.error?.message).toContain('output budget');
       expect(envelope.callCount).toBe(1);
       expect(envelope.completedCalls).toStrictEqual([
         { tool: 'glob', status: 'ok' },
@@ -180,13 +180,44 @@ describe('execute_tool_script response size (issue #4084)', () => {
     ]);
   });
 
-  it('limits the response in history like any tool output once an AfterTool hook extends it', async () => {
+  it('keeps fitting AfterTool text in the JSON envelope', async () => {
+    const hook = join(workingDir, 'after-hook.ts');
+    writeFileSync(
+      hook,
+      `process.stdout.write(JSON.stringify({ systemMessage: "reviewed" }));\n`,
+    );
+    const message = await scriptToolMessage(
+      { 'tool-output-max-tokens': 1000 },
+      {
+        settings: { enableHooks: true },
+        hooks: {
+          [HookEventName.AfterTool]: [
+            {
+              matcher: 'execute_tool_script',
+              hooks: [
+                { type: HookType.Command, command: physicalHookCommand(hook) },
+              ],
+            },
+          ],
+        },
+      },
+    );
+    const envelope = envelopeOf(message);
+
+    expect(envelope.error?.code).toBe('RESULT_TOO_LARGE');
+    expect(envelope.completedCalls).toStrictEqual([
+      { tool: 'glob', status: 'ok' },
+    ]);
+    expect(envelope).toHaveProperty('hookOutput', 'reviewed');
+  });
+
+  it('preserves script outcome and accounting while explicitly bounding oversized AfterTool text', async () => {
     const hook = join(workingDir, 'after-hook.ts');
     writeFileSync(
       hook,
       `process.stdout.write(JSON.stringify({ systemMessage: "hook note ".repeat(800) }));\n`,
     );
-    await scriptToolMessage(
+    const message = await scriptToolMessage(
       { 'tool-output-max-tokens': 1000, 'tool-output-truncate-mode': 'warn' },
       {
         settings: { enableHooks: true },
@@ -202,14 +233,36 @@ describe('execute_tool_script response size (issue #4084)', () => {
         },
       },
     );
+    const envelope = envelopeOf(message);
 
-    const history = (await agent?.getHistory()) ?? [];
-    const responses = history.flatMap((content) =>
-      content.blocks.filter((block) => block.type === 'tool_response'),
-    );
-    expect(responses).toHaveLength(1);
-    expect(JSON.stringify(responses[0].result)).toContain(
-      'execute_tool_script output exceeded token limit',
+    expect(message).not.toContain('output exceeded token limit');
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error?.code).toBe('RESULT_TOO_LARGE');
+    expect(envelope.callCount).toBe(1);
+    expect(envelope.completedCalls).toStrictEqual([
+      { tool: 'glob', status: 'ok' },
+    ]);
+    expect(envelope).toHaveProperty('hookOutput', {
+      omitted: true,
+      reason: 'output budget exceeded',
+      characters: 'hook note '.repeat(800).length,
+    });
+  });
+
+  it('delivers an intact accounted failure or rejects before nested work at a 100-token budget', async () => {
+    const message = await scriptToolMessage({
+      'tool-output-max-tokens': 100,
+      'tool-output-truncate-mode': 'warn',
+    });
+    const envelope = envelopeOf(message);
+
+    expect(message).not.toContain('output exceeded token limit');
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error?.code).toBe('OUTPUT_BUDGET_TOO_SMALL');
+    expect(envelope.callCount).toBe(0);
+    expect(envelope.completedCalls).toStrictEqual([]);
+    expect(envelope.error?.message).toContain(
+      'Increase tool-output-max-tokens',
     );
   });
 });
