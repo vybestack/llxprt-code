@@ -26,8 +26,9 @@ import * as os from 'node:os';
 import type { DiffManager } from './diff-manager.js';
 import { OpenFilesManager } from './open-files-manager.js';
 import {
+  createPrivateFileWriter,
   ensurePrivateDirectory,
-  writePrivateFile,
+  type PrivateFileWriter,
 } from './private-port-file.js';
 
 class CORSError extends Error {
@@ -67,6 +68,7 @@ interface WritePortAndWorkspaceArgs {
   portFile: string | undefined;
   authToken: string;
   log: (message: string) => void;
+  writePrivateFile: PrivateFileWriter;
 }
 
 async function writePortAndWorkspace({
@@ -75,6 +77,7 @@ async function writePortAndWorkspace({
   portFile,
   authToken,
   log,
+  writePrivateFile,
 }: WritePortAndWorkspaceArgs): Promise<void> {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   const workspacePath =
@@ -159,6 +162,7 @@ export class IDEServer {
   private authToken: string | undefined;
   private transports: Map<string, StreamableHTTPServerTransport> = new Map();
   private openFilesManager: OpenFilesManager | undefined;
+  private readonly writePrivateFile = createPrivateFileWriter();
   diffManager: DiffManager;
 
   constructor(log: (message: string) => void, diffManager: DiffManager) {
@@ -672,6 +676,7 @@ export class IDEServer {
           portFile: this.portFile,
           authToken: this.authToken ?? '',
           log: this.log,
+          writePrivateFile: this.writePrivateFile,
         });
       }
       resolve();
@@ -722,6 +727,7 @@ export class IDEServer {
         portFile: this.portFile,
         authToken: this.authToken,
         log: this.log,
+        writePrivateFile: this.writePrivateFile,
       });
       this.broadcastIdeContextUpdate();
     }

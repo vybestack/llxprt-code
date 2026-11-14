@@ -9,8 +9,9 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  createPrivateFileWriter,
   ensurePrivateDirectory,
-  writePrivateFile,
+  type PrivateFileWriter,
 } from './private-port-file.js';
 
 describe('private port file helpers', () => {
@@ -24,7 +25,13 @@ describe('private port file helpers', () => {
     await fs.rm(root, { recursive: true, force: true });
   });
 
-  describe('writePrivateFile', () => {
+  describe('createPrivateFileWriter', () => {
+    let writePrivateFile: PrivateFileWriter;
+
+    beforeEach(() => {
+      writePrivateFile = createPrivateFileWriter();
+    });
+
     it('creates the file with the given content', async () => {
       const file = path.join(root, 'port.json');
 
