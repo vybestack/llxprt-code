@@ -138,6 +138,7 @@ export function cloneDataDescriptors(
   active = new Set<object>(),
 ): unknown {
   if (typeof value !== 'object' || value === null) return value;
+  if (value instanceof Uint8Array) return new Uint8Array(value);
   if (active.has(value)) return undefined;
   active.add(value);
   if (Array.isArray(value)) {

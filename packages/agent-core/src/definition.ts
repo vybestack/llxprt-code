@@ -427,7 +427,7 @@ function validatePolicyRegexes(policy: PolicyDocument): void {
       } catch (error) {
         problems.push({
           code: 'invalid-policy-regex',
-          path: [...path, 'match', 'args', index, 'serializedArgs'],
+          path: [...path, 'args', index, 'serializedArgs'],
           message: `sourceId=${rule.provenance.sourceId} ruleIndex=${rule.provenance.ruleIndex} field=serializedArgs: ${error instanceof Error ? error.message : 'Native RegExp construction failed.'}`,
         });
       }
@@ -440,7 +440,7 @@ function validatePolicyRegexes(policy: PolicyDocument): void {
     path: ReadonlyArray<string | number>,
   ): void =>
     rules.forEach((rule, index) =>
-      visitMatch(rule.match, rule, [...path, index]),
+      visitMatch(rule.match, rule, [...path, index, 'match']),
     );
   collect(policy.authority, ['policy', 'authority']);
   policy.preferences.forEach((layer, index) =>

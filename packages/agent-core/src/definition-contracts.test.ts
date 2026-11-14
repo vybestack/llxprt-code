@@ -272,6 +272,26 @@ describe('P01a agent-core contracts', () => {
     expect(
       validateAgentCommand({ type: 'set-source-stacks', stacks: [stack] }).type,
     ).toBe('set-source-stacks');
+    expect(
+      validateAgentCommand({
+        type: 'set-context',
+        items: [
+          {
+            id: 'inline-image',
+            source: 'user',
+            trust: 'untrusted',
+            lifetime: 'session',
+            parts: [
+              {
+                kind: 'image',
+                mediaType: 'image/png',
+                data: new Uint8Array([1]),
+              },
+            ],
+          },
+        ],
+      }),
+    ).toHaveProperty('items.0.parts.0.data', new Uint8Array([1]));
     const invalidPatternRule: PolicyRule = {
       ...rule,
       match: {

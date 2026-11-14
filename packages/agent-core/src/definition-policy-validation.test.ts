@@ -27,6 +27,56 @@ function definitionProblems(
 }
 
 describe('P01a embedded policy validation', () => {
+  it('reports invalid regexes at the nested PolicyMatch path', () => {
+    const rule: PolicyRule = {
+      id: 'nested-invalid-regex',
+      match: {
+        unless: [
+          {
+            args: [
+              {
+                serializedArgs: {
+                  flavor: 'ecmascript',
+                  source: '[',
+                  flags: '',
+                  input: { path: 'direct', source: '[', flags: '' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      outcome: 'deny',
+      priority: 1,
+      order: 0,
+      provenance: {
+        source: 'admin',
+        sourceId: 'nested-regex-source',
+        ruleIndex: 0,
+        expansionIndex: 0,
+      },
+    };
+    const problems = definitionProblems(() =>
+      validateAgentCommand({ type: 'set-authority', rules: [rule] }),
+    );
+    expect(problems).toContainEqual(
+      expect.objectContaining({
+        code: 'invalid-policy-regex',
+        path: [
+          'policy',
+          'authority',
+          0,
+          'match',
+          'unless',
+          0,
+          'args',
+          0,
+          'serializedArgs',
+        ],
+      }),
+    );
+  });
+
   it('rejects child policies whose effective pattern differs from its evidence', () => {
     const normalized = normalizePolicyRegex({
       path: 'directory-commandRegex',
