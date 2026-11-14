@@ -51,6 +51,7 @@ const memoryEntries = [
 const bundleEntries = [
   'packages/a2a-server/src/http/server.ts',
   'packages/cli/index.ts',
+  'packages/agents/src/code-mode/quickjs-wrapper.ts',
   ...memoryEntries,
 ];
 
