@@ -22,29 +22,30 @@ date above. This is the canonical dated copy; the
 [Provider Setup Quick Reference](./quick-reference.md) links here rather than
 duplicating it.
 
-| Alias           | Default model                |
-| --------------- | ---------------------------- |
-| `anthropic`     | `claude-opus-5-5`            |
-| `claudecode`    | `claude-opus-5-5`            |
-| `gemini`        | `gemini-2.5-pro`             |
-| `openai`        | `gpt-5.5`                    |
-| `codex`         | `gpt-5.6-sol`                |
-| `qwen`          | `qwen3-coder-plus`           |
-| `kimi`          | `kimi-for-coding`            |
-| `xai`           | `grok-4`                     |
-| `deepseek`      | `deepseek-v4-flash`          |
-| `zai`           | `glm-5`                      |
-| `synthetic`     | `hf:zai-org/GLM-4.7`         |
-| `chutes-ai`     | `zai-org/GLM-5-TEE`          |
-| `makora`        | `nvidia/Kimi-K2.6-NVFP4`     |
-| `fireworks`     | `fireworks/minimax-m3`       |
-| `openrouter`    | `nvidia/nemotron-nano-9b-v2` |
-| `cerebras-code` | `qwen-3-coder-480b`          |
-| `mistral`       | `mistral-large-latest`       |
-| `litellm`       | `gpt-4o`                     |
-| `ollama-cloud`  | `kimi-k2.6`                  |
-| `lm-studio`     | `gemma-3b-it`                |
-| `llama-cpp`     | `local-model`                |
+| Alias              | Default model                |
+| ------------------ | ---------------------------- |
+| `anthropic`        | `claude-opus-5-5`            |
+| `claudecode`       | `claude-opus-5-5`            |
+| `gemini`           | `gemini-2.5-pro`             |
+| `openai`           | `gpt-5.5`                    |
+| `codex`            | `gpt-5.6-sol`                |
+| `qwen`             | `qwen3-coder-plus`           |
+| `kimi`             | `kimi-for-coding`            |
+| `xai`              | `grok-4`                     |
+| `deepseek`         | `deepseek-v4-flash`          |
+| `zai`              | `glm-5`                      |
+| `synthetic`        | `hf:zai-org/GLM-4.7`         |
+| `chutes-ai`        | `zai-org/GLM-5-TEE`          |
+| `makora`           | `nvidia/Kimi-K2.6-NVFP4`     |
+| `fireworks`        | `fireworks/minimax-m3`       |
+| `openrouter`       | `nvidia/nemotron-nano-9b-v2` |
+| `cerebras-code`    | `qwen-3-coder-480b`          |
+| `mistral`          | `mistral-large-latest`       |
+| `litellm`          | `gpt-4o`                     |
+| `CheaperInference` | `gpt-5.4-mini`               |
+| `ollama-cloud`     | `kimi-k2.6`                  |
+| `lm-studio`        | `gemma-3b-it`                |
+| `llama-cpp`        | `local-model`                |
 
 ## How model limits are resolved
 
