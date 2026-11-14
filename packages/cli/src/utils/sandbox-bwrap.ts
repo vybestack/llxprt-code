@@ -5,7 +5,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { Writable } from 'node:stream';
+import { Readable, Writable } from 'node:stream';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,6 +16,11 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { normalizeExitCode } from './sandbox-seatbelt.js';
+import {
+  createBwrapSignalDelivery,
+  type BwrapSignalDeliveryOptions,
+} from './sandbox-bwrap-signal-delivery.js';
+import { forwardSignalsToSandboxProcess } from './sandbox-signal-forwarding.js';
 import {
   addBwrapDestinationParents,
   buildBwrapMountArgs,
@@ -28,6 +33,8 @@ import {
 } from './sandbox-bwrap-session-dirs.js';
 import type { ContainerWorkspacePlan } from './sandbox-workspaces.js';
 
+/** 128 + SIGKILL, reported when the launcher had to kill a stuck sandbox. */
+const SIGKILL_EXIT_STATUS = 137;
 const PRIVATE_CREDENTIAL_DESTINATION = '/run/llxprt/credentials';
 const CAPABILITY_FD = 3;
 const CAPABILITY_PIPE_FD = 5;
@@ -266,6 +273,12 @@ function isWritablePipe(
   return value instanceof Writable;
 }
 
+function isReadablePipe(
+  value: ReturnType<typeof spawn>['stdio'][number],
+): value is Readable {
+  return value instanceof Readable;
+}
+
 function launchBwrap(
   args: readonly string[],
   environment: NodeJS.ProcessEnv,
@@ -273,14 +286,22 @@ function launchBwrap(
   context: RuntimeContext,
   cliArgs: readonly string[],
   socketPath: string,
+  signalOptions: BwrapSignalDeliveryOptions,
 ): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const child = spawn(
       'bwrap',
-      ['--args', '3', '--', ...childCommand(context, cliArgs)],
+      [
+        '--args',
+        '3',
+        '--info-fd',
+        '4',
+        '--',
+        ...childCommand(context, cliArgs),
+      ],
       {
         env: environment,
-        stdio: ['inherit', 'inherit', 'inherit', 'pipe', 'ignore', 'pipe'],
+        stdio: ['inherit', 'inherit', 'inherit', 'pipe', 'pipe', 'pipe'],
         shell: false,
       },
     );
@@ -289,17 +310,30 @@ function launchBwrap(
     const pipes: ReadonlyArray<ReturnType<typeof spawn>['stdio'][number]> =
       child.stdio;
     const optionsPipe = pipes[3];
+    const infoPipe = pipes[4];
     const capabilityPipe = pipes[CAPABILITY_PIPE_FD];
-    if (!isWritablePipe(optionsPipe) || !isWritablePipe(capabilityPipe)) {
+    if (
+      !isWritablePipe(optionsPipe) ||
+      !isReadablePipe(infoPipe) ||
+      !isWritablePipe(capabilityPipe)
+    ) {
       child.kill('SIGKILL');
-      reject(new Error('Unable to create bwrap options and capability pipes.'));
+      reject(new Error('Unable to create bwrap options and info pipes.'));
       return;
     }
+    forwardSignalsToSandboxProcess(
+      child,
+      createBwrapSignalDelivery(child, infoPipe, signalOptions),
+    );
     optionsPipe.end(serializeOptions(args, socketPath));
     capabilityPipe.end(`${token}\n`);
     child.once('error', reject);
     child.once('close', (code, signal) =>
-      resolve(normalizeExitCode(code, signal)),
+      resolve(
+        signal === 'SIGKILL'
+          ? SIGKILL_EXIT_STATUS
+          : normalizeExitCode(code, signal),
+      ),
     );
   });
 }
@@ -470,6 +504,7 @@ export async function runBwrapSandbox(
   _cliConfig?: Config,
   cliArgs: string[] = [],
   directories?: () => readonly string[],
+  signalOptions: BwrapSignalDeliveryOptions = {},
 ): Promise<number> {
   if (config.command !== 'bwrap') {
     throw new FatalSandboxError(
@@ -492,6 +527,7 @@ export async function runBwrapSandbox(
       plan.runtimeContext,
       cliArgs,
       proxy.socketPath,
+      signalOptions,
     );
   } catch (error) {
     primaryError = error;
