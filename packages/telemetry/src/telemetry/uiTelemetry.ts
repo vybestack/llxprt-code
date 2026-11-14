@@ -275,7 +275,7 @@ export class UiTelemetryService
 
   addEvent(event: UiEvent) {
     this.assertOpen();
-    let changed = true;
+    let changed: boolean;
     switch (event['event.name']) {
       case EVENT_API_RESPONSE:
         changed = this.processApiResponse(event);

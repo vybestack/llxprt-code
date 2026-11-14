@@ -157,7 +157,7 @@ function bunVersion(bunExePath, options) {
  */
 function assertBundledBunHealthy(bunExePath, expectedVersion, options) {
   const reasons = [];
-  let peOk = true;
+  let peOk;
   try {
     peOk = isWindowsPe(bunExePath, options);
   } catch (e) {

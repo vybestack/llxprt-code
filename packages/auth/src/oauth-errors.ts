@@ -500,7 +500,7 @@ export class OAuthErrorFactory {
     context?: string,
   ): OAuthError {
     let originalError: Error | null = null;
-    let message = 'Unknown error';
+    let message: string;
     let type = OAuthErrorType.UNKNOWN;
 
     if (error instanceof Error) {
