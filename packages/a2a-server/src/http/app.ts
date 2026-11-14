@@ -316,7 +316,9 @@ async function handleExecuteCommand(
   res: express.Response,
   context: AppContext,
 ): Promise<void> {
-  logger.info('[CoreAgent] Received /executeCommand request: ', req.body);
+  logger.info('[CoreAgent] Received /executeCommand request:', {
+    body: req.body,
+  });
   const { command, args } = req.body;
   try {
     const validationResult = validateCommandRequest(command, args, res);
@@ -333,9 +335,9 @@ async function handleExecuteCommand(
     await executeRegisteredCommand(commandToExecute, context, args ?? [], res);
   } catch (e) {
     logger.error(
-      `Error executing /executeCommand: ${command} with args: ${JSON.stringify(
-        args,
-      )}`,
+      `Error executing /executeCommand: ${JSON.stringify(
+        command,
+      )} with args: ${JSON.stringify(args)}`,
       e,
     );
     const errorMessage =

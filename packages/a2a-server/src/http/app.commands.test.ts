@@ -21,16 +21,19 @@ import {
   vi,
 } from 'bun:test';
 import type { Server } from 'node:http';
+import { Writable } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type express from 'express';
+import winston from 'winston';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { CoderAgentExecutor } from '../agent/executor.js';
 import { createApp } from './app.js';
+import { logger } from '../utils/logger.js';
 import { commandRegistry } from '../commands/command-registry.js';
 import type { Command, CommandContext } from '../commands/types.js';
 
@@ -321,6 +324,77 @@ describe('E2E Tests', () => {
   });
 
   describe('/executeCommand', () => {
+    describe('request logging', () => {
+      const FORGED = '[ERROR] 2026-01-01 00:00:00.000 AM -- forged entry';
+      let captured = '';
+      let transport: winston.transport | undefined;
+
+      /** Taps the real application logger so its production formatting is exercised. */
+      const startCapture = (): void => {
+        captured = '';
+        transport = new winston.transports.Stream({
+          stream: new Writable({
+            write(chunk, _encoding, callback) {
+              captured += String(chunk);
+              callback();
+            },
+          }),
+        });
+        logger.add(transport);
+      };
+
+      afterEach(() => {
+        if (transport !== undefined) logger.remove(transport);
+        transport = undefined;
+      });
+
+      const forgedLines = (): string[] =>
+        captured.split('\n').filter((line) => line.startsWith('[ERROR]'));
+
+      it('does not let a request body forge log entries', async () => {
+        startCapture();
+
+        const res = await fetch(`${baseUrl}/executeCommand`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            command: `no-such-command\r\n${FORGED}`,
+            message: `note\r\n${FORGED}`,
+            args: [],
+          }),
+        });
+
+        expect(res.status).toBe(404);
+        expect(captured).toContain('Received /executeCommand request');
+        expect(forgedLines()).toStrictEqual([]);
+      });
+
+      it('does not let a failing command name forge log entries', async () => {
+        startCapture();
+        mockCommandLookup({
+          name: 'boom',
+          description: 'always fails',
+          execute: vi.fn().mockRejectedValue(new Error('exploded')),
+        });
+
+        const res = await fetch(`${baseUrl}/executeCommand`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            command: `boom\n${FORGED}`,
+            args: [`arg\n${FORGED}`],
+          }),
+        });
+
+        expect(res.status).toBe(500);
+        expect(captured).toContain('Error executing /executeCommand');
+        const errorEntries = captured
+          .split('\n')
+          .filter((line) => line.startsWith('[ERROR]'));
+        expect(errorEntries).toHaveLength(1);
+      });
+    });
+
     it('should return extensions for valid command', async () => {
       // The startup context's extensions list is the real data source.
       const res = await fetch(`${baseUrl}/executeCommand`, {
