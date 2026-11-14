@@ -42,6 +42,7 @@ export interface StreamTimingMeasurement {
   readonly lastTokenMs: number | null;
   readonly providerRequestMs: number;
   readonly chunkCount: number;
+  readonly rawTimingStamped: boolean;
 }
 
 function isTokenBearingBlock(block: ContentBlock): boolean {
@@ -125,6 +126,7 @@ export class StreamTimingTracker {
       lastTokenMs: this.lastTokenMs,
       providerRequestMs: performance.now() - this.startMs,
       chunkCount: this.chunkCount,
+      rawTimingStamped: this.rawTimingStamped,
     };
   }
 }
@@ -199,9 +201,23 @@ export async function logStreamTelemetry(
 }
 
 /**
+ * Which signal stamped the token window (#4068): `raw` when raw token deltas
+ * did (issue #3493), `visible` when it fell back to visible token-bearing
+ * chunks. Undefined when no token window was measured, so a retry attempt
+ * without one clears the previous attempt's source.
+ */
+function resolveTimingSource(
+  timing: StreamTimingMeasurement | undefined,
+): 'raw' | 'visible' | undefined {
+  if (timing === undefined) return undefined;
+  if (timing.firstTokenMs === null) return undefined;
+  return timing.rawTimingStamped ? 'raw' : 'visible';
+}
+
+/**
  * Attach measured stream timing to the pending token-usage entry for the
  * prompt. Guarded like logStreamTelemetry: a telemetry-side failure must
- * never escape into the stream path. All four keys are attached every
+ * never escape into the stream path. All timing keys are attached every
  * time — null where unmeasured — so a retry attempt fully replaces the
  * prior attempt's timing via the spread-merge. Also used on the
  * stream-error path so a failed attempt's partial timing (with
@@ -220,6 +236,7 @@ export function attachStreamTiming(
       lastTokenMs: timing?.lastTokenMs ?? null,
       providerRequestMs: timing?.providerRequestMs ?? null,
       chunkCount: timing?.chunkCount ?? null,
+      timingSource: resolveTimingSource(timing),
     });
   } catch (error) {
     new DebugLogger('llxprt:stream-telemetry').error(

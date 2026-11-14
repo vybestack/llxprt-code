@@ -8,6 +8,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { appendFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { TokenUsageLogLevel } from '@vybestack/llxprt-code-settings';
 import {
   TOKEN_USAGE_SCHEMA_VERSION,
   type TokenUsageTurnContext,
@@ -24,6 +25,7 @@ import {
   type TokenUsageAttemptOutcome,
 } from './tokenUsageRecords.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
+import { toSummaryTurnRecord } from './tokenUsageSummaryRecord.js';
 
 // Re-export for backward compatibility — SerializedTokenUsageRecord now lives
 // in the schema module as an alias of SerializedTokenUsageTurnRecord.
@@ -62,6 +64,8 @@ export interface TokenUsageRecord extends PendingTokenEstimate {
   readonly cachedTokens: number;
   readonly effectiveActualTokens: number;
 }
+
+export type { TokenUsageLogLevel } from '@vybestack/llxprt-code-settings';
 
 export const PENDING_CAP = 100;
 
@@ -176,8 +180,12 @@ export class TokenUsageLogger {
    */
   private readonly shapeMemory = new RequestShapeSessionMemory();
 
+  /**
+   * @param level The resolved `token-usage-log` level (#4068). Legacy boolean
+   *   values are mapped by the settings accessor before they reach here.
+   */
   constructor(
-    private readonly enabled: boolean,
+    private readonly level: TokenUsageLogLevel,
     private readonly logFilePath: string | undefined,
   ) {}
 
@@ -214,8 +222,13 @@ export class TokenUsageLogger {
     return { fromProvider: previous.provider, fromModel: previous.model };
   }
 
+  /** The configured detail level; `off` writes nothing. */
+  getLevel(): TokenUsageLogLevel {
+    return this.level;
+  }
+
   isEnabled(): boolean {
-    return this.enabled;
+    return this.level !== 'off';
   }
 
   /**
@@ -229,7 +242,7 @@ export class TokenUsageLogger {
     promptId: string,
     context: Partial<TokenUsageTurnContext>,
   ): void {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     const existing = this.pending.get(promptId);
     if (existing !== undefined) {
       this.pending.set(promptId, {
@@ -266,7 +279,7 @@ export class TokenUsageLogger {
       'ts' | 'promptId' | 'tiktokenTokens' | 'tiktokenEstimationFailed'
     >,
   ): void {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     const existing = this.pending.get(promptId);
     this.recordEstimate(promptId, {
       ...data,
@@ -279,7 +292,7 @@ export class TokenUsageLogger {
     promptId: string,
     data: Omit<PendingTokenEstimate, 'ts' | 'promptId'>,
   ): void {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     if (!this.pending.has(promptId)) {
       this.evictIfFull();
     }
@@ -330,7 +343,7 @@ export class TokenUsageLogger {
     promptId: string,
     actual: TokenUsageActualInput,
   ): Promise<void> {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     const pending = this.pending.get(promptId);
     if (pending === undefined) return;
     // Split guard keeps each expression under the 3-operator complexity limit
@@ -421,7 +434,7 @@ export class TokenUsageLogger {
    * the logger is disabled.
    */
   async recordLifecycleEvent(event: TokenUsageLifecycleEvent): Promise<void> {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     const record = this._toLifecycleRecord(event);
     await this._appendJsonl(record);
   }
@@ -455,12 +468,33 @@ export class TokenUsageLogger {
   private _toSerializedTurnRecord(
     record: WritableTurnRecord,
   ): SerializedTokenUsageRecord {
-    return {
+    const context = record.turnContext ?? {};
+    const full: SerializedTokenUsageRecord = {
       record_type: 'turn',
       schema_version: TOKEN_USAGE_SCHEMA_VERSION,
       ...this._serializeCoreEstimateFields(record),
-      ...this._serializeContextFields(record.turnContext),
+      ...this._serializeContextFields(context),
       ...this._serializeExtraFields(record.actualExtras),
+      ...this._serializeDerivedFields(context),
+    };
+    return this.level === 'debug' ? full : toSummaryTurnRecord(full);
+  }
+
+  /**
+   * #4068 summary-level aggregates. `fixed_tokens` is the per-request overhead
+   * that does not depend on the conversation (instructions plus tool schemas);
+   * it is written only when both parts were measured.
+   */
+  private _serializeDerivedFields(c: Partial<TokenUsageTurnContext>) {
+    return {
+      ...(c.instructionsTokens !== undefined &&
+        c.toolsSchemaTokens !== undefined && {
+          fixed_tokens: c.instructionsTokens + c.toolsSchemaTokens,
+        }),
+      ...(c.newToolResultCount !== undefined && {
+        new_tool_result_count: c.newToolResultCount,
+      }),
+      ...(c.timingSource !== undefined && { timing_source: c.timingSource }),
     };
   }
 
@@ -679,6 +713,15 @@ export class TokenUsageLogger {
       ...(event.compressionOutputTokens !== undefined && {
         compression_output_tokens: event.compressionOutputTokens,
       }),
+      ...(event.compressionStrategy !== undefined && {
+        compression_strategy: event.compressionStrategy,
+      }),
+      ...(event.llmCallMade !== undefined && {
+        llm_call_made: event.llmCallMade,
+      }),
+      ...(event.compressionAttempts !== undefined && {
+        compression_attempts: event.compressionAttempts,
+      }),
     };
   }
 
@@ -772,12 +815,12 @@ export class TokenUsageLogger {
 }
 
 export function createTokenUsageLogger(
-  tokenUsageEnabled: boolean,
+  tokenUsageLevel: TokenUsageLogLevel,
   sessionId: string,
   config: Config | undefined,
 ): TokenUsageLogger {
   let logFilePath: string | undefined;
-  if (tokenUsageEnabled && config) {
+  if (tokenUsageLevel !== 'off' && config) {
     try {
       const tempDir = config.getProjectTempDir();
       if (tempDir) {
@@ -788,7 +831,7 @@ export function createTokenUsageLogger(
     }
   }
   return new TokenUsageLogger(
-    tokenUsageEnabled && logFilePath !== undefined,
+    logFilePath === undefined ? 'off' : tokenUsageLevel,
     logFilePath,
   );
 }

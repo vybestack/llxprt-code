@@ -345,6 +345,16 @@ export const CORE_SETTINGS_SCHEMA = {
           'Machine-wide aggregate size limit for all session recordings and cold archives, in MiB (see the default property).',
         showInDialog: true,
       },
+      tokenUsageMaxTotalSizeMB: {
+        type: 'number',
+        label: 'Token Usage Log Max Total Size (MiB)',
+        category: 'General',
+        requiresRestart: false,
+        default: 1024,
+        description:
+          'Machine-wide size limit for per-session token-usage logs (token-usage/*.jsonl), in MiB. The oldest inactive logs are deleted first when the total exceeds it.',
+        showInDialog: true,
+      },
       maxAge: {
         type: 'string',
         label: 'Max Age',
@@ -352,7 +362,7 @@ export const CORE_SETTINGS_SCHEMA = {
         requiresRestart: false,
         default: undefined,
         description:
-          'Maximum age of sessions to keep (e.g. "30d", "7d", "24h"). No default age limit.',
+          'Maximum age of sessions and token-usage logs to keep (e.g. "30d", "7d", "24h"). No default age limit.',
         showInDialog: true,
       },
       maxCount: {
