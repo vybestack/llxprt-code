@@ -31,6 +31,13 @@ import { acquireTaskSession } from './task-session-owner.js';
 import type { Task } from './task.js';
 import { readRequestAbortSignal } from '../http/request-cancellation.js';
 
+/** States after which a task can never run again. */
+const FINISHED_TASK_STATES: ReadonlySet<string> = new Set([
+  'canceled',
+  'failed',
+  'completed',
+]);
+
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new Error('Execution aborted');
@@ -282,6 +289,7 @@ export class CoderAgentExecutor implements AgentExecutor {
       );
       await this.taskStore?.save(wrapper.toSDKTask());
       logger.info(`[CoderAgentExecutor] Task ${taskId} state CANCELED saved.`);
+      await this.#releaseIfFinished(wrapper);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -709,6 +717,31 @@ export class CoderAgentExecutor implements AgentExecutor {
     }
   }
 
+  /**
+   * Drops a finished task's live session. The executor outlives every request,
+   * so without this each task's wrapper (and its agent) is retained forever.
+   * The task store holds the persisted state, so the task can still be
+   * reconstructed by id. A task still inside an execution loop is released by
+   * that loop's own completion instead.
+   */
+  async #releaseIfFinished(wrapper: TaskWrapper): Promise<void> {
+    if (
+      !FINISHED_TASK_STATES.has(wrapper.task.taskState) ||
+      this.executingTasks.has(wrapper.id)
+    ) {
+      return;
+    }
+    this.tasks.delete(wrapper.id);
+    try {
+      await wrapper.task.dispose();
+    } catch (disposeError) {
+      logger.error(
+        `[CoderAgentExecutor] Failed to dispose finished task ${wrapper.id}:`,
+        disposeError,
+      );
+    }
+  }
+
   async #saveFinalTaskState(wrapper: TaskWrapper): Promise<void> {
     logger.info(
       `[CoderAgentExecutor] Saving final state for task ${wrapper.id}.`,
@@ -760,10 +793,11 @@ export class CoderAgentExecutor implements AgentExecutor {
 
     const currentTask = wrapper.task;
 
-    if (['canceled', 'failed', 'completed'].includes(currentTask.taskState)) {
+    if (FINISHED_TASK_STATES.has(currentTask.taskState)) {
       logger.warn(
         `[CoderAgentExecutor] Attempted to execute task ${taskId} which is already in state ${currentTask.taskState}. Ignoring.`,
       );
+      await this.#releaseIfFinished(wrapper);
       return;
     }
 
@@ -799,6 +833,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     } finally {
       this.executingTasks.delete(taskId);
       await this.#saveFinalTaskState(wrapper);
+      await this.#releaseIfFinished(wrapper);
     }
   }
 }
