@@ -23,6 +23,11 @@ import {
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { probeBwrapCapability } from '../utils/sandbox-bwrap-capability.js';
+import {
+  assertSandboxDevicesSupported,
+  parseSandboxDeviceGrants,
+  resolveSandboxDevices,
+} from '../utils/sandbox-devices.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,7 +77,7 @@ type RuntimeSandboxProfileMount = Omit<SandboxProfileMount, 'mode'> & {
 
 type RuntimeSandboxProfile = Omit<
   SandboxProfile,
-  'engine' | 'resources' | 'network' | 'sshAgent' | 'mounts' | 'env'
+  'engine' | 'resources' | 'network' | 'sshAgent' | 'mounts' | 'env' | 'devices'
 > & {
   engine?: string;
   resources?: RuntimeSandboxProfileResources;
@@ -80,6 +85,7 @@ type RuntimeSandboxProfile = Omit<
   sshAgent?: string;
   mounts?: RuntimeSandboxProfileMount[];
   env?: Record<string, unknown>;
+  devices?: unknown;
 };
 
 const VALID_SANDBOX_COMMANDS: ReadonlyArray<SandboxConfig['command']> = [
@@ -299,6 +305,11 @@ function normalizeSandboxProfile(
 
   normalized.mounts = normalizeMounts(profile.mounts);
   normalized.env = normalizeEnvEntries(profile.env);
+
+  const devices = parseSandboxDeviceGrants(profile.devices);
+  if (devices.length > 0) {
+    normalized.devices = devices;
+  }
 
   return normalized;
 }
@@ -759,9 +770,22 @@ function warnBwrapImage(
   }
 }
 
+function resolveSandboxDeviceGrants(
+  command: SandboxConfig['command'],
+  sandboxProfile: SandboxProfile | undefined,
+): { readonly devices?: readonly string[] } {
+  const requested = sandboxProfile?.devices;
+  assertSandboxDevicesSupported(command, requested);
+  if (requested === undefined || requested.length === 0) {
+    return {};
+  }
+  return { devices: resolveSandboxDevices(requested).grants };
+}
+
 function resolveBwrapSandboxConfig(
   sandboxProfile: SandboxProfile | undefined,
   argv: SandboxCliArgs,
+  grants: { readonly devices?: readonly string[] },
 ): SandboxConfig {
   const unsupportedResources = Object.keys(sandboxProfile?.resources ?? {});
   if (unsupportedResources.length > 0) {
@@ -779,6 +803,7 @@ function resolveBwrapSandboxConfig(
     env: sandboxProfile?.env,
     network,
     sshAgent: sandboxProfile?.sshAgent,
+    ...grants,
   };
 }
 
@@ -837,8 +862,10 @@ export async function loadSandboxConfig(
     return undefined;
   }
 
+  const deviceGrants = resolveSandboxDeviceGrants(command, sandboxProfile);
+
   if (command === 'bwrap') {
-    return resolveBwrapSandboxConfig(sandboxProfile, argv);
+    return resolveBwrapSandboxConfig(sandboxProfile, argv, deviceGrants);
   }
 
   const image = resolveSandboxImage(
@@ -853,7 +880,7 @@ export async function loadSandboxConfig(
 
   applySandboxProfileEnv(sandboxProfile);
 
-  return { command, image };
+  return { command, image, ...deviceGrants };
 }
 
 /**
