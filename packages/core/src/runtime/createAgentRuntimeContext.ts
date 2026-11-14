@@ -440,6 +440,10 @@ export function createAgentRuntimeContext(
   options: AgentRuntimeContextFactoryOptions,
 ): AgentRuntimeContext {
   validateRequiredOptions(options);
+  // Every policy below is read live, per request. Reading the live policy once
+  // here as well makes a malformed stored value fail at construction, before
+  // any request is built, instead of on the first send.
+  options.readRuntimeSettings?.();
 
   const history = options.history ?? new HistoryService();
   if (options.mediaStore !== undefined) {
@@ -493,7 +497,7 @@ export function createAgentRuntimeContext(
       options.readRuntimeSettings?.().showCitations ??
       options.settings.showCitations ??
       false,
-    tokenUsageLogLevel:
+    readTokenUsageLogLevel: () =>
       options.readRuntimeSettings?.().tokenUsageLogLevel ??
       options.settings.tokenUsageLogLevel ??
       DEFAULT_TOKEN_USAGE_LOG_LEVEL,

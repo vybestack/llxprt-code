@@ -14,9 +14,11 @@ log writes, and #4067's compression records must fit #4068's summary rules.
   naming the valid levels.
 - One accessor, `resolveTokenUsageLogLevel`, reads the stored value: unset
   means `summary`, invalid throws. `SessionSettingsOwner.readRuntimePolicy`
-  uses it; the runtime context carries `tokenUsageLogLevel`; `ChatSession`
-  passes it to `createTokenUsageLogger`. `TokenUsageLogger` takes the level
-  only (no boolean overload).
+  uses it; the runtime context exposes `readTokenUsageLogLevel()`, a live
+  read; `ChatSession` passes that reader to `createTokenUsageLogger`.
+  `TokenUsageLogger` takes a level only (no boolean overload).
+- The setting is `propagation: 'next-turn'`, so the level is resolved per
+  request (see "Review fixes" below), not once per chat.
 - Serialization: the logger builds the full record, then `debug` writes it and
   `summary` writes `toSummaryTurnRecord(full)` (`tokenUsageSummaryRecord.ts`),
   an explicit list of scalar fields. Omitted values stay omitted, never zero.
@@ -49,7 +51,9 @@ summary record measured 866 bytes for the main-session smoke-test request and
 1.0 to 1.1 KB for a subagent request with production-length ids. Reaching 800 bytes needs a decision about
 dropping or shortening identity fields, which the spec lists as required, so
 it is reported rather than decided here. The test asserts the bound met with
-production-length ids (under 1,200 bytes).
+production-length ids and production-magnitude timing, written in whole
+milliseconds: under 1,150 bytes (it was 1,200 before rounding; see "Review
+fixes").
 
 ## #4068: retention
 
@@ -70,8 +74,10 @@ production-length ids (under 1,200 bytes).
   before `::`) is the current session, or holds a live lock in that project's
   `chats/` dir (`SessionLockManager.isLocked`, stale locks excluded), or the
   file was written within `minRetention`. Root ids outside the safe session-id
-  grammar cannot be lock-checked and are left alone. Before unlinking, the file
-  is re-stat'ed and skipped if its identity or mtime changed since the scan.
+  grammar cannot be lock-checked and are left alone. Each deletion takes the
+  root session's lock, re-stats the file under it, skips it if its identity,
+  size or mtime changed since the scan, unlinks and releases (see "Review
+  fixes").
 - Empty `token-usage/` directories are removed (ENOTEMPTY from a concurrent
   first write is not a failure). I/O failures are counted into the sweep's
   `failed` total, like the other janitor phases.
@@ -133,6 +139,101 @@ generated does not. A compression that produced no summary emits no
   reports no usage, `high-density`, `llm_call_made: false`, and emits no
   `compressionEnded`. All three failed on the old code (logs in
   `tmp/verify4068/4067-red*.log`).
+
+## Review fixes
+
+An independent review returned four findings; all are fixed in the second
+commit.
+
+### Retention held no lock across deletion (high)
+
+The scan checked `SessionLockManager.isLocked` for the root session, then
+deleted later. A session could take its lock in between without changing the
+file's inode or mtime, and its log was deleted. `deleteScanned` now follows
+the chat reclamation engine (`reclamationEngine.ts`, `directDeleteRawUnderLock`):
+it takes the root session's lock with `SessionLockManager.acquire` (no wait;
+`SessionLockedError` means busy and skips the file, any other error is counted
+in `failed`), revalidates under the lock (same dev, inode, size and mtime, and
+`ownsLock()`), unlinks, and releases in `finally`. The root of a subagent file
+is the part before `::`. The scan-time check stays as a cheap filter. Taking
+the lock can create a project's `chats/` directory, where a starting session
+would create the same lock.
+
+Tests (`tokenUsageRetention.race.test.ts`) use a narrow scan-to-delete hook,
+the twin of the janitor's existing scan-to-mutation hook, with real files and
+the real lock manager: a lock taken after the scan keeps a root file and a
+subagent file (both deleted by the old code, `tmp/verify4068/f1-red.log`); an
+append after the scan keeps the file; a replacement with identical size and
+mtime keeps it (inode differs; the replacement is staged before the rename so
+the inode cannot be reused); an idle file is still deleted and its lock is
+free afterwards.
+
+### `/set token-usage-log` did not reach an existing chat (medium)
+
+The runtime context captured the level once and the chat built its logger
+once. Now:
+
+- `AgentRuntimeContext.readTokenUsageLogLevel()` reads the owner's live
+  policy, like the other `read*` policies.
+- `TokenUsageLogger` keeps the current request's level and a reader.
+  `beginRequest()` reads the live level and applies it; it is called once per
+  provider attempt at the request boundary: the `apiCall` closure in
+  `StreamProcessor._executeStreamApiCall` (where the per-attempt raw-delta
+  bridge is minted) and before the send seam in
+  `TurnProcessor._executeProviderCall`.
+- Requests of one session are sequential and each attempt's actual usage is
+  recorded before the next attempt begins, so an attempt is written at the
+  level it started with. Pending attempts and request-shape memory are kept
+  across level changes. `createTokenUsageLogger` resolves the log path even
+  when the level starts at `off`.
+- A request sent at `off` is not observed by the shape memory
+  (`noteUnobservedRequest`). The next observed request cannot separate new
+  from carried tool results, so it omits the split (and `tool_calls`) instead
+  of over-counting new results, and its `prefix_fingerprint_changed` is
+  `null`. The keys are set to undefined, not dropped, so a retry of the same
+  prompt cannot inherit an earlier attempt's split. Between `summary` and
+  `debug` nothing is lost.
+
+Test (`tokenUsageLevelSwitch.test.ts`): one real `ChatSession` reading a real
+`SessionSettingsOwner`, the level changed with the `/set` parser and a user
+write. Summary → off writes nothing more → debug writes a debug record →
+summary writes a summary record with the correct carried total; summary →
+debug → summary keeps `tool_calls` to the new result and the carried total
+equal to the previous request's new total. All three tests failed on the old
+code (`tmp/verify4068/f2-red.log`).
+
+### `off` still did logging-only work (medium)
+
+`recordSendSeamTelemetry` now returns at entry when the request is not
+logged, before the system instruction is extracted.
+
+`StreamTimingTracker` and `RawTokenDeltaBridge` serve only the token-usage
+record: the tracker's measurement reaches nothing but `attachStreamTiming`.
+API-response telemetry (`logApiResponse`) times the call from its own start
+time; the providers' `AttemptRecorder` gets raw deltas through its lifecycle
+observer, which `resolveRawTokenDeltaNotifier` fans out independently of the
+caller sink; refusal handling (#4036) reads finish reasons from chunks; no UI
+reads either. So `beginTokenUsageAttempt` returns no bridge for an `off`
+attempt (no sink in request metadata) and `startAttemptTiming` creates no
+tracker. Because the decision is per attempt, a chat switched from off to
+summary times its next request.
+
+Tests: a counting getter on the system instruction is read at summary and not
+at off; `beginTokenUsageAttempt`/`startAttemptTiming` install nothing at off
+and a working bridge and tracker after switching on; in the session test the
+provider sees no sink at off and a sink after switching on, and that request's
+record has raw timing.
+
+### Whole-millisecond timing (maintainer decision)
+
+`ttft_ms`, `provider_request_ms` and `generation_ms` are rounded at both
+levels. `generation_ms` is the difference of the rounded endpoints, so
+`ttft_ms + generation_ms` never exceeds `provider_request_ms`. The size test
+now uses production-magnitude fractional timing (a one-minute request) and
+asserts the rounded values and a 1,150-byte bound; the records measure 1,060
+and 1,136 bytes. Without rounding the fractional digits add about 27 bytes,
+over the bound. The main-session smoke-test summary record now measures 830
+bytes (866 before).
 
 ## Open questions
 

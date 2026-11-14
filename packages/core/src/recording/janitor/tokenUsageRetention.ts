@@ -19,11 +19,20 @@
  * written within the `minRetention` floor — the same protections the janitor
  * applies to chat recordings. A root id outside the safe session-id grammar
  * cannot be lock-checked, so such files are left alone.
+ *
+ * The live-lock check at selection time is advisory. Each deletion then takes
+ * the root session's lock itself (skipping the file when the lock is busy),
+ * revalidates the file under it and unlinks before releasing, so a session
+ * that starts between selection and deletion keeps its log.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { SessionLockManager } from '../SessionLockManager.js';
+import {
+  SessionLockManager,
+  SessionLockedError,
+  type LockHandle,
+} from '../SessionLockManager.js';
 import { hasErrnoCode } from '../../storage/local-media-store-validation.js';
 import type { ResolvedRetentionConfig } from './cleanupTypes.js';
 import { PROJECT_HASH_RE } from './sessionScanner.js';
@@ -55,6 +64,21 @@ interface CleanupState {
   deleted: number;
   bytesDeleted: number;
   failed: number;
+}
+
+/**
+ * Narrow test-only lifecycle hook, the token-usage twin of the janitor's
+ * scan-to-mutation hook. When non-null it runs after a file was selected for
+ * deletion and before the deletion takes the session lock, so a test can
+ * acquire that lock, append to the file or replace it in exactly that window.
+ */
+let scanToDeleteHook: ((filePath: string) => Promise<void>) | null = null;
+
+/** Install or clear the scan-to-delete hook for tests. */
+export function setTokenUsageScanToDeleteHookForTest(
+  fn: ((filePath: string) => Promise<void>) | null,
+): void {
+  scanToDeleteHook = fn;
 }
 
 function rootSessionIdOf(fileName: string): string {
@@ -130,12 +154,56 @@ async function isProtected(
 }
 
 /**
- * Delete one file after confirming it is still the file that was scanned, so
- * a file replaced since the scan (a resumed session recreating its log) is
- * not deleted on stale evidence.
+ * Exclusive ownership of the file's root session lock, or null when it is
+ * held (a live session, or this process's own session). Any other failure is
+ * counted, not hidden. Acquiring may create the project's `chats/` directory,
+ * which is where a starting session would create the same lock.
+ */
+async function lockRootSession(
+  file: TokenUsageFile,
+  state: CleanupState,
+): Promise<LockHandle | null> {
+  try {
+    return await SessionLockManager.acquire(file.chatsDir, file.rootSessionId);
+  } catch (error) {
+    if (!(error instanceof SessionLockedError)) state.failed += 1;
+    return null;
+  }
+}
+
+/**
+ * Delete one selected file while holding its root session's lock, the same
+ * discipline the chat reclamation engine uses for recordings. The scan-time
+ * lock check alone leaves a window: a session can take its lock after that
+ * check without changing the file. Holding the lock closes it, because a
+ * session cannot start or resume until the lock is released. A busy lock
+ * skips the file.
  */
 async function deleteScanned(
   file: TokenUsageFile,
+  state: CleanupState,
+): Promise<void> {
+  if (scanToDeleteHook !== null) await scanToDeleteHook(file.filePath);
+  const lock = await lockRootSession(file, state);
+  if (lock === null) return;
+  try {
+    await unlinkIfUnchanged(file, lock, state);
+  } finally {
+    await lock.release();
+  }
+}
+
+/**
+ * Revalidate under the lock, then unlink. The protections checked at scan
+ * time either cannot change (the current session id, the id grammar) or are
+ * re-established here: the lock is ours, and an unchanged identity, size and
+ * mtime mean nothing was written since the scan, so the minRetention floor
+ * still does not apply. A file replaced or appended to since the scan (a
+ * resumed session recreating or extending its log) is kept.
+ */
+async function unlinkIfUnchanged(
+  file: TokenUsageFile,
+  lock: LockHandle,
   state: CleanupState,
 ): Promise<void> {
   try {
@@ -143,7 +211,8 @@ async function deleteScanned(
     if (!stat.isFile() || stat.dev !== file.dev || stat.ino !== file.ino) {
       return;
     }
-    if (stat.mtimeMs !== file.mtimeMs) return;
+    if (stat.mtimeMs !== file.mtimeMs || stat.size !== file.sizeBytes) return;
+    if (!(await lock.ownsLock())) return;
     await fs.unlink(file.filePath);
     state.deleted += 1;
     state.bytesDeleted += file.sizeBytes;

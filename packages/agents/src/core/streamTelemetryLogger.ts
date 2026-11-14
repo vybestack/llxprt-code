@@ -154,6 +154,41 @@ export class RawTokenDeltaBridge {
 }
 
 /**
+ * Begin one provider attempt's token-usage observation (#4068): apply the
+ * live `token-usage-log` level to the logger and return the attempt's raw
+ * token-delta bridge, or null when the attempt is not logged.
+ *
+ * The bridge and the {@link StreamTimingTracker} it feeds exist only for the
+ * token-usage turn record: the tracker's measurement reaches nothing but
+ * {@link attachStreamTiming}. API-response telemetry times the call from its
+ * own start time, the providers' AttemptRecorder receives raw deltas through
+ * its lifecycle observer independently of this sink
+ * (`resolveRawTokenDeltaNotifier`), and refusal handling (#4036) reads finish
+ * reasons from the chunks. So an `off` attempt installs neither.
+ */
+export function beginTokenUsageAttempt(
+  tokenUsageLogger: TokenUsageLogger | null | undefined,
+): RawTokenDeltaBridge | null {
+  if (tokenUsageLogger === null || tokenUsageLogger === undefined) return null;
+  return tokenUsageLogger.beginRequest() === 'off'
+    ? null
+    : new RawTokenDeltaBridge();
+}
+
+/**
+ * The attempt's timing tracker, attached to its raw-delta bridge, created at
+ * the provider-call boundary. Null when the attempt is not logged.
+ */
+export function startAttemptTiming(
+  bridge: RawTokenDeltaBridge | null | undefined,
+): StreamTimingTracker | null {
+  if (bridge === null || bridge === undefined) return null;
+  const tracker = new StreamTimingTracker();
+  bridge.attach(tracker);
+  return tracker;
+}
+
+/**
  * Log the API response telemetry and record actual token usage for a
  * completed stream attempt.
  *
