@@ -76,8 +76,10 @@ interface Scenario {
 const EXPECTED = [
   'a-plans-off',
   'a-plans-on',
+  'a-plans-on-named',
   'b-longest-off',
   'b-longest-on',
+  'b-longest-on-named',
   'c-unprompted-on',
   'd-read-off',
   'd-read-on',
@@ -123,7 +125,9 @@ function expectedMode(name: string): 'on' | 'off' {
 
 describe('issue4084 tmux scenario scripts', () => {
   it('has one script for every scratch test and before/after pair', () => {
-    expect(scenarioFiles().map(nameOf)).toStrictEqual([...EXPECTED].sort());
+    expect(scenarioFiles().map(nameOf).sort()).toStrictEqual(
+      [...EXPECTED].sort(),
+    );
   });
 
   it.each(EXPECTED.map((name) => [name]))(
