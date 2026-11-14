@@ -324,6 +324,25 @@ export function addContainerVolumeMounts(args: string[]): void {
   }
 }
 
+/**
+ * Writes the empty podman auth file inside a fresh 0700 directory so a file or
+ * symlink another local user planted in the shared temp dir can neither be
+ * overwritten nor substituted. The directory is removed when the CLI exits.
+ */
+function createEmptyAuthFile(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-podman-auth-'));
+  const file = path.join(dir, 'empty_auth.json');
+  fs.writeFileSync(file, '{}', { encoding: 'utf-8', mode: 0o600, flag: 'wx' });
+  process.once('exit', () => {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup of a scratch directory at process exit.
+    }
+  });
+  return file;
+}
+
 /** Adds environment variable flags for non-secret config, term, proxy, etc. */
 export function addContainerEnvVars(
   args: string[],
@@ -383,9 +402,7 @@ export function addContainerEnvVars(
   args.push('--env', `SANDBOX=${containerName}`);
 
   if (config.command === 'podman') {
-    const emptyAuthFilePath = path.join(os.tmpdir(), 'empty_auth.json');
-    fs.writeFileSync(emptyAuthFilePath, '{}', 'utf-8');
-    args.push('--authfile', emptyAuthFilePath);
+    args.push('--authfile', createEmptyAuthFile());
   }
 }
 
