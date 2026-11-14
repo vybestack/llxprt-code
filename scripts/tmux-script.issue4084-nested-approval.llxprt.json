@@ -2,7 +2,7 @@
   "description": "Issue #4084 nested approval in the CLI (not yolo): the script's shell call waits for the ordinary confirmation, labelled with its script; approving once completes the run.",
   "tmux": {
     "cols": 140,
-    "rows": 45,
+    "rows": 100,
     "historyLimit": 50000,
     "scrollbackLines": 8000,
     "initialWaitMs": 8000
@@ -158,7 +158,7 @@
     {
       "type": "line",
       "text": "/quit",
-      "submitKeys": ["Escape", "Enter"]
+      "submitKeys": ["Enter", "Enter"]
     },
     {
       "type": "waitForExit",

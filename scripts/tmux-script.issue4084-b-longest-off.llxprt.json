@@ -2,7 +2,7 @@
   "description": "Issue #4084 scenario B, code mode off (before). Ground truth: bun scripts/issue4084-ground-truth.ts (field b).",
   "tmux": {
     "cols": 140,
-    "rows": 45,
+    "rows": 100,
     "historyLimit": 50000,
     "scrollbackLines": 8000,
     "initialWaitMs": 8000
@@ -96,7 +96,7 @@
     {
       "type": "line",
       "text": "/quit",
-      "submitKeys": ["Escape", "Enter"]
+      "submitKeys": ["Enter", "Enter"]
     },
     {
       "type": "waitForExit",

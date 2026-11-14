@@ -2,7 +2,7 @@
   "description": "Issue #4084 scenario A (@plan markers in the files changed in e3c1782b96~10..e3c1782b96, counted per plan ID, package and blamed commit), code mode off (before). Ground truth: bun scripts/issue4084-ground-truth.ts (field a).",
   "tmux": {
     "cols": 140,
-    "rows": 45,
+    "rows": 100,
     "historyLimit": 50000,
     "scrollbackLines": 8000,
     "initialWaitMs": 8000
@@ -29,7 +29,7 @@
     },
     {
       "type": "line",
-      "text": "Find every `@plan` marker in TypeScript files changed between commits e3c1782b96~10 and e3c1782b96, reading each file as it is at e3c1782b96. Report the count per plan ID, the count per package (packages/<name>), and, using git blame at e3c1782b96 on each marker line, the count per short commit hash that last touched the line. Give the total.",
+      "text": "Find every `@plan` marker in TypeScript files changed between commits e3c1782b96~10 and e3c1782b96, reading each file as it is at e3c1782b96. Report the count per plan ID, the count per package (packages/<name>), and, using git blame at e3c1782b96 on each marker line, the count per short commit hash that last touched the line. Give the total. Do the work yourself in this session; do not delegate to a subagent.",
       "postTypeMs": 1500
     },
     {
@@ -96,7 +96,7 @@
     {
       "type": "line",
       "text": "/quit",
-      "submitKeys": ["Escape", "Enter"]
+      "submitKeys": ["Enter", "Enter"]
     },
     {
       "type": "waitForExit",
