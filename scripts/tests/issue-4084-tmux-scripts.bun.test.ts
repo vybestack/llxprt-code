@@ -74,8 +74,8 @@ interface Scenario {
 }
 
 const EXPECTED = [
-  'a-todos-off',
-  'a-todos-on',
+  'a-plans-off',
+  'a-plans-on',
   'b-longest-off',
   'b-longest-on',
   'c-unprompted-on',

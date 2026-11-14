@@ -6,7 +6,7 @@
 - Phase B: done (run owner, nested execution seam, `execute_tool_script` behind a construction flag, bundle packaging; see "Phase B record")
 - Phase D: done (nested approvals in the CLI, fail-fast hosts, script card, `tool_script_event` recording and resume, script telemetry, default policy; see "Phase D record"). Done before Phase C on purpose: without it a nested approval in the CLI would wait forever once the setting exists.
 - Phase C: done (settings, live surface, `discover_tool_api`, declarations and API revision, subagents, hook restriction, scenario scripts and ground truth; see "Phase C record")
-- Phase E: pending
+- Phase E: in progress (see "Phase E" progress log)
 
 ## Fixed decisions
 

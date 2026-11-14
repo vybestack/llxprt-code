@@ -17,11 +17,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   computeLongestFunctions,
-  computeTodoAuthors,
+  computePlanMarkers,
   functionLengths,
+  longestWithTies,
+  planIdsOn,
 } from '../issue4084-ground-truth.ts';
 
 let repo: string;
+const hashes: Record<string, string> = {};
 
 function git(args: readonly string[], author = 'Ada'): void {
   execFileSync('git', ['-C', repo, ...args], {
@@ -35,6 +38,12 @@ function git(args: readonly string[], author = 'Ada'): void {
   });
 }
 
+function head(): string {
+  return execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+}
+
 function commit(file: string, content: string, author: string): void {
   const target = path.join(repo, file);
   mkdirSync(path.dirname(target), { recursive: true });
@@ -46,16 +55,31 @@ function commit(file: string, content: string, author: string): void {
 beforeAll(() => {
   repo = mkdtempSync(path.join(tmpdir(), 'issue4084-ground-truth-'));
   git(['init', '-q']);
-  // Outside the last ten commits: its marker must not count.
-  commit('old.ts', '// TODO old\n', 'Old');
+  // Outside the last ten commits: its marker counts only because the file
+  // changes inside the window, and blame names this older commit.
+  commit('packages/old/old.ts', '// @plan:PLAN-OLD.P01\n', 'Old');
+  hashes.old = head();
   for (let i = 0; i < 9; i++) commit(`pad${i}.md`, `pad ${i}\n`, 'Ada');
-  commit('a.ts', '// TODO one\nconst x = 1; // FIXME two\n', 'Ada');
-  commit('b.tsx', 'export const B = 1;\n', 'Ada');
-  commit('b.tsx', 'export const B = 1;\n// TODO from bob\n', 'Bob');
-  commit('notes.md', 'TODO not typescript\n', 'Bob');
-  commit('gone.ts', '// TODO deleted\n', 'Bob');
+  commit(
+    'packages/alpha/a.ts',
+    '/** @plan:PLAN-A.P01 */\nconst x = 1; // @plan PLAN-B.P02.\n// @planning is not a marker\n',
+    'Ada',
+  );
+  hashes.alpha = head();
+  commit('packages/beta/b.tsx', 'export const B = 1;\n', 'Ada');
+  commit(
+    'packages/beta/b.tsx',
+    'export const B = 1;\n// @plan:PLAN-A.P01 @plan:PLAN-A.P02\n',
+    'Bob',
+  );
+  hashes.beta = head();
+  commit('notes.md', '@plan:PLAN-A.P01 not typescript\n', 'Bob');
+  commit('gone.ts', '// @plan:PLAN-GONE.P01\n', 'Bob');
   git(['rm', '-q', 'gone.ts'], 'Bob');
   git(['commit', '-q', '-m', 'remove gone.ts'], 'Bob');
+  commit('scripts/tool.ts', "it('x @plan:PLAN-B.P02', () => {});\n", 'Bob');
+  hashes.tool = head();
+  commit('packages/old/old.ts', '// @plan:PLAN-OLD.P01\nconst y = 2;\n', 'Bob');
   commit(
     'core/long.ts',
     [
@@ -90,17 +114,46 @@ afterAll(() => {
 });
 
 describe('issue4084 ground truth', () => {
-  it('counts TODO/FIXME lines per blamed author in TypeScript files changed in the last ten commits', () => {
-    const result = computeTodoAuthors(repo, 'HEAD', 10);
+  it('counts @plan markers per plan ID, package and blamed commit in TypeScript files changed in the last ten commits', () => {
+    const result = computePlanMarkers(repo, 'HEAD', 10);
 
     expect(result.files).toStrictEqual([
-      'a.ts',
-      'b.tsx',
       'core/long.test.ts',
       'core/long.ts',
+      'packages/alpha/a.ts',
+      'packages/beta/b.tsx',
+      'packages/old/old.ts',
+      'scripts/tool.ts',
     ]);
-    expect(result.byAuthor).toStrictEqual({ Ada: 2, Bob: 1 });
-    expect(result.total).toBe(3);
+    expect(result.byPlanId).toStrictEqual({
+      'PLAN-A.P01': 2,
+      'PLAN-B.P02': 2,
+      'PLAN-A.P02': 1,
+      'PLAN-OLD.P01': 1,
+    });
+    expect(result.byPackage).toStrictEqual({
+      'packages/alpha': 2,
+      'packages/beta': 2,
+      'packages/old': 1,
+      scripts: 1,
+    });
+    expect(result.byCommit).toStrictEqual({
+      [hashes.alpha]: 2,
+      [hashes.beta]: 2,
+      [hashes.old]: 1,
+      [hashes.tool]: 1,
+    });
+    expect(result.total).toBe(6);
+  });
+
+  it('reads plan IDs after a colon or spaces and ignores words that only start with @plan', () => {
+    expect(planIdsOn('// @plan:PLAN-X.P01 @requirement:REQ-1')).toStrictEqual([
+      'PLAN-X.P01',
+    ]);
+    expect(
+      planIdsOn(" * @plan PLAN-Y.P07/P11, see '@plan:ISSUE-3'"),
+    ).toStrictEqual(['PLAN-Y.P07/P11', 'ISSUE-3']);
+    expect(planIdsOn('@planning @plans @plan-x')).toStrictEqual([]);
   });
 
   it('measures function spans from the declaration line to the closing line', () => {
@@ -137,6 +190,20 @@ describe('issue4084 ground truth', () => {
       ['core/long.ts', 'method', 5],
       ['core/long.ts', 'shortOne', 3],
       ['core/long.ts', 'arrow', 3],
+    ]);
+  });
+
+  it('lists every function tied with the last of the top entries', () => {
+    const { top, tiedAtCutoff } = longestWithTies(repo, 'core', {
+      ref: 'HEAD',
+      includeTests: false,
+      limit: 2,
+    });
+
+    expect(top.map(({ name }) => name)).toStrictEqual(['method', 'shortOne']);
+    expect(tiedAtCutoff.map(({ name }) => name)).toStrictEqual([
+      'shortOne',
+      'arrow',
     ]);
   });
 });

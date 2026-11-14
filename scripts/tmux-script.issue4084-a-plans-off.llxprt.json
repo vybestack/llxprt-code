@@ -1,5 +1,5 @@
 {
-  "description": "Issue #4084 scenario A, code mode off (before). Ground truth: bun scripts/issue4084-ground-truth.ts (field a).",
+  "description": "Issue #4084 scenario A (@plan markers in the files changed in e3c1782b96~10..e3c1782b96, counted per plan ID, package and blamed commit), code mode off (before). Ground truth: bun scripts/issue4084-ground-truth.ts (field a).",
   "tmux": {
     "cols": 140,
     "rows": 45,
@@ -29,7 +29,7 @@
     },
     {
       "type": "line",
-      "text": "Find every TODO or FIXME comment in TypeScript files changed in the last 10 commits. For each, use git blame to find the author of that line. Give me counts per author and the total.",
+      "text": "Find every `@plan` marker in TypeScript files changed between commits e3c1782b96~10 and e3c1782b96, reading each file as it is at e3c1782b96. Report the count per plan ID, the count per package (packages/<name>), and, using git blame at e3c1782b96 on each marker line, the count per short commit hash that last touched the line. Give the total.",
       "postTypeMs": 1500
     },
     {
@@ -39,6 +39,26 @@
     {
       "type": "capture",
       "label": "prompt-submitted"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
     },
     {
       "type": "waitForNot",

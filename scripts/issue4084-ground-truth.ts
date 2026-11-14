@@ -6,16 +6,21 @@
 
 /**
  * Ground truth for the issue #4084 code mode scenarios A and B, computed
- * from a git commit with git and the TypeScript parser only (no llxprt), so
- * the tmux runs can be scored against it.
+ * from git and the TypeScript parser only (no llxprt), so the tmux runs can
+ * be scored against it. Both are pinned to the commit the scenarios name
+ * (`SCENARIO_BASE`), because the code mode branch itself changes the files.
  *
- * A: to-do and fix-me markers in the TypeScript files (`.ts`, `.tsx`) changed by
- *    `git diff --name-only <ref>~10..<ref>`, attributed to authors with
- *    `git blame`, counted per author.
+ * A: every `@plan` marker in the TypeScript files (`.ts`, `.tsx`) changed by
+ *    `git diff --name-only <base>~10..<base>`, read as they are at the base
+ *    commit, counted per plan ID (the token after `@plan:` or `@plan `), per
+ *    package (`packages/<name>`), and per commit that last touched the marker
+ *    line according to `git blame <base> -- <file>`.
  * B: the longest functions under a directory by line count (first line of the
  *    declaration through its closing line), reported both for every
  *    TypeScript file and with test files left out, because the prompt does
- *    not say which a model should count.
+ *    not say which a model should count. The B prompt reads the working tree,
+ *    so the report also says whether the ranking at `--ref` (default HEAD)
+ *    gives the same files, names and lengths as the base commit.
  *
  * Usage: bun scripts/issue4084-ground-truth.ts [--ref HEAD] [--repo .]
  */
@@ -24,11 +29,24 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import ts from 'typescript';
 
-export interface TodoAuthors {
+/** The commit scenarios A and B are pinned to. */
+export const SCENARIO_BASE = 'e3c1782b96';
+
+export interface PlanMarker {
+  readonly file: string;
+  readonly line: number;
+  readonly planId: string;
+  readonly commit: string;
+}
+
+export interface PlanMarkers {
   readonly ref: string;
   readonly files: readonly string[];
   readonly total: number;
-  readonly byAuthor: Readonly<Record<string, number>>;
+  readonly byPlanId: Readonly<Record<string, number>>;
+  readonly byPackage: Readonly<Record<string, number>>;
+  readonly byCommit: Readonly<Record<string, number>>;
+  readonly markers: readonly PlanMarker[];
 }
 
 export interface FunctionLength {
@@ -38,8 +56,10 @@ export interface FunctionLength {
   readonly lines: number;
 }
 
-const TODO_PATTERN = /\b(?:TODO|FIXME)\b/;
+/** `@plan` followed by `:` or spaces and the plan ID; `@planning` is not one. */
+const PLAN_MARKER = /@plan(?:[:\s]+([^\s'"`,;()[\]]+))?(?![\w-])/g;
 const TYPESCRIPT_FILE = /\.tsx?$/;
+const PORCELAIN_HEADER = /^([0-9a-f]{40}) \d+ \d+/;
 
 function git(repo: string, args: readonly string[]): string {
   return execFileSync('git', ['-C', repo, ...args], {
@@ -52,9 +72,9 @@ function existsAt(repo: string, ref: string, file: string): boolean {
   return git(repo, ['ls-tree', '--name-only', ref, '--', file]).trim() === file;
 }
 
-/** Authors of each line of `file` at `ref`, from one porcelain blame. */
-function lineAuthors(repo: string, ref: string, file: string): string[] {
-  const authors: string[] = [];
+/** The commit that last touched each line of `file` at `ref`, from one blame. */
+function lineCommits(repo: string, ref: string, file: string): string[] {
+  const commits: string[] = [];
   let current = '';
   for (const line of git(repo, [
     'blame',
@@ -63,34 +83,90 @@ function lineAuthors(repo: string, ref: string, file: string): string[] {
     '--',
     file,
   ]).split('\n')) {
-    if (line.startsWith('author ')) current = line.slice('author '.length);
-    else if (line.startsWith('\t')) authors.push(current);
+    const header = PORCELAIN_HEADER.exec(line);
+    if (header) current = header[1];
+    else if (line.startsWith('\t')) commits.push(current);
   }
-  return authors;
+  return commits;
 }
 
-export function computeTodoAuthors(
+/** `packages/<name>` for package files, otherwise the top directory. */
+export function packageOf(file: string): string {
+  const parts = file.split('/');
+  if (parts[0] === 'packages' && parts.length > 2)
+    return parts.slice(0, 2).join('/');
+  return parts.length > 1 ? parts[0] : '.';
+}
+
+/** A sentence-ending period after an ID is not part of it. */
+function withoutTrailingDots(id: string): string {
+  let end = id.length;
+  while (end > 0 && id[end - 1] === '.') end -= 1;
+  return id.slice(0, end);
+}
+
+/** Plan IDs of the markers on one line, in order; a bare `@plan` is `(none)`. */
+export function planIdsOn(text: string): string[] {
+  return [...text.matchAll(PLAN_MARKER)].map((match) =>
+    withoutTrailingDots(match[1] ?? '(none)'),
+  );
+}
+
+function increment(counts: Record<string, number>, key: string): void {
+  counts[key] = (counts[key] ?? 0) + 1;
+}
+
+function sortedCounts(counts: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(counts).sort(
+      ([leftKey, left], [rightKey, right]) =>
+        right - left || leftKey.localeCompare(rightKey),
+    ),
+  );
+}
+
+function markersIn(repo: string, ref: string, file: string): PlanMarker[] {
+  const lines = git(repo, ['show', `${ref}:${file}`]).split('\n');
+  const found = lines.flatMap((text, index) =>
+    planIdsOn(text).map((planId) => ({ index, planId })),
+  );
+  if (found.length === 0) return [];
+  const commits = lineCommits(repo, ref, file);
+  return found.map(({ index, planId }) => ({
+    file,
+    line: index + 1,
+    planId,
+    commit: commits[index],
+  }));
+}
+
+export function computePlanMarkers(
   repo: string,
-  ref = 'HEAD',
+  ref: string,
   commits = 10,
-): TodoAuthors {
+): PlanMarkers {
   const files = git(repo, ['diff', '--name-only', `${ref}~${commits}..${ref}`])
     .split('\n')
     .filter((file) => TYPESCRIPT_FILE.test(file) && existsAt(repo, ref, file))
     .sort();
-  const byAuthor: Record<string, number> = {};
-  let total = 0;
-  for (const file of files) {
-    const lines = git(repo, ['show', `${ref}:${file}`]).split('\n');
-    const authors = lineAuthors(repo, ref, file);
-    lines.forEach((text, index) => {
-      if (!TODO_PATTERN.test(text)) return;
-      const author = authors[index];
-      byAuthor[author] = (byAuthor[author] ?? 0) + 1;
-      total += 1;
-    });
+  const markers = files.flatMap((file) => markersIn(repo, ref, file));
+  const byPlanId: Record<string, number> = {};
+  const byPackage: Record<string, number> = {};
+  const byCommit: Record<string, number> = {};
+  for (const marker of markers) {
+    increment(byPlanId, marker.planId);
+    increment(byPackage, packageOf(marker.file));
+    increment(byCommit, marker.commit);
   }
-  return { ref, files, total, byAuthor };
+  return {
+    ref,
+    files,
+    total: markers.length,
+    byPlanId: sortedCounts(byPlanId),
+    byPackage: sortedCounts(byPackage),
+    byCommit: sortedCounts(byCommit),
+    markers,
+  };
 }
 
 /** Function kinds that carry their own name. */
@@ -197,6 +273,33 @@ export function computeLongestFunctions(
     .slice(0, options.limit ?? 10);
 }
 
+/**
+ * The top `limit` functions plus every function tied with the last of them,
+ * so a ranking that picks a different member of a tie can be scored.
+ */
+export function longestWithTies(
+  repo: string,
+  directory: string,
+  options: { ref: string; limit: number; includeTests: boolean },
+): { top: FunctionLength[]; tiedAtCutoff: FunctionLength[] } {
+  const ranked = computeLongestFunctions(repo, directory, {
+    ...options,
+    limit: Number.MAX_SAFE_INTEGER,
+  });
+  const top = ranked.slice(0, options.limit);
+  const cutoff = top[top.length - 1]?.lines;
+  return {
+    top,
+    tiedAtCutoff: ranked.filter((entry) => entry.lines === cutoff),
+  };
+}
+
+function rankingKey(entries: readonly FunctionLength[]): string {
+  return JSON.stringify(
+    entries.map(({ file, name, lines }) => [file, name, lines]),
+  );
+}
+
 function argument(argv: readonly string[], flag: string): string | undefined {
   const index = argv.indexOf(flag);
   return index < 0 ? undefined : argv[index + 1];
@@ -204,22 +307,37 @@ function argument(argv: readonly string[], flag: string): string | undefined {
 
 function main(argv: readonly string[]): void {
   const repo = path.resolve(argument(argv, '--repo') ?? '.');
-  const ref = argument(argv, '--ref') ?? 'HEAD';
-  const commit = git(repo, ['rev-parse', ref]).trim();
+  const ref = git(repo, [
+    'rev-parse',
+    argument(argv, '--ref') ?? 'HEAD',
+  ]).trim();
+  const base = git(repo, ['rev-parse', SCENARIO_BASE]).trim();
   const directory = 'packages/agents/src/core';
+  const longest = (at: string, includeTests: boolean) =>
+    longestWithTies(repo, directory, { ref: at, limit: 10, includeTests });
+  const atBase = {
+    all: longest(base, true),
+    excludingTests: longest(base, false),
+  };
+  const atRef = {
+    all: longest(ref, true),
+    excludingTests: longest(ref, false),
+  };
   const report = {
-    commit,
-    a: computeTodoAuthors(repo, commit),
+    base,
+    ref,
+    a: computePlanMarkers(repo, base),
     b: {
       directory,
-      all: computeLongestFunctions(repo, directory, {
-        ref: commit,
-        includeTests: true,
-      }),
-      excludingTests: computeLongestFunctions(repo, directory, {
-        ref: commit,
-        includeTests: false,
-      }),
+      ...atBase,
+      sameRankingAtRef:
+        rankingKey(atBase.all.tiedAtCutoff) ===
+          rankingKey(atRef.all.tiedAtCutoff) &&
+        rankingKey(atBase.all.top) === rankingKey(atRef.all.top) &&
+        rankingKey(atBase.excludingTests.top) ===
+          rankingKey(atRef.excludingTests.top) &&
+        rankingKey(atBase.excludingTests.tiedAtCutoff) ===
+          rankingKey(atRef.excludingTests.tiedAtCutoff),
     },
   };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
