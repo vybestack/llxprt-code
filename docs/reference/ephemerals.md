@@ -174,6 +174,15 @@ Prevent commands and tasks from hanging indefinitely. In seconds (not millisecon
 | `task-max-timeout-seconds`         | number      | `1800` (30 min) | yes     | Ceiling only for subagent tasks — bounds a request upward but never overrides a shorter one. A model request above this (including a `-1` "unlimited" request) is clamped to this value and the result says so. Set to `-1` to decline a ceiling entirely (genuinely unbounded). |
 | `socket-timeout`                   | number (ms) | —               | yes     | HTTP request timeout for API calls, in milliseconds. Useful for slow local models.                                                                                                                                                                                               |
 
+### Stream timeouts
+
+Watchdogs on the model response stream, in milliseconds. Both are off by default, because long prompts on large-context models and slow local models can legitimately take minutes before the first token.
+
+| Setting                            | Type        | Default         | Profile | Description                                                                                                                                                                                                                                                                              |
+| ---------------------------------- | ----------- | --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stream-first-response-timeout-ms` | number (ms) | `-1` (no limit) | yes     | Longest wait from sending a request until the first content arrives. A positive value arms the watchdog; `0` or `-1` disables it. A provider liveness signal such as `response.created` disarms it before content arrives. Also settable with `LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS`. |
+| `stream-idle-timeout-ms`           | number (ms) | `0` (disabled)  | yes     | Longest silence between stream chunks once content is flowing. Also settable with `LLXPRT_STREAM_IDLE_TIMEOUT_MS`.                                                                                                                                                                       |
+
 ## Loop Detection
 
 Catch models that get stuck repeating the same action.

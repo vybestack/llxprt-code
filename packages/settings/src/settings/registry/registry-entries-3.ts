@@ -487,7 +487,7 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = deepFreezeTable<
     owner: 'model',
     propagation: 'next-turn',
     description:
-      'First-response (time-to-first-content) watchdog in milliseconds. Enabled by default (300000 = 5 minutes). Set to 0 or a negative number to disable; a provider liveness signal (e.g. response.created) disarms it even before semantic content arrives.',
+      'First-response (time-to-first-content) watchdog in milliseconds. Disabled by default (-1 = no limit). Set a positive number of milliseconds to arm it; 0 or a negative number disables it; a provider liveness signal (e.g. response.created) disarms it even before semantic content arrives.',
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {

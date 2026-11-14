@@ -620,10 +620,10 @@ describe('SettingsSchema', () => {
         ).toBeUndefined();
       });
 
-      it('should advertise a documented/schema default of 300000 via documentedDefault', () => {
+      it('should advertise a documented/schema default of -1 (no limit) via documentedDefault', () => {
         expect(
           SETTINGS_SCHEMA.streamFirstResponseTimeoutMs.documentedDefault,
-        ).toBe(300000);
+        ).toBe(-1);
       });
 
       it('should accept a positive integer value via validation', () => {
@@ -648,19 +648,19 @@ describe('SettingsSchema', () => {
         expect(result.success).toBe(true);
       });
 
-      it('should accept the documented default 300000 via validation (explicit setting still applied)', () => {
+      it('should accept an explicit 300000 via validation (explicit setting still applied)', () => {
         const result = validateSettings({
           streamFirstResponseTimeoutMs: 300000,
         });
         expect(result.success).toBe(true);
       });
 
-      it('should advertise default 300000 in the generated settings.schema.json (documentedDefault precedence over undefined runtime default)', () => {
+      it('should advertise default -1 in the generated settings.schema.json (documentedDefault precedence over undefined runtime default)', () => {
         const setting =
           parsedGeneratedSchema.properties.streamFirstResponseTimeoutMs;
         expect(setting).toBeDefined();
         expect(setting?.type).toBe('number');
-        expect(setting?.default).toBe(300000);
+        expect(setting?.default).toBe(-1);
         expect(setting?.minimum).toBeUndefined();
         expect(setting?.maximum).toBeUndefined();
       });

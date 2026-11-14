@@ -156,40 +156,28 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     process.env = originalEnv;
   });
 
-  it('DEFAULT-ON regression: with NO first-response setting/env, a stream whose first .next() never resolves yields terminal StreamIdleTimeout after DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS', async () => {
-    // buildTurn() with NO args: first-response returns undefined → resolver falls to default 300000
+  it('default-disabled (issue #4092): with NO first-response setting/env, a stream whose first .next() never resolves is not interrupted by a timeout', async () => {
+    // buildTurn() with NO args: first-response returns undefined → resolver falls to the -1 default
+    expect(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS).toBeLessThanOrEqual(0);
     const { turn } = buildTurn();
 
     mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
 
-    const { events, runPromise } = startRun(turn);
+    const { events } = startRun(turn);
 
-    // Before the default timeout: no events, generator still pending.
-    await advanceTimersByTimeAsync(
-      DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS - 1,
-    );
-    // Let the event loop settle so the consumer processes any pending state.
+    // Well past the former 5-minute default: still no events, no timeout.
+    await advanceTimersByTimeAsync(10 * 60 * 1000);
     await flushEventLoop();
-    expect(events).toHaveLength(0);
-
-    // Advance past the default first-response timeout (300000ms). Drain all
-    // pending timers/microtasks so the rejection deterministically propagates
-    // through handleRunError before we await the consumer loop.
-    await advanceTimersByTimeAsync(2);
     await runAllTimersAsync();
-    await runPromise;
+    await flushEventLoop();
 
-    const timeoutEvent = events.find(
-      (e) => e.type === AgentEventType.StreamIdleTimeout,
-    );
-    expect(timeoutEvent).toBeDefined();
-    expect(events.some((e) => e.type === AgentEventType.Error)).toBe(false);
+    expect(events).toHaveLength(0);
   });
 
-  it('DEFAULT-ON regression (real-timer failsafe): never-resolving first .next() surfaces StreamIdleTimeout under the failsafe deadline', async () => {
+  it('env-override (real-timer failsafe): never-resolving first .next() surfaces StreamIdleTimeout under the failsafe deadline', async () => {
     vi.useRealTimers();
     // Use a tiny env override so the real-timer test finishes quickly while
-    // still proving the DEFAULT-ON path fires (no ephemeral setting needed).
+    // still proving the env var arms the watchdog (no ephemeral setting needed).
     process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = '50';
     const { turn } = buildTurn();
 

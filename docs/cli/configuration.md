@@ -152,8 +152,8 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 #### `streamFirstResponseTimeoutMs`
 
 - **`streamFirstResponseTimeoutMs`** (number):
-  - **Description:** First-response (time-to-first-content) watchdog in milliseconds. Enabled by default (300000 = 5 minutes). A provider liveness signal (e.g. response.created) disarms it even before semantic content arrives. Set to 0 or a negative number to disable.
-  - **Default:** `300000`
+  - **Description:** First-response (time-to-first-content) watchdog in milliseconds. Disabled by default (-1 = no limit). Set a positive number of milliseconds to arm it. A provider liveness signal (e.g. response.created) disarms it even before semantic content arrives. 0 or a negative number disables it.
+  - **Default:** `-1`
   - **Requires restart:** No
 
 #### `useExternalAuth`
