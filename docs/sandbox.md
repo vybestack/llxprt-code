@@ -1002,9 +1002,14 @@ cannot be used with bwrap. Create a bwrap-specific profile without `resources`.
 | `sshAgent`         | `auto`, `on`, `off`                                         | SSH agent forwarding into container                        |
 | `mounts`           | array                                                       | Extra mounts (`{from, to?, mode?}`); mode defaults to `ro` |
 | `env`              | object                                                      | Additional environment variables                           |
+| `devices`          | array of `/dev` character-device paths                      | Host devices to expose, e.g. `/dev/dri/renderD128` (Linux) |
 
 > **Note:** `network: proxied` requires `LLXPRT_SANDBOX_PROXY_COMMAND`. Without
 > it, startup fails rather than silently using open networking.
+
+> **Note:** `devices` is honored by `bwrap`, Docker and Podman on Linux. Seatbelt
+> and container engines on non-Linux hosts fail the launch when `devices` is
+> nonempty. See the [profile reference](./cli/sandbox-profiles.md#devices).
 
 #### Creating a custom profile
 
