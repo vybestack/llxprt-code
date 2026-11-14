@@ -198,6 +198,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
 
     return {
       output: result.output,
+      ...(result.streams === undefined ? {} : { streams: result.streams }),
       exitCode: result.exitCode,
       signal: result.signal === null ? null : String(result.signal),
       error: result.error,

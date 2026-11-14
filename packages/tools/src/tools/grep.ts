@@ -21,6 +21,7 @@ import {
 import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 
 import { ToolErrorType } from '../types/tool-error.js';
+import { withSearchCompleteness } from './grep/search-completeness.js';
 import {
   limitOutputTokens,
   formatLimitedOutput,
@@ -233,7 +234,7 @@ File: ${resolved.basename}
       return {
         llmContent: formatted.llmContent,
         returnDisplay: formatted.returnDisplay,
-        metadata: truncationMeta,
+        metadata: { outputTruncation: { truncated: true } },
       };
     }
 
@@ -717,15 +718,17 @@ File: ${resolved.basename}
       const resolved = this.resolveTarget(dirPath);
       const searchDirDisplay = stringOrDefault(dirPath, '.');
 
-      return await this.host.runSearch(workspaceContext, () =>
-        this.executeDirectorySearch(
-          resolved,
-          workspaceContext,
-          combinedSignal,
-          searchDirDisplay,
-          maxResults,
-          maxFiles,
-          maxPerFile,
+      return withSearchCompleteness(
+        await this.host.runSearch(workspaceContext, () =>
+          this.executeDirectorySearch(
+            resolved,
+            workspaceContext,
+            combinedSignal,
+            searchDirDisplay,
+            maxResults,
+            maxFiles,
+            maxPerFile,
+          ),
         ),
       );
     } catch (error) {

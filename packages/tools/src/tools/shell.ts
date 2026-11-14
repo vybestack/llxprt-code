@@ -27,6 +27,13 @@ import {
   type LiveOutputUpdate,
 } from './tools.js';
 import { ToolErrorType } from '../types/tool-error.js';
+import { ToolApprovalRequiredError } from './approval-required-error.js';
+import {
+  buildShellExecutionError,
+  scriptBackgroundRejection,
+  withShellStructuredOutput,
+  type OptionalExecuteTail,
+} from './shell-structured-output.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 import type { IShellExecutionService } from '../interfaces/IShellExecutionService.js';
@@ -155,7 +162,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       if (this.host.isShellInvocationAllowlisted(command, ShellTool.Name)) {
         return false;
       }
-      throw new Error(
+      throw new ToolApprovalRequiredError(
         `Command "${command}" is not in the list of allowed tools for non-interactive mode.`,
       );
     }
@@ -205,6 +212,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
   async execute(
     signal: AbortSignal,
     updateOutput?: (update: LiveOutputUpdate) => void,
+    ...[, , , scope]: OptionalExecuteTail
   ): Promise<ToolResult> {
     this.validateFilterParams();
 
@@ -212,6 +220,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     const resolution = this.resolveTimeoutResolution();
 
     if (this.shouldRunAsBackground(strippedCommand)) {
+      if (scope?.origin === 'script') return scriptBackgroundRejection();
       const backgroundCommand = this.resolveBackgroundCommand(strippedCommand);
       return this.executeBackground(backgroundCommand);
     }
@@ -434,7 +443,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         filterInfo,
       );
 
-      const executionError = this.buildExecutionError(
+      const executionError = buildShellExecutionError(
         result,
         llmContent,
         timeoutTriggered,
@@ -452,7 +461,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // branch) and limitOutputTokens can replace the formatted content
       // wholesale; only a post-processing append is guaranteed to reach the
       // model (Issues #3031 and #3517).
-      return appendClampNoticeToResult(
+      const noticed = appendClampNoticeToResult(
         appendSurvivorNoticeToResult(
           appendTerminationCauseNoticeToResult(
             toolResult,
@@ -464,6 +473,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         ),
         resolution,
       );
+      return withShellStructuredOutput(noticed, result, this.params);
     } finally {
       fs.rmSync(tempFilePath, { force: true });
     }
@@ -717,39 +727,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
         : `[${filterInfo.description}]`;
     }
     return returnDisplayMessage;
-  }
-
-  private buildExecutionError(
-    result: ShellExecutionResult,
-    llmContent: string,
-    timeoutTriggered: boolean,
-  ):
-    | { error: { message: string; type: ToolErrorType } }
-    | Record<string, never> {
-    const commandError = result.error as typeof result.error | null | undefined;
-    if (commandError !== undefined && commandError !== null) {
-      return {
-        error: {
-          message: commandError.message,
-          type: ToolErrorType.SHELL_EXECUTE_ERROR,
-        },
-      };
-    } else if (result.aborted === true && timeoutTriggered) {
-      return {
-        error: {
-          message: llmContent,
-          type: ToolErrorType.TIMEOUT,
-        },
-      };
-    } else if (result.aborted === true) {
-      return {
-        error: {
-          message: llmContent,
-          type: ToolErrorType.EXECUTION_FAILED,
-        },
-      };
-    }
-    return {};
   }
 
   private createPreCancelledResult(): ToolResult {

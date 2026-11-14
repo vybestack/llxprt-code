@@ -134,6 +134,11 @@ export interface ToolCallRequestInfo {
   agentId?: string;
   checkpoint?: string;
   hookRestrictedAllowedTools?: string[];
+  /**
+   * Set on calls a code mode script made (issue #4084): the
+   * `execute_tool_script` call that ran the script, and the run's ID.
+   */
+  script?: { readonly parentCallId: string; readonly runId: string };
 }
 
 export interface ToolCallResponseInfo {
