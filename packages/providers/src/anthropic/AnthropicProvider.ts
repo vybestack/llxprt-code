@@ -973,7 +973,10 @@ export class AnthropicProvider extends BaseProvider {
       baseURL,
       requestBody: requestContext.requestBody,
       streamingEnabled: requestContext.streamingEnabled,
-      attemptContext: readDumpAttemptContext(options.metadata),
+      attemptContext: readDumpAttemptContext(
+        options.metadata,
+        options.invocation.ephemerals,
+      ),
       headers: dumpHeaders,
       rateLimitLogger,
     });

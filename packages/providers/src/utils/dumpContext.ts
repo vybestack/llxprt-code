@@ -45,6 +45,10 @@ export interface DumpAttemptCorrelation {
   readonly attemptIndex: number;
   readonly runtimeId: string;
   readonly outcome?: string;
+  readonly retentionLimits?: {
+    readonly maxBytes: number;
+    readonly maxAgeDays: number;
+  };
 }
 
 export interface DumpData {
@@ -192,9 +196,12 @@ async function writeDumpFile(filepath: string, data: unknown): Promise<void> {
   await fs.rename(temporary, filepath);
 }
 
-async function pruneDumpFiles(dumpDir: string): Promise<void> {
+async function pruneDumpFiles(
+  dumpDir: string,
+  limits: DumpAttemptCorrelation['retentionLimits'] = DEFAULT_DUMP_RETENTION,
+): Promise<void> {
   try {
-    await pruneDumpDirectory(dumpDir, DEFAULT_DUMP_RETENTION);
+    await pruneDumpDirectory(dumpDir, limits);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.debug(() => `Best-effort dump retention failed: ${message}`);
@@ -241,7 +248,8 @@ export async function dumpRequestContext(
   };
 
   await writeDumpFile(filepath, data);
-  if (!deferRetention) await pruneDumpFiles(dumpDir);
+  if (!deferRetention)
+    await pruneDumpFiles(dumpDir, correlation?.retentionLimits);
   logger.debug(() => `Request context dumped to: ${filepath}`);
 
   return { baseId: id, requestFilename, dumpDir };
@@ -280,7 +288,7 @@ export async function dumpResponseContext(
   };
 
   await writeDumpFile(filepath, data);
-  await pruneDumpFiles(dumpDir);
+  await pruneDumpFiles(dumpDir, correlation?.retentionLimits);
   let retained = true;
   try {
     await fs.stat(filepath);

@@ -4,7 +4,7 @@ Plan ID: `PLAN-20261114-ISSUE4101`
 Generated: 2026-11-14
 Issue: <https://github.com/vybestack/llxprt-code/issues/4101>
 Branch: `issue4101`
-Status: Phase A implemented; P01 verification results and limitations recorded in `execution-tracker.md` and `.completed/P01.md`
+Status: P01-P03 implemented; phase verification results and limitations recorded in `execution-tracker.md` and the corresponding `.completed/` records
 Phases: specification P00, preflight P00.5, then A/P01 through E/P05, in order.
 
 ## Scope and execution rules
@@ -464,7 +464,7 @@ A Vercel SDK may normalize a provider's refusal reason before `buildMetadata`; v
 | Preflight | P00.5 | Research complete; implementation harness runs pending | Branch/date/dependencies/paths verified |
 | A: metadata/records/notices/stats | P01 | Implemented; focused checks pass, full verification incomplete | Endpoint -> persisted evidence -> UI/stats; see `execution-tracker.md` and `.completed/P01.md` |
 | B: dump pairing/retention | P02 | Implemented and verified | Real Anthropic/OpenAI refusal→accepted dumps, Vercel SSE/JSON capture, retention and no-false-id evidence; measured 105,287-byte refusal pair means the 14-day cap controls at the observed refusal rate |
-| C: configuration | P03 | Pending | CLI/user defaults -> session -> child files |
+| C: configuration | P03 | Implemented and verified | CLI/user defaults -> session -> child inheritance; see `.completed/P03.md` |
 | D: audit output/context | P04 | Pending | Partial tools never run; bounded context/provenance |
 | E: survey | P05 | Pending | Offline command -> deterministic human/JSON report |
 

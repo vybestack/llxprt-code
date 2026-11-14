@@ -316,6 +316,21 @@ export const CORE_SETTINGS_SCHEMA = {
     },
   },
 
+  dumpcontext: {
+    type: 'enum',
+    label: 'Context Dump Mode',
+    category: 'Diagnostics',
+    requiresRestart: true,
+    default: 'off',
+    description:
+      'Default context dump mode for new sessions. Dumps can contain prompt content and are stored in the LLxprt cache directory.',
+    showInDialog: true,
+    options: [
+      { value: 'off', label: 'Off' },
+      { value: 'error', label: 'Refusals and errors' },
+      { value: 'on', label: 'All requests' },
+    ],
+  },
   dumpRetention: {
     type: 'object',
     label: 'Diagnostic Dump Retention',

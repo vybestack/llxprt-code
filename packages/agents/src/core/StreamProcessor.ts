@@ -398,10 +398,7 @@ export class StreamProcessor {
     sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const dumpAttemptContext = this.refusalDumpPairing.createAttempt(promptId);
-    const requestDraft = this._buildRequestContents(
-      userContent,
-      semanticMediaPurge,
-    );
+    const requestDraft = this._buildContents(userContent, semanticMediaPurge);
     const toolSelection = await this._selectHookRequestTools(params);
     const { requestPayload, runtimeContext } = this._prepareRequestPayload(
       requestDraft.contents,
@@ -669,7 +666,7 @@ export class StreamProcessor {
     return applyToolSelectionHook(tools, this.ports.state.model, owner);
   }
 
-  private _buildRequestContents(
+  private _buildContents(
     userContent: IContent | IContent[],
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): {

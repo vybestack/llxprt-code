@@ -140,6 +140,15 @@ function getReasoningFieldName(
   return invocation.getEphemeral<string>('reasoning.fieldName');
 }
 
+function readProviderAttemptContext(
+  options: NormalizedGenerateChatOptions,
+): ReturnType<typeof readDumpAttemptContext> {
+  return readDumpAttemptContext(
+    options.metadata,
+    options.invocation.ephemerals,
+  );
+}
+
 export class OpenAIProvider extends BaseProvider implements IProvider {
   protected requestProviderFileLifecycle?: ProviderFileLifecycle;
   protected requestProviderFileBindings?: ProviderFileBindingStore;
@@ -756,7 +765,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       model,
       formattedTools,
       streamingEnabled,
-      attemptContext: readDumpAttemptContext(options.metadata),
+      attemptContext: readProviderAttemptContext(options),
       logger,
       getBaseURL: () => this.getBaseURL(),
     });

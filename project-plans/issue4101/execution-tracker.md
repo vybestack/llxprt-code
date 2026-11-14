@@ -1,15 +1,27 @@
 # REQ-4101 execution tracker
 
-Branch: `issue4101`; current phase: P02.
+Branch: `issue4101`; current phase: P04.
 
-Status: P01 and P02 implementation, fixture-size measurement, and corrected full repository verification are complete.
+Status: P01-P03 are implemented and verified; P01 and P02 were already committed before this phase. P03's first full test run exposed incomplete `LoadedSettings` fixtures in sandbox tests; the fixtures were corrected, the focused tests passed, and the full rerun passed.
 
 | Phase | State | Verification |
 | --- | --- | --- |
 | P00 / P00.5 | Complete from the checked-in plan | Issue and integration map were read before implementation. |
 | P01 | Implemented and verified | Details in `.completed/P01.md`. |
 | P02 | Implemented and verified | Corrected provider behavior, fixture initialization, and full repository verification are recorded below. |
-| P03-P05 | Not started | Out of scope for this phase. |
+| P03 | Implemented and verified | Details in `.completed/P03.md`; full verification log: `tmp/verify4101/test-P03.log`. |
+| P04-P05 | Not started | Out of scope for this phase. |
+
+## P03 verification record
+
+- Startup mode precedence is code default `off`, user-global `dumpcontext`, `--dumponerror`, then the last explicit `--set dumpcontext=...`; the result is written to the session overlay. CLI session overrides use the same session-scoped writer, and child settings inherit that overlay.
+- Added user-level `dumpcontext` and `dumpRetention` settings, generated schema/docs, startup validation/application, diagnostics reporting of effective mode including `off`, and retained inert loading of legacy profile `dumponerror` keys. Removed the dead Config getter/state and active registry entry.
+- Focused startup tests cover code/user/flag/`--set` sources, CLI precedence, repeated `--set`, retention propagation, child inheritance, action-mode rejection, and later session override. Registry/profile and ephemeral-setting tests cover removal and legacy compatibility.
+- The first `npm run test` run ended with `rc=1`: sandbox test doubles lacked the required `LoadedSettings.user.settings` property after startup began reading only user settings. Updated those fixtures to match the actual loader contract; both sandbox test files then passed (24/24).
+- `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build`, and `npm run lint:settings-sync`: passed.
+- Final `npm run test`: `rc=0` in `tmp/verify4101/test-P03.log`; `grep -nE 'Native Bun test failed|^FAILED:'` returned no matches (`failure-markers-none`).
+- Smoke tests passed: normal `lunahigh` returned a haiku; `--dumponerror --profile-load lunahigh` returned a haiku.
+- `git diff --check`: passed. The required test-first red run was not independently captured for this phase; the focused tests passed after implementation and the first full-suite run exposed only the incomplete sandbox fixtures.
 
 ## P02 verification record
 
