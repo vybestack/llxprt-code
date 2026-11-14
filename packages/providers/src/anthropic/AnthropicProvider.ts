@@ -43,7 +43,7 @@ import {
 } from '../utils/dumpAttemptContext.js';
 import {
   type AnthropicRateLimitInfo,
-  calculateWaitTime,
+  applyRateLimitThrottling,
 } from './AnthropicRateLimitHandler.js';
 import { processAnthropicStream } from './AnthropicStreamProcessor.js';
 import { parseAnthropicResponse } from './AnthropicResponseParser.js';
@@ -109,6 +109,7 @@ export class AnthropicProvider extends BaseProvider {
 
   // Rate limit state tracking - updated on each API response
   private lastRateLimitInfo?: AnthropicRateLimitInfo;
+  private sleep = delay;
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
     PreparedAnthropicPromptEnvelope
@@ -657,10 +658,12 @@ export class AnthropicProvider extends BaseProvider {
       thinking: requestContext.requestBody['thinking'],
     });
     const rateLimitLogger = this.getRateLimitLogger();
-    await this.applyRateLimitThrottling(
-      requestContext,
+    await applyRateLimitThrottling(
+      this.lastRateLimitInfo ?? {},
+      requestContext.configEphemerals,
       rateLimitLogger,
       effectiveOptions.invocation.signal,
+      (ms, signal) => this.sleep(ms, signal),
     );
 
     // H2: if a prior outer attempt already sanitized this request's images,
@@ -938,31 +941,6 @@ export class AnthropicProvider extends BaseProvider {
       };
     } catch (error) {
       return finishMediaRequest(mediaRequest, { status: 'failed', error });
-    }
-  }
-
-  private async applyRateLimitThrottling(
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
-    rateLimitLogger: { debug: (fn: () => string) => void },
-    signal?: AbortSignal,
-  ): Promise<void> {
-    const waitDecision = calculateWaitTime(this.lastRateLimitInfo ?? {}, {
-      throttleEnabled:
-        (requestContext.configEphemerals['rate-limit-throttle'] as
-          | string
-          | undefined) ?? 'on',
-      thresholdPercentage:
-        (requestContext.configEphemerals['rate-limit-throttle-threshold'] as
-          | number
-          | undefined) ?? 5,
-      maxWaitMs:
-        (requestContext.configEphemerals['rate-limit-max-wait'] as
-          | number
-          | undefined) ?? 60000,
-    });
-    if (waitDecision.shouldWait) {
-      rateLimitLogger.debug(() => waitDecision.reason);
-      await delay(waitDecision.waitMs, signal);
     }
   }
 

@@ -2,13 +2,13 @@
 
 Branch: `issue4101`; current phase: P02.
 
-Status: P01 and P02 are complete. P02 implementation, fixture-size measurement, and full repository verification are complete.
+Status: P01 and P02 implementation, fixture-size measurement, and corrected full repository verification are complete.
 
 | Phase | State | Verification |
 | --- | --- | --- |
 | P00 / P00.5 | Complete from the checked-in plan | Issue and integration map were read before implementation. |
 | P01 | Implemented and verified | Details in `.completed/P01.md`. |
-| P02 | Implemented and verified | Focused and full repository checks passed; details below. |
+| P02 | Implemented and verified | Corrected provider behavior, fixture initialization, and full repository verification are recorded below. |
 | P03-P05 | Not started | Out of scope for this phase. |
 
 ## P02 verification record
@@ -17,11 +17,13 @@ Status: P01 and P02 are complete. P02 implementation, fixture-size measurement, 
 - Existing dump/recovery regressions passed: 87 tests across the OpenAI/Anthropic SDK dump, Vercel capture, refusal recovery, and reviewer rewrite suites.
 - Fixture measurement: `tmp/verify4101/measure-dump.ts` generated a real Anthropic refusal pair of 105,287 bytes across two files and six parsed SSE events. At that fixture size, the 2 GiB cap holds 20,396 pairs; 34 pairs/day for 14 days uses 50,116,612 bytes (~47.8 MiB). This is fixture-specific and does not guarantee retention under larger prompts or `on` mode traffic. The main plan records this implication.
 - `git diff --check`: passed.
-- `npm run typecheck`: passed (`tmp/verify4101/typecheck-final2-P02.log`).
-- `npm run lint`: passed (`tmp/verify4101/lint-final-P02.log`).
-- `npm run format`: passed (`tmp/verify4101/format-final2-P02.log`).
-- `npm run build`: passed (`tmp/verify4101/build-final2-P02.log`).
-- `npm run test`: passed, 1,003/1,003 isolated native Bun test files and 7/7 isolated companion test files (`tmp/verify4101/test-final2-P02.log`).
+- `npm run typecheck`: passed, `rc=0` (`tmp/verify4101/typecheck-P02fix.log`).
+- `npm run lint`: passed, `rc=0` (`tmp/verify4101/lint-P02fix.log`).
+- `npm run format`: passed, `rc=0` (`tmp/verify4101/format-P02fix.log`).
+- `npm run build`: passed, `rc=0` (`tmp/verify4101/build-P02fix.log`).
+- `npm run test`: passed, final line `rc=0` in `tmp/verify4101/test-P02fix.log`; `grep -nE 'Native Bun test failed|^FAILED:' tmp/verify4101/test-P02fix.log` returned no matches (grep exit code 1). This supersedes the prior false-green record above. The runner's intentional fixture failures are not included in the suite failure markers.
+- Regression causes found: Anthropic throttling bypassed its `sleep` seam and invoked `delay` directly, so tests could not control the wait, and the retry-boundary unit fixture uses `Object.create(StreamProcessor.prototype)` without initializing the new `RefusalDumpPairing` instance member.
+- Fix: preserve the provider's spyable sleep seam while moving throttle decision/wait orchestration to `AnthropicRateLimitHandler`; initialize `RefusalDumpPairing` in the prototype-based StreamProcessor test fixture. No assertions or timeout values changed.
 - Test-first red output was not independently preserved in this session: the worktree already contained the implementation and passing P02 tests at session start, so this session cannot verify the red run.
 
 
