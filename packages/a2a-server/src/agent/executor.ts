@@ -722,12 +722,15 @@ export class CoderAgentExecutor implements AgentExecutor {
    * so without this each task's wrapper (and its agent) is retained forever.
    * The task store holds the persisted state, so the task can still be
    * reconstructed by id. A task still inside an execution loop is released by
-   * that loop's own completion instead.
+   * that loop's own completion instead. A wrapper that is no longer the
+   * registered one for its id (a replacement was reconstructed while a save was
+   * in flight) is left alone so the replacement is not evicted or disposed.
    */
   async #releaseIfFinished(wrapper: TaskWrapper): Promise<void> {
     if (
       !FINISHED_TASK_STATES.has(wrapper.task.taskState) ||
-      this.executingTasks.has(wrapper.id)
+      this.executingTasks.has(wrapper.id) ||
+      this.tasks.get(wrapper.id) !== wrapper
     ) {
       return;
     }
@@ -742,18 +745,21 @@ export class CoderAgentExecutor implements AgentExecutor {
     }
   }
 
-  async #saveFinalTaskState(wrapper: TaskWrapper): Promise<void> {
+  /** Returns false when the save failed, so the caller keeps the live task. */
+  async #saveFinalTaskState(wrapper: TaskWrapper): Promise<boolean> {
     logger.info(
       `[CoderAgentExecutor] Saving final state for task ${wrapper.id}.`,
     );
     try {
       await this.taskStore?.save(wrapper.toSDKTask());
       logger.info(`[CoderAgentExecutor] Task ${wrapper.id} state saved.`);
+      return true;
     } catch (saveError) {
       logger.error(
         `[CoderAgentExecutor] Failed to save task ${wrapper.id} state in finally block:`,
         saveError,
       );
+      return false;
     }
   }
 
@@ -832,8 +838,9 @@ export class CoderAgentExecutor implements AgentExecutor {
       this.#handleExecutionError(currentTask, abortSignal, error);
     } finally {
       this.executingTasks.delete(taskId);
-      await this.#saveFinalTaskState(wrapper);
-      await this.#releaseIfFinished(wrapper);
+      if (await this.#saveFinalTaskState(wrapper)) {
+        await this.#releaseIfFinished(wrapper);
+      }
     }
   }
 }

@@ -15,11 +15,23 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
-import type { TaskState } from '@a2a-js/sdk';
+import type { Task as SDKTask, TaskState } from '@a2a-js/sdk';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { CoderAgentExecutor } from '../executor.js';
 import type { acquireTaskSession } from '../task-session-owner.js';
 import type { Task } from '../task.js';
+
+/** An in-memory store whose next save can be intercepted to fail or race. */
+class ScriptedTaskStore extends InMemoryTaskStore {
+  beforeSave?: (task: SDKTask) => Promise<void>;
+
+  override async save(task: SDKTask): Promise<void> {
+    const hook = this.beforeSave;
+    this.beforeSave = undefined;
+    await hook?.(task);
+    await super.save(task);
+  }
+}
 
 type TurnScript = () => AsyncGenerator<AgentEvent, void, unknown>;
 
@@ -76,7 +88,7 @@ function requestFor(taskId: string): RequestContext {
 }
 
 describe('CoderAgentExecutor task retention', () => {
-  let store: InMemoryTaskStore;
+  let store: ScriptedTaskStore;
   let sessions: Map<string, FakeSession>;
   let turns: Map<string, TurnScript>;
   let executor: CoderAgentExecutor;
@@ -90,7 +102,7 @@ describe('CoderAgentExecutor task retention', () => {
   };
 
   beforeEach(() => {
-    store = new InMemoryTaskStore();
+    store = new ScriptedTaskStore();
     sessions = new Map();
     turns = new Map();
     const createSession: typeof acquireTaskSession = async (
@@ -163,5 +175,38 @@ describe('CoderAgentExecutor task retention', () => {
     );
 
     expect(executor.getAllTasks()).toStrictEqual([]);
+  });
+
+  it('keeps a replacement task reconstructed while the cancel save is in flight', async () => {
+    await executor.execute(requestFor('raced'), eventBus);
+    const original = executor.getTask('raced');
+    let replacement: ReturnType<CoderAgentExecutor['getTask']>;
+    store.beforeSave = async () => {
+      replacement = await executor.reconstruct((await store.load('raced'))!);
+    };
+
+    await executor.cancelTask('raced', eventBus);
+
+    expect(replacement).toBeDefined();
+    expect(replacement).not.toBe(original);
+    expect(executor.getTask('raced')).toBe(replacement);
+    expect(sessions.get('raced')?.disposed()).toBe(false);
+  });
+
+  it('keeps serving a task from memory when its final save fails', async () => {
+    turns.set('unsaved', async function* () {
+      // Arm the failure once the task exists so only the final save rejects.
+      store.beforeSave = async () => {
+        throw new Error('store unavailable');
+      };
+      yield* failingTurn();
+    });
+
+    await executor.execute(requestFor('unsaved'), eventBus);
+
+    const kept = executor.getTask('unsaved');
+    expect(kept?.task.taskState).toBe('failed');
+    expect(sessions.get('unsaved')?.disposed()).toBe(false);
+    expect((await store.load('unsaved'))?.status.state).toBe('submitted');
   });
 });

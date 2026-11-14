@@ -29,6 +29,18 @@ function captureLogger(): {
   return { log, output: () => text.split('\n').filter((l) => l !== '') };
 }
 
+/** True for any control or line-separator character other than the layout newline. */
+function isRawBreakOrControl(char: string): boolean {
+  if (char === '\n') {
+    return false;
+  }
+  const code = char.charCodeAt(0);
+  if (code < 0x20 || code === 0x2028 || code === 0x2029) {
+    return true;
+  }
+  return code >= 0x7f && code <= 0x9f;
+}
+
 describe('a2a logger format', () => {
   it('keeps an ordinary message on a single leveled line', () => {
     const { log, output } = captureLogger();
@@ -75,5 +87,21 @@ describe('a2a logger format', () => {
 
     const joined = output().join('\n');
     expect(joined).toContain('"command": "a\\nb"');
+  });
+
+  it('escapes line-separator characters in nested metadata values and property names', () => {
+    const { log, output } = captureLogger();
+
+    log.info('with body', {
+      body: { list: ['x\u0085y', { deep: 'p\u2028q\u2029r' }] },
+      'key\u2028name\u0085': 'v',
+    });
+
+    const joined = output().join('\n');
+    const forbidden = [...joined].filter(isRawBreakOrControl);
+    expect(forbidden).toStrictEqual([]);
+    expect(joined).toContain('x\\u0085y');
+    expect(joined).toContain('p\\u2028q\\u2029r');
+    expect(joined).toContain('key\\u2028name\\u0085');
   });
 });
