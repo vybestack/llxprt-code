@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   readFileSync,
   writeFileSync,
   mkdirSync,
+  mkdtempSync,
   rmSync,
   createWriteStream,
   type PathLike,
@@ -116,27 +117,29 @@ end
 }
 
 /**
- * Executes a shell command with error handling
- * @param {string} command - The command to execute
- * @param {object} options - Options for execSync
+ * Runs git with an argument vector (no shell), so values such as the version
+ * or the temp directory can never be interpreted as shell syntax.
+ * @param {string[]} args - Arguments for git
+ * @param {object} options - Options for execFileSync
  * @returns {string} The command output
  */
-function runCommand(
-  command: string,
-  options: Record<string, unknown> = {},
-): string {
-  console.log(`> ${command}`);
+function runGit(args: string[], options: Record<string, unknown> = {}): string {
+  console.log(`> git ${args.join(' ')}`);
   try {
-    return execSync(command, {
+    return execFileSync('git', args, {
       stdio: 'inherit',
       encoding: 'utf-8',
       ...options,
     });
   } catch (error) {
-    console.error(`Command failed: ${command}`);
+    console.error(`Command failed: git ${args.join(' ')}`);
     throw error;
   }
 }
+
+// The version ends up in a formula, a download URL and a commit message, so it
+// must be a plain semver string and nothing else.
+const RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 /**
  * Resolves and validates the version string from CLI arg or package.json.
@@ -153,7 +156,7 @@ function resolveVersion(versionArg: string): string | null {
     console.log(`Using version from argument: ${version}`);
   }
 
-  if (!/^\d+\.\d+\.\d+/.test(version)) {
+  if (!RELEASE_VERSION_PATTERN.test(version)) {
     throw new Error(
       `Invalid version format: ${version}. Expected format: X.Y.Z`,
     );
@@ -175,16 +178,18 @@ async function downloadAndGenerateFormula(
   preparedTarball?: string,
 ): Promise<string> {
   let tarballPath = preparedTarball;
+  let downloadDir: string | undefined;
   if (tarballPath === undefined) {
     const tarballUrl = `https://registry.npmjs.org/@vybestack/llxprt-code/-/llxprt-code-${version}.tgz`;
-    const tmpDir = tmpdir();
-    tarballPath = join(tmpDir, `llxprt-code-${version}.tgz`);
+    downloadDir = mkdtempSync(join(tmpdir(), 'llxprt-code-tarball-'));
+    tarballPath = join(downloadDir, `llxprt-code-${version}.tgz`);
 
     console.log(`Downloading tarball from ${tarballUrl}...`);
     try {
       await downloadFile(tarballUrl, tarballPath);
       console.log('Tarball downloaded successfully');
     } catch (error: unknown) {
+      rmSync(downloadDir, { recursive: true, force: true });
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to download tarball: ${message}`);
     }
@@ -200,8 +205,8 @@ async function downloadAndGenerateFormula(
   console.log('Generated formula:');
   console.log(formulaContent);
 
-  if (preparedTarball === undefined) {
-    rmSync(tarballPath, { force: true });
+  if (downloadDir !== undefined) {
+    rmSync(downloadDir, { recursive: true, force: true });
   }
   return formulaContent;
 }
@@ -210,14 +215,12 @@ async function downloadAndGenerateFormula(
  * Clones the tap repository and configures git. Returns the tap directory path.
  */
 function setupTapRepo(token: string | undefined): string {
-  const tmpDir = tmpdir();
-  const tapDir = join(tmpDir, 'homebrew-tap');
+  const tapDir = mkdtempSync(join(tmpdir(), 'homebrew-tap-'));
   const tapRepoBase = 'https://github.com/vybestack/homebrew-tap.git';
 
   console.log('Setting up tap repository...');
   try {
-    rmSync(tapDir, { recursive: true, force: true });
-    runCommand(`git clone ${tapRepoBase} ${tapDir}`, { stdio: 'ignore' });
+    runGit(['clone', tapRepoBase, tapDir], { stdio: 'ignore' });
     if (token) {
       const tapRepoAuth = `https://${token}@github.com/vybestack/homebrew-tap.git`;
       execFileSync('git', ['remote', 'set-url', 'origin', tapRepoAuth], {
@@ -227,16 +230,17 @@ function setupTapRepo(token: string | undefined): string {
     }
     console.log('Cloned tap repository');
   } catch (error: unknown) {
+    rmSync(tapDir, { recursive: true, force: true });
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to clone tap repository: ${message}`);
   }
 
-  runCommand('git config user.name "github-actions[bot]"', {
+  runGit(['config', 'user.name', 'github-actions[bot]'], {
     cwd: tapDir,
     stdio: 'ignore',
   });
-  runCommand(
-    'git config user.email "github-actions[bot]@users.noreply.github.com"',
+  runGit(
+    ['config', 'user.email', 'github-actions[bot]@users.noreply.github.com'],
     { cwd: tapDir, stdio: 'ignore' },
   );
 
@@ -260,25 +264,25 @@ function commitAndPush(
   console.log(`Updated formula at ${formulaPath}`);
 
   try {
-    runCommand('git add Formula/llxprt-code.rb', {
+    runGit(['add', 'Formula/llxprt-code.rb'], {
       cwd: tapDirStr,
       stdio: 'ignore',
     });
 
     try {
-      runCommand('git diff --cached --quiet', {
+      runGit(['diff', '--cached', '--quiet'], {
         cwd: tapDirStr,
         stdio: 'ignore',
       });
       console.log('No changes to commit - formula already up to date');
     } catch {
-      runCommand(`git commit -m "Update llxprt-code to ${version}"`, {
+      runGit(['commit', '-m', `Update llxprt-code to ${version}`], {
         cwd: tapDirStr,
         stdio: 'ignore',
       });
       console.log('Committed changes');
 
-      runCommand('git push origin main', {
+      runGit(['push', 'origin', 'main'], {
         cwd: tapDirStr,
         stdio: 'ignore',
       });
