@@ -3,6 +3,10 @@
   "version": "0.12.0",
   "description": "Pure agent API contracts and definition validation for LLxprt Code",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
