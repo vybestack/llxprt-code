@@ -9,56 +9,14 @@ export const RETAINED_ALLOWANCE_BYTES = 1_048_576;
  */
 export const SETTLE_NOISE_BYTES = 262_144;
 
-/**
- * A checkpoint is the median of this many settled samples taken
- * CHECKPOINT_SAMPLE_EVERY_TURNS apart, so it spans 45 turns, several times
- * longer than the periodic transient that drops the settled heap by 1 to 3 MB
- * for about 10 turns; the median ignores it.
- */
-export const WINDOW_SAMPLES = 9;
-/** Turns between the settled samples inside a checkpoint window. */
-export const CHECKPOINT_SAMPLE_EVERY_TURNS = 5;
-/**
- * Warm-up convergence is read from sparser samples than a checkpoint, since it
- * only needs to see that the heap has stopped moving: one sample per 10 turns,
- * and a convergence window of this many samples spans 50 turns, the same span
- * as a checkpoint window, so a transient of about 10 turns still lands in at
- * most two of the five samples and cannot move the median.
- */
-export const WARMUP_SAMPLE_EVERY_TURNS = 10;
-export const CONVERGENCE_WINDOW_SAMPLES = 5;
-/** Consecutive non-overlapping windows that must agree for warm-up to end. */
-export const CONVERGENCE_WINDOWS = 3;
-
 export function median(values: readonly number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-/**
- * Warm-up has settled when the medians of the last CONVERGENCE_WINDOWS
- * non-overlapping windows of CONVERGENCE_WINDOW_SAMPLES readings (taken
- * WARMUP_SAMPLE_EVERY_TURNS apart) all lie within
- * SETTLE_NOISE_BYTES of each other (spread, not just neighbouring steps, so a
- * slow steady climb cannot pass in small steps). An isolated dip lands in at
- * most one window slot and cannot move that window's median.
- */
-export function hasConverged(heapReadings: readonly number[]): boolean {
-  if (heapReadings.length < CONVERGENCE_WINDOW_SAMPLES * CONVERGENCE_WINDOWS)
-    return false;
-  const medians: number[] = [];
-  for (let slot = 0; slot < CONVERGENCE_WINDOWS; slot++) {
-    const end = heapReadings.length - slot * CONVERGENCE_WINDOW_SAMPLES;
-    medians.push(
-      median(heapReadings.slice(end - CONVERGENCE_WINDOW_SAMPLES, end)),
-    );
-  }
-  return Math.max(...medians) - Math.min(...medians) < SETTLE_NOISE_BYTES;
-}
-
 export interface SettledCheckpoint {
   readonly turn: number;
-  /** Median of the settled heap readings taken at this checkpoint. */
+  /** Median of the heap readings (settled heap or application census) taken at this checkpoint. */
   readonly heapBytes: number;
 }
 

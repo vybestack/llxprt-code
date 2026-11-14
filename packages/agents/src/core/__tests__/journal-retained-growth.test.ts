@@ -1,15 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
-  CONVERGENCE_WINDOW_SAMPLES,
-  CONVERGENCE_WINDOWS,
   RETAINED_ALLOWANCE_BYTES,
-  SETTLE_NOISE_BYTES,
-  WARMUP_SAMPLE_EVERY_TURNS,
   evaluateRetainedGrowth,
-  hasConverged,
 } from './support/journal-retained-growth-predicate.js';
-import { CI_WARMUP_HEAP_READINGS } from './support/journal-retained-growth-ci-series.js';
 import { evaluateRetainedSizes } from './support/journal-retained-size-predicate.js';
 import {
   CHECKPOINT_COUNT,
@@ -24,15 +18,16 @@ import {
 } from './support/journal-retained-growth-harness.js';
 
 /**
- * Six checkpoints, 50 turns apart, follow a converged warm-up. Compare retained
- * growth over the 150-turn half/full-size span using the median of all 15
- * checkpoint-pair slopes under the unchanged 1 MiB growth allowance. Every
- * intermediate checkpoint must also remain below 1 MiB over baseline.
- * Linux forced-collection diagnostics at 1,000 and 2,000 turns found flat row,
- * string and array counts despite short-window compiler/collector steps.
- * The two-size policy avoids interpreting those steps as sustained retention.
- * The retaining and release controls use this same predicate. The separate
- * late-window predicate tests below still cover the CLI's measurement protocol.
+ * A baseline after a fixed warm-up, then six checkpoints 50 turns
+ * apart. Every reading is the median of three application-heap censuses (heap
+ * snapshot bytes without compiled code blocks), so the JavaScriptCore compiler
+ * steps that moved the settled total heap by megabytes cannot fail or hide
+ * anything. Compare retained growth over the 150-turn half/full-size span using
+ * the median of all 15 checkpoint-pair slopes under the unchanged 1 MiB growth
+ * allowance. Every intermediate checkpoint must also remain below 1 MiB over
+ * baseline. The retaining and release controls use this same predicate. The
+ * separate late-window predicate tests below still cover the CLI's
+ * measurement protocol.
  */
 
 describe('repeated-turn retained growth over the real journal-backed send path', () => {
@@ -230,72 +225,6 @@ describe('repeated-turn retained growth over the real journal-backed send path',
       const over = RETAINED_ALLOWANCE_BYTES + 1;
       const verdict = evaluate([0, over, over, over, over, over]);
       expect(verdict.pass).toBe(false);
-    });
-  });
-
-  describe('warm-up convergence', () => {
-    const RULE_FLOOR_TURNS = 550;
-    const NEEDED_READINGS = CONVERGENCE_WINDOW_SAMPLES * CONVERGENCE_WINDOWS;
-
-    /** First sampled turn at or after turn 550 where the rule holds. */
-    function firstConvergedTurn(readings: readonly number[]): number | null {
-      for (let count = 1; count <= readings.length; count++) {
-        const turn = count * WARMUP_SAMPLE_EVERY_TURNS;
-        if (turn >= RULE_FLOOR_TURNS && hasConverged(readings.slice(0, count)))
-          return turn;
-      }
-      return null;
-    }
-
-    it('converges on the CI series despite isolated dips, by turn 600', () => {
-      // The CI series was recorded every 5 turns; the warm-up now reads every 10.
-      const everyTenTurns = CI_WARMUP_HEAP_READINGS.filter(
-        (_, index) => index % 2 === 1,
-      );
-      const turn = firstConvergedTurn(everyTenTurns);
-      expect(turn).not.toBeNull();
-      expect(turn).toBeLessThanOrEqual(600);
-    });
-
-    it('converges on the CI series from either 10-turn phase of the recording', () => {
-      const offPhase = CI_WARMUP_HEAP_READINGS.filter(
-        (_, index) => index % 2 === 0,
-      );
-      expect(firstConvergedTurn(offPhase)).not.toBeNull();
-    });
-
-    it('does not converge while the heap keeps rising', () => {
-      const rising = Array.from(
-        { length: 150 },
-        (_, index) => 100_000_000 + index * 100_000,
-      );
-      expect(firstConvergedTurn(rising)).toBeNull();
-    });
-
-    it('does not converge on a slow climb whose neighbouring steps are each under the noise', () => {
-      // Each window median moves 0.75x the noise from the last, 1.5x over three.
-      const step = Math.floor(
-        (SETTLE_NOISE_BYTES * 0.75) / CONVERGENCE_WINDOW_SAMPLES,
-      );
-      const climbing = Array.from(
-        { length: 150 },
-        (_, index) => 100_000_000 + index * step,
-      );
-      expect(firstConvergedTurn(climbing)).toBeNull();
-    });
-
-    it('converges on a flat series with periodic dips', () => {
-      const dipped = Array.from({ length: 150 }, (_, index) =>
-        index % 7 === 3 ? 170_000_000 - 1_500_000 : 170_000_000,
-      );
-      expect(firstConvergedTurn(dipped)).toBe(RULE_FLOOR_TURNS);
-    });
-
-    it('needs three full windows of readings', () => {
-      expect(hasConverged(Array(NEEDED_READINGS - 1).fill(170_000_000))).toBe(
-        false,
-      );
-      expect(hasConverged(Array(NEEDED_READINGS).fill(170_000_000))).toBe(true);
     });
   });
 });

@@ -26,10 +26,8 @@ describe('retained growth trap: context held between compressions then released'
         result.checkpoints,
       );
       // The rows really were let go: the last checkpoint holds under 5% of the
-      // peak. It is not zero because the settled heap keeps a little bounded
-      // state the baseline did not have. The trap's warm-up (see
-      // TRAP_WARMUP_TURNS in the worker) runs past the measurement cache fill
-      // so that residue stays far under the allowance; the final delta is
+      // peak. It need not be zero because the application heap can keep a
+      // little bounded state the baseline did not have; the final delta is
       // checked against the allowance below. A gate that looked only at the
       // final heap would see none of the rows held up to checkpoint 3; only the
       // per-checkpoint gate catches them.

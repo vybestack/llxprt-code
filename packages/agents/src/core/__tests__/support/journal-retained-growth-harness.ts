@@ -6,6 +6,8 @@ import { expect } from 'bun:test';
 import { z } from 'zod';
 
 import {
+  BASELINE_TURN,
+  CENSUS_SAMPLES,
   CHECKPOINT_COUNT,
   CHECKPOINT_SPACING_TURNS,
   MEASURED_TURNS,
@@ -23,11 +25,10 @@ export const WORKER_TEST_TIMEOUT_MS = 290_000;
 const checkpointSchema = z.object({
   turn: z.number(),
   heapBytes: z.number(),
-  readings: z.array(z.number()),
+  readings: z.array(z.number()).length(CENSUS_SAMPLES),
 });
 const resultSchema = z.object({
   mode: z.enum(['normal', 'trap', 'release-trap']),
-  warmup: z.array(z.object({ turn: z.number(), heapBytes: z.number() })),
   baseline: checkpointSchema,
   checkpoints: z.array(checkpointSchema).length(CHECKPOINT_COUNT),
   requests: z.number(),
@@ -86,17 +87,15 @@ export async function runWorker(
 
 export function report(result: RetainedGrowthResult): string {
   const verdict = evaluateRetainedSizes(result.baseline, result.checkpoints);
-  const warmup = result.warmup
-    .map((sample) => `${sample.turn}:${sample.heapBytes}`)
-    .join(' ');
   const samples = [result.baseline, ...result.checkpoints]
     .map((point) => `turn ${point.turn}: [${point.readings.join(', ')}]`)
     .join('\n');
-  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} twoSizeGrowth=${verdict.growthBytes} requests=${result.requests} compressions=${result.compressions}\nwarmup ${warmup}\n${samples}`;
+  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} twoSizeGrowth=${verdict.growthBytes} requests=${result.requests} compressions=${result.compressions}\napplication heap censuses\n${samples}`;
 }
 
 /** The run really sent every turn, compressed repeatedly, and wrote a journal. */
 export function expectRealWorkload(result: RetainedGrowthResult): void {
+  expect(result.baseline.turn).toBe(BASELINE_TURN);
   const warmedTurn = result.baseline.turn;
   expect(result.requests).toBe(warmedTurn + MEASURED_TURNS);
   expect(result.compressions).toBeGreaterThanOrEqual(MIN_COMPRESSIONS);
