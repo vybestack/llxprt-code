@@ -47,7 +47,7 @@ describe('podman --authfile for sandbox containers', () => {
   it('passes an auth file that holds an empty JSON object', () => {
     const authfile = authfileOperand(podmanArgs());
 
-    expect(JSON.parse(fs.readFileSync(authfile, 'utf-8'))).toEqual({});
+    expect(JSON.parse(fs.readFileSync(authfile, 'utf-8'))).toStrictEqual({});
   });
 
   posixOnly('creates the auth file readable only by its owner', () => {
