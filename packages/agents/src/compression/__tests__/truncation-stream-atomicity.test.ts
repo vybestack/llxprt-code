@@ -80,7 +80,7 @@ describe('disk truncation atomicity and caller ownership', () => {
     }, true);
   }, 120_000);
 
-  it('preserves and annotates a surviving summary while recording it as the compression summary', async () => {
+  it('preserves and annotates a surviving summary without recording it as this compression summary (#4067)', async () => {
     await withSuffixFixture(
       512,
       async (history) => {
@@ -94,14 +94,19 @@ describe('disk truncation atomicity and caller ownership', () => {
         expect(await handler.performCompression('summary')).toBe(
           PerformCompressionResult.COMPRESSED,
         );
-        expect(recordingSummary?.metadata?.chronologyReplaced).toStrictEqual({
+        // Truncation produced no summary; the surviving one was carried from
+        // history, so recording is not told history collapsed onto it.
+        expect(recordingSummary).toBeUndefined();
+        let surviving: IContent | undefined;
+        for await (const row of history.streamRawHistory()) {
+          if (row.metadata?.reason === 'compression-state-snapshot')
+            surviving = row;
+        }
+        expect(surviving?.metadata?.chronologyReplaced).toStrictEqual({
           fromSeq: 1,
           toSeq: 483,
           itemCount: 483,
         });
-        expect(recordingSummary?.metadata?.reason).toBe(
-          'compression-state-snapshot',
-        );
       },
       64,
       (index) => ({
