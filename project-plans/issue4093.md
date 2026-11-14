@@ -86,3 +86,19 @@ watchdog is armed at 1 s):
 Red then green: the behavior file was run before any production change (8 of 10 red, the two green cases were the
 history and retries-0 assertions that hold without a resend). The settings unit test and the retry-loop unit test were
 written after the code (disclosed deviation).
+
+## Verification
+
+Commands run in the issue4093 worktree after merging `origin/main`:
+
+| Command | Result |
+| --- | --- |
+| `bun test --timeout 120000 packages/agents/src/api/__tests__/streamTimeoutRetry.behavior.test.ts` | Passed: 13 tests, 0 failures, 30 expectations. |
+| `npm run format` | Passed (exit 0). |
+| `npm run lint` | Failed (exit 1): existing max-lines violation in `packages/core/src/session/session-settings-owner.ts` at line 876; file has 801 lines against the 800-line limit. This file is outside the follow-up changes. |
+| `npm run check:runtime-boundary` | Failed (exit 1). Runtime-state scan completed but reported widened/stale `runtime-service-bundle` baseline entries for `packages/core/src/runtime/AgentRuntimeLoader.ts`. The service-shape scan was `blocked-by-compiler` and ambient-delegation results were `provisional-compiler-errors`; diagnostics include missing `@ai-sdk/google` and `@ai-sdk/google-vertex` modules and incompatible `google-auth-library` `Headers` types in the Google Gemini plugin. |
+| `npm run typecheck` | Passed (exit 0). |
+| `npm run build` | Passed (exit 0), including the compiled lazy-MCP registry coherence check. |
+| `bun scripts/check-test-file-coverage.ts` | Passed: zero uncovered and zero doubly-executed test files. |
+
+The stalled-stream cancellation regression is covered by the behavior test in this verification run. The lint and runtime-boundary failures are recorded as repository/toolchain findings; neither is caused by the follow-up test or documentation changes.
