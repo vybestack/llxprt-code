@@ -520,3 +520,16 @@ Policy default (orchestrator decision): `execute_tool_script` is `Kind.Think` an
 
 - `133a5c2733` feat(core): record code mode script events and script lifecycle telemetry (#4084)
 - `fd169e3f72` feat(agents): show nested script approvals, script cards and resumed runs (#4084)
+
+## Review round 1 remediation
+
+Review: `tmp/verify4084/review/review-1.md` (4 HIGH, 1 MEDIUM). Each finding gets a failing behavioral test first (red log), a root-cause fix, then a green log. Logs in `tmp/verify4084/r1/`.
+
+Progress log (update after each finding; after context loss read this and `git status`/`git diff`):
+
+- [x] H1 BeforeTool/AfterTool `continue: false` ends the script run. Root cause: `checkHookDecision` threw a plain `Error` tagged with an unread `isStopExecution` property, so preparation and `bufferError` recorded it as `UNHANDLED_EXCEPTION`, which the nested classifier hands to the guest as `{ ok: false }`. Fix: typed `ToolHookStopError` (`scheduler/tool-executor.ts`); preparation (`prepare-tool-calls.ts`) and execution errors (`result-aggregator.ts` `bufferError`) record it as the existing, previously unused `ToolErrorType.STOP_EXECUTION`; `nested-call-outcome.ts` turns `STOP_EXECUTION` into `ScriptRunTermination('HOOK_STOPPED')`, so the run closes admission, cancels queued calls and joins in-flight work like a policy denial. A hook `decision: block` stays an ordinary failure. Direct calls keep their behavior (an error response with the stop reason); only their error type is now `stop_execution` instead of `unhandled_exception`. Test `code-mode-hook-stop.test.ts` (4): BeforeTool stop with a catch-all script, a queued call behind the stopped one, AfterTool stop, and the block control. Red `tmp/verify4084/r1/h1-red.log` (3 fail, control passes), green `h1-green.log` (4 pass).
+- [ ] H2 no tool admission during final-value serialization
+- [ ] H3 script result owns its size contract against the model output budget
+- [ ] H4 failed/cancelled script cards live and on resume
+- [ ] M1 evidence tools run from their committed location
+- [ ] Full verification cycle, smoke, commits

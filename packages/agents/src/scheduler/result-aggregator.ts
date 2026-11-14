@@ -32,6 +32,7 @@ import { type ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/uti
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolResultSink } from './nested-execution.js';
+import { ToolHookStopError } from './tool-executor.js';
 
 const logger = new DebugLogger('llxprt:scheduler:result-aggregator');
 
@@ -130,7 +131,10 @@ export class ResultAggregator {
     const errorResult: ToolResult = {
       error: {
         message: error.message,
-        type: ToolErrorType.UNHANDLED_EXCEPTION,
+        type:
+          error instanceof ToolHookStopError
+            ? ToolErrorType.STOP_EXECUTION
+            : ToolErrorType.UNHANDLED_EXCEPTION,
       },
       llmContent: error.message,
       returnDisplay: error.message,

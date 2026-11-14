@@ -81,11 +81,9 @@ function checkHookDecision(
 ): void {
   if (hookResult?.shouldStopExecution() === true) {
     const reason = hookResult.getEffectiveReason();
-    const stopError = new Error(
+    throw new ToolHookStopError(
       reason && reason.length > 0 ? reason : `Stopped by ${hookPhase} hook`,
     );
-    (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
-    throw stopError;
   }
   if (hookResult?.isBlockingDecision() === true) {
     const blockReason = hookResult.getEffectiveReason();
@@ -155,6 +153,19 @@ function bindHookCancellation(
             ? signal
             : AbortSignal.any([owner.signal, signal]),
       };
+}
+
+/**
+ * A BeforeTool or AfterTool hook asked to stop (`continue: false`). The call
+ * fails with ToolErrorType.STOP_EXECUTION, which a caller that runs several
+ * calls on its own (a code mode script) treats as the end of its run rather
+ * than as an ordinary tool failure.
+ */
+export class ToolHookStopError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ToolHookStopError';
+  }
 }
 
 export class ToolArgumentValidationError extends Error {

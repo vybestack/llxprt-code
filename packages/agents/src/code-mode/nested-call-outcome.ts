@@ -7,8 +7,9 @@
 /**
  * Turns a nested call's terminal scheduler state into what the script sees
  * (issue #4084). Ordinary tool failures become `{ ok: false }` results the
- * script can handle; a policy denial, a refused approval or a headless
- * approval requirement ends the whole run, so the guest cannot catch it.
+ * script can handle; a policy denial, a refused approval, a headless
+ * approval requirement or a hook's request to stop ends the whole run, so
+ * the guest cannot catch it.
  */
 
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
@@ -120,6 +121,14 @@ function erroredOutcome(
       kind: 'termination',
       status: 'denied',
       termination: new ScriptRunTermination('POLICY_DENIED', message),
+    };
+  // A hook that asks to stop ends the run; a hook that only blocks the call
+  // is an ordinary failure the script may handle.
+  if (errorType === ToolErrorType.STOP_EXECUTION)
+    return {
+      kind: 'termination',
+      status: 'failed',
+      termination: new ScriptRunTermination('HOOK_STOPPED', message),
     };
   return {
     kind: 'result',

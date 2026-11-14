@@ -11,6 +11,7 @@ import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateC
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import {
   ToolArgumentValidationError,
+  ToolHookStopError,
   type PreparedToolExecution,
   type ToolExecutor,
 } from './tool-executor.js';
@@ -98,9 +99,14 @@ function failPreparation(
     createErrorResponse(
       call.request,
       error instanceof Error ? error : new Error(String(error)),
-      error instanceof ToolArgumentValidationError
-        ? ToolErrorType.INVALID_TOOL_PARAMS
-        : ToolErrorType.UNHANDLED_EXCEPTION,
+      preparationErrorType(error),
     ),
   );
+}
+
+function preparationErrorType(error: unknown): ToolErrorType {
+  if (error instanceof ToolArgumentValidationError)
+    return ToolErrorType.INVALID_TOOL_PARAMS;
+  if (error instanceof ToolHookStopError) return ToolErrorType.STOP_EXECUTION;
+  return ToolErrorType.UNHANDLED_EXCEPTION;
 }
