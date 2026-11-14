@@ -230,9 +230,11 @@ export type AgentSandboxConfig =
   | {
       readonly command: 'docker' | 'podman' | 'sandbox-exec';
       readonly image: string;
+      readonly devices?: readonly string[];
     }
   | {
       readonly command: 'bwrap';
+      readonly devices?: readonly string[];
       readonly mounts?: ReadonlyArray<{
         readonly from: string;
         readonly to?: string;
