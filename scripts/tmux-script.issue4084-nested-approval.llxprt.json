@@ -29,7 +29,7 @@
     },
     {
       "type": "line",
-      "text": "Call execute_tool_script exactly once and no other tool. Use purpose \"issue4084 nested approval probe\", tools [\"glob\", \"run_shell_command\"], and this exact source: const readme = await tools[\"glob\"]({ pattern: \"README.md\" }); const shell = await tools[\"run_shell_command\"]({ command: \"echo issue4084-nested-approval-ok\" }); return { readmeFound: readme.ok, stdout: shell.ok ? shell.value.stdout.trim() : null };  After the tool returns, reply with the stdout value only.",
+      "text": "Call execute_tool_script exactly once and no other tool. Use purpose \"issue4084 nested approval probe\", tools [\"glob\", \"run_shell_command\"], and this exact source: const readme = await tools[\"glob\"]({ pattern: \"README.md\" }); const shell = await tools[\"run_shell_command\"]({ command: \"printf issue4084-nested-approval-ok\" }); return { readmeFound: readme.ok, stdout: shell.ok ? shell.value.stdout.trim() : null };  After the tool returns, reply with the stdout value only.",
       "postTypeMs": 1500
     },
     {
@@ -55,7 +55,7 @@
     {
       "type": "expect",
       "scope": "screen",
-      "contains": "echo issue4084-nested-approval-ok"
+      "contains": "printf issue4084-nested-approval-ok"
     },
     {
       "type": "capture",

@@ -1,5 +1,5 @@
 {
-  "description": "Issue #4084 scenario E (not yolo): approve the first nested shell prompt, deny the second; expect APPROVAL_DENIED listing the completed first call and one model-visible response.",
+  "description": "Issue #4084 scenario E (not yolo): approve the first nested shell prompt, deny the second; expect APPROVAL_DENIED listing the completed first call and one model-visible response. The second command is `git branch --show-current` instead of the issue's `git status --short`, because the user policy on the test machine (auto-saved.toml) allows `git status` without a prompt.",
   "tmux": {
     "cols": 140,
     "rows": 100,
@@ -29,7 +29,7 @@
     },
     {
       "type": "line",
-      "text": "Using execute_tool_script, run `git log -5 --format=%s` and then `git status --short` and return both.",
+      "text": "Using execute_tool_script, run `git log -5 --format=%s` and then `git branch --show-current` and return both.",
       "postTypeMs": 1500
     },
     {
