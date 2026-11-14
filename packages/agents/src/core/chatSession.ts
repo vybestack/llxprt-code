@@ -383,7 +383,7 @@ export class ChatSession {
 
   private createTokenUsageLogger(): TokenUsageLogger {
     return createTokenUsageLogger(
-      this.ports.runtime.tokenUsageLoggingEnabled,
+      this.ports.runtime.tokenUsageLogLevel,
       this.ports.runtime.state.sessionId,
       this.config,
     );

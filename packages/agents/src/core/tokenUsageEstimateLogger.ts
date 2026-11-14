@@ -170,15 +170,20 @@ export function recordRequestShapeContext(
   if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
 
+  // #4068: the per-result attribution and the prefix fingerprint are written
+  // only at the debug level, so the summary level neither computes the
+  // fingerprint nor holds the attribution array on the pending entry.
+  const debug = usageLogger.getLevel() === 'debug';
   const result = usageLogger.getShapeMemory().recordRequestShape({
     requestContents,
     tools,
     instructionsText,
     countTokens: estimateTokens,
+    includeFingerprint: debug,
   });
 
   const context: TokenUsageTurnContext = {
-    toolCalls: result.toolCalls,
+    newToolResultCount: result.newToolCalls.length,
     newToolResultTokens: result.newToolResultTokens,
     carriedToolResultTokens: result.carriedToolResultTokens,
     instructionsTokens: result.instructionsTokens,
@@ -186,8 +191,11 @@ export function recordRequestShapeContext(
     historyTokens: result.historyTokens,
     mediaTokens: result.mediaTokens,
     injectedTokens: result.injectedTokens,
-    prefixFingerprint: result.prefixFingerprint,
-    prefixFingerprintChanged: result.prefixFingerprintChanged,
+    ...(debug && {
+      toolCalls: result.newToolCalls,
+      prefixFingerprint: result.prefixFingerprint,
+      prefixFingerprintChanged: result.prefixFingerprintChanged,
+    }),
   };
 
   usageLogger.attachTurnContext(promptId, context);

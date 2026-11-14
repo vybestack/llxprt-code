@@ -27,6 +27,7 @@ import {
 } from '../core/tokenLimits.js';
 /** @plan PLAN-20260211-COMPRESSION.P12 */
 import {
+  DEFAULT_TOKEN_USAGE_LOG_LEVEL,
   getSettingSpec,
   validateSetting,
 } from '@vybestack/llxprt-code-settings';
@@ -492,10 +493,10 @@ export function createAgentRuntimeContext(
       options.readRuntimeSettings?.().showCitations ??
       options.settings.showCitations ??
       false,
-    tokenUsageLoggingEnabled:
-      options.readRuntimeSettings?.().tokenUsageLoggingEnabled ??
-      options.settings.tokenUsageLoggingEnabled ??
-      true,
+    tokenUsageLogLevel:
+      options.readRuntimeSettings?.().tokenUsageLogLevel ??
+      options.settings.tokenUsageLogLevel ??
+      DEFAULT_TOKEN_USAGE_LOG_LEVEL,
     prepareProviderInvocation: options.prepareProviderInvocation,
     state: options.state,
     history,

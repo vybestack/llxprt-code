@@ -16,28 +16,70 @@ The `<projectTempDir>` is the `.llxprt/tmp` directory for the current project
 `<sessionId>` is the unique session identifier (for example
 `a1b2c3d4-e5f6-...`). Each line in the file is a self-contained JSON object.
 
-### Enabling and disabling
+### Levels
 
-Token usage logging is controlled by the `token-usage-log` setting.
+The `token-usage-log` setting chooses how much each record holds.
 
 | Property         | Value                          |
 | ---------------- | ------------------------------ |
 | **Scope**        | Per-profile or global settings |
 | **Persistence**  | Persists to `settings.json`    |
-| **Default**      | `true` (enabled)               |
-| **Valid values** | `true`, `false`                |
+| **Default**      | `summary`                      |
+| **Valid values** | `off`, `summary`, `debug`      |
 
-To disable logging, add the following to your
+- `off` writes nothing. No file is created, and the request-shape and
+  fingerprint work done only for this log is skipped.
+- `summary` (the default) writes one line of scalar fields per model request:
+  identity and lineage, provider and model, provider-reported usage, the
+  estimate, timing, the fixed per-request overhead, and new versus carried
+  tool-result totals. It contains no arrays. See
+  [Summary fields](#summary-fields).
+- `debug` writes everything `summary` writes plus the tool-result attribution
+  array, the per-component prompt split, the prefix fingerprint and the
+  estimator internals. See [Debug-only fields](#debug-only-fields).
+
+Lifecycle records (compression, provider and model switches) are written at
+both `summary` and `debug`.
+
+The setting used to be a boolean. `true` and `false` are still accepted, in
+settings files, profiles and `/set token-usage-log`, and mean `summary` and
+`off`. Any other value is rejected with an error that lists the valid levels.
+
+To turn logging off, add the following to your
 [user settings](./reference/application-directories.md) or workspace
 `.llxprt/settings.json`:
 
 ```json
 {
-  "token-usage-log": false
+  "token-usage-log": "off"
 }
 ```
 
-When disabled, no file is created and no records are written.
+`/set token-usage-log debug` (or `off`) changes the level for the rest of the
+run. The level is read when a chat session starts, so it applies to sessions
+and subagents started after the change.
+
+### Retention
+
+The session janitor that cleans up chat recordings also cleans up token-usage
+files, at every level:
+
+- **Age.** A token-usage file older than `sessionRetention.maxAge` is deleted,
+  the same age policy that applies to chat recordings. There is no default age
+  limit.
+- **Size.** When the token-usage files of all projects together exceed
+  `sessionRetention.tokenUsageMaxTotalSizeMB` (default `1024`), the oldest files
+  are deleted first until the total is under the budget. This budget is
+  separate from the 4 GiB `sessionRetention.maxTotalSizeMB` budget for chat
+  recordings.
+- **Active sessions are never touched.** A subagent's file is named
+  `<root session>::<child runtime>.jsonl` and belongs to its root session. A
+  file is kept when its root session is the running session, when that session
+  holds a live lock in the project's `chats/` directory, or when the file was
+  written within `sessionRetention.minRetention` (default `1d`).
+- A `token-usage/` directory left empty is removed.
+- `sessionRetention.enabled: false` turns this cleanup off along with the rest
+  of the janitor.
 
 ## Record types
 
@@ -62,7 +104,63 @@ remain readable.
 ## Turn record fields
 
 Each `turn` record captures the token economics of a single billed API request.
-Fields are grouped by purpose.
+Which fields appear depends on the level. Levels add or omit fields; they never
+rename one, and `schema_version` stays `1` at both levels.
+
+### Summary fields
+
+A `summary` record holds only these fields, all scalar. A field the provider
+did not report, or a value that was not measured, is omitted rather than
+written as zero.
+
+| Group             | Fields                                                                                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Record            | `record_type`, `schema_version`                                                                                                        |
+| Identity, lineage | `ts`, `session_id`, `turn_id`, `runtime_id`, `parent_runtime_id`, `subagent_name`, `prompt_id`, `attempt_index`, `attempt_outcome`     |
+| Attempt end       | `finish_reason`, `raw_stop_reason` (only when reported; kept for #4036 refusal accounting)                                             |
+| Model             | `provider`, `model`, `protocol`                                                                                                        |
+| Usage             | `actual_prompt_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `reasoning_tokens` (only when the provider reports it) |
+| Estimate          | `estimated_tokens`, `estimator_family`, `stateful_parent_used`                                                                         |
+| Timing            | `ttft_ms`, `provider_request_ms`, `generation_ms`, `timing_source`                                                                     |
+| Fixed overhead    | `fixed_tokens`                                                                                                                         |
+| Tool results      | `new_tool_result_count`, `new_tool_result_tokens`, `carried_tool_result_tokens`                                                        |
+
+A summary record is about 1 KB for a subagent request, most of it the field
+names and the composite session, runtime and prompt identifiers.
+
+### Debug-only fields
+
+A `debug` record holds every summary field and adds:
+
+- `tool_calls`, listing only the tool results that are new in this request.
+  Results carried over from earlier requests are counted in
+  `carried_tool_result_tokens` and are not listed again.
+- The per-component prompt split: `instructions_tokens`, `tools_schema_tokens`,
+  `history_tokens`, `media_tokens`, `injected_tokens`.
+- The prefix fingerprint: `prefix_fingerprint`, `prefix_fingerprint_changed`.
+- Estimator internals: `estimator`, `estimator_method`, `estimator_version`,
+  `asset_revision`, `projection_revision`, `tiktoken_tokens`,
+  `tiktoken_estimation_failed`.
+- Envelope detail: `transmitted_prompt_tokens`, `incremental_prompt_tokens`,
+  `retained_context_tokens`, `effective_provider_context_tokens`,
+  `chunk_count`.
+- The remaining detail fields described below that the summary does not list:
+  `effective_actual_tokens`, `user_turn`, `step`, `cache_read_tokens`,
+  `tool_tokens`, `total_tokens`, `retry_reason`, `http_status`,
+  `backend_profile`.
+
+### Timing and aggregates
+
+| Field                   | Type   | Description                                                                                                                                                |
+| ----------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ttft_ms`               | number | Milliseconds from the start of the provider stream to the first token. Omitted when no token arrived.                                                      |
+| `provider_request_ms`   | number | Milliseconds the provider stream ran for this attempt.                                                                                                     |
+| `generation_ms`         | number | Milliseconds from the first token to the last. Omitted when not measured.                                                                                  |
+| `timing_source`         | string | `raw` when raw provider token deltas set the token window, `visible` when it was measured from visible output chunks. Omitted when no token window exists. |
+| `fixed_tokens`          | number | `instructions_tokens + tools_schema_tokens`: the overhead every request in the session pays before any conversation.                                       |
+| `new_tool_result_count` | number | How many tool results enter the prompt for the first time on this request.                                                                                 |
+
+The detailed tables below describe the individual fields.
 
 ### Identity and join keys
 
@@ -134,11 +232,11 @@ attempt gets its own record.
 
 These fields attribute token cost to tool results present in the request.
 
-| Field                        | Type   | Description                                                                                                                                                          |
-| ---------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tool_calls`                 | array  | One entry per tool result in this request: `{ call_id, tool_name, result_tokens, was_truncated }`. Only identifiers and counts — never the result body or arguments. |
-| `new_tool_result_tokens`     | number | Total tokens from tool results entering the prompt for the first time on this send.                                                                                  |
-| `carried_tool_result_tokens` | number | Total tokens from tool results already present in a previous send.                                                                                                   |
+| Field                        | Type   | Description                                                                                                                                                                                  |
+| ---------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tool_calls`                 | array  | Debug only. One entry per tool result that is new in this request: `{ call_id, tool_name, result_tokens, was_truncated }`. Only identifiers and counts — never the result body or arguments. |
+| `new_tool_result_tokens`     | number | Total tokens from tool results entering the prompt for the first time on this send.                                                                                                          |
+| `carried_tool_result_tokens` | number | Total tokens from tool results already present in a previous send.                                                                                                                           |
 
 ### Request shape
 
@@ -181,19 +279,27 @@ known, `turn_id`.
 Emitted once per completed compression. Without this record, a compression
 appears as an unexplained drop in the token count.
 
-| Field                       | Type            | Description                                                               |
-| --------------------------- | --------------- | ------------------------------------------------------------------------- |
-| `record_type`               | `"compression"` | Discriminator.                                                            |
-| `schema_version`            | number          | Schema version.                                                           |
-| `ts`                        | string          | ISO timestamp.                                                            |
-| `session_id`                | string          | Session identifier.                                                       |
-| `turn_id`                   | string \| null  | Turn identifier at compression time, when known.                          |
-| `tokens_before`             | number          | Total token count before compression.                                     |
-| `tokens_after`              | number          | Total token count after compression.                                      |
-| `compression_model`         | string \| null  | The model that served the compression.                                    |
-| `compression_provider`      | string \| null  | The provider that served the compression.                                 |
-| `compression_prompt_tokens` | number          | The compression call's own prompt token usage. Omitted when not reported. |
-| `compression_output_tokens` | number          | The compression call's own output token usage. Omitted when not reported. |
+| Field                       | Type            | Description                                                                                                                                           |
+| --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `record_type`               | `"compression"` | Discriminator.                                                                                                                                        |
+| `schema_version`            | number          | Schema version.                                                                                                                                       |
+| `ts`                        | string          | ISO timestamp.                                                                                                                                        |
+| `session_id`                | string          | Session identifier.                                                                                                                                   |
+| `turn_id`                   | string \| null  | Turn identifier at compression time, when known.                                                                                                      |
+| `tokens_before`             | number          | Total token count before compression.                                                                                                                 |
+| `tokens_after`              | number          | Total token count after compression.                                                                                                                  |
+| `compression_model`         | string \| null  | The model that served the compression.                                                                                                                |
+| `compression_provider`      | string \| null  | The provider that served the compression.                                                                                                             |
+| `compression_prompt_tokens` | number          | Prompt tokens of this compression's own LLM call, as the strategy reported them. Omitted when no LLM call was made or the provider reported no usage. |
+| `compression_output_tokens` | number          | Output tokens of this compression's own LLM call. Omitted under the same conditions.                                                                  |
+| `compression_strategy`      | string          | The strategy that produced the applied result (`middle-out`, `one-shot`, `high-density`, `top-down-truncation`).                                      |
+| `llm_call_made`             | boolean         | Whether that strategy called a model.                                                                                                                 |
+| `compression_attempts`      | number          | Strategy runs this compression took, counting retries and fallbacks.                                                                                  |
+
+Usage comes from the result of the strategy that ran. It is never read from a
+summary entry in history: from the second compression on, a strategy can keep
+an earlier summary at the head of history, and that entry still carries the
+earlier call's usage.
 
 ### Provider switch and model switch
 

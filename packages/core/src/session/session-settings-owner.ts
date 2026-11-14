@@ -38,7 +38,10 @@ import { EventEmitter } from 'node:events';
 import { CoreEvent, type ModelProfileInfoPayload } from '../utils/events.js';
 import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { EphemeralDefaultOwnership } from '../config/ephemeralDefaultOwnership.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  SettingsService,
+  resolveTokenUsageLogLevel,
+} from '@vybestack/llxprt-code-settings';
 import {
   buildToolGovernance,
   type ToolGovernance,
@@ -394,7 +397,9 @@ export class SessionSettingsOwner {
       }),
       showCitations: this.settings.get('ui.showCitations') === true,
       loopDetection: this.readLoopDetectionPolicy(),
-      tokenUsageLoggingEnabled: this.settings.get('token-usage-log') !== false,
+      tokenUsageLogLevel: resolveTokenUsageLogLevel(
+        this.settings.get('token-usage-log'),
+      ),
       promptPolicy: Object.freeze({
         enableToolPrompts: this.settings.get('enable-tool-prompts') === true,
         allMemoriesAreCore:

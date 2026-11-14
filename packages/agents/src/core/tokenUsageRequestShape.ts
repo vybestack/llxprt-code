@@ -87,6 +87,12 @@ export interface RequestShapeInput {
    * session; with it a carried content is tokenized once.
    */
   readonly measurementCache?: ContentMeasurementCache | undefined;
+  /**
+   * Whether to compute the prefix fingerprint (default true). The fingerprint
+   * is only written at the `debug` token-usage level (#4068), so the summary
+   * level skips the serialization and hashing it costs.
+   */
+  readonly includeFingerprint?: boolean;
 }
 
 /** A single tool-call attribution entry (AC-5). */
@@ -104,10 +110,14 @@ export interface RequestShapeResult {
   readonly historyTokens: number;
   readonly mediaTokens: number;
   readonly injectedTokens: number;
+  /** Every tool result in the request, new and carried. */
   readonly toolCalls: readonly ToolCallAttribution[];
+  /** Only the tool results this session has not sent before (#4068). */
+  readonly newToolCalls: readonly ToolCallAttribution[];
   readonly newToolResultTokens: number;
   readonly carriedToolResultTokens: number;
-  readonly prefixFingerprint: string;
+  /** Undefined when the fingerprint was not requested. */
+  readonly prefixFingerprint: string | undefined;
   readonly prefixFingerprintChanged: boolean | null;
 }
 
@@ -483,17 +493,21 @@ export function computeRequestShape(
   let mediaTokens = 0;
   let injectedTokens = 0;
   const toolCalls: ToolCallAttribution[] = [];
+  const newToolCalls: ToolCallAttribution[] = [];
   let newToolResultTokens = 0;
   let carriedToolResultTokens = 0;
 
   const toolsJson = stableStringify(input.tools);
   // Instructions and tool schemas are the head of the cacheable prefix and are
-  // always included in full; history then fills the remaining budget.
-  const fingerprintParts: string[] = [
-    `I:${input.instructionsText ?? ''}`,
-    `T:${toolsJson}`,
-  ];
-  let fingerprintBudget = FINGERPRINT_PREFIX_CHAR_BUDGET;
+  // always included in full; history then fills the remaining budget. A null
+  // part list (fingerprint not requested) leaves a zero budget, so no content
+  // is serialized for it.
+  const fingerprintParts: string[] | null =
+    input.includeFingerprint === false
+      ? null
+      : [`I:${input.instructionsText ?? ''}`, `T:${toolsJson}`];
+  let fingerprintBudget =
+    fingerprintParts === null ? 0 : FINGERPRINT_PREFIX_CHAR_BUDGET;
 
   for (const content of requestContents) {
     const { measurement, fingerprintPart } = resolveContentMeasurement(
@@ -513,7 +527,7 @@ export function computeRequestShape(
     }
 
     for (const result of measurement.toolResults) {
-      toolCalls.push({
+      const attribution: ToolCallAttribution = {
         callId: result.callId,
         toolName: resolveToolName(
           result.callId,
@@ -522,25 +536,21 @@ export function computeRequestShape(
         ),
         resultTokens: result.resultTokens,
         wasTruncated: result.wasTruncated,
-      });
+      };
+      toolCalls.push(attribution);
       if (input.previouslySentCallIds.has(result.callId)) {
         carriedToolResultTokens += result.resultTokens;
       } else {
+        newToolCalls.push(attribution);
         newToolResultTokens += result.resultTokens;
       }
     }
 
     if (fingerprintPart !== null) {
-      fingerprintParts.push(fingerprintPart.text);
+      fingerprintParts?.push(fingerprintPart.text);
       fingerprintBudget -= fingerprintPart.consumed;
     }
   }
-
-  const prefixFingerprint = computeFingerprint(fingerprintParts.join('\u0000'));
-  const prefixFingerprintChanged =
-    input.previousFingerprint === undefined
-      ? null
-      : input.previousFingerprint !== prefixFingerprint;
 
   return {
     instructionsTokens: countInstructionsTokens(
@@ -552,10 +562,31 @@ export function computeRequestShape(
     mediaTokens,
     injectedTokens,
     toolCalls,
+    newToolCalls,
     newToolResultTokens,
     carriedToolResultTokens,
+    ...finishFingerprint(fingerprintParts, input.previousFingerprint),
+  };
+}
+
+/**
+ * Hash the collected prefix parts and compare with the previous send. Both
+ * values are empty (undefined and null) when the fingerprint was not requested.
+ */
+function finishFingerprint(
+  parts: readonly string[] | null,
+  previousFingerprint: string | undefined,
+): Pick<RequestShapeResult, 'prefixFingerprint' | 'prefixFingerprintChanged'> {
+  if (parts === null) {
+    return { prefixFingerprint: undefined, prefixFingerprintChanged: null };
+  }
+  const prefixFingerprint = computeFingerprint(parts.join('\u0000'));
+  return {
     prefixFingerprint,
-    prefixFingerprintChanged,
+    prefixFingerprintChanged:
+      previousFingerprint === undefined
+        ? null
+        : previousFingerprint !== prefixFingerprint,
   };
 }
 

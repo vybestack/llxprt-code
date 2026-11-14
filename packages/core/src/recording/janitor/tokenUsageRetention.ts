@@ -1,0 +1,227 @@
+/**
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Token-usage log retention for the session janitor (#4068).
+ *
+ * Every model request appends to `<project tmp>/token-usage/<session>.jsonl`,
+ * and nothing used to delete those files. The janitor now applies the chat age
+ * policy (`sessionRetention.maxAge`, guarded by `minRetention`) to them and
+ * keeps their machine-wide total under `sessionRetention.tokenUsageMaxTotalSizeMB`,
+ * evicting the oldest files first. It runs under the janitor's global lease.
+ *
+ * A file belongs to the root session named before `::` in its file name
+ * (subagent logs are `<root>::<child runtime>.jsonl`). A file is never deleted
+ * when its root session is the current process's session, when that session
+ * holds a live lock in the project's chats directory, or when the file was
+ * written within the `minRetention` floor — the same protections the janitor
+ * applies to chat recordings. A root id outside the safe session-id grammar
+ * cannot be lock-checked, so such files are left alone.
+ */
+
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { SessionLockManager } from '../SessionLockManager.js';
+import { hasErrnoCode } from '../../storage/local-media-store-validation.js';
+import type { ResolvedRetentionConfig } from './cleanupTypes.js';
+import { PROJECT_HASH_RE } from './sessionScanner.js';
+import { isValidSafeSessionId } from './sessionSafety.js';
+
+export const TOKEN_USAGE_DIR_NAME = 'token-usage';
+
+const JSONL_SUFFIX = '.jsonl';
+
+interface TokenUsageFile {
+  readonly filePath: string;
+  readonly chatsDir: string;
+  readonly rootSessionId: string;
+  readonly sizeBytes: number;
+  readonly mtimeMs: number;
+  readonly dev: number;
+  readonly ino: number;
+}
+
+/** Outcome counts of one token-usage cleanup pass. */
+export interface TokenUsageCleanupResult {
+  readonly scanned: number;
+  readonly deleted: number;
+  readonly bytesDeleted: number;
+  readonly failed: number;
+}
+
+interface CleanupState {
+  deleted: number;
+  bytesDeleted: number;
+  failed: number;
+}
+
+function rootSessionIdOf(fileName: string): string {
+  const sessionId = fileName.slice(0, -JSONL_SUFFIX.length);
+  const separator = sessionId.indexOf('::');
+  return separator === -1 ? sessionId : sessionId.slice(0, separator);
+}
+
+async function listProjectDirs(
+  globalTempDir: string,
+  state: CleanupState,
+): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(globalTempDir, { withFileTypes: true });
+    return entries
+      .filter(
+        (entry) => entry.isDirectory() && PROJECT_HASH_RE.test(entry.name),
+      )
+      .map((entry) => path.join(globalTempDir, entry.name));
+  } catch (error) {
+    if (!hasErrnoCode(error, 'ENOENT')) state.failed += 1;
+    return [];
+  }
+}
+
+/** Regular `.jsonl` files directly inside one project's token-usage dir. */
+async function listProjectFiles(
+  projectDir: string,
+  state: CleanupState,
+): Promise<TokenUsageFile[]> {
+  const tokenDir = path.join(projectDir, TOKEN_USAGE_DIR_NAME);
+  let entries: string[];
+  try {
+    const dirStat = await fs.lstat(tokenDir);
+    if (!dirStat.isDirectory()) return [];
+    entries = await fs.readdir(tokenDir);
+  } catch (error) {
+    if (!hasErrnoCode(error, 'ENOENT')) state.failed += 1;
+    return [];
+  }
+  const files: TokenUsageFile[] = [];
+  for (const name of entries.filter((entry) => entry.endsWith(JSONL_SUFFIX))) {
+    const filePath = path.join(tokenDir, name);
+    try {
+      const stat = await fs.lstat(filePath);
+      if (!stat.isFile()) continue;
+      files.push({
+        filePath,
+        chatsDir: path.join(projectDir, 'chats'),
+        rootSessionId: rootSessionIdOf(name),
+        sizeBytes: stat.size,
+        mtimeMs: stat.mtimeMs,
+        dev: stat.dev,
+        ino: stat.ino,
+      });
+    } catch (error) {
+      if (!hasErrnoCode(error, 'ENOENT')) state.failed += 1;
+    }
+  }
+  return files;
+}
+
+async function isProtected(
+  file: TokenUsageFile,
+  currentSessionId: string | undefined,
+  config: ResolvedRetentionConfig,
+  now: number,
+): Promise<boolean> {
+  if (now - file.mtimeMs < config.minRetentionMs) return true;
+  if (file.rootSessionId === currentSessionId) return true;
+  if (!isValidSafeSessionId(file.rootSessionId)) return true;
+  return SessionLockManager.isLocked(file.chatsDir, file.rootSessionId);
+}
+
+/**
+ * Delete one file after confirming it is still the file that was scanned, so
+ * a file replaced since the scan (a resumed session recreating its log) is
+ * not deleted on stale evidence.
+ */
+async function deleteScanned(
+  file: TokenUsageFile,
+  state: CleanupState,
+): Promise<void> {
+  try {
+    const stat = await fs.lstat(file.filePath);
+    if (!stat.isFile() || stat.dev !== file.dev || stat.ino !== file.ino) {
+      return;
+    }
+    if (stat.mtimeMs !== file.mtimeMs) return;
+    await fs.unlink(file.filePath);
+    state.deleted += 1;
+    state.bytesDeleted += file.sizeBytes;
+  } catch (error) {
+    if (!hasErrnoCode(error, 'ENOENT')) state.failed += 1;
+  }
+}
+
+async function removeIfEmpty(
+  projectDir: string,
+  state: CleanupState,
+): Promise<void> {
+  const tokenDir = path.join(projectDir, TOKEN_USAGE_DIR_NAME);
+  try {
+    const dirStat = await fs.lstat(tokenDir);
+    if (!dirStat.isDirectory()) return;
+    if ((await fs.readdir(tokenDir)).length > 0) return;
+    await fs.rmdir(tokenDir);
+  } catch (error) {
+    // ENOTEMPTY: a session wrote its first record after the emptiness check.
+    if (!hasErrnoCode(error, 'ENOENT') && !hasErrnoCode(error, 'ENOTEMPTY')) {
+      state.failed += 1;
+    }
+  }
+}
+
+function oldestFirst(a: TokenUsageFile, b: TokenUsageFile): number {
+  if (a.mtimeMs !== b.mtimeMs) return a.mtimeMs - b.mtimeMs;
+  if (a.filePath === b.filePath) return 0;
+  return a.filePath < b.filePath ? -1 : 1;
+}
+
+/**
+ * Apply the age policy, then the byte budget, to every token-usage file under
+ * `globalTempDir`, and remove token-usage directories left empty. The budget
+ * counts protected files too (it bounds what is on disk); only unprotected
+ * files are ever evicted.
+ */
+export async function cleanupTokenUsageFiles(
+  globalTempDir: string,
+  currentSessionId: string | undefined,
+  config: ResolvedRetentionConfig,
+): Promise<TokenUsageCleanupResult> {
+  const state: CleanupState = { deleted: 0, bytesDeleted: 0, failed: 0 };
+  const projectDirs = await listProjectDirs(globalTempDir, state);
+  const files: TokenUsageFile[] = [];
+  for (const projectDir of projectDirs) {
+    files.push(...(await listProjectFiles(projectDir, state)));
+  }
+
+  const now = Date.now();
+  const evictable: TokenUsageFile[] = [];
+  let totalBytes = 0;
+  for (const file of files) {
+    totalBytes += file.sizeBytes;
+    if (!(await isProtected(file, currentSessionId, config, now))) {
+      evictable.push(file);
+    }
+  }
+  evictable.sort(oldestFirst);
+
+  for (const file of evictable) {
+    const pastAge =
+      config.maxAgeMs !== null && now - file.mtimeMs > config.maxAgeMs;
+    const overBudget = totalBytes > config.tokenUsageMaxTotalSizeBytes;
+    if (!pastAge && !overBudget) continue;
+    const before = state.deleted;
+    await deleteScanned(file, state);
+    if (state.deleted > before) totalBytes -= file.sizeBytes;
+  }
+
+  for (const projectDir of projectDirs) {
+    await removeIfEmpty(projectDir, state);
+  }
+  return {
+    scanned: files.length,
+    deleted: state.deleted,
+    bytesDeleted: state.bytesDeleted,
+    failed: state.failed,
+  };
+}

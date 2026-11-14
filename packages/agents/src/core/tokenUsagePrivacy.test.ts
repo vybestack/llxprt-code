@@ -84,7 +84,7 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
 
   const observeDoesNotLeakPromptTextToolArgumentsOrToolResultBodies =
     async () => {
-      const logger = new TokenUsageLogger(true, logFile);
+      const logger = new TokenUsageLogger('debug', logFile);
 
       const contents: IContent[] = [
         {
@@ -161,7 +161,7 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
     };
 
   it('the prefix fingerprint is a hash, not prompt text', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
 
     recordRequestShapeContext(
       logger,
@@ -218,7 +218,7 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
 
   const observeToolCallsArrayCarriesOnlyCallIdToolNameResultTokensWas =
     async () => {
-      const logger = new TokenUsageLogger(true, logFile);
+      const logger = new TokenUsageLogger('debug', logFile);
 
       recordRequestShapeContext(
         logger,
