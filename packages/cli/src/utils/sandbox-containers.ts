@@ -32,6 +32,11 @@ import {
   resolveDebugPort,
 } from './sandbox-env.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
+import {
+  buildContainerDeviceArgs,
+  preflightSandboxDevices,
+  resolveSandboxDevices,
+} from './sandbox-devices.js';
 import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
@@ -121,6 +126,15 @@ function isNonEmptyEnvValue(value: string | undefined): value is string {
   return value !== undefined && value !== '';
 }
 
+function appendDeviceArgs(args: string[], config: SandboxConfig): void {
+  if (config.devices === undefined || config.devices.length === 0) {
+    return;
+  }
+  const resolved = resolveSandboxDevices(config.devices);
+  preflightSandboxDevices(resolved);
+  args.push(...buildContainerDeviceArgs(resolved));
+}
+
 /** Builds docker/podman run args. */
 export function buildContainerRunArgs(
   config: SandboxConfig,
@@ -161,6 +175,7 @@ export function buildContainerRunArgs(
       'Sandbox network mode "proxied" requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.',
     );
   }
+  appendDeviceArgs(args, config);
   if (shouldAllocateSandboxTty()) args.push('-t');
   args.push('--volume', `${workdir}:${containerWorkdir}`);
   // Issue #3081: mount the host config directory at path parity and pin
