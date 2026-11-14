@@ -326,6 +326,51 @@ function stagePromptDefaults(repoRoot: string, bundleDir: string): string[] {
   );
 }
 
+/**
+ * Name the QuickJS wasm is staged under, next to the bundled code mode wrapper
+ * (issue #4084). The wrapper bundle receives the same name through a build
+ * `define`, so the two cannot drift apart.
+ */
+export const BUNDLED_QUICKJS_WASM_FILE = 'quickjs-release-sync.wasm';
+
+/**
+ * Resolves the release-sync QuickJS wasm through `quickjs-emscripten`, the
+ * package that owns the variant dependency, anchored at the agents package
+ * that declares `quickjs-emscripten`.
+ */
+function resolveQuickJsWasm(repoRoot: string): string {
+  const agentsRequire = createRequire(
+    join(repoRoot, 'packages', 'agents', 'package.json'),
+  );
+  try {
+    const quickJsEntry = agentsRequire.resolve('quickjs-emscripten');
+    return createRequire(quickJsEntry).resolve(
+      '@jitl/quickjs-wasmfile-release-sync/wasm',
+    );
+  } catch {
+    throw missingRequiredAsset(
+      'QuickJS wasm',
+      join(
+        repoRoot,
+        'node_modules/@jitl/quickjs-wasmfile-release-sync/dist/emscripten-module.wasm',
+      ),
+    );
+  }
+}
+
+export function stageQuickJsWasm(
+  repoRoot: string,
+  bundleDir: string,
+): string[] {
+  return [
+    stageRequiredFile(
+      resolveQuickJsWasm(repoRoot),
+      join(bundleDir, BUNDLED_QUICKJS_WASM_FILE),
+      'QuickJS wasm',
+    ),
+  ];
+}
+
 function stageGeneratedAssets(repoRoot: string, bundleDir: string): string[] {
   const staged: string[] = [];
   staged.push(
@@ -364,6 +409,7 @@ export function stageCliBundleAssets(
 
   const staged: string[] = [];
   staged.push(...stageTreeSitterWasm(repoRoot, bundleDir));
+  staged.push(...stageQuickJsWasm(repoRoot, bundleDir));
   staged.push(...stageProviderAliases(repoRoot, bundleDir));
   staged.push(...stagePolicyTomls(repoRoot, bundleDir));
   staged.push(...stageSandboxProfiles(repoRoot, bundleDir));

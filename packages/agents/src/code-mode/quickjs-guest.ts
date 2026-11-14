@@ -16,13 +16,13 @@
  */
 
 import {
-  getQuickJS,
   type QuickJSContext,
   type QuickJSDeferredPromise,
   type QuickJSHandle,
   type QuickJSRuntime,
 } from 'quickjs-emscripten';
 import { guestPreludeSource } from './guest-prelude.js';
+import { loadQuickJsModule } from './quickjs-wasm.js';
 import {
   PROTOCOL_VERSION,
   type ChildFrame,
@@ -81,7 +81,7 @@ export class GuestRun {
   ) {}
 
   static async create(start: StartFrame, emit: Emit): Promise<GuestRun> {
-    const quickJS = await getQuickJS();
+    const quickJS = await loadQuickJsModule();
     const runtime = quickJS.newRuntime();
     runtime.setMemoryLimit(start.limits.memoryBytes);
     runtime.setMaxStackSize(start.limits.stackBytes);

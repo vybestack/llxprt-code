@@ -36,7 +36,10 @@ import { createRequire } from 'node:module';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { portableTiktokenPlugin } from './portable-tiktoken-plugin.js';
-import { stageCliBundleAssets } from './copy_bundle_assets.js';
+import {
+  BUNDLED_QUICKJS_WASM_FILE,
+  stageCliBundleAssets,
+} from './copy_bundle_assets.js';
 import { releaseSourceEmittedSiblingPlugin } from './source-emitted-sibling-resolution.js';
 
 /**
@@ -241,6 +244,30 @@ function profilerBundleConfig(
   };
 }
 
+/**
+ * The code mode wrapper (issue #4084) runs in its own subprocess, so the CLI
+ * bundle cannot inline it: the inlined runtime launches
+ * `<bundle-dir>/quickjs-wrapper.js` by path. The define tells the bundled
+ * wrapper to load the QuickJS wasm that `copy_bundle_assets.ts` stages next
+ * to it, instead of the variant's own sibling lookup.
+ */
+export const QUICKJS_WRAPPER_BUNDLE = 'quickjs-wrapper.js';
+
+function quickJsWrapperBundleConfig(): Parameters<typeof Bun.build>[0] {
+  return {
+    ...cliBundleSharedConfig,
+    define: {
+      ...cliBundleSharedConfig.define,
+      LLXPRT_BUNDLED_QUICKJS_WASM: JSON.stringify(BUNDLED_QUICKJS_WASM_FILE),
+    },
+    external: CLI_BUNDLE_EXTERNALS,
+    entrypoints: [
+      join(root, 'packages/agents/src/code-mode/quickjs-wrapper.ts'),
+    ],
+    naming: QUICKJS_WRAPPER_BUNDLE,
+  };
+}
+
 export function requireDependenciesInstalled(
   workspaceRoot: string = root,
 ): void {
@@ -258,6 +285,7 @@ export function requireDependenciesInstalled(
  */
 export const cliBundleTargets: readonly CliBundleTarget[] = [
   { label: 'cli-bundle', config: cliBundleConfig },
+  { label: 'quickjs-wrapper', config: quickJsWrapperBundleConfig() },
   {
     label: 'memprofile-launcher',
     config: profilerBundleConfig(
