@@ -18,12 +18,15 @@ import { formatToolScriptCard } from '@vybestack/llxprt-code-agents';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import {
   buildScriptAgent,
+  processesMatching,
   runTurn,
   scratchDir,
+  waitFor,
   type ScriptAgent,
 } from '../../../../agents/src/code-mode/__tests__/script-agent.js';
 import { assertNoLiveWrappers } from '../../../../agents/src/code-mode/__tests__/runtime-test-helpers.js';
 import type { HistoryItemToolGroup } from '../types.js';
+import { ToolCallStatus } from '../types.js';
 import { iContentToHistoryItems } from './iContentToHistoryItems.js';
 import { resumeOwnerSession } from './resumeOwnerSession.js';
 
@@ -109,6 +112,98 @@ describe('code mode resume in the CLI', () => {
       );
       expect(String(plain.tools[0].resultDisplay)).toContain('callCount');
       expect(String(plain.tools[0].resultDisplay)).not.toContain('Purpose:');
+    }, 60_000);
+
+    /** Records one script turn, then resumes it in a fresh agent. */
+    async function recordAndResume(
+      source: string,
+      purpose: string,
+      during?: (abort: () => void) => Promise<void>,
+    ) {
+      const workspace = scratchDir('cli-code-mode-resume-end-');
+      const first = await buildScriptAgent(
+        [{ source, tools: ['run_shell_command'], purpose }],
+        { workspace, rules: [ALLOW_SHELL] },
+      );
+      owned.push(first);
+      await first.agent.session.setRecording({ enabled: true });
+      const controller = new AbortController();
+      const turn = runTurn(first.agent, controller.signal);
+      await during?.(() => controller.abort());
+      await turn;
+      // As after Escape in the CLI, the user goes on with another prompt;
+      // that turn writes the session file.
+      if (during !== undefined) await runTurn(first.agent);
+      const sessionId = first.agent.session.getSessionId();
+      await first.agent.session.setRecording({ enabled: false });
+
+      const next = await buildScriptAgent([], {
+        workspace,
+        rules: [ALLOW_SHELL],
+      });
+      owned.push(next);
+      const session = next.agent.session;
+      const replay = await resumeOwnerSession(
+        session.resume.bind(session),
+        sessionId,
+        'allowed',
+        session.listBrowserTargetsDetailed.bind(session),
+        session.getToolScriptRuns.bind(session),
+      );
+      const [group] = scriptGroups([...replay.uiHistory]);
+      return {
+        tool: group.tools[0],
+        history: replay.history,
+        runs: await session.getToolScriptRuns(),
+      };
+    }
+
+    it('shows a cancelled run as cancelled, with its card, with or without a recorded response', async () => {
+      const { tool, history, runs } = await recordAndResume(
+        'await tools["run_shell_command"]({ command: "sleep 28.4084" }); return "finished";',
+        'sleep until cancelled',
+        async (abort) => {
+          await waitFor(
+            () => processesMatching('sleep 28.4084').length > 0,
+            'the nested sleep to start',
+          );
+          abort();
+        },
+      );
+
+      expect(tool.status).toBe(ToolCallStatus.Canceled);
+      expect(String(tool.resultDisplay)).toContain(
+        'Purpose: sleep until cancelled',
+      );
+      expect(String(tool.resultDisplay)).toContain('CANCELLED');
+
+      // The interactive CLI records an Escaped call with no tool response at
+      // all; the finished run still decides the status.
+      const unanswered = history.map((content) => ({
+        ...content,
+        blocks: content.blocks.filter(
+          (block) =>
+            block.type !== 'tool_response' || block.callId !== tool.callId,
+        ),
+      }));
+      const [group] = scriptGroups(
+        iContentToHistoryItems(unanswered, 'allowed', runs),
+      );
+      expect(group.tools[0].status).toBe(ToolCallStatus.Canceled);
+      expect(group.tools[0].resultDisplay).toBe(tool.resultDisplay);
+    }, 60_000);
+
+    it('shows a failed run as failed, with its card', async () => {
+      const { tool } = await recordAndResume(
+        'await tools["run_shell_command"]({ command: "echo before" }); throw new Error("stop here");',
+        'fail on purpose',
+      );
+
+      expect(tool.status).toBe(ToolCallStatus.Error);
+      expect(String(tool.resultDisplay)).toContain(
+        'Status: failed SCRIPT_ERROR',
+      );
+      expect(String(tool.resultDisplay)).not.toContain('{"ok"');
     }, 60_000);
   });
 });

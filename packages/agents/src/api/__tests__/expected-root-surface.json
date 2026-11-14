@@ -204,6 +204,7 @@
   "Unsubscribe",
   "UsageMetadataValue",
   "UsageMetadataValueSchema",
+  "applyToolScriptEvent",
   "assembleProfileApplication",
   "assembleProfileDefinitions",
   "assembleProviderSwitch",

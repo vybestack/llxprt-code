@@ -25,6 +25,7 @@ import {
   buildDirectAgent,
   runTurn,
   scratchDir,
+  modelFacingText,
   toolResponses,
   type ScriptAgent,
   type ToolCallSpec,
@@ -69,9 +70,7 @@ async function responseText(agent: ScriptAgent['agent'], callId: string) {
   const [response] = toolResponses(await agent.getHistory()).filter(
     (block) => block.callId === callId,
   );
-  const result = response.result as { output?: unknown } | string | undefined;
-  const output = typeof result === 'object' ? result.output : result;
-  return response.error ?? (typeof output === 'string' ? output : '');
+  return modelFacingText(response.result);
 }
 
 describe('code mode under a tool-selection hook restriction (issue #4084)', () => {

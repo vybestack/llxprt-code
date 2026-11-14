@@ -151,8 +151,10 @@ export type {
 
 export type { AgentModelParametersControl } from './model-parameters.js';
 
-// Issue #4084: code mode script cards, drawn by hosts from recorded runs.
+// Issue #4084: code mode script cards, drawn by hosts from recorded runs
+// and, for a run cancelled with its turn, from the run's live records.
 export {
+  applyToolScriptEvent,
   formatToolScriptCard,
   type ToolScriptRunView,
 } from '../code-mode/tool-script-card.js';

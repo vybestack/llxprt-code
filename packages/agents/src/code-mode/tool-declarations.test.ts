@@ -21,6 +21,7 @@ import {
   buildDirectAgent,
   runTurn,
   scratchDir,
+  modelFacingText,
   toolResponses,
   type ScriptAgent,
   type ToolCallSpec,
@@ -99,9 +100,7 @@ async function responseJson(
   );
   expect(responses).toHaveLength(1);
   const [response] = responses;
-  const result = response.result as { output?: unknown } | string | undefined;
-  const output = typeof result === 'object' ? result.output : result;
-  const text = response.error ?? (typeof output === 'string' ? output : '');
+  const text = modelFacingText(response.result);
   return JSON.parse(text.slice(text.indexOf('{"ok"'))) as Record<
     string,
     unknown

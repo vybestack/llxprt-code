@@ -791,6 +791,13 @@ export interface ToolResult {
    * replaces or extends the model-facing text.
    */
   boundedOutput?: boolean;
+
+  /**
+   * When the call fails, show `returnDisplay` instead of `error.message`
+   * (the code mode script card, which summarizes a failed run better than
+   * its error text does).
+   */
+  displayOnError?: boolean;
 }
 
 /**

@@ -24,6 +24,7 @@ import {
 } from '../useReactToolScheduler.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import { classifyCompletedTools } from './toolCompletionHandler.js';
+import { useCancelledScriptCards } from './cancelledScriptCards.js';
 import { useKeypress, type Key } from '../useKeypress.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 
@@ -111,6 +112,12 @@ export function useToolSchedulerSetup(
     getPreferredEditor,
     onEditorClose,
     onEditorOpen,
+  );
+  useCancelledScriptCards(
+    subscribeChildTools,
+    toolSchedulerResult[0],
+    addItem,
+    toolSchedulerResult[2],
   );
 
   return { toolSchedulerResult };

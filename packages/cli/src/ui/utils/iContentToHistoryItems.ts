@@ -288,11 +288,8 @@ function parseRecordedJson(text: string): unknown {
 function scriptCardFor(
   call: ToolCallBlock,
   response: { result: unknown; error?: string } | undefined,
-  scriptRuns: ReadonlyMap<string, ToolScriptRunView>,
-): string | undefined {
-  if (call.name !== SCRIPT_TOOL) return undefined;
-  const run = scriptRuns.get(call.id);
-  if (run === undefined) return undefined;
+  run: ToolScriptRunView,
+): string {
   const source = (call.parameters as { source?: unknown } | undefined)?.source;
   const result =
     response === undefined ? undefined : scriptResultText(response.result);
@@ -300,6 +297,48 @@ function scriptCardFor(
     ...(typeof source === 'string' ? { source } : {}),
     ...(result === undefined ? {} : { result }),
   });
+}
+
+/**
+ * A finished run's own outcome decides its status: a cancelled run has no
+ * tool response (the turn ended without one) or a synthesized one, and must
+ * not read as pending or as an ordinary failure.
+ */
+function scriptRunStatus(
+  run: ToolScriptRunView,
+): ToolCallStatus | undefined {
+  const finished = run.finished;
+  if (finished === undefined) return undefined;
+  if (finished.ok) return ToolCallStatus.Success;
+  return finished.errorCode === 'CANCELLED'
+    ? ToolCallStatus.Canceled
+    : ToolCallStatus.Error;
+}
+
+function toolCallDisplay(
+  tc: ToolCallBlock,
+  responseMap: Map<string, { result: unknown; error?: string }>,
+  scriptRuns: ReadonlyMap<string, ToolScriptRunView>,
+): IndividualToolCallDisplay {
+  const response = responseMap.get(tc.id);
+  const run = tc.name === SCRIPT_TOOL ? scriptRuns.get(tc.id) : undefined;
+  const card =
+    run === undefined ? undefined : scriptCardFor(tc, response, run);
+  const display =
+    response !== undefined && card === undefined
+      ? safeToolResultToDisplayText(response.result)
+      : undefined;
+  return {
+    callId: tc.id,
+    name: tc.name,
+    description: tc.description ?? tc.name,
+    resultDisplay: card ?? display?.text,
+    status:
+      (run === undefined ? undefined : scriptRunStatus(run)) ??
+      toToolCallStatus(response),
+    confirmationDetails: undefined,
+    retention: display?.retention,
+  };
 }
 
 function processAiContent(
@@ -345,23 +384,9 @@ function processAiContent(
   }
 
   if (toolCallBlocks.length > 0) {
-    const tools: IndividualToolCallDisplay[] = toolCallBlocks.map((tc) => {
-      const response = responseMap.get(tc.id);
-      const card = scriptCardFor(tc, response, scriptRuns);
-      const display =
-        response !== undefined && card === undefined
-          ? safeToolResultToDisplayText(response.result)
-          : undefined;
-      return {
-        callId: tc.id,
-        name: tc.name,
-        description: tc.description ?? tc.name,
-        resultDisplay: card ?? display?.text,
-        status: toToolCallStatus(response),
-        confirmationDetails: undefined,
-        retention: display?.retention,
-      };
-    });
+    const tools: IndividualToolCallDisplay[] = toolCallBlocks.map((tc) =>
+      toolCallDisplay(tc, responseMap, scriptRuns),
+    );
     items.push({ type: 'tool_group', tools });
   }
 }

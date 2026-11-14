@@ -100,33 +100,38 @@ const EXECUTE_DESCRIPTION = [
   'return counts;',
 ].join('\n');
 
+interface ScriptFailure {
+  readonly code: string;
+  readonly message: string;
+}
+
 /**
  * The envelope is already fitted to the call's model output budget, so it
- * is marked bounded: the scheduler hands it to the model whole.
+ * is marked bounded: the scheduler hands it to the model whole. On failure
+ * the envelope is the model-facing error content and the terse message marks
+ * the failure; a run that started shows its card rather than that message.
  */
 function toToolResult(
-  summary: ScriptEnvelope,
+  envelope: ScriptEnvelope,
+  failure: ScriptFailure | undefined,
   card: string | undefined,
 ): ToolResult {
-  const llmContent = JSON.stringify(summary);
-  const ok = summary['ok'] === true;
-  const display =
-    card ??
-    (ok
-      ? `Script finished after ${String(summary['callCount'])} tool call(s).`
-      : `Script failed: ${llmContent}`);
+  const llmContent = JSON.stringify(envelope);
+  if (failure === undefined)
+    return {
+      llmContent,
+      returnDisplay:
+        card ??
+        `Script finished after ${String(envelope['callCount'])} tool call(s).`,
+      boundedOutput: true,
+    };
+  const message = `Script failed with ${failure.code}: ${failure.message}`;
   return {
     llmContent,
-    returnDisplay: display,
+    returnDisplay: card ?? message,
     boundedOutput: true,
-    ...(ok
-      ? {}
-      : {
-          error: {
-            message: llmContent,
-            type: ToolErrorType.EXECUTION_FAILED,
-          },
-        }),
+    error: { message, type: ToolErrorType.EXECUTION_FAILED },
+    displayOnError: card !== undefined,
   };
 }
 
@@ -140,6 +145,7 @@ function preflightFailure(code: string, message: string): ToolResult {
       completedCalls: [],
       logs: [],
     },
+    { code, message },
     undefined,
   );
 }
@@ -244,7 +250,7 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
       },
     });
     const report = await owner.run(signal);
-    const summary = scriptEnvelope(report);
+    const envelope = scriptEnvelope(report);
     const card =
       latest === undefined
         ? undefined
@@ -254,7 +260,11 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
               ? { result: JSON.stringify(report.result.value) }
               : {}),
           });
-    return toToolResult(summary, card);
+    return toToolResult(
+      envelope,
+      report.result.ok ? undefined : report.result.error,
+      card,
+    );
   }
 }
 

@@ -411,7 +411,12 @@ export class ResultAggregator {
         result.error.type,
         extractModelFacingErrorText(result.llmContent, toolName, outputConfig),
       );
-      this.callbacks.setError(callId, errorResponse);
+      this.callbacks.setError(
+        callId,
+        result.displayOnError === true
+          ? { ...errorResponse, resultDisplay: result.returnDisplay }
+          : errorResponse,
+      );
     }
   }
 

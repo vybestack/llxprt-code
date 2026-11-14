@@ -204,11 +204,17 @@ export function toolResponses(history: readonly IContent[]) {
   );
 }
 
-function responseText(result: unknown, error: string | undefined): string {
-  if (error !== undefined) return error;
+/**
+ * The model-facing text of a tool response: `output` on success, `error` on
+ * failure (the response's own `error` field is only a short failure marker).
+ */
+export function modelFacingText(result: unknown): string {
   if (typeof result === 'string') return result;
-  if (typeof result === 'object' && result !== null && 'output' in result)
-    return String((result as { output: unknown }).output);
+  if (typeof result === 'object' && result !== null) {
+    if ('output' in result)
+      return String((result as { output: unknown }).output);
+    if ('error' in result) return String((result as { error: unknown }).error);
+  }
   return JSON.stringify(result);
 }
 
@@ -225,7 +231,7 @@ export async function scriptResponse(
       `Expected one response for ${callId}, found ${responses.length}`,
     );
   const [response] = responses;
-  const text = responseText(response.result, response.error);
+  const text = modelFacingText(response.result);
   const start = text.indexOf('{"ok"');
   if (start < 0) throw new Error(`No script result in response: ${text}`);
   return JSON.parse(text.slice(start)) as ScriptResponse;
