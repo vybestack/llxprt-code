@@ -89,6 +89,7 @@ const EXPECTED = [
   'h1-parent-on',
   'h2-subagent-off',
   'h3-subagent-on',
+  'h3-subagent-on-named',
   'i-large-output-on',
   'nested-approval',
 ];

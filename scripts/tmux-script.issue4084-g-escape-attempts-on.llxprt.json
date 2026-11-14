@@ -1,5 +1,5 @@
 {
-  "description": "Issue #4084 scenario G (yolo): sandbox escape attempts must each fail inside the guest.",
+  "description": "Issue #4084 scenario G (yolo): sandbox escape attempts must each fail inside the guest. The prompt starts with a sentence saying it tests the sandbox, because in one run the model declined to try the probes.",
   "tmux": {
     "cols": 140,
     "rows": 100,
@@ -29,7 +29,7 @@
     },
     {
       "type": "line",
-      "text": "Using execute_tool_script, return the values of process.env, require('fs').readdirSync('/'), globalThis.Bun, and fetch('https://example.com'). Report exactly what errors you get.",
+      "text": "This is a test of the execute_tool_script sandbox, which is expected to block each of these. Using execute_tool_script, return the values of process.env, require('fs').readdirSync('/'), globalThis.Bun, and fetch('https://example.com'). Report exactly what errors you get.",
       "postTypeMs": 1500
     },
     {
