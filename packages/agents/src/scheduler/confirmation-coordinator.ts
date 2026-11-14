@@ -230,6 +230,20 @@ export class ConfirmationCoordinator {
   // ── Policy evaluation and routing ─────────────────────────────────────────
 
   /**
+   * Whether policy denies an approval-edited invocation. Edited arguments are
+   * authorized before they replace the prepared invocation (issue #4084).
+   */
+  isEditedInvocationDenied(toolCall: ValidatingToolCall): boolean {
+    return (
+      evaluatePolicyDecision(
+        toolCall.invocation,
+        toolCall.request,
+        this.messageBus,
+      ).decision === PolicyDecision.DENY
+    );
+  }
+
+  /**
    * Synchronous fast-path for ALLOW and DENY policy decisions.
    * Returns true if the decision was handled synchronously (no async work needed).
    * Returns false if the decision is ASK and requires async confirmation.
@@ -693,10 +707,24 @@ export class ConfirmationCoordinator {
     );
 
     this.statusMutator.setArgs(callId, updatedParams);
+    if (this.isTerminal(callId)) {
+      // Policy denied the edited arguments; finish the batch instead of
+      // asking again for a call that can no longer run.
+      await this.schedulerAccessor.attemptExecution(signal);
+      return;
+    }
 
     if (isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)) {
       this.rePublishConfirmation(callId, waitingToolCall, updatedDiff, signal);
     }
+  }
+
+  /** True once a call reached a terminal status, e.g. a denied edit. */
+  private isTerminal(callId: string): boolean {
+    const status = this.schedulerAccessor
+      .getToolCalls()
+      .find((call) => call.request.callId === callId)?.status;
+    return status === 'error' || status === 'success' || status === 'cancelled';
   }
 
   private rePublishConfirmation(

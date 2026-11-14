@@ -15,7 +15,10 @@
  * The code is CUT and PASTED with minimal adaptation for module boundaries.
  */
 
-import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type {
+  ScheduledToolCall,
+  ValidatingToolCall,
+} from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolResult } from '@vybestack/llxprt-code-tools';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import {
@@ -23,7 +26,6 @@ import {
   triggerAfterToolHook,
 } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
 /**
  * Execution context for a single tool call.
@@ -39,6 +41,12 @@ export interface ToolExecutionContext {
 /**
  * Result of tool execution with before/after hook application.
  */
+export interface PreparedToolExecution {
+  readonly invocation: ScheduledToolCall['invocation'];
+  readonly effectiveArgs: Record<string, unknown>;
+  readonly beforeResult: Awaited<ReturnType<typeof triggerBeforeToolHook>>;
+}
+
 export interface ToolExecutionResult {
   result: ToolResult;
   invocation: ScheduledToolCall['invocation'];
@@ -142,11 +150,63 @@ function bindHookCancellation(
       };
 }
 
+export class ToolArgumentValidationError extends Error {
+  constructor(cause: unknown) {
+    super(
+      cause instanceof Error ? cause.message : String(cause),
+      cause instanceof Error ? { cause } : undefined,
+    );
+    this.name = 'ToolArgumentValidationError';
+  }
+}
+
 export class ToolExecutor {
+  /** Prepares a call that runs without hooks: its arguments are final. */
+  prepareDirect(call: ValidatingToolCall): PreparedToolExecution {
+    return {
+      invocation: call.invocation,
+      effectiveArgs: structuredClone(call.request.args),
+      beforeResult: undefined,
+    };
+  }
+
   /**
-   * Execute a single tool call from scheduled to completed state.
+   * Runs BeforeTool once and builds the invocation policy will evaluate. A
+   * hook-modified input that does not validate fails the call.
    */
-  async execute(context: ToolExecutionContext): Promise<ToolExecutionResult> {
+  async prepareWithHook(
+    call: ValidatingToolCall,
+    signal: AbortSignal,
+    hookOwner: HookExecutionOwner,
+  ): Promise<PreparedToolExecution> {
+    const { name: toolName, args } = call.request;
+    const serverName = (call.invocation as { _serverName?: string })
+      ._serverName;
+    const beforeResult = await triggerBeforeToolHook(
+      toolName,
+      args,
+      serverName ? { server_name: serverName } : undefined,
+      bindHookCancellation(hookOwner, signal),
+    );
+    checkHookDecision(beforeResult, 'BeforeTool');
+
+    const modifiedInput = beforeResult?.getModifiedToolInput();
+    const effectiveArgs = structuredClone(modifiedInput ?? args);
+    let invocation = call.invocation;
+    if (modifiedInput) {
+      try {
+        invocation = call.tool.build(effectiveArgs);
+      } catch (error) {
+        throw new ToolArgumentValidationError(error);
+      }
+    }
+    return { invocation, effectiveArgs, beforeResult };
+  }
+
+  async execute(
+    context: ToolExecutionContext,
+    prepared: PreparedToolExecution,
+  ): Promise<ToolExecutionResult> {
     const {
       call: scheduledCall,
       signal,
@@ -154,55 +214,24 @@ export class ToolExecutor {
       onLiveOutput,
       onPid,
     } = context;
-    const { callId, name: toolName, args } = scheduledCall.request;
-    let invocation = scheduledCall.invocation;
-    let effectiveArgs = args;
-
+    const { callId, name: toolName } = scheduledCall.request;
+    const { invocation, effectiveArgs, beforeResult } = prepared;
     const serverName = (invocation as { _serverName?: string })._serverName;
     const mcpContext = serverName ? { server_name: serverName } : undefined;
-
     const executionOwner = bindHookCancellation(hookOwner, signal);
-    const beforeResult = await triggerBeforeToolHook(
-      toolName,
-      args,
-      mcpContext,
-      executionOwner,
-    );
-    checkHookDecision(beforeResult, 'BeforeTool');
-
-    const modifiedInput = beforeResult?.getModifiedToolInput();
-    if (modifiedInput) {
-      effectiveArgs = modifiedInput;
-      try {
-        invocation = scheduledCall.tool.build(modifiedInput);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        debugLogger.warn(
-          `Failed to rebuild tool invocation after input modification: ${errorMessage}`,
-        );
-      }
-    }
-
     const liveOutputCallback = scheduledCall.tool.canUpdateOutput
-      ? (update: LiveOutputUpdate) => {
-          onLiveOutput?.(callId, update);
-        }
+      ? (update: LiveOutputUpdate) => onLiveOutput?.(callId, update)
       : undefined;
-    const setPidCallback = (pid: number) => {
-      onPid?.(callId, pid);
-    };
+    const setPidCallback = (pid: number) => onPid?.(callId, pid);
 
     return invocation
       .execute(signal, liveOutputCallback, undefined, undefined, setPidCallback)
       .then(async (toolResult: ToolResult) => {
         if (signal.aborted) throw new Error('User cancelled tool execution.');
-
         const beforeDecoratedResult = applyHookOutputModifications(
           beforeResult,
           toolResult,
         );
-
         const afterResult = await triggerAfterToolHook(
           toolName,
           effectiveArgs,
@@ -211,7 +240,6 @@ export class ToolExecutor {
           executionOwner,
         );
         checkHookDecision(afterResult, 'AfterTool');
-
         return {
           result: applyHookOutputModifications(
             afterResult,
@@ -221,7 +249,7 @@ export class ToolExecutor {
           effectiveArgs,
         };
       })
-      .catch(async (executionError: Error) => {
+      .catch((executionError: Error) => {
         if (signal.aborted) throw new Error('User cancelled tool execution.');
         throw executionError;
       });
