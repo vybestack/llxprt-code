@@ -30,6 +30,7 @@ import {
   triggerAfterToolHook,
 } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
+import type { ParsedToolOutputMaxTokens } from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
 
 /**
  * Execution context for a single tool call.
@@ -40,6 +41,8 @@ export interface ToolExecutionContext {
   hookOwner?: HookExecutionOwner;
   onLiveOutput?: (callId: string, update: LiveOutputUpdate) => void;
   onPid?: (callId: string, pid: number) => void;
+  /** This call's share of the model-facing tool output budget. */
+  modelOutputLimit: ParsedToolOutputMaxTokens;
 }
 
 /**
@@ -126,8 +129,13 @@ function applyHookOutputModifications(
     const appendText = appendedTexts.join('\n\n');
 
     // The hook changed the text a programmatic caller would otherwise read
-    // from the typed value, so the typed value no longer describes it.
-    const { structuredOutput: _replaced, ...textResult } = finalResult;
+    // from the typed value, so the typed value no longer describes it, and
+    // the text is no longer the tool's own bounded output.
+    const {
+      structuredOutput: _replaced,
+      boundedOutput: _rebounded,
+      ...textResult
+    } = finalResult;
     finalResult = {
       ...textResult,
       llmContent: `${existingContent}\n\n${appendText}`,
@@ -237,11 +245,13 @@ export class ToolExecutor {
       hookOwner,
       onLiveOutput,
       onPid,
+      modelOutputLimit,
     } = context;
     const scope = buildExecutionScope(
       scheduledCall.request,
       this.nestedExecution,
       hookOwner,
+      modelOutputLimit,
     );
     const { callId, name: toolName } = scheduledCall.request;
     const { invocation, effectiveArgs, beforeResult } = prepared;

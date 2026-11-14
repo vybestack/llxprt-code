@@ -56,13 +56,17 @@ import {
   type NestedCallStatus,
 } from './nested-call-outcome.js';
 import type {
-  CodeModeRunResult,
   CodeModeRuntime,
   ScriptCall,
   ScriptRunRequest,
   ScriptToolResult,
 } from './runtime-contract.js';
 import { ScriptRunJournal } from './script-run-journal.js';
+import {
+  fitModelOutputBudget,
+  type CodeModeRunReport,
+  type NestedCallRecord,
+} from './script-result-envelope.js';
 import type { ToolScriptRunView } from './tool-script-card.js';
 
 const logger = new DebugLogger('llxprt:agents:code-mode');
@@ -75,18 +79,6 @@ export interface ScriptRunDisplay {
   open(): AgentDisplayCallbacks;
   answersApprovals(): boolean;
   publishToolScriptEvent(event: ToolScriptEventPayload): void;
-}
-
-export interface NestedCallRecord {
-  readonly tool: string;
-  readonly status: NestedCallStatus;
-}
-
-export interface CodeModeRunReport {
-  readonly result: CodeModeRunResult;
-  readonly completedCalls: readonly NestedCallRecord[];
-  /** True when any result delivered to the guest was partial. */
-  readonly partial: boolean;
 }
 
 interface QueuedCall {
@@ -202,12 +194,12 @@ export class CodeModeRunOwner {
         signal,
       );
       await this.close();
-      this.journal.finished(result, this.partial);
-      return {
-        result,
-        completedCalls: [...this.records],
-        partial: this.partial,
-      };
+      const report = fitModelOutputBudget(
+        { result, completedCalls: [...this.records], partial: this.partial },
+        this.options.scope.modelOutputLimit,
+      );
+      this.journal.finished(report.result, report.partial);
+      return report;
     } finally {
       signal.removeEventListener('abort', closeOnAbort);
       await this.close();

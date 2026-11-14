@@ -23,6 +23,7 @@ import type {
   ToolLookup,
   ToolResult,
 } from '@vybestack/llxprt-code-tools';
+import type { ParsedToolOutputMaxTokens } from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
 import type { ToolScriptRunEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { ApprovalHandler } from '../core/agenticLoop/types.js';
 import type { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
@@ -103,6 +104,7 @@ export function buildExecutionScope(
   request: ToolCallRequestInfo,
   composition: NestedExecutionComposition | undefined,
   hookOwner: HookExecutionOwner | undefined,
+  modelOutputLimit: ParsedToolOutputMaxTokens,
 ): ToolExecutionScope {
   return Object.freeze({
     callId: request.callId,
@@ -117,5 +119,6 @@ export function buildExecutionScope(
       composition === undefined
         ? undefined
         : new NestedExecutionPort(composition, hookOwner),
+    modelOutputLimit,
   });
 }

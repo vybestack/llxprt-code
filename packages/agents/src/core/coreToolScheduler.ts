@@ -679,6 +679,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
           onPid: (id: string, pid: number) => {
             this.setPidInternal(id, pid);
           },
+          modelOutputLimit: this.resultAggregator.modelOutputLimit(),
         },
         prepared,
       )

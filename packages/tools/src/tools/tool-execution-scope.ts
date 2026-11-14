@@ -10,6 +10,8 @@
  * output in addition to the model-facing text.
  */
 
+import type { ParsedToolOutputMaxTokens } from '../utils/toolOutputMaxTokens.js';
+
 /** JSON data a tool may hand to a programmatic caller. */
 export type ToolStructuredValue =
   | null
@@ -53,4 +55,11 @@ export interface ToolExecutionScope {
   /** Tool names a hook restricted this call's turn to, if any. */
   readonly hookRestrictedAllowedTools: readonly string[] | undefined;
   readonly nestedExecution: NestedToolExecution | undefined;
+  /**
+   * The model-facing output token budget of this call's result, after a
+   * parallel batch divided `tool-output-max-tokens` among its calls. A tool
+   * whose result must reach the model whole fits itself to it and marks the
+   * result `boundedOutput`.
+   */
+  readonly modelOutputLimit: ParsedToolOutputMaxTokens;
 }

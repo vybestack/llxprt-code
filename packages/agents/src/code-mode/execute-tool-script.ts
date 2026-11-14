@@ -25,19 +25,15 @@ import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js'
 import { NestedExecutionPort } from '../scheduler/nested-execution.js';
 import {
   CodeModeRunOwner,
-  type CodeModeRunReport,
   type ScriptRunDisplay,
 } from './code-mode-run-owner.js';
+import { scriptEnvelope, type ScriptEnvelope } from './script-result-envelope.js';
 import {
   formatToolScriptCard,
   type ToolScriptRunView,
 } from './tool-script-card.js';
 import { QuickJsProcessRuntime } from './quickjs-process-runtime.js';
-import type {
-  CodeModeLimits,
-  CodeModeRuntime,
-  JsonValue,
-} from './runtime-contract.js';
+import type { CodeModeLimits, CodeModeRuntime } from './runtime-contract.js';
 import { boundWallTimeout } from './code-mode-settings.js';
 import { computeApiRevision, readScriptApi } from './tool-declarations.js';
 import {
@@ -104,29 +100,12 @@ const EXECUTE_DESCRIPTION = [
   'return counts;',
 ].join('\n');
 
-interface ScriptSummary {
-  readonly [key: string]: JsonValue;
-}
-
-function summarize(report: CodeModeRunReport): ScriptSummary {
-  const { result, completedCalls, partial } = report;
-  const outcome: ScriptSummary = result.ok
-    ? { ok: true, value: result.value }
-    : { ok: false, error: { ...result.error } };
-  return {
-    ...outcome,
-    callCount: result.callCount,
-    partial,
-    completedCalls: completedCalls.map(({ tool, status }) => ({
-      tool,
-      status,
-    })),
-    logs: [...result.logs],
-  };
-}
-
+/**
+ * The envelope is already fitted to the call's model output budget, so it
+ * is marked bounded: the scheduler hands it to the model whole.
+ */
 function toToolResult(
-  summary: ScriptSummary,
+  summary: ScriptEnvelope,
   card: string | undefined,
 ): ToolResult {
   const llmContent = JSON.stringify(summary);
@@ -139,6 +118,7 @@ function toToolResult(
   return {
     llmContent,
     returnDisplay: display,
+    boundedOutput: true,
     ...(ok
       ? {}
       : {
@@ -264,7 +244,7 @@ class ExecuteToolScriptInvocation extends BaseToolInvocation<
       },
     });
     const report = await owner.run(signal);
-    const summary = summarize(report);
+    const summary = scriptEnvelope(report);
     const card =
       latest === undefined
         ? undefined

@@ -783,6 +783,14 @@ export interface ToolResult {
    * or extends the model-facing text.
    */
   structuredOutput?: ToolStructuredOutput;
+
+  /**
+   * The tool already fitted `llmContent` to its scope's `modelOutputLimit`
+   * and the content must reach the model whole (code mode's JSON result),
+   * so the scheduler neither limits nor replaces it. Dropped when a hook
+   * replaces or extends the model-facing text.
+   */
+  boundedOutput?: boolean;
 }
 
 /**

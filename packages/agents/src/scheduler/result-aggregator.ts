@@ -1,4 +1,7 @@
-import { parseToolOutputMaxTokens } from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
+import {
+  parseToolOutputMaxTokens,
+  type ParsedToolOutputMaxTokens,
+} from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
 import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 /**
  * @license
@@ -220,6 +223,19 @@ export class ResultAggregator {
     }
   }
 
+  /**
+   * The model-facing token budget of a result published in the current
+   * batch: the batch's equal share when a parallel batch divided it, else
+   * the configured `tool-output-max-tokens`.
+   */
+  modelOutputLimit(): ParsedToolOutputMaxTokens {
+    return parseToolOutputMaxTokens(
+      this.currentOutputConfig().readExecutionPolicy()[
+        'tool-output-max-tokens'
+      ],
+    );
+  }
+
   // ---- state reset ---------------------------------------------------------
 
   /**
@@ -236,6 +252,10 @@ export class ResultAggregator {
   }
 
   // ---- private helpers -----------------------------------------------------
+
+  private currentOutputConfig(): ToolOutputSettingsProvider {
+    return this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();
+  }
 
   /** Find a buffered entry by its executionIndex. */
   private findByExecutionIndex(index: number): BufferedEntry | undefined {
@@ -351,8 +371,9 @@ export class ResultAggregator {
     const { result, callId, toolName, scheduledCall } = buffered;
     this.callbacks.deliverResult?.({ callId, toolName, result });
 
+    // A bounded result already fits this call's budget and must stay whole.
     const outputConfig =
-      this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();
+      result.boundedOutput === true ? undefined : this.currentOutputConfig();
 
     if (result.error === undefined) {
       const responseParts = convertToFunctionResponse(

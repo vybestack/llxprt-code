@@ -69,6 +69,7 @@ describe('ExecuteToolScriptTool execution scope', () => {
             origin: 'model',
             hookRestrictedAllowedTools: undefined,
             nestedExecution: { kind: 'nested-tool-execution' },
+            modelOutputLimit: { kind: 'disabled' },
           },
         ),
     ).rejects.toThrow('nested-execution scope');
