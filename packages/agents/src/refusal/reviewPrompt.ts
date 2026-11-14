@@ -52,6 +52,19 @@ OUTPUT. Reply with exactly one JSON object and nothing else (a single \`\`\`json
 - "no_change": only when the context is insufficient to judge, or when no entry is editable. "rewrites" must be empty.
 No other keys are allowed.`;
 
+export function buildKeepLiteralsFeedback(
+  dropped: ReadonlyArray<{
+    readonly id: string;
+    readonly literals: readonly string[];
+  }>,
+): string {
+  const entries = dropped.map(
+    ({ id, literals }) =>
+      `The previous answer was rejected because the replacement for entry ${id} dropped ${literals.join(', ')}. Every listed literal must be copied exactly in any replacement of that entry.`,
+  );
+  return `Feedback on your previous answer:\n${entries.join('\n')}`;
+}
+
 function escapeForDataBlock(json: string): string {
   // Keeps the data from containing the closing delimiter, without changing it:
   // "\\u003c" parses back to "<".

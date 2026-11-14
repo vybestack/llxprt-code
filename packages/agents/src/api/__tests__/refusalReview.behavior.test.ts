@@ -86,6 +86,54 @@ function historyText(
   return JSON.stringify(history);
 }
 
+describe('a rejected review that succeeds on its next review (issue #4115)', () => {
+  it('sends literal feedback, rewrites on the second review and resends successfully', async () => {
+    let reviews = 0;
+    const run = await runReviewScenario({
+      profile: PROFILE,
+      settings: { 'refusal.max-rewrites': 3 },
+      reviewer: (request) => {
+        reviews += 1;
+        return reviews === 1
+          ? summaryRewriteReply(
+              request,
+              `State snapshot: the agent will ${REWRITTEN_PHRASE} in the fitting module and terminates 3 surviving mutants (42 of 50).`,
+            )
+          : summaryRewriteReply(request);
+      },
+    });
+    const summaryId = reviewEntries(run.reviews[0]).find(
+      (entry) => entry.kind === 'summary',
+    )?.id;
+
+    expect({
+      reviews: run.reviews.length,
+      foregroundRequests: run.foreground.length,
+      reasons: doneReasons(run),
+      retryNotice: notices(run).find((notice) =>
+        notice.includes('asking it again'),
+      ),
+      recovered: notices(run)[notices(run).length - 1],
+      feedbackOutsideSessionData:
+        wireIncludes(
+          run.reviews[1],
+          'Every listed literal must be copied exactly',
+        ) && wireIncludes(run.reviews[1], 'Feedback on your previous answer'),
+      reviewVerdicts: run.tokenRecords
+        .filter((record) => record['record_type'] === 'refusal_review')
+        .map((record) => record['verdict']),
+    }).toStrictEqual({
+      reviews: 2,
+      foregroundRequests: 3,
+      reasons: ['stop'],
+      retryNotice: `Refusal review by ${REVIEWER_MODEL} dropped src/mesh/fit.ts from ${summaryId}; asking it again to keep them (review 2 of 3).`,
+      recovered: `Refusal recovered after rewrite by ${REVIEWER_MODEL}.`,
+      feedbackOutsideSessionData: true,
+      reviewVerdicts: ['invalid', 'rewrite'],
+    });
+  });
+});
+
 describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {
   const recovered = (): Promise<ReviewRun> =>
     runReviewScenario({ profile: PROFILE });

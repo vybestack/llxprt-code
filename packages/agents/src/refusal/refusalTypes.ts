@@ -61,7 +61,7 @@ export type ResolvedRefusalDecision =
 export interface ReviewInProgress {
   readonly action: 'review';
   readonly notice: string;
-  complete(): Promise<ResolvedRefusalDecision>;
+  complete(): Promise<RefusalDecision>;
 }
 
 export type RefusalDecision = ResolvedRefusalDecision | ReviewInProgress;

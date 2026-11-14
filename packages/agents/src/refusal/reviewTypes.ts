@@ -31,6 +31,12 @@ export interface ChangedEntry {
   readonly newText: string;
 }
 
+/** Protected facts omitted by a rejected replacement. */
+export interface DroppedLiteralEntry {
+  readonly id: string;
+  readonly literals: readonly string[];
+}
+
 /** What the coordinator hands the reviewer for one refused attempt. */
 export interface ReviewRequest {
   readonly attempt: RefusalAttempt;
@@ -46,6 +52,8 @@ export interface ReviewRequest {
   /** The refused request's admitted route, for the session-model fallback. */
   readonly modelParameters: AdmittedModelParameters | undefined;
   readonly signal: AbortSignal | undefined;
+  /** Facts the next review must copy exactly after a prior rejected answer. */
+  readonly keepLiterals?: readonly DroppedLiteralEntry[];
 }
 
 /** The history-bound and provider-bound views of a pending user turn. */
@@ -63,6 +71,12 @@ export type ReviewOutcome =
       readonly changes: readonly ChangedEntry[];
       /** The part of the rewrite that edits the pending user turn. */
       readonly pendingEdits: readonly PendingEdit[];
+    }
+  | {
+      readonly kind: 'dropped-literals';
+      readonly reviewer: ReviewerIdentity;
+      readonly detail: string;
+      readonly dropped: readonly DroppedLiteralEntry[];
     }
   | {
       readonly kind: 'disallowed';

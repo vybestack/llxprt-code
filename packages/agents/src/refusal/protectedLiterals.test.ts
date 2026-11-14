@@ -33,6 +33,29 @@ describe('protected literals', () => {
     expect(findDroppedLiterals(ORIGINAL, REPHRASED)).toStrictEqual([]);
   });
 
+  it('does not treat a bare two-segment prose phrase as a path', () => {
+    expect(
+      findDroppedLiterals(
+        'Casters/SSAO was enabled.',
+        'casters and SSAO was enabled.',
+      ),
+    ).toStrictEqual([]);
+  });
+
+  it.each([
+    'src/a.ts',
+    'packages/agents/src',
+    'packages/agents/',
+    '@vybestack/llxprt-code',
+    '/usr/bin',
+    '~/x',
+    '`Casters/SSAO`',
+  ])('still protects path-like literal %s', (literal) => {
+    expect(
+      findDroppedLiterals(`Keep ${literal} unchanged.`, 'Keep it unchanged.'),
+    ).toContain(literal);
+  });
+
   const dropped: ReadonlyArray<readonly [string, string, string]> = [
     ['a posix path', 'src/core/a.ts', 'The file src/core/b.ts changed'],
     [

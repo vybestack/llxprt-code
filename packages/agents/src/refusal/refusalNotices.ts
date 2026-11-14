@@ -76,6 +76,22 @@ export function describeReviewStart(input: {
   return `Model ${input.model} refused ${input.refusals} time(s); asking ${input.reviewer} to review the recent context.`;
 }
 
+/** Shown when a reviewer must retry after dropping protected literals. */
+export function describeDroppedLiteralsReview(input: {
+  readonly reviewer: string;
+  readonly dropped: ReadonlyArray<{
+    readonly id: string;
+    readonly literals: readonly string[];
+  }>;
+  readonly reviewNumber: number;
+  readonly reviews: number;
+}): string {
+  const omissions = input.dropped
+    .map(({ id, literals }) => `${literals.join(', ')} from ${id}`)
+    .join('; ');
+  return `Refusal review by ${input.reviewer} dropped ${omissions}; asking it again to keep them (review ${input.reviewNumber} of ${input.reviews}).`;
+}
+
 /** Shown when a reviewer rewrote context and the request is about to resend. */
 export function describeReviewRewrite(input: {
   readonly reviewer: string;

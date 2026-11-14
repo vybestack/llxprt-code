@@ -21,13 +21,24 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { HistoryRefusalReviewer } from './refusalReviewer.js';
 import type { RefusalAttempt } from './refusalTypes.js';
-import type { ReviewOutcome } from './reviewTypes.js';
+import type { ReviewOutcome, ReviewRequest } from './reviewTypes.js';
 import { buildReviewWindow } from './reviewWindow.js';
 
 const SUMMARY =
   'Mutation run: the agent kills 42 mutants in src/core/a.ts and pkill stops owned servers.';
 const REWRITTEN =
   'Mutation run: the agent terminates 42 mutants in src/core/a.ts and pkill stops owned servers.';
+
+class RecordingFakeProvider extends FakeProvider {
+  readonly requests: IContent[][] = [];
+
+  override async *generateChatCompletion(
+    options: Parameters<FakeProvider['generateChatCompletion']>[0],
+  ): AsyncIterableIterator<IContent> {
+    this.requests.push(Array.isArray(options) ? options : options.contents);
+    yield* super.generateChatCompletion(options);
+  }
+}
 
 const ATTEMPT: RefusalAttempt = {
   finishReason: 'refusal',
@@ -96,10 +107,12 @@ describe('reviewer commit (issue #4036)', () => {
     /** The reviewer profile's `context-limit`. */
     readonly contextLimit?: number;
     readonly summaryText?: string;
+    readonly keepLiterals?: ReviewRequest['keepLiterals'];
   }): Promise<{
     readonly outcome: ReviewOutcome | { readonly aborted: true };
     readonly history: HistoryService;
     readonly before: readonly IContent[];
+    readonly providerRequests: readonly IContent[][];
   }> {
     const history = new HistoryService();
     await history.addBatch(seed(options.summaryText));
@@ -129,7 +142,7 @@ describe('reviewer commit (issue #4036)', () => {
         ],
       })}\n`,
     );
-    const provider = new FakeProvider(fixture);
+    const provider = new RecordingFakeProvider(fixture);
     const controller = new AbortController();
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'reviewer-test',
@@ -179,9 +192,12 @@ describe('reviewer commit (issue #4036)', () => {
         pending: undefined,
         modelParameters: undefined,
         signal: controller.signal,
+        ...(options.keepLiterals !== undefined && {
+          keepLiterals: options.keepLiterals,
+        }),
       })
       .catch(() => ({ aborted: true as const }));
-    return { outcome, history, before };
+    return { outcome, history, before, providerRequests: provider.requests };
   }
 
   it('commits the rewrite when the request is still live', async () => {
@@ -212,6 +228,22 @@ describe('reviewer commit (issue #4036)', () => {
       reason: 'context-too-large',
       untouched: true,
     });
+  });
+
+  it('sends keep-feedback after the prompt and before the untrusted session data', async () => {
+    const { providerRequests } = await review({
+      abortBeforeCommit: false,
+      keepLiterals: [{ id: 'c21389.0', literals: ['Casters/SSAO'] }],
+    });
+    const blocks = providerRequests[0]?.[0]?.blocks.flatMap((block) =>
+      block.type === 'text' ? [block.text] : [],
+    );
+
+    expect(blocks).toMatchObject([
+      expect.stringContaining('You are the refusal reviewer'),
+      'Feedback on your previous answer:\nThe previous answer was rejected because the replacement for entry c21389.0 dropped Casters/SSAO. Every listed literal must be copied exactly in any replacement of that entry.',
+      expect.stringContaining('<session_data>'),
+    ]);
   });
 
   it('asks the reviewer when the window fits its context window', async () => {
