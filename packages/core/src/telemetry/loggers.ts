@@ -16,6 +16,7 @@ export {
   logLoopDetected,
   logNextSpeakerCheck,
   logToolOutputTruncated,
+  logToolScriptRun,
   logFileOperation,
   logConversationRequest,
   logConversationResponse,

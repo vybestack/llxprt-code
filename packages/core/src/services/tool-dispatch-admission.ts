@@ -76,6 +76,7 @@ export class ToolDispatchAdmission {
           [
             'withBackgroundJobs',
             'withChildDisplay',
+            'withScriptDisplay',
             'withAsyncTaskService',
             'withSessionApproval',
           ].includes(String(key)) &&

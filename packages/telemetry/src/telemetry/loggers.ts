@@ -23,6 +23,7 @@ import {
   EVENT_NEXT_SPEAKER_CHECK,
   EVENT_SLASH_COMMAND,
   EVENT_TOOL_OUTPUT_TRUNCATED,
+  EVENT_TOOL_SCRIPT_RUN,
   EVENT_FILE_OPERATION,
   EVENT_MALFORMED_JSON_RESPONSE,
   EVENT_MODEL_ROUTING,
@@ -50,6 +51,7 @@ import type {
   TokenUsageEvent,
   PerformanceMetricsEvent,
   ToolOutputTruncatedEvent,
+  ToolScriptRunEvent,
   FileOperationEvent,
   MalformedJsonResponseEvent,
   ModelRoutingEvent,
@@ -263,6 +265,34 @@ export function logHookCall(
 
   const logRecord: LogRecord = {
     body: `Hook call: ${event.hook_event_name}. Success: ${event.success}. Duration: ${event.duration_ms}ms.`,
+    attributes,
+  };
+  telemetry.events.record(() => logRecord);
+}
+
+/**
+ * Code mode script lifecycle (issue #4084). The purpose is exported only
+ * under `logPrompts`; every other attribute is a count, duration, identifier
+ * or named code.
+ */
+export function logToolScriptRun(
+  config: ToolLoggingConfig,
+  event: ToolScriptRunEvent,
+  telemetry: RootTelemetry,
+): void {
+  if (!telemetry.isEnabled()) return;
+
+  const { purpose, ...counts } = event;
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    ...counts,
+    'event.name': EVENT_TOOL_SCRIPT_RUN,
+    'event.timestamp': new Date().toISOString(),
+    ...(telemetry.readPrivacySettings().logPrompts ? { purpose } : {}),
+  };
+
+  const logRecord: LogRecord = {
+    body: `Tool script run: ${event.nested_call_count} call(s). Ended: ${event.termination_reason}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
   telemetry.events.record(() => logRecord);
