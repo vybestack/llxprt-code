@@ -1,4 +1,7 @@
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type {
+  DumpAttemptContext,
+  ProviderFileLifecycle,
+} from '@vybestack/llxprt-code-providers';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 /**
  * @license
@@ -18,7 +21,6 @@ import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runti
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIterator.js';
 import {
   isRetryableError,
   retryWithBackoff,
@@ -39,6 +41,7 @@ import { fireBeforeModelHook } from './beforeModelHookFire.js';
 import type { ConversationManager } from './ConversationManager.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
 import { processAfterModelHook } from './streamAfterModelHook.js';
+import { RefusalDumpPairing } from './refusalDumpPairing.js';
 import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
 import { prepareStreamEnvelope } from './streamEnvelopePreparation.js';
 import {
@@ -54,6 +57,8 @@ import {
   type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
 import {
+  consumeFirstChunkAndReturn,
+  createDumpIdChunk,
   stripProviderAttemptDiagnostics,
   trackPromptTokens,
 } from './streamResponseHelpers.js';
@@ -109,6 +114,9 @@ export class StreamProcessor {
 
   /** Canonical turn identity retained across retries for each logical prompt. */
   private readonly turnIdByPromptId = new Map<string, string>();
+  private readonly refusalDumpPairing = new RefusalDumpPairing(
+    () => this.currentAttemptIndex,
+  );
   private currentAttemptIndex = 0;
   /** Whether the attempt in flight resends an earlier attempt of its send. */
   private currentIsResend = false;
@@ -389,13 +397,14 @@ export class StreamProcessor {
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
     sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    assertAdmittedRoute(params.modelParameters?.route);
-    const { contents: requestContents, pending: pendingUserIContents } =
-      this._buildRequestContents(userContent, semanticMediaPurge);
-
+    const dumpAttemptContext = this.refusalDumpPairing.createAttempt(promptId);
+    const requestDraft = this._buildRequestContents(
+      userContent,
+      semanticMediaPurge,
+    );
     const toolSelection = await this._selectHookRequestTools(params);
     const { requestPayload, runtimeContext } = this._prepareRequestPayload(
-      requestContents,
+      requestDraft.contents,
       toolSelection,
       params,
     );
@@ -407,7 +416,7 @@ export class StreamProcessor {
         await this._fireBeforeModel(
           params,
           requestPayload.contents,
-          pendingUserIContents,
+          requestDraft.pending,
           toolSelection,
         );
 
@@ -425,6 +434,7 @@ export class StreamProcessor {
             params,
             this.generationConfig,
             this.currentRawTokenDeltaBridge,
+            dumpAttemptContext,
           ),
         this.compressionHandler,
         promptId,
@@ -453,6 +463,8 @@ export class StreamProcessor {
         promptId,
         toolSelection.allowedFunctionNames,
         streamPreparation.prepared,
+        this.generationConfig,
+        dumpAttemptContext,
       );
       return withCompressionCallbackCleanup(
         stream,
@@ -571,6 +583,9 @@ export class StreamProcessor {
     hookRestrictedAllowedTools: string[] | undefined,
     preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
     generation: ChatSessionConfig = this.generationConfig,
+    dumpAttemptContext: DumpAttemptContext = this.refusalDumpPairing.createAttempt(
+      promptId,
+    ),
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
     try {
@@ -583,6 +598,7 @@ export class StreamProcessor {
         params,
         generation,
         this.currentRawTokenDeltaBridge,
+        dumpAttemptContext,
       );
       const prepared =
         preparedAtEnforcement ??
@@ -614,14 +630,17 @@ export class StreamProcessor {
       // what keeps this attempt's stream wired to this attempt's tracker.
       const rawTokenDeltaBridge = this.currentRawTokenDeltaBridge;
 
-      return await this._consumeFirstChunkAndReturn(
+      return await consumeFirstChunkAndReturn(
         streamResponse,
         requestPayload,
         promptId,
         startTime,
+        this.currentAttemptIndex,
         hookRestrictedAllowedTools,
         rawTokenDeltaBridge,
         params.hookOwner ?? params.recordingExecution?.hookOwner,
+        dumpAttemptContext,
+        this._convertIContentStream.bind(this),
       );
     } catch (error) {
       const durationMs = Date.now() - startTime;
@@ -637,37 +656,6 @@ export class StreamProcessor {
     }
   }
 
-  /**
-   * Eagerly consume first chunk within retry boundary (#1750).
-   */
-  private async _consumeFirstChunkAndReturn(
-    streamResponse: AsyncIterable<IContent>,
-    requestPayload: PreparedRequest['requestPayload'],
-    promptId: string,
-    startTime: number,
-    hookRestrictedAllowedTools: string[] | undefined,
-    rawTokenDeltaBridge: RawTokenDeltaBridge | null,
-    owner?: HookExecutionOwner,
-  ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    const convertedStream = this._convertIContentStream(
-      streamResponse,
-      requestPayload,
-      { promptId, startTime, attemptIndex: this.currentAttemptIndex },
-      hookRestrictedAllowedTools,
-      rawTokenDeltaBridge,
-      owner,
-    );
-
-    const firstChunk = await convertedStream.next();
-
-    if (firstChunk.done === true) {
-      throw new EmptyStreamError(
-        'Model stream ended immediately with no content.',
-      );
-    }
-
-    return prependAsyncGenerator(firstChunk.value, convertedStream);
-  }
   private _selectRequestTools(
     params: SendMessageParams,
   ): AgentClientGenerateConfig['tools'] {
@@ -725,15 +713,16 @@ export class StreamProcessor {
    */
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
-    requestPayload?: PreparedRequest['requestPayload'],
-    telemetryContext?: {
+    requestPayload: PreparedRequest['requestPayload'],
+    telemetryContext: {
       promptId: string;
       startTime: number;
       attemptIndex?: number;
     },
-    hookRestrictedAllowedTools?: string[],
-    rawTokenDeltaBridge?: RawTokenDeltaBridge | null,
-    owner?: HookExecutionOwner,
+    hookRestrictedAllowedTools: string[] | undefined,
+    rawTokenDeltaBridge: RawTokenDeltaBridge | null | undefined,
+    owner: HookExecutionOwner | undefined,
+    dumpAttemptContext: DumpAttemptContext,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
     let finish: StreamFinishInfo = {};
@@ -790,6 +779,15 @@ export class StreamProcessor {
       throw error;
     }
 
+    if (dumpAttemptContext.dumpBaseId !== undefined) {
+      const dumpIdChunk = createDumpIdChunk(dumpAttemptContext.dumpBaseId);
+      lastIContent = contentForTelemetryPreservingUsage(
+        dumpIdChunk,
+        lastIContent,
+      );
+      finish = accumulateStreamFinishInfo(finish, dumpIdChunk);
+      yield dumpIdChunk;
+    }
     await logStreamTelemetry(
       this.turnTelemetryPorts(),
       telemetryContext,

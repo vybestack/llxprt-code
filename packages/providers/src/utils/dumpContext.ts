@@ -5,6 +5,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -13,6 +14,10 @@ import {
   sanitizeDiagnosticData,
   type DiagnosticSanitizationOptions,
 } from './mediaDiagnostics.js';
+import {
+  DEFAULT_DUMP_RETENTION,
+  pruneDumpDirectory,
+} from './dump-retention.js';
 
 const logger = new DebugLogger('llxprt:core:dumpContext');
 
@@ -35,9 +40,20 @@ export interface DumpResponse {
   body?: unknown;
 }
 
+export interface DumpAttemptCorrelation {
+  readonly promptId: string;
+  readonly attemptIndex: number;
+  readonly runtimeId: string;
+  readonly outcome?: string;
+}
+
 export interface DumpData {
   provider: string;
   timestamp: string;
+  promptId?: string;
+  attemptIndex?: number;
+  runtimeId?: string;
+  outcome?: string;
   request?: DumpRequest;
   response?: DumpResponse;
   relatedRequestFile?: string;
@@ -161,11 +177,30 @@ export interface DumpRequestResult {
 export interface DumpResponseResult {
   responseFilename: string;
   dumpDir: string;
+  retained: boolean;
 }
 
 /**
  * Generates a shared base id used to relate request and response dump files.
  */
+async function writeDumpFile(filepath: string, data: unknown): Promise<void> {
+  const temporary = `${filepath}.${randomUUID()}.tmp`;
+  await fs.writeFile(temporary, JSON.stringify(data, null, 2), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
+  await fs.rename(temporary, filepath);
+}
+
+async function pruneDumpFiles(dumpDir: string): Promise<void> {
+  try {
+    await pruneDumpDirectory(dumpDir, DEFAULT_DUMP_RETENTION);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.debug(() => `Best-effort dump retention failed: ${message}`);
+  }
+}
+
 export function generateDumpBaseId(provider: string): string {
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -184,9 +219,11 @@ export async function dumpRequestContext(
   baseId?: string,
   chronology?: readonly ChronologyTraceEntry[],
   options: DiagnosticSanitizationOptions = {},
+  correlation?: DumpAttemptCorrelation,
+  deferRetention = false,
 ): Promise<DumpRequestResult> {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
-  await fs.mkdir(dumpDir, { recursive: true });
+  await fs.mkdir(dumpDir, { recursive: true, mode: 0o700 });
 
   const id = baseId ?? generateDumpBaseId(provider);
   const requestFilename = `${id}-request.json`;
@@ -197,12 +234,14 @@ export async function dumpRequestContext(
   const data: DumpData = {
     provider,
     timestamp: new Date().toISOString(),
+    ...(correlation ?? {}),
     request: redactedRequest,
     // Sibling of `request`, never inside `request.body` (#1721).
     ...(chronology ? { chronology } : {}),
   };
 
-  await fs.writeFile(filepath, JSON.stringify(data, null, 2), 'utf-8');
+  await writeDumpFile(filepath, data);
+  if (!deferRetention) await pruneDumpFiles(dumpDir);
   logger.debug(() => `Request context dumped to: ${filepath}`);
 
   return { baseId: id, requestFilename, dumpDir };
@@ -217,9 +256,10 @@ export async function dumpResponseContext(
   response: DumpResponse,
   provider: string,
   options: DiagnosticSanitizationOptions = {},
+  correlation?: DumpAttemptCorrelation,
 ): Promise<DumpResponseResult> {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
-  await fs.mkdir(dumpDir, { recursive: true });
+  await fs.mkdir(dumpDir, { recursive: true, mode: 0o700 });
 
   const id = baseId ?? generateDumpBaseId(provider);
   const responseFilename = `${id}-response.json`;
@@ -228,6 +268,7 @@ export async function dumpResponseContext(
   const data = {
     provider,
     timestamp: new Date().toISOString(),
+    ...(correlation ?? {}),
     response: {
       ...response,
       headers: redactSensitiveHeaders(response.headers),
@@ -238,10 +279,26 @@ export async function dumpResponseContext(
     ...(baseId ? { relatedRequestFile: `${baseId}-request.json` } : {}),
   };
 
-  await fs.writeFile(filepath, JSON.stringify(data, null, 2), 'utf-8');
+  await writeDumpFile(filepath, data);
+  await pruneDumpFiles(dumpDir);
+  let retained = true;
+  try {
+    await fs.stat(filepath);
+    if (baseId !== undefined)
+      await fs.stat(path.join(dumpDir, `${baseId}-request.json`));
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    )
+      retained = false;
+    else throw error;
+  }
   logger.debug(() => `Response context dumped to: ${filepath}`);
 
-  return { responseFilename, dumpDir };
+  return { responseFilename, dumpDir, retained };
 }
 
 /**

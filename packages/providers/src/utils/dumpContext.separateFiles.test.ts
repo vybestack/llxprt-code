@@ -146,6 +146,7 @@ describe('dumpContext separate request/response files', () => {
       );
       expect(respResult.responseFilename).toMatch(/-response\.json$/);
       expect(respResult.responseFilename).toContain(reqResult.baseId);
+      expect(respResult.retained).toBe(true);
 
       const respFilepath = path.join(DUMP_DIR, respResult.responseFilename);
       createdFiles.push(respFilepath);
@@ -174,6 +175,18 @@ describe('dumpContext separate request/response files', () => {
       expect(content.response.status).toBe(500);
       expect(content.response.body.error).toBe('Rate limit exceeded');
       expect(content.relatedRequestFile).toBe(`${baseId}-request.json`);
+    });
+
+    it('marks a response without its linked request as not retained', async () => {
+      const baseId = generateDumpBaseId('openai');
+      const result = await dumpResponseContext(
+        baseId,
+        { status: 200, body: { choices: [] } },
+        'openai',
+      );
+      createdFiles.push(path.join(DUMP_DIR, result.responseFilename));
+
+      expect(result.retained).toBe(false);
     });
   });
 

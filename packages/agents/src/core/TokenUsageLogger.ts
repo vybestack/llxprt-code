@@ -405,6 +405,7 @@ export class TokenUsageLogger {
         refusalExplanation: actual.refusalExplanation,
         recommendedModel: actual.recommendedModel,
         requestId: actual.requestId,
+        dumpBaseId: actual.dumpBaseId,
       },
     };
     await this._writeTurnRecord(record);
@@ -647,6 +648,9 @@ export class TokenUsageLogger {
         recommended_model: extras.recommendedModel,
       }),
       request_id: extras.requestId ?? null,
+      ...(extras.dumpBaseId === undefined
+        ? {}
+        : { dump_base_id: extras.dumpBaseId }),
     };
   }
 

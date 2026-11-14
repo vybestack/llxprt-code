@@ -35,6 +35,7 @@ export interface StreamFinishInfo {
   readonly rawStopReason?: string;
   readonly stopDetails?: StopDetails;
   readonly requestId?: string | null;
+  readonly dumpBaseId?: string;
 }
 export function accumulateStreamFinishInfo(
   finish: StreamFinishInfo,
@@ -46,6 +47,7 @@ export function accumulateStreamFinishInfo(
     stopDetails: chunk.stopDetails ?? finish.stopDetails,
     requestId:
       chunk.requestId !== undefined ? chunk.requestId : finish.requestId,
+    dumpBaseId: chunk.dumpBaseId ?? finish.dumpBaseId,
   };
 }
 
@@ -289,6 +291,9 @@ async function emitStreamTelemetry(
           ...(finish.requestId === undefined
             ? {}
             : { requestId: finish.requestId }),
+          ...(finish.dumpBaseId === undefined
+            ? {}
+            : { dumpBaseId: finish.dumpBaseId }),
         })
       : undefined,
   );

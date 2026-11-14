@@ -45,6 +45,7 @@ export interface ActualTokenUsageInput {
   refusalExplanation?: string | null;
   recommendedModel?: string;
   requestId?: string | null;
+  dumpBaseId?: string;
 }
 
 interface ActualTokenUsageRecorder {
@@ -70,6 +71,7 @@ export function usageStatsToActualInput(
     refusalExplanation?: string | null;
     recommendedModel?: string;
     requestId?: string | null;
+    dumpBaseId?: string;
   },
 ): ActualTokenUsageInput {
   const base: ActualTokenUsageInput = {
@@ -104,6 +106,7 @@ export function usageStatsToActualInput(
       recommendedModel: attempt.recommendedModel,
     }),
     ...(attempt.requestId !== undefined && { requestId: attempt.requestId }),
+    ...(attempt.dumpBaseId !== undefined && { dumpBaseId: attempt.dumpBaseId }),
   };
 }
 
@@ -267,6 +270,7 @@ export async function recordActualTokenUsage(
         recommendedModel: usage.recommendedModel,
       }),
       ...(usage.requestId !== undefined && { requestId: usage.requestId }),
+      ...(usage.dumpBaseId !== undefined && { dumpBaseId: usage.dumpBaseId }),
     };
 
     await usageLogger.recordActual(promptId, actual);

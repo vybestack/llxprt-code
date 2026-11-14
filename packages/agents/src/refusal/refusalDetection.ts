@@ -44,6 +44,9 @@ export function throwIfRefused(accumulated: ModelOutput, turnId: string): void {
     ...(accumulated.requestId !== undefined && {
       requestId: accumulated.requestId,
     }),
+    ...(accumulated.dumpBaseId !== undefined && {
+      dumpBaseId: accumulated.dumpBaseId,
+    }),
     ...(accumulated.usage !== undefined && { usage: accumulated.usage }),
     turnId,
   });

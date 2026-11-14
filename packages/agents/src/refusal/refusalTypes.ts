@@ -21,6 +21,7 @@ export interface RefusalEvidence {
   readonly rawStopReason?: string;
   readonly stopDetails?: StopDetails;
   readonly requestId?: string | null;
+  readonly dumpBaseId?: string;
   readonly usage?: UsageStats;
   /** Canonical turn id of the refused request. */
   readonly turnId: string;

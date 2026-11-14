@@ -24,6 +24,7 @@ export const RefusalPayloadSchema = z.object({
   refusal_explanation: z.string().nullable().optional(),
   recommended_model: z.string().optional(),
   request_id: z.string().nullable().optional(),
+  dump_base_id: z.string().optional(),
   usage: z
     .object({
       promptTokens: z.number(),

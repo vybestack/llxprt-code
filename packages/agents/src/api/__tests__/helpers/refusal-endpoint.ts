@@ -168,6 +168,31 @@ function renderReply(
   );
 }
 
+function renderJsonReply(reply: EndpointReply): string {
+  if (reply.kind !== 'finish')
+    throw new Error('JSON test replies must be finish replies');
+  return JSON.stringify({
+    id: 'scripted',
+    object: 'chat.completion',
+    model: 'scripted-model',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: reply.text ?? null,
+        },
+        finish_reason: reply.finishReason,
+      },
+    ],
+    usage: {
+      prompt_tokens: PROMPT_TOKENS,
+      completion_tokens: reply.outputTokens,
+      total_tokens: PROMPT_TOKENS + reply.outputTokens,
+    },
+  });
+}
+
 /** Notes a client that hangs up before the reply ended, by request index. */
 export function trackConnection(
   response: ServerResponse,
@@ -244,8 +269,11 @@ export async function startScriptedEndpoint(
         );
         return;
       }
-      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
-      response.end(renderReply(reply));
+      const streaming = body['stream'] !== false;
+      response.writeHead(200, {
+        'Content-Type': streaming ? 'text/event-stream' : 'application/json',
+      });
+      response.end(streaming ? renderReply(reply) : renderJsonReply(reply));
     })().catch((error: unknown) =>
       response.destroy(error instanceof Error ? error : undefined),
     );

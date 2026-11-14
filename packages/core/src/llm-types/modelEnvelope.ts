@@ -56,6 +56,7 @@ export interface ModelOutput {
   rawStopReason?: string;
   stopDetails?: StopDetails;
   requestId?: string | null;
+  dumpBaseId?: string;
   usage?: UsageStats;
   responseId?: string;
   hookRestrictions?: HookRestrictions;
@@ -138,6 +139,8 @@ export function accumulateModelStreamChunk(
   const requestId =
     chunk.requestId !== undefined ? chunk.requestId : acc.requestId;
   if (requestId !== undefined) result.requestId = requestId;
+  const dumpBaseId = chunk.dumpBaseId ?? acc.dumpBaseId;
+  if (dumpBaseId !== undefined) result.dumpBaseId = dumpBaseId;
 
   const usage = chunk.usage ?? acc.usage;
   if (usage !== undefined) {
@@ -284,6 +287,7 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
   }
   if (meta?.stopDetails !== undefined) result.stopDetails = meta.stopDetails;
   if (meta?.requestId !== undefined) result.requestId = meta.requestId;
+  if (meta?.dumpBaseId !== undefined) result.dumpBaseId = meta.dumpBaseId;
 
   if (meta?.usage) {
     // Defensive copy so callers cannot mutate the original IContent metadata.

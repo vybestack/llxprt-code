@@ -38,6 +38,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
+  dumpAttemptResultContent,
+  readDumpAttemptContext,
+} from '../utils/dumpAttemptContext.js';
+import {
   type AnthropicRateLimitInfo,
   calculateWaitTime,
 } from './AnthropicRateLimitHandler.js';
@@ -958,7 +962,7 @@ export class AnthropicProvider extends BaseProvider {
     });
     if (waitDecision.shouldWait) {
       rateLimitLogger.debug(() => waitDecision.reason);
-      await this.sleep(waitDecision.waitMs, signal);
+      await delay(waitDecision.waitMs, signal);
     }
   }
 
@@ -991,6 +995,7 @@ export class AnthropicProvider extends BaseProvider {
       baseURL,
       requestBody: requestContext.requestBody,
       streamingEnabled: requestContext.streamingEnabled,
+      attemptContext: readDumpAttemptContext(options.metadata),
       headers: dumpHeaders,
       rateLimitLogger,
     });
@@ -1038,10 +1043,7 @@ export class AnthropicProvider extends BaseProvider {
       });
       yield withSemanticMediaPurgeCacheEvidence(content, requestContext);
     }
-  }
-
-  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
-    return delay(ms, signal);
+    yield* dumpAttemptResultContent(readDumpAttemptContext(options.metadata));
   }
 }
 

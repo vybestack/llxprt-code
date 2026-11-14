@@ -152,6 +152,12 @@ export { LOGICAL_REQUEST_ID_KEY } from './logging/attemptLifecycle.js';
 // Callers thread a raw token-delta sink so caller-side timing consumers
 // observe raw generation deltas.
 export { RAW_TOKEN_DELTA_SINK_KEY } from './logging/attemptLifecycle.js';
+export {
+  DUMP_ATTEMPT_CONTEXT_KEY,
+  readDumpAttemptContext,
+  type DumpAttemptContext,
+  type DumpAttemptOutcome,
+} from './utils/dumpAttemptContext.js';
 
 // --- Provider utilities ---
 export {

@@ -111,6 +111,7 @@ export const SerializedTokenUsageTurnRecordSchema = z.object({
   refusal_explanation: z.string().nullable().optional(),
   recommended_model: z.string().optional(),
   request_id: z.string().nullable().optional(),
+  dump_base_id: z.string().optional(),
   // --- AC-5 tool attribution ---
   tool_calls: z.array(ToolCallEntrySchema).optional(),
   new_tool_result_tokens: z.number().optional(),
@@ -379,6 +380,7 @@ export interface TokenUsageActualInput {
   refusalExplanation?: string | null;
   recommendedModel?: string;
   requestId?: string | null;
+  dumpBaseId?: string;
 }
 
 // ---------------------------------------------------------------------------

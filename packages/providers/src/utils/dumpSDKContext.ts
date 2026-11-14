@@ -11,6 +11,7 @@ import {
   dumpResponseContext,
   type DumpRequest,
   type DumpRequestResult,
+  type DumpAttemptCorrelation,
 } from './dumpContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
@@ -30,6 +31,7 @@ type RequestDumpTransport =
 export interface RequestDumpMetadata {
   headers?: Record<string, string>;
   transport?: RequestDumpTransport;
+  correlation?: DumpAttemptCorrelation;
 }
 
 function resolveDumpHeaders(
@@ -158,6 +160,7 @@ export async function dumpSDKRequestContext(
   requestParams: unknown,
   baseURL?: string,
   metadata?: RequestDumpMetadata,
+  deferRetention = false,
 ): Promise<DumpRequestResult> {
   const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
@@ -168,7 +171,15 @@ export async function dumpSDKRequestContext(
       `Dumping SDK request context for ${providerName}: endpoint=${endpoint}`,
   );
 
-  return dumpRequestContext(request, providerName);
+  return dumpRequestContext(
+    request,
+    providerName,
+    undefined,
+    undefined,
+    {},
+    metadata?.correlation,
+    deferRetention,
+  );
 }
 
 /**
@@ -179,7 +190,8 @@ export async function dumpSDKResponseContext(
   providerName: string,
   response: unknown,
   isError: boolean,
-): Promise<string> {
+  correlation?: DumpAttemptCorrelation,
+): Promise<string | undefined> {
   const dumpResponse = {
     status: isError ? 500 : 200,
     headers: {
@@ -193,8 +205,14 @@ export async function dumpSDKResponseContext(
       `Dumping SDK response context for ${providerName}: isError=${isError}`,
   );
 
-  const result = await dumpResponseContext(baseId, dumpResponse, providerName);
-  return result.responseFilename;
+  const result = await dumpResponseContext(
+    baseId,
+    dumpResponse,
+    providerName,
+    {},
+    correlation,
+  );
+  return result.retained ? result.responseFilename : undefined;
 }
 
 /**
@@ -216,6 +234,8 @@ export function wrapStreamWithDump<T>(
   baseId: string,
   providerName: string,
   dumpResponse: typeof dumpSDKResponseContext = dumpSDKResponseContext,
+  correlation?: DumpAttemptCorrelation,
+  recordDump?: (baseId: string) => void,
 ): AsyncIterable<T> {
   const accumulated: T[] = [];
   let dumped = false;
@@ -229,9 +249,10 @@ export function wrapStreamWithDump<T>(
       return;
     }
     dumped = true;
-    await bestEffortDump(operation, providerName, () =>
-      dumpResponse(baseId, providerName, body, isError),
+    const result = await bestEffortDump(operation, providerName, () =>
+      dumpResponse(baseId, providerName, body, isError, correlation),
     );
+    if (result !== undefined) recordDump?.(baseId);
   }
 
   async function* iterate(): AsyncGenerator<T> {
@@ -276,6 +297,68 @@ export function wrapStreamWithDump<T>(
       return iterate()[Symbol.asyncIterator]();
     },
   };
+}
+
+export type DumpOutcome = 'refusal' | 'success' | undefined;
+
+/** Captures only terminal outcomes selected by the provider's native mapping. */
+export function wrapStreamWithOutcomeDump<T>(
+  stream: AsyncIterable<T>,
+  providerName: string,
+  endpoint: string,
+  requestParams: unknown,
+  baseURL: string | undefined,
+  metadata: RequestDumpMetadata,
+  pairedSuccess: boolean,
+  selectOutcome: (chunk: T) => DumpOutcome,
+  recordDump: (outcome: 'refusal' | 'paired-success', baseId: string) => void,
+): AsyncIterable<T> {
+  async function* iterate(): AsyncGenerator<T> {
+    const chunks: T[] = [];
+    let outcome: DumpOutcome = undefined;
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+      outcome = selectOutcome(chunk) ?? outcome;
+      yield chunk;
+    }
+    let dumpOutcome: 'refusal' | 'paired-success' | undefined;
+    if (outcome === 'refusal') dumpOutcome = 'refusal';
+    else if (outcome === 'success' && pairedSuccess)
+      dumpOutcome = 'paired-success';
+    if (dumpOutcome === undefined) return;
+    const correlation =
+      metadata.correlation === undefined
+        ? undefined
+        : { ...metadata.correlation, outcome: dumpOutcome };
+    const request = await bestEffortDump('outcome-request', providerName, () =>
+      dumpSDKRequestContext(
+        providerName,
+        endpoint,
+        requestParams,
+        baseURL,
+        {
+          ...metadata,
+          ...(correlation === undefined ? {} : { correlation }),
+        },
+        true,
+      ),
+    );
+    if (request === undefined) return;
+    const response = await bestEffortDump(
+      'outcome-response',
+      providerName,
+      () =>
+        dumpSDKResponseContext(
+          request.baseId,
+          providerName,
+          { streaming: true, chunks, completed: true },
+          false,
+          correlation,
+        ),
+    );
+    if (response !== undefined) recordDump(dumpOutcome, request.baseId);
+  }
+  return { [Symbol.asyncIterator]: () => iterate()[Symbol.asyncIterator]() };
 }
 
 export async function dumpSDKErrorRequestResponse(

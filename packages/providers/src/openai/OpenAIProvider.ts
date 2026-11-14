@@ -83,6 +83,7 @@ import {
 } from './OpenAIPromptProjectionPreparation.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import { readDumpAttemptContext } from '../utils/dumpAttemptContext.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import {
   finishMediaRequest,
@@ -131,6 +132,12 @@ interface DispatchResponseOptions {
    * #3473). Undefined when no attempt-lifecycle observer is attached.
    */
   onRawTokenDelta: (() => void) | undefined;
+}
+
+function getReasoningFieldName(
+  invocation: NormalizedGenerateChatOptions['invocation'],
+): string | undefined {
+  return invocation.getEphemeral<string>('reasoning.fieldName');
 }
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
@@ -749,13 +756,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       model,
       formattedTools,
       streamingEnabled,
+      attemptContext: readDumpAttemptContext(options.metadata),
       logger,
       getBaseURL: () => this.getBaseURL(),
     });
 
-    const reasoningFieldName = options.invocation.getEphemeral<string>(
-      'reasoning.fieldName',
-    );
+    const reasoningFieldName = getReasoningFieldName(options.invocation);
 
     yield* this.dispatchResponse({
       response,

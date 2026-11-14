@@ -11,6 +11,8 @@ import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/tool
 import {
   LOGICAL_REQUEST_ID_KEY,
   RAW_TOKEN_DELTA_SINK_KEY,
+  DUMP_ATTEMPT_CONTEXT_KEY,
+  type DumpAttemptContext,
 } from '@vybestack/llxprt-code-providers';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type { RawTokenDeltaBridge } from './streamTelemetryLogger.js';
@@ -28,6 +30,7 @@ export function buildStreamChatOptions(
   params: SendMessageParams,
   generationConfig: ChatSessionConfig,
   rawTokenDeltaBridge: RawTokenDeltaBridge | null,
+  dumpAttemptContext?: DumpAttemptContext,
 ): GenerateChatOptions {
   return {
     contents: requestPayload.contents,
@@ -58,6 +61,9 @@ export function buildStreamChatOptions(
       _retryRequestContext: params.config?.providerRequestContext,
       [LOGICAL_REQUEST_ID_KEY]: promptId,
       [RAW_TOKEN_DELTA_SINK_KEY]: rawTokenDeltaBridge?.notify,
+      ...(dumpAttemptContext === undefined
+        ? {}
+        : { [DUMP_ATTEMPT_CONTEXT_KEY]: dumpAttemptContext }),
     },
     systemInstruction: extractSystemInstructionText(
       generationConfig.systemInstruction,

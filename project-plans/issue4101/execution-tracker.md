@@ -1,14 +1,29 @@
 # REQ-4101 execution tracker
 
-Branch: `issue4101`; current phase: P01.
+Branch: `issue4101`; current phase: P02.
 
-Status: Phase A implementation and required verification are complete. The request-id helper typing and the inexpensive recording/replay and public noninteractive-notice cases are fixed. P02-P05 have not started.
+Status: P01 and P02 are complete. P02 implementation, fixture-size measurement, and full repository verification are complete.
 
 | Phase | State | Verification |
 | --- | --- | --- |
 | P00 / P00.5 | Complete from the checked-in plan | Issue and integration map were read before implementation. |
 | P01 | Implemented and verified | Details in `.completed/P01.md`. |
-| P02-P05 | Not started | Out of scope for this task. |
+| P02 | Implemented and verified | Focused and full repository checks passed; details below. |
+| P03-P05 | Not started | Out of scope for this phase. |
+
+## P02 verification record
+
+- Focused Phase B tests passed: refusal dump behavior across Anthropic streaming, Anthropic JSON, OpenAI Chat streaming/JSON, refusal pairing, non-refusal no-dump, and `on` mode deduplication; Vercel SSE/JSON capture; retention policy; and settings defaults/validation.
+- Existing dump/recovery regressions passed: 87 tests across the OpenAI/Anthropic SDK dump, Vercel capture, refusal recovery, and reviewer rewrite suites.
+- Fixture measurement: `tmp/verify4101/measure-dump.ts` generated a real Anthropic refusal pair of 105,287 bytes across two files and six parsed SSE events. At that fixture size, the 2 GiB cap holds 20,396 pairs; 34 pairs/day for 14 days uses 50,116,612 bytes (~47.8 MiB). This is fixture-specific and does not guarantee retention under larger prompts or `on` mode traffic. The main plan records this implication.
+- `git diff --check`: passed.
+- `npm run typecheck`: passed (`tmp/verify4101/typecheck-final2-P02.log`).
+- `npm run lint`: passed (`tmp/verify4101/lint-final-P02.log`).
+- `npm run format`: passed (`tmp/verify4101/format-final2-P02.log`).
+- `npm run build`: passed (`tmp/verify4101/build-final2-P02.log`).
+- `npm run test`: passed, 1,003/1,003 isolated native Bun test files and 7/7 isolated companion test files (`tmp/verify4101/test-final2-P02.log`).
+- Test-first red output was not independently preserved in this session: the worktree already contained the implementation and passing P02 tests at session start, so this session cannot verify the red run.
+
 
 ## P01 verification record
 

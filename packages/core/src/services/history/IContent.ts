@@ -169,6 +169,7 @@ export interface ContentMetadata {
   /** Provider-reported refusal classifier details. */
   stopDetails?: StopDetails;
   requestId?: string | null;
+  dumpBaseId?: string;
 
   /** Reason the response was incomplete (e.g., max_output_tokens) */
   incompleteReason?: string;

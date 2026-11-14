@@ -37,6 +37,9 @@ export function toRefusalPayload(
         : { recommended_model: attempt.stopDetails.recommendedModel }),
     }),
     request_id: attempt.requestId ?? null,
+    ...(attempt.dumpBaseId === undefined
+      ? {}
+      : { dump_base_id: attempt.dumpBaseId }),
     ...(usage !== undefined && {
       usage: {
         promptTokens: usage.promptTokens,
