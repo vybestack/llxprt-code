@@ -69,7 +69,7 @@ const schema = {
     tools: {
       type: 'array',
       items: { type: 'string' },
-      description: `Exact names of the tools the script calls. Allowed: ${SCRIPT_CALLABLE_TOOLS.join(', ')}.`,
+      description: `Exact names of the tools the script calls, each once; empty if it calls none. Allowed: ${SCRIPT_CALLABLE_TOOLS.join(', ')}.`,
     },
     api_revision: {
       type: 'string',

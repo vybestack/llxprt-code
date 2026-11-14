@@ -91,14 +91,14 @@ export function admittedScriptTools(
 /**
  * Checks the exact list a script asked for before it starts. Every name must
  * be script-callable and admitted for this caller; nothing is silently
- * dropped.
+ * dropped. A script that calls no tools lists none.
  */
 export function preflightScriptTools(
   requested: readonly string[],
   composition: NestedExecutionComposition,
   hookRestrictedAllowedTools: readonly string[] | undefined,
 ): ScriptToolPreflight {
-  if (requested.length === 0 || new Set(requested).size !== requested.length)
+  if (new Set(requested).size !== requested.length)
     return {
       ok: false,
       code: 'INVALID_TOOLS',

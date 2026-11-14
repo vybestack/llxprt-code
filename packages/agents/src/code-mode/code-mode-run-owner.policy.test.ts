@@ -326,6 +326,44 @@ describe('code mode policy', () => {
       }
     }, 60_000);
 
+    it('runs a script that calls no tools when its tool list is empty, and refuses a call it did not list', async () => {
+      const workspace = scratchDir('code-mode-no-tools-');
+      const agent = track(
+        await buildScriptAgent(
+          [
+            {
+              id: 'p-none',
+              tools: [],
+              source: 'return { process: typeof process, sum: 1 + 2 };',
+            },
+            {
+              id: 'p-unlisted',
+              tools: [],
+              source:
+                'const r = await tools["glob"]({ pattern: "*" }); return r.ok;',
+            },
+          ],
+          { workspace },
+        ),
+      );
+      await runTurn(agent.agent);
+
+      const none = await scriptResponse(agent.agent, 'p-none');
+      const unlisted = await scriptResponse(agent.agent, 'p-unlisted');
+
+      expect({
+        ok: none.ok,
+        value: none.value,
+        callCount: none.callCount,
+      }).toStrictEqual({
+        ok: true,
+        value: { process: 'undefined', sum: 3 },
+        callCount: 0,
+      });
+      expect(unlisted.ok).toBe(false);
+      expect(unlisted.callCount).toBe(0);
+    }, 60_000);
+
     it('rejects a script tool outside the caller allowlist', async () => {
       const workspace = scratchDir('code-mode-allowlist-');
       const agent = track(

@@ -29,7 +29,7 @@
     },
     {
       "type": "line",
-      "text": "Using execute_tool_script, run `git log -5 --format=%s` and then `git branch --show-current` and return both.",
+      "text": "Using execute_tool_script, run `git log -5 --format=%s` and then `git branch --show-current` as two separate run_shell_command calls in one script, and return both outputs.",
       "postTypeMs": 1500
     },
     {
