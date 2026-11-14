@@ -3,19 +3,28 @@
  * ground truth ranking at e3c1782b96, for both readings of the prompt (test
  * files included or left out).
  *
- * Usage: bun tmp/verify4084/phaseE/score-b.ts <answer.md>
+ * Usage: bun project-plans/issue4084/evidence/tools/score-b.ts <answer.md> [--repo <dir>] [--ref <commit>]
+ * The repository defaults to the checkout holding this file and the ref to
+ * the scenario base, which needs the full history (not a shallow clone).
  */
 
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import {
   computeLongestFunctions,
   SCENARIO_BASE,
   type FunctionLength,
-} from '../../../scripts/issue4084-ground-truth.ts';
+} from '../../../../scripts/issue4084-ground-truth.ts';
 
 const DIR = 'packages/agents/src/core';
-const REPO = '/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code';
-const answer = readFileSync(process.argv[2], 'utf8').replaceAll('`', '').replaceAll('*', '');
+const { values, positionals } = parseArgs({
+  allowPositionals: true,
+  options: { repo: { type: 'string' }, ref: { type: 'string' } },
+});
+const REPO = values.repo ?? fileURLToPath(new URL('../../../../', import.meta.url));
+const REF = values.ref ?? SCENARIO_BASE;
+const answer = readFileSync(positionals[0], 'utf8').replaceAll('`', '').replaceAll('*', '');
 
 interface Row {
   file: string;
@@ -38,7 +47,7 @@ for (const line of answer.split('\n')) {
 }
 
 function score(includeTests: boolean, namedOnly = false) {
-  const ranked = computeLongestFunctions(REPO, DIR, { ref: SCENARIO_BASE, includeTests, namedOnly, limit: 100000 });
+  const ranked = computeLongestFunctions(REPO, DIR, { ref: REF, includeTests, namedOnly, limit: 100000 });
   const top = ranked.slice(0, 10);
   const cutoff = top[9].lines;
   const accepted = ranked.filter((f) => f.lines >= cutoff);

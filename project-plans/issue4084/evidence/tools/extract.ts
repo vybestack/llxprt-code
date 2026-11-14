@@ -2,7 +2,7 @@
  * Issue #4084 Phase E: collect the session recording and token-usage logs of
  * one tmux run and compute its metrics.
  *
- * Usage: bun tmp/verify4084/phaseE/extract.ts <run-dir>
+ * Usage: bun project-plans/issue4084/evidence/tools/extract.ts <run-dir>
  * Writes <run-dir>/session.jsonl, <run-dir>/token-usage*.jsonl and
  * <run-dir>/metrics.json, and prints the metrics.
  */
@@ -10,8 +10,10 @@
 import { copyFileSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const PROJECT = '/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code';
+/** The checkout holding this file: the working directory the runs used. */
+const PROJECT = path.resolve(fileURLToPath(new URL('../../../../', import.meta.url)));
 const LOGS = path.join(homedir(), 'Library/Logs/llxprt-code/tmp');
 
 interface Line {

@@ -10,7 +10,7 @@
  * tokens are reported as extra. The parse is heuristic; every score in the
  * evidence README was also checked by reading the answer.
  *
- * Usage: bun tmp/verify4084/phaseE/score-a.ts <answer.md> <ground-truth.json>
+ * Usage: bun project-plans/issue4084/evidence/tools/score-a.ts <answer.md> <ground-truth.json>
  */
 
 import { readFileSync } from 'node:fs';
