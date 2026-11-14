@@ -11,6 +11,7 @@ import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
 import type { IGitStatsService } from '../services/git-stats-service.js';
 import { ConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
+import { getSettingSpec } from '@vybestack/llxprt-code-settings';
 
 import type {
   MemorySettings,
@@ -66,6 +67,9 @@ import type { ShellExecutionConfig } from '../services/shellExecutionService.js'
 export class Config extends ConfigBase {
   private gitStatsService: IGitStatsService | null = null;
   private conversationFileWriter: ConversationFileWriter | undefined;
+  private liveSettingsReader:
+    | (() => Readonly<Record<string, unknown>>)
+    | undefined;
   readonly profileDirectory: string | undefined;
   readonly subagentDirectory: string | undefined;
   readonly initialWorkspaceTrust: boolean | undefined;
@@ -226,10 +230,21 @@ export class Config extends ConfigBase {
     }
   }
 
+  /**
+   * Lets this Config see session settings changed after it was built, such as
+   * a profile applied at startup or loaded later. Without it, shell execution
+   * settings come only from the construction-time snapshot.
+   */
+  bindLiveSettingsReader(read: () => Readonly<Record<string, unknown>>): void {
+    this.liveSettingsReader = read;
+  }
+
   getShellExecutionConfig(): ShellExecutionConfig {
     const ephemeralSettings = this.initialSettings;
     const inactivitySeconds = Number(
-      ephemeralSettings['shell-inactivity-timeout-seconds'] ?? 120,
+      this.liveSettingsReader?.()['shell-inactivity-timeout-seconds'] ??
+        ephemeralSettings['shell-inactivity-timeout-seconds'] ??
+        getSettingSpec('shell-inactivity-timeout-seconds')?.default,
     );
 
     const rawLimit = ephemeralSettings['shell-output-retention-max-bytes'];
