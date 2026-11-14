@@ -44,6 +44,29 @@ describe('private port file helpers', () => {
       },
     );
 
+    it('applies overlapping replacements of the same file in request order', async () => {
+      const file = path.join(root, 'port.json');
+
+      const writes = ['one', 'two', 'three', 'four', 'five'].map((content) =>
+        writePrivateFile(file, content),
+      );
+      await Promise.all(writes);
+
+      expect(await fs.readFile(file, 'utf8')).toBe('five');
+    });
+
+    it('keeps replacing a file after an earlier queued write failed', async () => {
+      const file = path.join(root, 'port.json');
+      await fs.mkdir(file);
+
+      const failed = writePrivateFile(file, 'blocked');
+      await expect(failed).rejects.toThrow(/EISDIR|EPERM/);
+      await fs.rmdir(file);
+      await writePrivateFile(file, 'recovered');
+
+      expect(await fs.readFile(file, 'utf8')).toBe('recovered');
+    });
+
     it.skipIf(process.platform === 'win32')(
       'replaces a previous world-readable file',
       async () => {
