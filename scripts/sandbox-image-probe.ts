@@ -23,13 +23,13 @@ interface CommandResult {
 
 const IMAGE_INSPECT_FORMAT =
   'image_id={{.Id}} repo_digests={{json .RepoDigests}} image_platform={{.Os}}/{{.Architecture}}';
-const RUNTIME_PROBE = [
+export const RUNTIME_PROBE = [
   'set -eu',
   'llxprt --version',
   'cd "$NPM_CONFIG_PREFIX/lib/node_modules/@vybestack/llxprt-code"',
   'bun scripts/verify-sandbox-runtime.ts',
   'cd "$NPM_CONFIG_PREFIX/lib/node_modules/@vybestack/llxprt-ui"',
-  `node --input-type=module -e 'import { mkdtempSync, rmSync, writeFileSync } from "node:fs"; import { spawnSync } from "node:child_process"; import { tmpdir } from "node:os"; import { join } from "node:path"; import { rgPath } from "@lvce-editor/ripgrep"; const dir = mkdtempSync(join(tmpdir(), "llxprt-ui-search-")); try { const file = join(dir, "search.txt"); writeFileSync(file, "LLXPRT_UI_SEARCH_PROBE\n"); const result = spawnSync(rgPath, ["--fixed-strings", "LLXPRT_UI_SEARCH_PROBE", file], { encoding: "utf8" }); if (result.status !== 0 || !result.stdout.includes("LLXPRT_UI_SEARCH_PROBE")) throw new Error(result.stderr || "UI ripgrep search failed"); console.log("sandbox-ui-ripgrep-search=ok"); } finally { rmSync(dir, { recursive: true, force: true }); }'`,
+  `node --input-type=module -e 'import { mkdtempSync, rmSync, writeFileSync } from "node:fs"; import { spawnSync } from "node:child_process"; import { tmpdir } from "node:os"; import { join } from "node:path"; import { rgPath } from "@lvce-editor/ripgrep"; const dir = mkdtempSync(join(tmpdir(), "llxprt-ui-search-")); try { const file = join(dir, "search.txt"); writeFileSync(file, "LLXPRT_UI_SEARCH_PROBE\\n"); const result = spawnSync(rgPath, ["--fixed-strings", "LLXPRT_UI_SEARCH_PROBE", file], { encoding: "utf8" }); if (result.status !== 0 || !result.stdout.includes("LLXPRT_UI_SEARCH_PROBE")) throw new Error(result.stderr || "UI ripgrep search failed"); console.log("sandbox-ui-ripgrep-search=ok"); } finally { rmSync(dir, { recursive: true, force: true }); }'`,
   'cd "$NPM_CONFIG_PREFIX/lib/node_modules/@vybestack/llxprt-code"',
   'npm ls --global --omit=dev --all --json > /tmp/llxprt-sandbox-dependencies.json',
   'printf "dependency_tree_sha256="',
@@ -200,4 +200,6 @@ function main(): void {
   console.log(metadata.stdout.trim());
 }
 
-main();
+if (import.meta.main) {
+  main();
+}

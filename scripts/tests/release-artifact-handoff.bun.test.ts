@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -158,6 +159,76 @@ describe('release candidate archive handoff', () => {
         'tampered candidate image',
       );
       expect(runSnippet(consumer, consumerEnv)).not.toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('prepared release package tarball handoff', () => {
+  it('copies exactly the consumer-proof tarballs named by its manifest and fails when one is missing', () => {
+    const proofRun = stepNamed(
+      workflowJob(WORKFLOW, 'prepare_artifact'),
+      'Build and prove prepared release packages',
+    ).run;
+    if (proofRun === undefined) {
+      throw new Error('prepared release consumer proof step is required');
+    }
+    const scriptStartMarker = "node -e '\n";
+    const scriptEndMarker = '\n\' "$LLXPRT_RELEASE_PROOF_DIR/artifacts.json"';
+    const scriptStart = proofRun.indexOf(scriptStartMarker);
+    const scriptEnd = proofRun.indexOf(
+      scriptEndMarker,
+      scriptStart + scriptStartMarker.length,
+    );
+    if (scriptStart < 0 || scriptEnd < 0) {
+      throw new Error('prepared release tarball copier script is required');
+    }
+    const script = proofRun.slice(
+      scriptStart + scriptStartMarker.length,
+      scriptEnd,
+    );
+
+    const root = mkdtempSync(join(tmpdir(), 'llxprt-release-package-handoff-'));
+    const proof = join(root, 'release-proof');
+    const upload = join(root, 'release-artifacts');
+    const manifest = join(proof, 'artifacts.json');
+    const tarballs = [
+      'vybestack-llxprt-code-tools-1.2.3.tgz',
+      'vybestack-llxprt-code-1.2.3.tgz',
+    ];
+    const runCopier = (destination: string): number | null =>
+      spawnSync('node', ['-e', script, manifest, proof, destination], {
+        encoding: 'utf8',
+      }).status;
+
+    try {
+      mkdirSync(proof);
+      mkdirSync(upload);
+      for (const filename of tarballs) {
+        writeFileSync(join(proof, filename), filename);
+      }
+      writeFileSync(
+        manifest,
+        JSON.stringify(
+          tarballs.map((filename) => ({
+            tarball: join(proof, filename),
+          })),
+        ),
+      );
+
+      expect(runCopier(upload)).toBe(0);
+      expect(readdirSync(upload).sort()).toEqual(tarballs.sort());
+
+      const missingOutput = join(root, 'missing-release-artifacts');
+      const missingTarball = tarballs[1];
+      if (missingTarball === undefined) {
+        throw new Error('expected second fixture tarball');
+      }
+      mkdirSync(missingOutput);
+      rmSync(join(proof, missingTarball));
+      expect(runCopier(missingOutput)).not.toBe(0);
+      expect(readdirSync(missingOutput)).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
