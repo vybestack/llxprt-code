@@ -13,8 +13,6 @@ import {
   writePrivateFile,
 } from './private-port-file.js';
 
-const posixOnly = process.platform === 'win32' ? it.skip : it;
-
 describe('private port file helpers', () => {
   let root: string;
 
@@ -35,26 +33,32 @@ describe('private port file helpers', () => {
       expect(await fs.readFile(file, 'utf8')).toBe('{"port":1}');
     });
 
-    posixOnly('creates the file readable only by its owner', async () => {
-      const file = path.join(root, 'port.json');
+    it.skipIf(process.platform === 'win32')(
+      'creates the file readable only by its owner',
+      async () => {
+        const file = path.join(root, 'port.json');
 
-      await writePrivateFile(file, 'secret');
+        await writePrivateFile(file, 'secret');
 
-      expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
-    });
+        expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
+      },
+    );
 
-    posixOnly('replaces a previous world-readable file', async () => {
-      const file = path.join(root, 'port.json');
-      await fs.writeFile(file, 'old', { mode: 0o644 });
-      await fs.chmod(file, 0o644);
+    it.skipIf(process.platform === 'win32')(
+      'replaces a previous world-readable file',
+      async () => {
+        const file = path.join(root, 'port.json');
+        await fs.writeFile(file, 'old', { mode: 0o644 });
+        await fs.chmod(file, 0o644);
 
-      await writePrivateFile(file, 'new');
+        await writePrivateFile(file, 'new');
 
-      expect(await fs.readFile(file, 'utf8')).toBe('new');
-      expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
-    });
+        expect(await fs.readFile(file, 'utf8')).toBe('new');
+        expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
+      },
+    );
 
-    posixOnly(
+    it.skipIf(process.platform === 'win32')(
       'does not write through a symlink planted at the target path',
       async () => {
         const victim = path.join(root, 'victim.txt');
@@ -80,7 +84,7 @@ describe('private port file helpers', () => {
       expect((await fs.stat(dir)).isDirectory()).toBe(true);
     });
 
-    posixOnly(
+    it.skipIf(process.platform === 'win32')(
       'creates the directory accessible only by its owner',
       async () => {
         const dir = path.join(root, 'ide');
@@ -91,7 +95,7 @@ describe('private port file helpers', () => {
       },
     );
 
-    posixOnly(
+    it.skipIf(process.platform === 'win32')(
       'tightens an existing directory that others can read',
       async () => {
         const dir = path.join(root, 'ide');
@@ -104,16 +108,19 @@ describe('private port file helpers', () => {
       },
     );
 
-    posixOnly('rejects a symlink in place of the directory', async () => {
-      const elsewhere = path.join(root, 'elsewhere');
-      await fs.mkdir(elsewhere);
-      const dir = path.join(root, 'ide');
-      await fs.symlink(elsewhere, dir);
+    it.skipIf(process.platform === 'win32')(
+      'rejects a symlink in place of the directory',
+      async () => {
+        const elsewhere = path.join(root, 'elsewhere');
+        await fs.mkdir(elsewhere);
+        const dir = path.join(root, 'ide');
+        await fs.symlink(elsewhere, dir);
 
-      await expect(ensurePrivateDirectory(dir)).rejects.toThrow(
-        /not a directory/i,
-      );
-    });
+        await expect(ensurePrivateDirectory(dir)).rejects.toThrow(
+          /not a directory/i,
+        );
+      },
+    );
 
     it('rejects a regular file in place of the directory', async () => {
       const dir = path.join(root, 'ide');
