@@ -199,6 +199,8 @@ export interface SessionClientConstruction {
   readonly authority: CredentialAuthority;
   /** Defaults to the production client factory when a caller observes none. */
   readonly clientFactory: AgentClientFactory | undefined;
+  /** Registers code mode's execute_tool_script in the session catalog. */
+  readonly codeMode?: boolean;
 }
 
 export async function acquireSessionClient(
@@ -228,6 +230,7 @@ export async function acquireSessionClient(
       authority: construction.authority,
       borrowedBus: messageBus,
       requestInteractiveAuth: (prompt) => oauth.requestInteractiveAuth(prompt),
+      codeMode: construction.codeMode === true,
     },
   );
   try {

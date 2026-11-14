@@ -40,7 +40,10 @@ import {
   isModifiableDeclarativeTool,
   modifyWithEditor,
 } from '@vybestack/llxprt-code-tools';
-import { type ModifyContext } from '@vybestack/llxprt-code-tools';
+import {
+  ToolApprovalRequiredError,
+  type ModifyContext,
+} from '@vybestack/llxprt-code-tools';
 import { doesToolInvocationMatch } from '@vybestack/llxprt-code-core/utils/tool-utils.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {
@@ -81,7 +84,7 @@ export interface StatusMutator {
  * execution. The getter MUST return the current array on each call — stored
  * references become stale because setStatusInternal reassigns toolCalls[].
  */
-export class ConfirmationRequiredError extends Error {}
+export class ConfirmationRequiredError extends ToolApprovalRequiredError {}
 
 export interface SchedulerAccessor {
   attemptExecution(signal: AbortSignal): Promise<void>;

@@ -75,6 +75,7 @@ export async function bindCreatedSessionClient(
   forceConfirmations: boolean,
   imageOperation: AgentConfig['imageOperation'],
   authority: CredentialAuthority,
+  codeMode: boolean,
 ): Promise<SessionClientOwner> {
   const client = await acquireSessionClient(
     {
@@ -94,6 +95,7 @@ export async function bindCreatedSessionClient(
       mediaStore: media.store,
       authority,
       clientFactory: undefined,
+      codeMode,
     },
   );
   try {

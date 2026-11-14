@@ -3,7 +3,8 @@
 ## Status
 
 - Phase A: done (runtime foundation and effective-argument authorization; see "Phase A record")
-- Phases B-E: pending
+- Phase B: done (run owner, nested execution seam, `execute_tool_script` behind a construction flag, bundle packaging; see "Phase B record")
+- Phases C-E: pending
 
 ## Fixed decisions
 
@@ -26,11 +27,24 @@
 - Add real subprocess + QuickJS behavioral tests, isolation and limits coverage, and source/build artifact resolution tests.
 - Run the complete verification cycle, record results, and commit.
 
-### Phase B: run owner and `execute_tool_script` (pending)
+### Phase B: run owner and `execute_tool_script` (done)
+
+Progress log (updated per milestone; read with `git status`/`git diff` after context loss):
+
+- [x] B1 bundle packaging: `code-mode/quickjs-wasm.ts` (explicit wasm load), `scripts/bun-build.config.ts` (`quickjs-wrapper` target), `scripts/copy_bundle_assets.ts` (`stageQuickJsWasm`), test `scripts/tests/issue-4084-code-mode-bundle.bun.test.ts` (3 pass)
+- [x] B2 tools contract: `tools/src/tools/tool-execution-scope.ts`, `tools.ts` (execute scope arg, `completeness`, `structuredOutput`), `shell-structured-output.ts` + shell/core streams, read-file/read-many-files/grep completeness, admission forwards arg 6
+- [x] B3 scheduler: `scheduler/nested-execution.ts`, ToolExecutor builds scope, ResultAggregator `deliverResult`, options `onToolResult`/`nestedExecution`, `bindSchedulerOwner(..., { approval })`, hook text drops structuredOutput
+- [x] B4 `code-mode/code-mode-run-owner.ts`, `nested-call-outcome.ts`
+- [x] B5 `code-mode/execute-tool-script.ts`, `script-tool-surface.ts`
+- [x] B6 registration: `AgentConfig.codeMode` -> policyComposition -> session-client-binding -> SessionClientOwner -> `SessionToolCatalogOwner(..., { codeMode })`; first end-to-end probe passes (tmp/verify4084/probe.test.ts)
+- [x] B7 behavioral tests: `code-mode-run-owner.test.ts` (11), `code-mode-run-owner.policy.test.ts` (7), `code-mode-run-owner.lifecycle.test.ts` (7), `execute-tool-script-history.test.ts` (3), `execute-tool-script.test.ts` (3), `tools/src/tools/shell-structured-output.test.ts` (4), bundle test (3); all pass targeted
+- [x] B8 verification (see "Phase B record"), commits
 
 - Build per-invocation run ownership and FIFO nested-call broker with fresh child scheduler ownership, lifecycle cancellation, bounded results and no active-parent-scheduler reentry.
 - Register/use `execute_tool_script` only behind opt-in capability and route each nested call through the ordinary scheduler, policy, hooks and approval path.
 - Add exact request allowlist/preflight, nested call accounting, unawaited-call cleanup and programmatic result delivery.
+
+See "Phase B record" below for what changed, decisions and follow-ups.
 
 ### Phase C: discovery, declarations, settings and subagents (pending)
 
@@ -56,25 +70,25 @@ Test file names below are planned owners; criteria move to done only when the na
 
 | Issue acceptance criterion | Phase | Behavioral test file |
 | --- | --- | --- |
-| Code mode off by default registers/advertises neither tool and leaves behavior unchanged | C | `packages/agents/src/code-mode/code-mode-registration.test.ts` |
+| Code mode off by default registers/advertises neither tool and leaves behavior unchanged | C (B covers the construction flag) | B: `execute-tool-script-history.test.ts`: "lists the tool only when the agent enables code mode", "cannot run a script when code mode is off"; C: `packages/agents/src/code-mode/code-mode-registration.test.ts` for the setting |
 | Code mode on exposes discover/execute; compact hides normal declarations without removing script authorization | C | `packages/agents/src/code-mode/code-mode-registration.test.ts` |
 | Settings validate at admission, invalid values get clear errors, settings do not reach providers | C | `packages/settings/src/code-mode-settings.test.ts` |
 | Guest cannot access environment, process, Bun, host globals, imports, fetch or filesystem; seeded credentials/socket stay hidden | A (done) | `quickjs-process-runtime.test.ts`: "gives the guest no host globals...", "fails a guest that touches host capabilities", "rejects dynamic module imports", "never exposes seeded credential values anywhere in the global object" |
 | Child process has only enumerated environment and omits credential/capability values | A (done) | `quickjs-process-runtime.test.ts`: "starts the wrapper with an empty environment, ignoring workspace .env and bunfig preloads" |
 | Infinite loop, deep recursion, memory blowup, microtask storm, unresolved promise, oversized/cyclic result and IPC flood terminate with named limits and no orphan | A (done) | `quickjs-process-runtime.limits.test.ts` (CPU_LIMIT, STACK_LIMIT, MEMORY_LIMIT, UNRESOLVED_PROMISE, RESULT_TOO_LARGE, RESULT_NOT_JSON, CALL_LIMIT, PENDING_LIMIT, ARGUMENTS_TOO_LARGE, INVALID_ARGUMENTS, INPUT_BYTES_LIMIT, CONSOLE_LIMIT, TIMEOUT, CANCELLED, SOURCE_TOO_LARGE); `quickjs-process-runtime.protocol.test.ts` (log-frame flood, oversized unterminated frame, malformed/duplicate/foreign frames). Every runtime test file asserts in `afterEach` that no wrapper process is still parented by the test process (`ps`), and one test proves that check detects a live wrapper |
 | Runtime startup failure is a capability error with no outside-QuickJS evaluation fallback | A (done) | `quickjs-process-runtime.test.ts`: "fails with RUNTIME_UNAVAILABLE and evaluates nothing when the wrapper cannot start", "... when the wrapper exits without a result" |
-| Direct and nested calls share policy decisions, including shell destructive checks | B | Planned: `packages/agents/src/scheduler/tool-executor-policy.test.ts`; `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| BeforeTool argument edits cannot execute values policy did not evaluate, on direct/nested paths | A (direct, done) / B (nested) | A: `packages/agents/src/core/coreToolScheduler.effective-args.test.ts` (rewrite DENY, ALLOW-for-original does not cover rewrite, exact rewritten args executed, invalid rewrite fails, approval shows rewritten args, approval edits authorized, BeforeTool once); B nested parity: planned `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| Script cannot call outside v1 set, request list, or caller selection | B | `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| Recursive execute/discover, task calls are rejected | B | `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| Interactive approval pauses/resumes; denial ends with completed-call summary | B | `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| Call responses cannot cross run/session; late replies after cancellation are discarded | B | `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| Headless approval requirement fails without hanging | B | `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| Abort during nested execution/approval leaves no subprocess or unjoined tool execution | B | `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| Return with pending calls fails `UNAWAITED_TOOL_CALLS` after cancellation/join | A (runtime, done) / B (owner) | `quickjs-process-runtime.limits.test.ts`: "fails with UNAWAITED_TOOL_CALLS after aborting and joining the pending call"; owner cleanup in `code-mode-run-owner.test.ts` |
-| Twenty nested calls create exactly one provider-visible tool response | B | `packages/agents/src/code-mode/execute-tool-script-history.test.ts` |
-| Truncated producer output reaches guest as partial and final output preserves incompleteness | B | `packages/agents/src/code-mode/code-mode-run-owner.test.ts` |
-| Oversized final value returns `RESULT_TOO_LARGE`, without truncated JSON | A (done for the runtime cap; the setting is wired in C) | `quickjs-process-runtime.limits.test.ts`: "returns RESULT_TOO_LARGE for an oversized or overly deep value instead of clipping it", "keeps the size check effective after the guest tampers with intrinsics" |
+| Direct and nested calls share policy decisions, including shell destructive checks | B (done) | `code-mode-run-owner.policy.test.ts`: "denies a destructive shell command directly and from a script, even under an allow rule", "asks for the same shell command directly and from a script, and allows reads without asking in both" |
+| BeforeTool argument edits cannot execute values policy did not evaluate, on direct/nested paths | A (direct, done) / B (nested, done) | A: `packages/agents/src/core/coreToolScheduler.effective-args.test.ts`; B: `code-mode-run-owner.policy.test.ts`: "denies a nested call whose BeforeTool rewrite policy denies, and never runs it", "executes exactly the rewritten arguments policy allowed" |
+| Script cannot call outside v1 set, request list, or caller selection | B (done) | `code-mode-run-owner.policy.test.ts`: "rejects names outside the v1 set, recursive and mutating tools, and tools the caller excluded", "rejects a script tool outside the caller allowlist"; `code-mode-run-owner.test.ts`: "fails a call to a tool the script did not list" |
+| Recursive execute/discover, task calls are rejected | B (done) | `code-mode-run-owner.policy.test.ts`: preflight test (execute_tool_script, discover_tool_api, task, todo_write, save_memory, write_file, exa_web_search) |
+| Interactive approval pauses/resumes; denial ends with completed-call summary | B (done) | `code-mode-run-owner.lifecycle.test.ts`: "pauses the script at a nested approval and resumes it when approved", "ends the run when an approval is refused, listing the calls that completed" |
+| Call responses cannot cross run/session; late replies after cancellation are discarded | B (done for runs) | `code-mode-run-owner.lifecycle.test.ts`: "routes each approval only to its own run", "discards a late approval after an abort during the approval wait" (sessions have separate buses; no cross-session test) |
+| Headless approval requirement fails without hanging | B (done) | `code-mode-run-owner.lifecycle.test.ts`: "fails a nested approval requirement fast in headless mode" |
+| Abort during nested execution/approval leaves no subprocess or unjoined tool execution | B (done) | `code-mode-run-owner.lifecycle.test.ts`: "leaves no subprocess or running tool after an abort during nested execution", "discards a late approval after an abort during the approval wait" |
+| Return with pending calls fails `UNAWAITED_TOOL_CALLS` after cancellation/join | A (runtime, done) / B (owner, done) | `quickjs-process-runtime.limits.test.ts`; `code-mode-run-owner.lifecycle.test.ts`: "fails with UNAWAITED_TOOL_CALLS after cancelling and joining the pending call" |
+| Twenty nested calls create exactly one provider-visible tool response | B (done) | `execute-tool-script-history.test.ts`: "records twenty nested calls as exactly one provider-visible tool response" |
+| Truncated producer output reaches guest as partial and final output preserves incompleteness | B (done) | `code-mode-run-owner.test.ts`: "marks a truncated read partial, and the run partial even if the script claims otherwise", "marks a search the tool cut at its match limit partial", "marks a multi-file read with a truncated file partial", "reports a window the script asked for as complete"; `packages/tools/src/tools/shell-structured-output.test.ts` (shell truncation) |
+| Oversized final value returns `RESULT_TOO_LARGE`, without truncated JSON | A, B (done for the default cap; the setting is wired in C) | `quickjs-process-runtime.limits.test.ts`; `code-mode-run-owner.test.ts`: "returns RESULT_TOO_LARGE for an oversized final value without clipping it" |
 | Resume restores card/events without executing script or unmatched model responses | D | `packages/agents/src/code-mode/script-event-resume.test.ts` |
 | Generated declarations compile for all v1 schemas and cover enums/unions/optional/arrays/string-key names | C | `packages/agents/src/code-mode/tool-declarations.test.ts` |
 | API revision mismatch fails with `API_CHANGED` | C | `packages/agents/src/code-mode/tool-declarations.test.ts` |
@@ -152,9 +166,98 @@ Dependencies: `quickjs-emscripten` pinned to `0.32.0` in `packages/agents/packag
 
 ### Known follow-ups
 
-- Bundled CLI: `packages/cli/bundle/llxprt.js` inlines the runtime module, so `resolveQuickJsWrapperPath` would look for `quickjs-wrapper.js` next to the bundle, where nothing emits it. Before Phase B registers `execute_tool_script`, add the wrapper as a separate bundle artifact (as the memprofile entries are) and test that the bundled CLI can run a script, including loading the QuickJS wasm from the bundle location.
-- Phase B owner must map policy denial, headless approval-required and user cancellation to `ScriptRunTermination`, ordinary tool failures to `{ ok: false }`, and make each nested execution honour the call's `signal`, since `run()` joins every call.
+- Bundled CLI: `packages/cli/bundle/llxprt.js` inlines the runtime module, so `resolveQuickJsWrapperPath` would look for `quickjs-wrapper.js` next to the bundle, where nothing emits it. Before Phase B registers `execute_tool_script`, add the wrapper as a separate bundle artifact (as the memprofile entries are) and test that the bundled CLI can run a script, including loading the QuickJS wasm from the bundle location. Resolved in Phase B.
+- Phase B owner must map policy denial, headless approval-required and user cancellation to `ScriptRunTermination`, ordinary tool failures to `{ ok: false }`, and make each nested execution honour the call's `signal`, since `run()` joins every call. Done in Phase B.
 - Phase C wires `code-mode-max-calls`, `code-mode-wall-timeout-ms` (bounded by the parent's deadline) and `code-mode-max-result-bytes` into `CodeModeLimits`, and subagent lowering.
 - The ModifyWithEditor branch that finishes the batch after a denied editor edit has no automated test, because it needs an external editor; the shared rebuild-and-authorize path it relies on is covered by the suggest-edit and inline-modify denial tests.
 - The orphan check in the runtime tests uses `ps`, which exists on the Linux and macOS runners that execute these tests; it would need a Windows equivalent if these tests ever run there.
 - QuickJS string building is slow; revisit the 5 s CPU default against the Phase E scenarios.
+
+## Phase B record
+
+### What changed
+
+Bundle packaging (Phase A follow-up 1):
+
+- `code-mode/quickjs-wasm.ts`: the wrapper always loads the QuickJS wasm from an explicit file (`newVariant(RELEASE_SYNC, { wasmBinary })`). An unbundled wrapper (source or `dist`) resolves the wasm through `quickjs-emscripten`, which owns the variant dependency. The bundled wrapper is built with the `LLXPRT_BUNDLED_QUICKJS_WASM` define and reads the file staged next to it.
+- `scripts/bun-build.config.ts`: new `quickjs-wrapper` CLI bundle target emitting `bundle/quickjs-wrapper.js` (same shared config, source-first plugin and externals as the other targets). The runtime inlined into `llxprt.js` already resolves `./quickjs-wrapper.js` next to the bundle.
+- `scripts/copy_bundle_assets.ts`: `stageQuickJsWasm` stages `bundle/quickjs-release-sync.wasm` as a required asset.
+
+Tools contract (`packages/tools`):
+
+- `tools/tool-execution-scope.ts`: `ToolExecutionScope` (call ID, prompt ID, agent ID, `origin: 'model' | 'script'`, hook restrictions, host-only `nestedExecution` port) passed as the optional sixth argument of `ToolInvocation.execute`; `ToolOutputCompleteness`; `ToolStructuredOutput`.
+- `ToolResult.completeness` and `ToolResult.structuredOutput`.
+- `tools/approval-required-error.ts`: `ToolApprovalRequiredError`. The shell tool throws it when a non-interactive session would need a prompt; the scheduler's `ConfirmationRequiredError` now extends it.
+- Shell: `tools/shell-structured-output.ts` adds `{ stdout, stderr, exitCode, streamsMerged }` and completeness from the execution result (core `ShellExecutionResult.streams`, set on the child_process path, carried by `CoreShellToolHostAdapter`). Scripts may not start background jobs (`origin: 'script'`).
+- Completeness producers: `read_file` (`read-file.ts`), `read_many_files` (`read-many-files.ts`), `search_file_content` (`grep.ts`, `grep/search-completeness.ts`).
+- Core `ToolDispatchAdmission` forwards the sixth `execute` argument.
+
+Scheduler (`packages/agents/src/scheduler`, `core`):
+
+- `scheduler/nested-execution.ts`: `ToolResultDelivery`/`ToolResultSink`, `NestedExecutionComposition`, `NestedExecutionPort`, `buildExecutionScope`.
+- `ToolExecutor` builds the scope for every execution; `CoreToolSchedulerOptions` gain `onToolResult` and `nestedExecution`; `ResultAggregator.publishResult` hands the post-hook `ToolResult` to the sink before `convertToFunctionResponse`. The model path is unchanged.
+- `bindSchedulerOwner(..., { approval })` builds the nested composition from the same options; its schedulers carry no composition. `SessionExecutionOwner` passes its approval handler. The default scheduler factory forwards the new options.
+- When a hook appends text to a result, `structuredOutput` is dropped so the script sees the text actually produced.
+- Core `ToolCallRequestInfo.script` (`parentCallId`, `runId`) marks nested requests.
+
+Code mode (`packages/agents/src/code-mode`):
+
+- `code-mode-run-owner.ts`: `CodeModeRunOwner`, one per invocation. Own `TurnToolExecutionOwner` (approval subscription limited to its call IDs) and `SessionSchedulerOwner` lease from the composition; FIFO broker; waits for terminal completion; `close()` closes admission, cancels queued calls, releases the lease (abort, `cancelAll`, join, dispose) and retires the approval subscription.
+- `nested-call-outcome.ts`: maps a terminal nested call to the guest result or a `ScriptRunTermination`.
+- `script-tool-surface.ts`: v1 callable set and preflight.
+- `execute-tool-script.ts`: `ExecuteToolScriptTool`.
+
+Root manifest: `quickjs-emscripten` 0.32.0 is now also a root dependency (`package.json`, `package-lock.json`, `bun.lock` root entries only). Phase A added it to `packages/agents` alone, which `scripts/tests/publish-integrity.test.ts` ("declares runtime dependencies needed by shipped workspace source") rejects; Phase A's verification ran `npm run test` but not the `test:scripts` shard where that test lives.
+
+Registration: `AgentConfig.codeMode` (schema-validated boolean, default off) flows through `bindCreatedSessionClient` and `acquireSessionClient` to `SessionToolCatalogOwner(..., { codeMode })`, which registers the tool after the builtin registry is built. Off means not registered and not advertised.
+
+### Decisions and reasons
+
+- The scope travels as an `execute` argument, not a separate invocation method, because `ToolDispatchAdmission` routes `execute` through its accept/join tracking; a separate method would have bypassed the join.
+- The port is an agents class checked with `instanceof`; a forged `{ kind: 'nested-tool-execution' }` object fails. Missing scope or port fails before any guest code runs.
+- Nested calls never reenter the parent scheduler. Each nested call is its own scheduler batch. Completions reach the broker on the next macrotask because `CoreToolScheduler` accepts a new batch only after its completion callback returns, and requests it queues while busy are only removed by `cancelAll` (pre-existing behavior, not relied on).
+- Guest results: `structuredOutput` when present, else `{ text }` from text-only `llmContent`; media gives `{ ok: false, error: { code: 'UNSUPPORTED_CONTENT' } }`. `completeness` defaults to `unknown`. Ordinary failures carry the tool error type upper-cased (for example `FILE_NOT_FOUND`).
+- Run-ending outcomes: policy DENY gives `POLICY_DENIED`; a headless approval requirement (`ToolApprovalRequiredError`, including the shell tool's non-interactive refusal) gives `APPROVAL_REQUIRED`; a refused prompt gives `APPROVAL_DENIED`; an abort gives the runtime's `CANCELLED`. The guest cannot catch them.
+- Completeness evidence: `read_file` is partial only when its own default line limit or line clipping cut the output; a window the caller asked for with `limit` is complete. `read_many_files` is partial when discovery, the file count, the byte budget or a per-file line limit cut it, otherwise `unknown` (skips such as ignored files make "complete" unprovable). `search_file_content` is partial when its `outputTruncation` metadata is set and complete otherwise; its single-file token-limited path now sets that metadata like the directory path. Shell is partial on acquisition truncation.
+- Shell structured value adds `streamsMerged`: a PTY merges the streams, so the combined text is reported as stdout with `streamsMerged: true` instead of an empty stderr. Output filters apply to each stream.
+- `execute_tool_script` is `Kind.Execute` and asks for confirmation ('info': purpose, tools, source preview) under the default policy. Approving it only starts the program; each nested call is still authorized. Headless use needs a policy allow for the script tool.
+- `api_revision` is accepted and unchecked until Phase C adds discovery.
+- Result JSON: `{ ok, value | error, callCount, partial, completedCalls, logs }`. `callCount` is the runtime's count of calls the guest made; `completedCalls` lists settled calls as `{ tool, status }` with status `ok | failed | denied | approval_required | cancelled`, bounded by the call limit; `logs` is bounded by the console limits.
+- Nested call IDs are `<parentCallId>#script-<run>-<n>`.
+
+### Known follow-ups
+
+- Nested confirmations go to the session approval handler (`onApproval`) and are published on the message bus, but they are not projected into the agent stream's `tool-confirmation` events or the CLI tool display, because the parent scheduler's call list does not contain them. A host without an approval handler (the CLI) would wait. Phase D must show nested calls through a scoped child display (as `ChildToolDisplay` does for subagents) before Phase C exposes the `code-mode` setting. Nested live output is not forwarded yet either.
+- Only the session loop's schedulers get the nested composition. Subagent schedulers, the client tool channel and `foreground-agent-assembly` do not, so the tool fails fast there; Phase C wires subagents.
+- Hook-restricted turns share the preflight check, but no behavioral test drives a real tool-selection hook restriction yet.
+- `CoreToolScheduler` never drains requests it queues while busy (only `cancelAll` empties the queue). Code mode does not depend on it; worth a separate issue.
+
+### New tests
+
+- `packages/agents/src/code-mode/code-mode-run-owner.test.ts` (11): one nested read, loop, `Promise.all` serialized in call order (shell commands append start/end markers), shell `{ stdout, stderr, exitCode }`, truncated `read_file`/`search_file_content`/`read_many_files` reach the guest as partial and set the host `partial` flag even when the script returns `partial: false`, a requested window is complete, `RESULT_TOO_LARGE`, a call to an unlisted tool fails, an ordinary tool failure is `{ ok: false }`.
+- `code-mode-run-owner.policy.test.ts` (7): destructive shell DENY directly and from a script under an allow rule, ASK directly and from a script with reads allowed without asking in both, BeforeTool rewrite denied on effective arguments and never executed, rewritten arguments executed exactly, AfterTool text replaces the typed value, preflight rejections, allowlist rejection.
+- `code-mode-run-owner.lifecycle.test.ts` (7): approval pauses and resumes, refusal ends the run with completed calls, per-run approval routing with two concurrent runs, headless approval requirement, abort during execution (no wrapper, no `sleep` child), late approval after abort discarded, `UNAWAITED_TOOL_CALLS` with the pending shell command killed.
+- `execute-tool-script-history.test.ts` (3): twenty nested calls give exactly one `tool_call` and one `tool_response` in model history; the tool is listed only with `codeMode`; a call with code mode off fails as unregistered.
+- `execute-tool-script.test.ts` (3): no scope, or a forged port, fails before the runtime runs; `api_revision` optional.
+- `packages/tools/src/tools/shell-structured-output.test.ts` (4) and `scripts/tests/issue-4084-code-mode-bundle.bun.test.ts` (3: separate artifacts, end-to-end run from a bundled layout without `node_modules`, the staged wasm is the one loaded).
+- Helper `code-mode/__tests__/script-agent.ts`: a real public `Agent` (`createAgent` through the `LLXPRT_FAKE_RESPONSES` FakeProvider seam) with `codeMode: true` over a temp workspace. Every afterEach checks that no wrapper process is left.
+
+No existing test assertion changed.
+
+### Verification (2026-11-13, logs in `tmp/verify4084/`)
+
+- `npm run test` (`phaseB-test.log`): every workspace passed. tools 144/144, storage 39/39, auth 43/43, settings 33/33, telemetry 49/49, ide-integration 10/10, agent-core 3/3, policy 12/12, mcp 57/57, core 528/528, lsp 15/15, providers 667/667, agents 870/870 plus 8/8, zed-acp 49/49, cli 1002/1002, a2a-server 26/26, test-utils 17/17, vscode-ide-companion 7/7. (The `(fail)` lines in core are the runner's own fixture files that are meant to fail.)
+- No wrapper process left after the run (`phaseB-ps-after-tests.log` is empty).
+- `npm run lint` (`phaseB-lint.log`): exit 0. `npm run typecheck` (`phaseB-typecheck.log`): exit 0. `npm run format` (`phaseB-format.log`): exit 0, no further changes. `npm run build` (`phaseB-build.log`): `BUILD_EXIT=0`.
+- Built output: the emitted `dist` runtime ran a script (`phaseB-built-runtime-probe.log`: `{"ok":true,"value":42,"callCount":1,"logs":[]}`).
+- Real CLI bundle: `bun scripts/bun-build.config.ts --cli-only` (`phaseB-bundle.log`, `BUNDLE_EXIT=0`) emitted `llxprt.js`, `quickjs-wrapper.js` and `quickjs-release-sync.wasm`; the real bundled wrapper ran a script (`phaseB-real-bundle-wrapper-probe.log`: `{"ok":true,"value":42,"callCount":1,"logs":[]}`).
+- Bundle tests (`phaseB-bundle-tests.log`): issue-4084 bundle, release-source-emitted-sibling-resolution, issue-3068, issue-3055 purity and externals ownership: 22 pass, 0 fail.
+- `npm run test:scripts`, first run (`phaseB-test-scripts.log`): 364/366 files passed, 4 failing tests in 2 files. `publish-integrity.test.ts` (root manifest, fixed above; 19/19 after the fix). Three `bun-test-tree-join.bun.test.ts` "post-close query" cases failed with `EPERM` from a process-group kill under load; the file passes 19/19 alone in this tree (`phaseB-tree-join-rerun.log`) and on HEAD (`phaseB-tree-join-on-HEAD.log`) and does not touch code mode. Rerun after the manifest fix (`phaseB-test-scripts-rerun.log`): 365/366 files passed; `publish-integrity` and `bun-test-tree-join` passed; the one failure was `scripts-quality-coverage.test.ts` "applies maintainability/complexity rules to a converted .ts script" hitting its 30 s timeout while ESLint ran under load, and that file passes 9/9 alone (`phaseB-scripts-quality-rerun.log`). Neither flaky file is touched by this phase.
+- `bun scripts/start.ts --profile-load lunahigh "write me a haiku and nothing else"` (`phaseB-smoke-lunahigh.log`): exit 0, haiku printed. Code mode has no setting yet, so the off/on smoke stays in Phase C/E.
+
+
+### Commits
+
+- `41a303f692` feat(tools): give scheduled executions a scope and programmatic results (#4084)
+- `ad37770a81` build(cli): ship the code mode wrapper and QuickJS wasm as bundle artifacts (#4084)
+- feat(agents): run code mode scripts through a nested scheduler owner (#4084) (the commit that adds this record)

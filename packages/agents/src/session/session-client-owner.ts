@@ -271,6 +271,7 @@ export class SessionClientOwner {
       readonly authority: CredentialAuthority;
       readonly borrowedBus: MessageBus | undefined;
       readonly requestInteractiveAuth: InteractiveAuthPromptOperation;
+      readonly codeMode?: boolean;
     },
   ) {
     const { config, settingsOwner } = environment;
@@ -299,6 +300,7 @@ export class SessionClientOwner {
       composition.readTaskSchemaPolicy,
       () => settingsOwner.readToolExecutionPolicy(),
       factories.manager.fetchNetwork,
+      { codeMode: composition.codeMode === true },
     );
     this.clients = new SessionClientAcquisitionOwner(
       { ...environment, readMcpInstructions: () => this.readMcpInstructions() },
@@ -327,6 +329,7 @@ export class SessionClientOwner {
       readonly authority: CredentialAuthority;
       readonly borrowedBus: MessageBus | undefined;
       readonly requestInteractiveAuth: InteractiveAuthPromptOperation;
+      readonly codeMode?: boolean;
     },
   ): Promise<SessionClientOwner> {
     const owner = new SessionClientOwner(environment, factories, composition);

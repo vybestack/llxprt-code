@@ -337,6 +337,7 @@ export const AgentConfigSchema = z
     hooks: z.record(z.unknown()).optional(),
     memory: z.string().optional(),
     skillsSupport: z.boolean().optional(),
+    codeMode: z.boolean().optional(),
     disabledSkills: z.array(z.string()).optional(),
     adminSkillsEnabled: z.boolean().optional(),
     streamIdleTimeoutMs: z.number().optional(),

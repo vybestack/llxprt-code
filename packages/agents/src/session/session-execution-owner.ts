@@ -357,6 +357,7 @@ export class SessionExecutionOwner {
               ? this.config.getApprovalMode()
               : ApprovalMode.DEFAULT,
           this.settings.telemetry,
+          { approval: this.approval },
         ),
       ),
       displayCallbacks: this.display,

@@ -415,6 +415,7 @@ class PreferredProviderAssembly {
           config.isInteractive(),
         mcpOptions.imageOperation,
         this.workspace.authority,
+        construction.parsed.codeMode === true,
       );
       if (raw.executeShellCommand !== undefined)
         client.toolCatalog.bindShellExecution(raw.executeShellCommand);

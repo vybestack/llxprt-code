@@ -356,6 +356,11 @@ export interface AgentConfig
   readonly hooks?: AgentHooks;
   readonly memory?: string;
   readonly skillsSupport?: boolean;
+  /**
+   * Registers the code mode `execute_tool_script` tool (issue #4084). Off by
+   * default; a later phase maps the `code-mode` setting onto this flag.
+   */
+  readonly codeMode?: boolean;
   readonly disabledSkills?: readonly string[];
   readonly adminSkillsEnabled?: boolean;
   readonly streamIdleTimeoutMs?: number;

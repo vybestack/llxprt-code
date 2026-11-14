@@ -20,6 +20,7 @@ import type { ChildToolDisplay } from './childToolDisplay.js';
 import type { TaskLaunchOwner } from './task-launch-owner.js';
 import type { ShellJobOwner } from './shell-job-owner.js';
 import { ShellTool } from '@vybestack/llxprt-code-tools';
+import { ExecuteToolScriptTool } from '../code-mode/execute-tool-script.js';
 
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
@@ -169,6 +170,9 @@ export class SessionToolCatalogOwner {
       input: RequestInfo | URL,
       init?: RequestInit,
     ) => Promise<Response>,
+    private readonly features: { readonly codeMode: boolean } = {
+      codeMode: false,
+    },
   ) {}
 
   private shellExecution: IShellToolHost['executeShellCommand'] | undefined;
@@ -254,6 +258,7 @@ export class SessionToolCatalogOwner {
       requestFetch: this.requestFetch,
     }).then(({ registry, allPotentialTools }) => {
       this.bindHostShell(registry, workspace.paths, session.summarize);
+      this.bindCodeMode(registry);
       this.publishRegistry(
         registry,
         allPotentialTools,
@@ -288,6 +293,18 @@ export class SessionToolCatalogOwner {
         bus,
       ),
     );
+  }
+
+  /**
+   * Code mode (issue #4084) registers execute_tool_script only when the
+   * session enables it, so a disabled session neither advertises nor runs it.
+   */
+  private bindCodeMode(registry: ToolRegistry): void {
+    if (!this.features.codeMode) return;
+    const bus = this.sessionBus;
+    if (bus === undefined)
+      throw new Error('Code mode requires its session bus');
+    registry.registerTool(new ExecuteToolScriptTool(bus));
   }
 
   private publishRegistry(

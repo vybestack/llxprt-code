@@ -31,6 +31,7 @@ import {
 import { type ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type { ToolResultSink } from './nested-execution.js';
 
 const logger = new DebugLogger('llxprt:scheduler:result-aggregator');
 
@@ -45,6 +46,8 @@ export interface ResultPublishCallbacks {
   setSuccess(callId: string, response: ToolCallResponseInfo): void;
   /** Transition a call to the 'error' terminal state. */
   setError(callId: string, response: ToolCallResponseInfo): void;
+  /** Receives the post-hook result before model formatting (#4084). */
+  deliverResult?: ToolResultSink;
   /**
    * Returns the active Config (or equivalent provider) so ResultAggregator
    * can compute per-tool token limits when no batch override is in effect.
@@ -342,6 +345,7 @@ export class ResultAggregator {
     _signal: AbortSignal,
   ): Promise<void> {
     const { result, callId, toolName, scheduledCall } = buffered;
+    this.callbacks.deliverResult?.({ callId, toolName, result });
 
     const outputConfig =
       this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();

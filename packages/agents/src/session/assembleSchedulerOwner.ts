@@ -16,6 +16,8 @@ import type {
   AgentSchedulerHandle,
 } from '../api/config-types.js';
 import { SessionSchedulerOwner } from './sessionSchedulerOwner.js';
+import type { ApprovalHandler } from '../core/agenticLoop/types.js';
+import type { NestedExecutionComposition } from '../scheduler/nested-execution.js';
 
 export type SchedulerConstruction = (
   options: CoreToolSchedulerOptions,
@@ -54,20 +56,43 @@ export function bindSchedulerOwner(
   getToolGovernance: CoreToolSchedulerOptions['getToolGovernance'],
   readApprovalMode: CoreToolSchedulerOptions['readApprovalMode'],
   telemetry: CoreToolSchedulerOptions['telemetry'],
+  nested?: { readonly approval: ApprovalHandler | undefined },
 ): (callbacks: SchedulerCallbacks) => SessionSchedulerOwner {
   const label = config.getSessionId();
+  const base: Omit<CoreToolSchedulerOptions, keyof SchedulerCallbacks> = {
+    config,
+    telemetry,
+    readExecutionPolicy,
+    readApprovalMode,
+    getToolGovernance,
+    messageBus,
+    toolRegistry,
+    toolContextInteractiveMode: interactiveMode,
+  };
+  // Nested (code mode) runs get fresh schedulers from the same options but
+  // without a nested composition, so a script cannot start another script.
+  const nestedExecution: NestedExecutionComposition | undefined =
+    nested === undefined
+      ? undefined
+      : {
+          messageBus,
+          approval: nested.approval,
+          interactiveMode,
+          selection: toolRegistry,
+          readGovernance: getToolGovernance,
+          createScheduler: (callbacks) =>
+            assembleSchedulerOwner(
+              `${label}#script`,
+              { ...base, ...callbacks },
+              construct,
+            ),
+        };
   return (callbacks) =>
     assembleSchedulerOwner(
       label,
       {
-        config,
-        telemetry,
-        readExecutionPolicy,
-        readApprovalMode,
-        getToolGovernance,
-        messageBus,
-        toolRegistry,
-        toolContextInteractiveMode: interactiveMode,
+        ...base,
+        ...(nestedExecution === undefined ? {} : { nestedExecution }),
         ...callbacks,
       },
       construct,
@@ -150,6 +175,12 @@ function createDefaultToolSchedulerFactory(options: {
             toolContextInteractiveMode:
               schedulerOptions.toolContextInteractiveMode,
           }
+        : {}),
+      ...(schedulerOptions.onToolResult !== undefined
+        ? { onToolResult: schedulerOptions.onToolResult }
+        : {}),
+      ...(schedulerOptions.nestedExecution !== undefined
+        ? { nestedExecution: schedulerOptions.nestedExecution }
         : {}),
     });
   };

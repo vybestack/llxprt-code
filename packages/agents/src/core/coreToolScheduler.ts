@@ -152,7 +152,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
     this.config = options.config;
     this.telemetry = options.telemetry;
     this.getToolGovernance = options.getToolGovernance;
-    this.toolExecutor = new ToolExecutor();
+    this.toolExecutor = new ToolExecutor(options.nestedExecution);
     this.toolDispatcher = new ToolDispatcher(
       options.toolRegistry,
       options.config,
@@ -169,6 +169,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       getFallbackOutputConfig: () => ({
         readExecutionPolicy: options.readExecutionPolicy,
       }),
+      deliverResult: options.onToolResult,
     };
     this.resultAggregator = new ResultAggregator(resultPublishCallbacks);
 

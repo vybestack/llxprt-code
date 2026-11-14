@@ -20,6 +20,10 @@ import type {
   ValidatingToolCall,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolResult } from '@vybestack/llxprt-code-tools';
+import {
+  buildExecutionScope,
+  type NestedExecutionComposition,
+} from './nested-execution.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import {
   triggerBeforeToolHook,
@@ -123,8 +127,11 @@ function applyHookOutputModifications(
         : JSON.stringify(finalResult.llmContent);
     const appendText = appendedTexts.join('\n\n');
 
+    // The hook changed the text a programmatic caller would otherwise read
+    // from the typed value, so the typed value no longer describes it.
+    const { structuredOutput: _replaced, ...textResult } = finalResult;
     finalResult = {
-      ...finalResult,
+      ...textResult,
       llmContent: `${existingContent}\n\n${appendText}`,
     };
   }
@@ -161,6 +168,12 @@ export class ToolArgumentValidationError extends Error {
 }
 
 export class ToolExecutor {
+  /**
+   * @param nestedExecution Composition attached to every execution scope as
+   * its nested-execution port; absent for schedulers without nested runs.
+   */
+  constructor(private readonly nestedExecution?: NestedExecutionComposition) {}
+
   /** Prepares a call that runs without hooks: its arguments are final. */
   prepareDirect(call: ValidatingToolCall): PreparedToolExecution {
     return {
@@ -214,6 +227,11 @@ export class ToolExecutor {
       onLiveOutput,
       onPid,
     } = context;
+    const scope = buildExecutionScope(
+      scheduledCall.request,
+      this.nestedExecution,
+      hookOwner,
+    );
     const { callId, name: toolName } = scheduledCall.request;
     const { invocation, effectiveArgs, beforeResult } = prepared;
     const serverName = (invocation as { _serverName?: string })._serverName;
@@ -225,7 +243,14 @@ export class ToolExecutor {
     const setPidCallback = (pid: number) => onPid?.(callId, pid);
 
     return invocation
-      .execute(signal, liveOutputCallback, undefined, undefined, setPidCallback)
+      .execute(
+        signal,
+        liveOutputCallback,
+        undefined,
+        undefined,
+        setPidCallback,
+        scope,
+      )
       .then(async (toolResult: ToolResult) => {
         if (signal.aborted) throw new Error('User cancelled tool execution.');
         const beforeDecoratedResult = applyHookOutputModifications(
