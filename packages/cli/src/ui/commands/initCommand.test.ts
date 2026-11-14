@@ -5,36 +5,23 @@
  */
 import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { createInitCommand } from './initCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
-const mockMemoryExists = vi.fn();
-// Mock the 'fs' module
-const realFsModule = { ...(await import('fs')) };
-
-void vi.mock('fs', () => {
-  const actual = realFsModule;
-  return {
-    ...actual,
-    default: actual,
-    existsSync: (filePath: Parameters<typeof actual.existsSync>[0]) =>
-      String(filePath).endsWith('LLXPRT.md')
-        ? mockMemoryExists(filePath)
-        : actual.existsSync(filePath),
-    writeFileSync: vi.fn(),
-  };
-});
+const posixOnly = process.platform === 'win32' ? it.skip : it;
 
 describe('initCommand', () => {
   let mockContext: CommandOwnerFixture;
-  const targetDir = '/test/dir';
-  const llxprtMdPath = path.join(targetDir, 'LLXPRT.md');
+  let targetDir: string;
+  let llxprtMdPath: string;
 
   beforeEach(() => {
-    // Create a fresh mock context for each test
+    targetDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-init-'));
+    llxprtMdPath = path.join(targetDir, 'LLXPRT.md');
     mockContext = createMockCommandContext({
       services: {
         config: {
@@ -45,45 +32,35 @@ describe('initCommand', () => {
   });
 
   afterEach(() => {
-    // Clear all mocks after each test
-    vi.clearAllMocks();
+    fs.rmSync(targetDir, { recursive: true, force: true });
   });
 
-  it('should inform the user if LLXPRT.md already exists', async () => {
-    // Arrange: Simulate that the file exists
-    mockMemoryExists.mockReturnValue(true);
-
-    // Act: Run the command's action
-    const result = await createInitCommand(
+  const runInit = (): ReturnType<
+    NonNullable<ReturnType<typeof createInitCommand>['action']>
+  > =>
+    createInitCommand(
       mockContext.services.config?.getTargetDir(),
       mockContext.ui.addItem,
     ).action!(mockContext, '');
 
-    // Assert: Check for the correct informational message
+  it('should inform the user if LLXPRT.md already exists', async () => {
+    fs.writeFileSync(llxprtMdPath, 'my notes');
+
+    const result = await runInit();
+
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
         'A LLXPRT.md file already exists in this directory. No changes were made.',
     });
-    // Assert: Ensure no file was written
-    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(fs.readFileSync(llxprtMdPath, 'utf8')).toBe('my notes');
   });
 
   it('should create LLXPRT.md and submit a prompt if it does not exist', async () => {
-    // Arrange: Simulate that the file does not exist
-    mockMemoryExists.mockReturnValue(false);
+    const result = await runInit();
 
-    // Act: Run the command's action
-    const result = await createInitCommand(
-      mockContext.services.config?.getTargetDir(),
-      mockContext.ui.addItem,
-    ).action!(mockContext, '');
-
-    // Assert: Check that writeFileSync was called correctly
-    expect(fs.writeFileSync).toHaveBeenCalledWith(llxprtMdPath, '', 'utf8');
-
-    // Assert: Check that an informational message was added to the UI
+    expect(fs.readFileSync(llxprtMdPath, 'utf8')).toBe('');
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
         type: 'info',
@@ -91,28 +68,40 @@ describe('initCommand', () => {
       },
       expect.any(Number),
     );
-
-    // Assert: Check that the correct prompt is submitted
     if (result?.type !== 'submit_prompt')
       throw new Error('Expected submitted prompt');
-    expect(result.type).toBe('submit_prompt');
     expect(result.content).toContain(
       'You are an AI agent that brings the power of multiple LLM providers',
     );
   });
 
+  posixOnly(
+    'should not create a file through a dangling LLXPRT.md symlink',
+    async () => {
+      const elsewhere = path.join(targetDir, 'elsewhere.txt');
+      fs.symlinkSync(elsewhere, llxprtMdPath);
+
+      const result = await runInit();
+
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content:
+          'A LLXPRT.md file already exists in this directory. No changes were made.',
+      });
+      expect(fs.existsSync(elsewhere)).toBe(false);
+    },
+  );
+
   it('should return an error if config is not available', async () => {
-    // Arrange: Create a context without config
     const noConfigContext = createMockCommandContext();
     noConfigContext.services.config = null;
 
-    // Act: Run the command's action
     const result = await createInitCommand(
       noConfigContext.services.config?.getTargetDir(),
       noConfigContext.ui.addItem,
     ).action!(noConfigContext, '');
 
-    // Assert: Check for the correct error message
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',

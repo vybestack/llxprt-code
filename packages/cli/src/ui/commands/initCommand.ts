@@ -109,17 +109,25 @@ export function createInitCommand(
       }
       const llxprtMdPath = path.join(targetDir, 'LLXPRT.md');
 
-      if (fs.existsSync(llxprtMdPath)) {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content:
-            'A LLXPRT.md file already exists in this directory. No changes were made.',
-        };
+      // Exclusive create: one atomic step both detects an existing LLXPRT.md
+      // (or a symlink at that path) and refuses to truncate or follow it.
+      try {
+        fs.writeFileSync(llxprtMdPath, '', { encoding: 'utf8', flag: 'wx' });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          error.code === 'EEXIST'
+        ) {
+          return {
+            type: 'message',
+            messageType: 'info',
+            content:
+              'A LLXPRT.md file already exists in this directory. No changes were made.',
+          };
+        }
+        throw error;
       }
-
-      // Create an empty LLXPRT.md file
-      fs.writeFileSync(llxprtMdPath, '', 'utf8');
 
       addItem(
         {
