@@ -25,6 +25,10 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import type { DiffManager } from './diff-manager.js';
 import { OpenFilesManager } from './open-files-manager.js';
+import {
+  ensurePrivateDirectory,
+  writePrivateFile,
+} from './private-port-file.js';
 
 class CORSError extends Error {
   constructor(message: string) {
@@ -105,7 +109,7 @@ async function writePortAndWorkspace({
   log(`Writing port file to: ${portFile}`);
 
   try {
-    await fs.writeFile(portFile, content).then(() => fs.chmod(portFile, 0o600));
+    await writePrivateFile(portFile, content);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log(`Failed to write port to file: ${message}`);
@@ -678,8 +682,10 @@ export class IDEServer {
 
   private async createPortFile() {
     try {
-      const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
-      await fs.mkdir(portDir, { recursive: true });
+      const baseDir = path.join(os.tmpdir(), 'llxprt');
+      const portDir = path.join(baseDir, 'ide');
+      await ensurePrivateDirectory(baseDir);
+      await ensurePrivateDirectory(portDir);
       this.portFile = path.join(
         portDir,
         `llxprt-ide-server-${process.ppid}-${this.port}.json`,
