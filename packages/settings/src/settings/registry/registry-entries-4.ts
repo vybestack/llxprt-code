@@ -84,7 +84,7 @@ export const REGISTRY_ENTRIES_PART_4: readonly SettingSpec[] = deepFreezeTable<
     owner: 'model',
     propagation: 'next-turn',
     description:
-      'Base wait in milliseconds before the first refusal retry. Retry n waits min(base * 4^(n-1), 180000). 0 retries immediately (default: 15000)',
+      'Base wait in milliseconds before the first refusal retry and before stream-timeout resends (see stream-timeout-retries). Retry n waits min(base * 4^(n-1), 180000). 0 retries immediately (default: 15000)',
     type: 'number',
     default: 15000,
     persistToProfile: true,

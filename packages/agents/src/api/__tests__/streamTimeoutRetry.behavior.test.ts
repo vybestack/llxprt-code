@@ -196,3 +196,30 @@ describe('cancelling during the wait before a resend (issue #4093)', () => {
     expect(run.requests).toHaveLength(1);
   });
 });
+
+describe('cancelling while the stream is stalled (issue #4093)', () => {
+  it('ends as cancelled without waiting for the watchdog or retrying', async () => {
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 5_000);
+
+    const run = await runScriptedPrompt(
+      [stallReply(), stopReply('unrequested')],
+      [PROMPT],
+      {
+        settings: {
+          ...FAST_TIMEOUT,
+          'stream-first-response-timeout-ms': 10_000,
+        },
+        signal: controller.signal,
+      },
+    );
+    clearTimeout(abortTimer);
+
+    expect(doneReasons(run)).toStrictEqual(['aborted']);
+    expect(run.requests).toHaveLength(1);
+    expect(notices(run)).toStrictEqual([]);
+    expect(run.events.filter((event) => event.type === 'retry')).toHaveLength(
+      0,
+    );
+  });
+});
