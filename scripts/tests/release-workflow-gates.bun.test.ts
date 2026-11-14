@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { relative, resolve } from 'node:path';
 import {
   asRecord,
   asString,
@@ -26,6 +27,38 @@ const verificationJobs = [
   'candidate_amd64',
   'candidate_arm64',
 ] as const;
+
+function standardArtifactAction(actionName: string): string {
+  const ratchetMarker = `# ratchet:actions/${actionName}@v`;
+  const candidates = [
+    readRootFile('.github/workflows/nightly.yml'),
+    readRootFile('.github/workflows/evals-nightly.yml'),
+  ].flatMap((source) =>
+    source
+      .split('\n')
+      .filter((line) => line.includes(ratchetMarker))
+      .map((line) => {
+        const match = line.match(
+          /uses:\s*['"]?(actions\/[a-z-]+@[a-f0-9]+)['"]?\s+# ratchet:actions\/[a-z-]+@v(\d+)/,
+        );
+        if (match === null) {
+          throw new Error(`Malformed ratcheted action line: ${line}`);
+        }
+        return match;
+      }),
+  );
+  const latest = candidates.reduce<RegExpMatchArray | undefined>(
+    (selected, candidate) =>
+      selected === undefined || Number(candidate[2]) > Number(selected[2])
+        ? candidate
+        : selected,
+    undefined,
+  );
+  if (latest === undefined) {
+    throw new Error(`No ratcheted pin found for actions/${actionName}`);
+  }
+  return latest[1] as string;
+}
 
 const checkCommandsBefore = [
   'npm run format',
@@ -55,6 +88,46 @@ const checkCommandsAfter = [
 function needsOf(jobName: string): string[] {
   return asStringArray(workflowJob(workflow, jobName)['needs']);
 }
+describe('release artifact action compatibility', () => {
+  it('uses the repository artifact action pins and publishes each compared digest', () => {
+    const uploadAction = standardArtifactAction('upload-artifact');
+    const downloadAction = standardArtifactAction('download-artifact');
+
+    for (const job of Object.values(jobs)) {
+      const jobRecord = asRecord(job);
+      const steps = jobSteps(jobRecord);
+      for (const step of steps) {
+        if (typeof step.uses !== 'string') continue;
+        const uses = step.uses;
+        if (uses.startsWith('actions/upload-artifact@')) {
+          expect(uses).toBe(uploadAction);
+        } else if (uses.startsWith('actions/download-artifact@')) {
+          expect(uses).toBe(downloadAction);
+        }
+      }
+
+      const outputs =
+        jobRecord.outputs === undefined ? {} : asRecord(jobRecord.outputs);
+      for (const [outputName, outputValue] of Object.entries(outputs)) {
+        const match = asString(outputValue).match(
+          /steps\.([^.]+)\.outputs\.artifact-digest/,
+        );
+        if (match === null) continue;
+        const sourceStep = steps.find((step) => step.id === match[1]);
+        expect(
+          asString(sourceStep?.uses),
+          `${outputName} must come from the repository upload-artifact action`,
+        ).toBe(uploadAction);
+      }
+    }
+
+    const prepareSteps = jobSteps(workflowJob(workflow, 'prepare_artifact'));
+    const preparedUpload = prepareSteps.find(
+      (step) => step.name === 'Upload prepared release artifacts',
+    );
+    expect(asRecord(preparedUpload?.with)['include-hidden-files']).toBe(true);
+  });
+});
 
 function runCommands(jobName: string): string[] {
   return jobSteps(workflowJob(workflow, jobName))
@@ -111,6 +184,72 @@ describe('prepared release commit wiring', () => {
         'test "$RELEASE_COMMIT_SHA" = "$PUBLIC_BASE_SHA"',
       );
     }
+  });
+});
+
+describe('prepared release artifact inventory', () => {
+  it('keeps consumer-proof scratch outside the uploaded handoff and uploads only its diagnostics separately', () => {
+    const prepareSteps = jobSteps(workflowJob(workflow, 'prepare_artifact'));
+    const proofStep = prepareSteps.find(
+      (step) => step.name === 'Build and prove prepared release packages',
+    );
+    const uploadStep = prepareSteps.find(
+      (step) => step.name === 'Upload prepared release artifacts',
+    );
+    const diagnosticsStep = prepareSteps.find(
+      (step) => step.name === 'Upload release consumer proof',
+    );
+    if (proofStep === undefined || uploadStep === undefined) {
+      throw new Error(
+        'release proof and prepared artifact upload are required',
+      );
+    }
+
+    const proofEnv = asRecord(proofStep.env);
+    const proofDirectory = asString(proofEnv.LLXPRT_RELEASE_PROOF_DIR).replace(
+      '${{ runner.temp }}',
+      '/runner-temp',
+    );
+    const uploadConfig = asRecord(uploadStep.with);
+    const uploadDirectory = asString(uploadConfig.path).replace(
+      '${{ runner.temp }}',
+      '/runner-temp',
+    );
+    const relativeProofPath = relative(
+      resolve(uploadDirectory),
+      resolve(proofDirectory),
+    );
+
+    expect(
+      relativeProofPath === '' ||
+        (!relativeProofPath.startsWith('../') && relativeProofPath !== '..'),
+      'proof scratch must not be the uploaded directory or a child of it',
+    ).toBe(false);
+    const proofRun = asString(proofStep.run);
+    expect(proofRun).toContain('path.basename(artifact.tarball)');
+    expect(proofRun).toContain('fs.statSync(source).isFile()');
+    expect(proofRun).toContain(
+      'fs.copyFileSync(source, path.join(artifactDirectory, filename))',
+    );
+    expect(proofRun).not.toContain('cp -R "$LLXPRT_RELEASE_PROOF_DIR"');
+
+    expect(diagnosticsStep).toBeDefined();
+    expect(asString(diagnosticsStep?.['if'])).toContain('always()');
+    expect(asString(diagnosticsStep?.uses)).toBe(uploadStep.uses);
+    const diagnostics = asRecord(diagnosticsStep?.with);
+    expect(asString(diagnostics['if-no-files-found'])).toBe('warn');
+    expect(asString(diagnostics.path)).toContain(
+      '${{ runner.temp }}/release-proof/*.json',
+    );
+    expect(asString(diagnostics.path)).toContain(
+      '${{ runner.temp }}/release-proof/*.log',
+    );
+    expect(asString(diagnostics.path)).toContain(
+      '${{ runner.temp }}/release-proof/local/*.log',
+    );
+    expect(asString(diagnostics.path)).toContain(
+      '${{ runner.temp }}/release-proof/global/*.log',
+    );
   });
 });
 
@@ -421,5 +560,38 @@ describe('issue #4033 release workflow gates', () => {
         ),
       ),
     ).toBe(true);
+  });
+});
+
+describe('npm trusted publishing runtime', () => {
+  it('sets up the repository Node version and retains OIDC permission before npm publish', () => {
+    for (const [jobName, job] of Object.entries(jobs)) {
+      const steps = jobSteps(asRecord(job));
+      const publishIndex = steps.findIndex(
+        (step) =>
+          typeof step.run === 'string' && step.run.includes('npm publish'),
+      );
+      if (publishIndex < 0) continue;
+
+      const nodeSetupIndex = steps.findIndex((step) => {
+        if (typeof step.uses !== 'string') return false;
+        if (!step.uses.startsWith('actions/setup-node@')) return false;
+        return asString(asRecord(step.with)['node-version-file']) === '.nvmrc';
+      });
+      expect(
+        nodeSetupIndex,
+        `${jobName} must set up Node from .nvmrc before npm publish`,
+      ).toBeGreaterThanOrEqual(0);
+      expect(
+        nodeSetupIndex,
+        `${jobName} must set up Node before its first npm publish`,
+      ).toBeLessThan(publishIndex);
+
+      const permissions = asRecord(asRecord(job).permissions);
+      expect(
+        asString(permissions['id-token']),
+        `${jobName} must retain OIDC trusted-publishing permission`,
+      ).toBe('write');
+    }
   });
 });
