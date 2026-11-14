@@ -32,7 +32,7 @@ import {
 import { TaskTool, type TaskToolParams } from './task.js';
 
 describe('TaskTool', () => {
-  const fixturePaths = installTestWorkspacePaths({
+  installTestWorkspacePaths({
     targetDir: process.cwd(),
     isTrusted: () => true,
   });
