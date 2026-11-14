@@ -1,0 +1,41 @@
+{
+  "run": "f",
+  "commit": "3b5133062041268b18c384edf49a652f410d89fd",
+  "sessionId": "2943c725-914a-43c0-9e63-cbf8fcd12a60",
+  "harnessWallSeconds": 43,
+  "turnSeconds": 0,
+  "parent": {
+    "requests": 1,
+    "failedAttempts": [],
+    "inputTokens": 23075,
+    "cachedTokens": 0,
+    "outputTokens": 89,
+    "lastRequestInputTokens": 23075,
+    "maxRequestInputTokens": 23075,
+    "toolResultTokens": 0,
+    "toolCalls": 0,
+    "toolCallsByName": {}
+  },
+  "children": {},
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "execute_tool_script": 1
+  },
+  "nestedToolCalls": 1,
+  "nestedToolCallsByName": {
+    "run_shell_command": 1
+  },
+  "scriptRuns": [
+    {
+      "ok": false,
+      "errorCode": "CANCELLED",
+      "callCount": 1,
+      "partial": false,
+      "inputBytes": 113,
+      "finalBytes": 0,
+      "durationMs": 3481.8172909999994
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 2
+}
