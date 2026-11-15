@@ -34,6 +34,12 @@ import {
 
 interface FinalizeStreamResponseOptions {
   readonly origin?: object;
+  /**
+   * Aborts when the attempt is abandoned (a watchdog timeout, a cancellation).
+   * An abandoned attempt publishes nothing: its purge and its answer are
+   * fenced out before they reach history.
+   */
+  readonly attemptSignal?: AbortSignal;
   readonly logger: DebugLogger;
   readonly conversationManager: ConversationManager;
   readonly historyService: HistoryService;
@@ -68,6 +74,9 @@ export async function failStreamProcessing(
 async function settlePublishedStreamAdmissions(
   options: FinalizeStreamResponseOptions,
 ): Promise<void> {
+  // Last point at which an abandoned attempt can still be rolled back: an
+  // error here undoes the publication, anything later is a completed send.
+  options.attemptSignal?.throwIfAborted();
   const failures: unknown[] = [];
   try {
     await options.preparedUserTurn?.transferToHistory();
@@ -171,6 +180,7 @@ export async function finalizeStreamResponse(
     );
   }
 
+  options.attemptSignal?.throwIfAborted();
   await options.semanticMediaPurge?.complete({
     status: 'success',
     usage: acc.usage,

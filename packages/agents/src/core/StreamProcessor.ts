@@ -76,6 +76,7 @@ import {
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { createCancellableStream } from './cancellableStream.js';
 import { buildStreamChatOptions } from './streamChatOptions.js';
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import {
@@ -247,6 +248,7 @@ export class StreamProcessor {
       semanticMediaPurge,
       turnId,
       params.recordingExecution?.historyOrigin,
+      params.config?.abortSignal,
     );
   }
 
@@ -257,61 +259,19 @@ export class StreamProcessor {
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
     turnId: string,
     origin?: object,
+    attemptSignal?: AbortSignal,
   ): AsyncGenerator<ModelStreamChunk> {
-    let processedStream: AsyncGenerator<ModelStreamChunk> | undefined;
-    const ensureProcessedStream = (): AsyncGenerator<ModelStreamChunk> => {
-      processedStream ??= this.processStreamResponse(
+    return createCancellableStream(streamResponse, () =>
+      this.processStreamResponse(
         streamResponse,
         userContent,
         semanticMediaPurge,
         turnId,
         prepared,
         origin,
-      );
-      return processedStream;
-    };
-
-    const cancellableStream = {
-      async next(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        return ensureProcessedStream().next(value);
-      },
-      async return(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        if (processedStream) {
-          return typeof processedStream.return === 'function'
-            ? processedStream.return(value)
-            : { done: true, value: undefined };
-        }
-
-        if (typeof streamResponse.return === 'function') {
-          await streamResponse.return(value);
-        }
-
-        return { done: true, value: undefined };
-      },
-      async throw(error?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        if (processedStream) {
-          if (typeof processedStream.throw === 'function') {
-            return processedStream.throw(error);
-          }
-          throw error;
-        }
-
-        if (typeof streamResponse.throw === 'function') {
-          return streamResponse.throw(error);
-        }
-
-        if (typeof streamResponse.return === 'function') {
-          await streamResponse.return(undefined);
-        }
-
-        throw error;
-      },
-      [Symbol.asyncIterator](): AsyncGenerator<ModelStreamChunk> {
-        return this as AsyncGenerator<ModelStreamChunk>;
-      },
-    };
-
-    return cancellableStream as AsyncGenerator<ModelStreamChunk>;
+        attemptSignal,
+      ),
+    );
   }
 
   /**
@@ -606,6 +566,9 @@ export class StreamProcessor {
       });
 
       assertAdmittedRoute(params.modelParameters?.route);
+      // An attempt abandoned while its request was still being prepared (a
+      // slow hook, a purge lease) must not send anything when it resumes.
+      params.config?.abortSignal?.throwIfAborted();
       const streamResponse = provider.generateChatCompletion({
         ...prepared.options,
         requestDiagnostics: this.ports.requestDiagnostics,
@@ -623,6 +586,7 @@ export class StreamProcessor {
         hookRestrictedAllowedTools,
         rawTokenDeltaBridge,
         params.hookOwner ?? params.recordingExecution?.hookOwner,
+        params.config?.abortSignal,
       );
     } catch (error) {
       const durationMs = Date.now() - startTime;
@@ -649,6 +613,7 @@ export class StreamProcessor {
     hookRestrictedAllowedTools: string[] | undefined,
     rawTokenDeltaBridge: RawTokenDeltaBridge | null,
     owner?: HookExecutionOwner,
+    attemptSignal?: AbortSignal,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const convertedStream = this._convertIContentStream(
       streamResponse,
@@ -657,6 +622,7 @@ export class StreamProcessor {
       hookRestrictedAllowedTools,
       rawTokenDeltaBridge,
       owner,
+      attemptSignal,
     );
 
     const firstChunk = await convertedStream.next();
@@ -735,6 +701,7 @@ export class StreamProcessor {
     hookRestrictedAllowedTools?: string[],
     rawTokenDeltaBridge?: RawTokenDeltaBridge | null,
     owner?: HookExecutionOwner,
+    attemptSignal?: AbortSignal,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
     let finish: StreamFinishInfo = {};
@@ -751,6 +718,8 @@ export class StreamProcessor {
     // attempt's estimate here so only a successful one stays observable.
     try {
       for await (const iContent of streamResponse) {
+        // Data from an abandoned attempt is neither processed nor published.
+        attemptSignal?.throwIfAborted();
         timing?.recordChunk(iContent);
         this._trackPromptTokens(iContent);
         const chunk = toModelStreamChunk(iContent);
@@ -778,6 +747,8 @@ export class StreamProcessor {
         };
         yield yieldedChunk;
       }
+      // An EOF that arrives after the attempt was abandoned is not a success.
+      attemptSignal?.throwIfAborted();
     } catch (error) {
       this.currentPromptEnvelopeEstimate = null;
       attachStreamTiming(
@@ -818,6 +789,7 @@ export class StreamProcessor {
     capturedTurnId?: string,
     preparedUserTurn?: PreparedUserTurn,
     origin?: object,
+    attemptSignal?: AbortSignal,
   ): AsyncGenerator<ModelStreamChunk> {
     const includeThoughts = this.ports.ephemerals.reasoning.includeInContext();
     const turnId = capturedTurnId ?? this.historyService.generateTurnKey();
@@ -842,6 +814,7 @@ export class StreamProcessor {
           filteredContent,
           turnId,
         );
+        attemptSignal?.throwIfAborted();
         admissions.push({
           contents: [historyChunk.content],
           context: turnMediaAdmissionContext(turnId, 'provider-stream-output'),
@@ -860,6 +833,7 @@ export class StreamProcessor {
         accumulator.add(historyChunk);
         yield { ...chunk, content: filteredContent };
       }
+      attemptSignal?.throwIfAborted();
       const accumulated = accumulator.materialize();
       // Classified before validation, history commit and success accounting:
       // a refused attempt's output never reaches any of them (issue #4036).
@@ -872,6 +846,7 @@ export class StreamProcessor {
         preparedUserTurn,
         admissions,
         origin,
+        attemptSignal,
       );
       finalized = true;
     } catch (error: unknown) {
@@ -896,9 +871,11 @@ export class StreamProcessor {
     preparedUserTurn: PreparedUserTurn | undefined,
     mediaAdmissions: readonly MediaAdmissionRelease[],
     origin?: object,
+    attemptSignal?: AbortSignal,
   ): Promise<void> {
     return finalizeStreamResponse({
       origin,
+      attemptSignal,
       logger: this.logger,
       conversationManager: this.conversationManager,
       historyService: this.historyService,

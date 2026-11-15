@@ -86,6 +86,7 @@ import {
 import { commitTurnHistory } from './turnHistoryCommit.js';
 import {
   failedTurnCleanup,
+  releaseWhenAttemptAborted,
   throwAfterFailedTurnCleanup,
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
@@ -284,19 +285,13 @@ export class TurnProcessor {
       streamDoneResolver = resolve;
     });
 
-    // Force-resolve sendPromise when the abort signal fires.
-    // This prevents a permanent deadlock when .return() can't propagate
-    // through a generator blocked on a hung inner iterator (e.g. stalled
-    // HTTP stream after idle timeout).
     const abortSignal = params.config?.abortSignal;
-    const onAbort = () => streamDoneResolver!();
-    if (abortSignal) {
-      if (abortSignal.aborted) {
-        streamDoneResolver!();
-      } else {
-        abortSignal.addEventListener('abort', onAbort, { once: true });
-      }
-    }
+    const stopWatchingAbort = releaseWhenAttemptAborted(
+      abortSignal,
+      prepared,
+      semanticMediaPurge,
+      () => streamDoneResolver!(),
+    );
 
     let finished = false;
     const onDone = (): void => {
@@ -308,7 +303,7 @@ export class TurnProcessor {
       } catch (error: unknown) {
         releaseFailure = { error };
       }
-      abortSignal?.removeEventListener('abort', onAbort);
+      stopWatchingAbort();
       streamDoneResolver!();
       if (releaseFailure !== undefined) throw releaseFailure.error;
     };

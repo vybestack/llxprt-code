@@ -138,18 +138,28 @@ export async function prepareAdmittedUserTurn(
           context: turnMediaAdmissionContext(turnId, 'user-input'),
           mode: 'contents',
         };
-  let state: 'active' | 'released' | 'transferred' = 'active';
+  // 'transferring' is entered synchronously so a cancellation that arrives
+  // while the hand-off awaits cannot release the same admission twice.
+  let state: 'active' | 'released' | 'transferring' | 'transferred' = 'active';
+  let release: Promise<void> | undefined;
   return {
     userContents: prepared.userContents,
     userIContents: prepared.userIContents,
     turnId,
     admission,
-    releaseIfUncommitted: async () => {
-      if (state !== 'active') return;
+    // Idempotent: a later caller observes the outcome of the first release,
+    // so a cancellation that releases early does not hide a failure from the
+    // stream cleanup that follows.
+    releaseIfUncommitted: () => {
+      if (state === 'released') return release ?? Promise.resolve();
+      if (state !== 'active') return Promise.resolve();
       state = 'released';
-      if (admission !== undefined) {
-        await mediaAdmission?.releaseAdmissions?.([admission]);
-      }
+      release = (async () => {
+        if (admission !== undefined) {
+          await mediaAdmission?.releaseAdmissions?.([admission]);
+        }
+      })();
+      return release;
     },
     transferToHistory: async () => {
       if (state === 'released') {
@@ -157,9 +167,15 @@ export async function prepareAdmittedUserTurn(
           'Released user media admission cannot transfer to history',
         );
       }
-      if (state === 'transferred') return;
-      if (admission !== undefined) {
-        await mediaAdmission?.releaseAdmissions?.([admission]);
+      if (state === 'transferring' || state === 'transferred') return;
+      state = 'transferring';
+      try {
+        if (admission !== undefined) {
+          await mediaAdmission?.releaseAdmissions?.([admission]);
+        }
+      } catch (error: unknown) {
+        state = 'active';
+        throw error;
       }
       state = 'transferred';
     },
