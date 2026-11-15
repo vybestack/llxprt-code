@@ -86,6 +86,7 @@ function chatDumpMetadata(
           promptId: attemptContext.promptId,
           attemptIndex: attemptContext.attemptIndex,
           runtimeId: attemptContext.runtimeId,
+          retentionLimits: attemptContext.retentionLimits,
           ...(outcome === undefined ? {} : { outcome }),
         };
   // The SDK sends Authorization from the client api key; synthesize the
@@ -371,17 +372,37 @@ function wrapOpenAIStreamingResponse(
   shouldDumpError: boolean,
 ): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
   const { client, requestBody, mergedHeaders, baseURL, attemptContext } = opts;
-  if (shouldDumpError && !shouldDumpSuccess && attemptContext !== undefined) {
-    return wrapStreamWithOutcomeDump(
+  if (shouldDumpError && !shouldDumpSuccess) {
+    const errorWrapped = wrapStreamWithSDKErrorDump(
       response,
       'openai',
       '/chat/completions',
       requestBody,
-      baseURL,
+      baseURL ?? 'https://api.openai.com/v1',
+      dumpSDKRequestContext,
+      dumpSDKResponseContext,
       chatDumpMetadata(mergedHeaders, client.apiKey, attemptContext),
-      attemptContext.pairedSuccess,
+    );
+    return wrapStreamWithOutcomeDump(
+      errorWrapped,
+      'openai',
+      '/chat/completions',
+      requestBody,
+      baseURL,
+      {
+        ...chatDumpMetadata(mergedHeaders, client.apiKey, attemptContext),
+        correlation: {
+          promptId: attemptContext?.promptId ?? null,
+          attemptIndex: attemptContext?.attemptIndex ?? null,
+          runtimeId: attemptContext?.runtimeId ?? null,
+          ...(attemptContext?.retentionLimits === undefined
+            ? {}
+            : { retentionLimits: attemptContext.retentionLimits }),
+        },
+      },
+      attemptContext?.pairedSuccess ?? false,
       selectOpenAIDumpOutcome,
-      attemptContext.recordDump,
+      (outcome, baseId) => attemptContext?.recordDump(outcome, baseId),
     );
   }
   if (shouldDumpSuccess && requestBaseId !== undefined) {
@@ -495,7 +516,7 @@ async function executeNonStreamingRequest(
       mergedHeaders,
     );
 
-    if (shouldDumpError && !shouldDumpSuccess && opts.attemptContext) {
+    if (shouldDumpError && !shouldDumpSuccess) {
       await dumpOpenAIOutcomeResponse(response, opts);
     }
 
@@ -570,20 +591,25 @@ async function dumpOpenAIOutcomeResponse(
   opts: ApiExecutionOptions,
 ): Promise<void> {
   const attempt = opts.attemptContext;
-  if (attempt === undefined) return;
   const outcome = selectOpenAIDumpOutcome(response);
   if (
     outcome !== 'refusal' &&
-    !(outcome === 'success' && attempt.pairedSuccess)
+    !(outcome === 'success' && attempt?.pairedSuccess === true)
   )
     return;
   const dumpOutcome = outcome === 'refusal' ? 'refusal' : 'paired-success';
-  const metadata = chatDumpMetadata(
-    opts.mergedHeaders,
-    opts.client.apiKey,
-    attempt,
-    dumpOutcome,
-  );
+  const metadata: RequestDumpMetadata = {
+    ...chatDumpMetadata(opts.mergedHeaders, opts.client.apiKey, attempt),
+    correlation: {
+      promptId: attempt?.promptId ?? null,
+      attemptIndex: attempt?.attemptIndex ?? null,
+      runtimeId: attempt?.runtimeId ?? null,
+      ...(attempt?.retentionLimits === undefined
+        ? {}
+        : { retentionLimits: attempt.retentionLimits }),
+      outcome: dumpOutcome,
+    },
+  };
   const request = await bestEffortDump('outcome-request', 'openai', () =>
     dumpSDKRequestContext(
       'openai',
@@ -591,6 +617,7 @@ async function dumpOpenAIOutcomeResponse(
       opts.requestBody,
       opts.baseURL ?? 'https://api.openai.com/v1',
       metadata,
+      true,
     ),
   );
   if (request === undefined) return;
@@ -604,7 +631,7 @@ async function dumpOpenAIOutcomeResponse(
     ),
   );
   if (dumpResponse !== undefined)
-    attempt.recordDump(dumpOutcome, request.baseId);
+    attempt?.recordDump(dumpOutcome, request.baseId);
 }
 
 /**

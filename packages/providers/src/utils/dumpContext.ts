@@ -16,6 +16,8 @@ import {
 } from './mediaDiagnostics.js';
 import {
   DEFAULT_DUMP_RETENTION,
+  markDumpGroupActive,
+  markDumpGroupPublished,
   pruneDumpDirectory,
 } from './dump-retention.js';
 
@@ -41,9 +43,9 @@ export interface DumpResponse {
 }
 
 export interface DumpAttemptCorrelation {
-  readonly promptId: string;
-  readonly attemptIndex: number;
-  readonly runtimeId: string;
+  readonly promptId: string | null;
+  readonly attemptIndex: number | null;
+  readonly runtimeId: string | null;
   readonly outcome?: string;
   readonly retentionLimits?: {
     readonly maxBytes: number;
@@ -54,9 +56,9 @@ export interface DumpAttemptCorrelation {
 export interface DumpData {
   provider: string;
   timestamp: string;
-  promptId?: string;
-  attemptIndex?: number;
-  runtimeId?: string;
+  promptId?: string | null;
+  attemptIndex?: number | null;
+  runtimeId?: string | null;
   outcome?: string;
   request?: DumpRequest;
   response?: DumpResponse;
@@ -201,7 +203,11 @@ async function pruneDumpFiles(
   limits: DumpAttemptCorrelation['retentionLimits'] = DEFAULT_DUMP_RETENTION,
 ): Promise<void> {
   try {
-    await pruneDumpDirectory(dumpDir, limits);
+    const result = await pruneDumpDirectory(dumpDir, limits);
+    if (result.skipped === true)
+      logger.debug(
+        () => `Skipped dump retention for unverified directory: ${dumpDir}`,
+      );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.debug(() => `Best-effort dump retention failed: ${message}`);
@@ -235,6 +241,7 @@ export async function dumpRequestContext(
   const id = baseId ?? generateDumpBaseId(provider);
   const requestFilename = `${id}-request.json`;
   const filepath = path.join(dumpDir, requestFilename);
+  if (deferRetention) markDumpGroupActive(dumpDir, id);
 
   const redactedRequest = redactSensitiveData(request, options);
 
@@ -288,6 +295,7 @@ export async function dumpResponseContext(
   };
 
   await writeDumpFile(filepath, data);
+  if (baseId !== undefined) markDumpGroupPublished(dumpDir, baseId);
   await pruneDumpFiles(dumpDir, correlation?.retentionLimits);
   let retained = true;
   try {

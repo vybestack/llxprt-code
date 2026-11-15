@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lstat, readdir, stat, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { lstat, readdir, realpath, unlink } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 export const DEFAULT_DUMP_RETENTION = {
   maxBytes: 2_147_483_648,
@@ -21,6 +21,7 @@ export interface DumpRetentionLimits {
 export interface DumpRetentionResult {
   readonly managedBytes: number;
   readonly removedGroups: readonly string[];
+  readonly skipped?: boolean;
 }
 
 interface DumpGroup {
@@ -35,8 +36,12 @@ interface DumpGroup {
 }
 
 const DIRECTORY_QUEUES = new Map<string, Promise<void>>();
+const ACTIVE_GROUPS = new Map<string, Set<string>>();
 
-async function readManagedGroups(directory: string): Promise<DumpGroup[]> {
+async function readManagedGroups(
+  directory: string,
+  active: ReadonlySet<string>,
+): Promise<DumpGroup[]> {
   const entries = await readdir(directory);
   const groups = new Map<string, Array<DumpGroup['files'][number]>>();
   for (const name of entries) {
@@ -51,6 +56,9 @@ async function readManagedGroups(directory: string): Promise<DumpGroup[]> {
       groups.set(baseId, files);
     }
   }
+  for (const [baseId, files] of groups) {
+    if (active.has(baseId) || files.length !== 2) groups.delete(baseId);
+  }
   return [...groups].map(([baseId, files]) => ({
     baseId,
     files,
@@ -59,8 +67,12 @@ async function readManagedGroups(directory: string): Promise<DumpGroup[]> {
   }));
 }
 
-async function removeGroup(group: DumpGroup): Promise<void> {
+async function removeGroup(
+  directory: string,
+  group: DumpGroup,
+): Promise<boolean> {
   for (const file of group.files) {
+    if ((await verifiedDirectory(directory)) !== directory) return false;
     try {
       const current = await lstat(file.path);
       if (current.isFile()) await unlink(file.path);
@@ -75,13 +87,17 @@ async function removeGroup(group: DumpGroup): Promise<void> {
       throw error;
     }
   }
+  return true;
 }
 
 async function prune(
   directory: string,
   limits: DumpRetentionLimits,
 ): Promise<DumpRetentionResult> {
-  const entries = await readManagedGroups(directory);
+  const entries = await readManagedGroups(
+    directory,
+    ACTIVE_GROUPS.get(directory) ?? new Set(),
+  );
   const now = (limits.now ?? new Date()).getTime();
   const expiration = now - limits.maxAgeDays * 86_400_000;
   const ordered = [...entries].sort((left, right) => {
@@ -93,17 +109,43 @@ async function prune(
   const keep = ordered.filter((group) => group.oldestMtimeMs >= expiration);
   const removedGroups: string[] = [];
   for (const group of expired) {
-    await removeGroup(group);
+    if (!(await removeGroup(directory, group)))
+      return { managedBytes: 0, removedGroups, skipped: true };
     removedGroups.push(group.baseId);
   }
   let managedBytes = keep.reduce((total, group) => total + group.bytes, 0);
   for (const group of keep) {
     if (managedBytes <= limits.maxBytes) break;
-    await removeGroup(group);
+    if (!(await removeGroup(directory, group)))
+      return { managedBytes, removedGroups, skipped: true };
     managedBytes -= group.bytes;
     removedGroups.push(group.baseId);
   }
   return { managedBytes, removedGroups };
+}
+
+export function markDumpGroupActive(directory: string, baseId: string): void {
+  const active = ACTIVE_GROUPS.get(directory) ?? new Set<string>();
+  active.add(baseId);
+  ACTIVE_GROUPS.set(directory, active);
+}
+
+export function markDumpGroupPublished(
+  directory: string,
+  baseId: string,
+): void {
+  const active = ACTIVE_GROUPS.get(directory);
+  active?.delete(baseId);
+  if (active?.size === 0) ACTIVE_GROUPS.delete(directory);
+}
+
+async function verifiedDirectory(
+  directory: string,
+): Promise<string | undefined> {
+  const directoryPath = resolve(directory);
+  const directoryStat = await lstat(directoryPath);
+  if (!directoryStat.isDirectory()) return undefined;
+  return realpath(directoryPath);
 }
 
 /** Prunes whole request/response groups; filesystem races are left to the caller's best-effort boundary. */
@@ -130,8 +172,13 @@ export async function pruneDumpDirectory(
   DIRECTORY_QUEUES.set(directory, queued);
   await previous;
   try {
-    await stat(directory);
-    return await prune(directory, limits);
+    const verifiedPath = await verifiedDirectory(directory);
+    if (verifiedPath === undefined)
+      return { managedBytes: 0, removedGroups: [], skipped: true };
+    const currentPath = await verifiedDirectory(directory);
+    if (currentPath !== verifiedPath)
+      return { managedBytes: 0, removedGroups: [], skipped: true };
+    return await prune(verifiedPath, limits);
   } finally {
     release();
     if (DIRECTORY_QUEUES.get(directory) === queued)

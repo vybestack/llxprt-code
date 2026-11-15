@@ -71,6 +71,27 @@ describe('dump retention', () => {
     rmSync(outside, { force: true });
   });
 
+  it('does not prune through a symlinked dump directory', async () => {
+    const root = createFixture();
+    const outside = join(root, 'outside');
+    mkdirSync(outside);
+    const request = join(outside, 'pair-request.json');
+    const response = join(outside, 'pair-response.json');
+    writeFileSync(request, 'request');
+    writeFileSync(response, 'response');
+    const linkedDirectory = join(root, 'dumps');
+    symlinkSync(outside, linkedDirectory, 'dir');
+
+    await pruneDumpDirectory(linkedDirectory, {
+      maxBytes: 1,
+      maxAgeDays: 1,
+      now: new Date(),
+    });
+
+    expect(readFileSync(request, 'utf8')).toBe('request');
+    expect(readFileSync(response, 'utf8')).toBe('response');
+  });
+
   it('keeps request and response files together and accepts default caps', async () => {
     const directory = createFixture();
     writeFileSync(join(directory, 'pair-request.json'), 'r'.repeat(20));

@@ -190,6 +190,53 @@ describe('dumpContext separate request/response files', () => {
     });
   });
 
+  it('keeps an in-flight request while another published pair triggers pruning', async () => {
+    const limits = { maxBytes: 1, maxAgeDays: 14 };
+    const correlation = {
+      promptId: 'interleaved-prompt',
+      attemptIndex: 0,
+      runtimeId: 'interleaved-runtime',
+      retentionLimits: limits,
+    };
+    const active = await dumpRequestContext(
+      { url: 'http://local/active', method: 'POST', body: {} },
+      'openai',
+      undefined,
+      undefined,
+      {},
+      correlation,
+      true,
+    );
+    const published = await dumpRequestContext(
+      { url: 'http://local/published', method: 'POST', body: {} },
+      'openai',
+      undefined,
+      undefined,
+      {},
+      { ...correlation, attemptIndex: 1 },
+      true,
+    );
+    await dumpResponseContext(
+      published.baseId,
+      { status: 200, body: {} },
+      'openai',
+      {},
+      { ...correlation, attemptIndex: 1 },
+    );
+
+    expect(
+      await fs.readFile(path.join(DUMP_DIR, active.requestFilename), 'utf8'),
+    ).toContain('active');
+
+    await dumpResponseContext(
+      active.baseId,
+      { status: 200, body: {} },
+      'openai',
+      {},
+      correlation,
+    );
+  });
+
   describe('request and response files are related by base id', () => {
     it('should produce filenames sharing the same base id', async () => {
       const request = {

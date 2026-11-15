@@ -376,7 +376,15 @@ export async function dumpSDKErrorRequestResponse(
   );
 
   await bestEffortDump('error-response', providerName, () =>
-    dumpResponse(reqResult?.baseId, providerName, errorResponse, true),
+    metadata?.correlation === undefined
+      ? dumpResponse(reqResult?.baseId, providerName, errorResponse, true)
+      : dumpResponse(
+          reqResult?.baseId,
+          providerName,
+          errorResponse,
+          true,
+          metadata.correlation,
+        ),
   );
 }
 

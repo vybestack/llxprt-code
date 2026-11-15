@@ -3,6 +3,18 @@
 Branch: `issue4101`; current phase: P05.
 
 Status: P05 implementation and verification completed. See `.completed/P05.md`.
+## Review round 1
+
+- HIGH retention path verification: the pruner now `lstat`s the dumps directory, resolves the verified real directory, skips symlink/non-directory targets with a debug record, and rechecks the directory before child deletion. A real symlinked-directory test confirms outside request/response files survive.
+- MEDIUM in-flight publication: retention tracks active base IDs, excludes incomplete and active groups, and clears active state only after response publication. A real temporary-directory interleaving test keeps an active request through another pair's prune and then publishes the response.
+- MEDIUM per-attempt caps: Anthropic, OpenAI streaming/JSON/error, and OpenAI Vercel dump metadata carry resolved `retentionLimits`. Real Agent-level refusal tests with tiny configured caps verify Anthropic and OpenAI old pairs are pruned from disk.
+- MEDIUM direct Agent.generate refusal: Anthropic and OpenAI native refusal capture now runs without attempt context and writes explicit null correlation identity. Both protocols are covered through local refusal endpoints and filesystem assertions.
+- MEDIUM OpenAI stream exception: error-mode streaming composes SDK exception capture with outcome capture, and error response dumps retain attempt correlation. A local SSE endpoint test asserts the request/response pair, stream error body, and attempt identity.
+- Focused regressions: 61 tests across retention, SDK dump, Anthropic/OpenAI execution, and Agent refusal files passed (`rc=0`).
+- Full verification final pass: `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build`, and `npm run test` each recorded `rc=0` in `tmp/verify4101/{typecheck,lint,format,build,test}-R1a.log`.
+- The first full test run reported one timing-sensitive unrelated heap-retention assertion (`shellPtyMemory.bun.test.ts`, observed 19 retained `Uint8Array` values against 16). That file passed 3/3 standalone reruns. A subsequent complete workspace run passed: agents 669/669, core 867/867, CLI 1004/1004, plus all remaining workspace suites. `grep -nE 'Native Bun test failed|^FAILED:' tmp/verify4101/test-R1a.log` matched only two `(pass)` retry-runner self-test lines; no `FAILED:` suite marker appeared.
+- `git diff --check`: passed. Changes remain on branch `issue4101`; no push performed.
+
 
 | Phase | State | Verification |
 | --- | --- | --- |

@@ -69,6 +69,7 @@ export async function writeVercelDumpPair(
           promptId: attempt.promptId,
           attemptIndex: attempt.attemptIndex,
           runtimeId: attempt.runtimeId,
+          retentionLimits: attempt.retentionLimits,
           outcome: dumpOutcome,
         };
   const request = await bestEffortDump(

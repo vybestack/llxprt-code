@@ -250,9 +250,123 @@ describe('refusal dump pairing (issue #4101)', () => {
     expect(readdirSync(cacheRoot)).toStrictEqual([]);
   });
 
+  it('applies configured retention limits to Anthropic refusal pairs', async () => {
+    await runScriptedPrompt(
+      [
+        { kind: 'finish', finishReason: 'refusal', outputTokens: 0 },
+        { kind: 'finish', finishReason: 'refusal', outputTokens: 0 },
+      ],
+      ['tiny retention'],
+      {
+        protocol: 'anthropic',
+        settings: {
+          dumpcontext: 'error',
+          'dump-retention-max-bytes': 10,
+          'dump-retention-max-age-days': 14,
+          'refusal.retries': 1,
+          'refusal.backoff-ms': 1,
+        },
+      },
+    );
+
+    const dumpDir = join(cacheRoot, 'dumps');
+    expect(existsSync(dumpDir) ? readdirSync(dumpDir) : []).toHaveLength(0);
+  });
+
+  it('applies configured retention limits to OpenAI refusal pairs', async () => {
+    await runScriptedPrompt(
+      [
+        { kind: 'finish', finishReason: 'refusal', outputTokens: 0 },
+        { kind: 'finish', finishReason: 'refusal', outputTokens: 0 },
+      ],
+      ['tiny retention'],
+      {
+        settings: {
+          dumpcontext: 'error',
+          'dump-retention-max-bytes': 10,
+          'dump-retention-max-age-days': 14,
+          'refusal.retries': 1,
+          'refusal.backoff-ms': 1,
+        },
+      },
+    );
+
+    const dumpDir = join(cacheRoot, 'dumps');
+    expect(existsSync(dumpDir) ? readdirSync(dumpDir) : []).toHaveLength(0);
+  });
+
+  it.each([
+    ['Anthropic', 'anthropic'],
+    ['OpenAI', 'openai'],
+  ] as const)(
+    'dumps a direct %s refusal without attempt context',
+    async (_, protocol) => {
+      await runScriptedPrompt(
+        [{ kind: 'finish', finishReason: 'refusal', outputTokens: 0 }],
+        ['direct refusal'],
+        {
+          ...(protocol === 'anthropic' ? { protocol } : {}),
+          directGeneration: true,
+          promptId: 'direct-prompt-4101',
+          settings: { dumpcontext: 'error' },
+        },
+      );
+
+      const dumpDir = join(cacheRoot, 'dumps');
+      const files = existsSync(dumpDir) ? readdirSync(dumpDir) : [];
+      expect(
+        files.filter((name) => name.endsWith('-request.json')),
+      ).toHaveLength(1);
+      expect(
+        files.filter((name) => name.endsWith('-response.json')),
+      ).toHaveLength(1);
+      const request = readDump(
+        dumpDir,
+        files.find((name) => name.endsWith('-request.json')) ?? '',
+      );
+      expect(request['promptId']).toBeNull();
+    },
+  );
+
+  it('captures an OpenAI SSE exception with the active attempt correlation', async () => {
+    await runScriptedPrompt(
+      [{ kind: 'stream-error', text: 'partial before disconnect' }],
+      ['stream interruption'],
+      {
+        settings: { dumpcontext: 'error' },
+        allowStreamError: true,
+      },
+    );
+
+    const dumpDir = join(cacheRoot, 'dumps');
+    const files = existsSync(dumpDir) ? readdirSync(dumpDir) : [];
+    expect(files.filter((name) => name.endsWith('-request.json'))).toHaveLength(
+      1,
+    );
+    expect(
+      files.filter((name) => name.endsWith('-response.json')),
+    ).toHaveLength(1);
+    const response = readDump(
+      dumpDir,
+      files.find((name) => name.endsWith('-response.json')) ?? '',
+    );
+    const body = asRecord(response['response']);
+    expect(body['status']).toBe(500);
+    expect(JSON.stringify(body['body'])).toContain('error');
+    const request = readDump(
+      dumpDir,
+      files.find((name) => name.endsWith('-request.json')) ?? '',
+    );
+    expect(request['promptId']).toBeString();
+    expect(request['attemptIndex']).toBe(0);
+    expect(response['promptId']).toBe(request['promptId']);
+    expect(response['attemptIndex']).toBe(request['attemptIndex']);
+  });
+
   it('writes exactly one pair per attempt in on mode', async () => {
     await runScriptedPrompt(
       [stopReply('ordinary answer')],
+
       ['ordinary prompt'],
       { protocol: 'anthropic', settings: { dumpcontext: 'on' } },
     );

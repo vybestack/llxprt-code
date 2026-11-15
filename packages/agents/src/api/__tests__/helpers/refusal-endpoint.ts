@@ -41,6 +41,7 @@ export type EndpointReply = {
   readonly requestId?: string | null;
 } & (
   | { readonly kind: 'http-error'; readonly status: number }
+  | { readonly kind: 'stream-error'; readonly text: string }
   | {
       readonly kind: 'finish';
       readonly finishReason: string;
@@ -169,7 +170,7 @@ function renderToolCall(
 }
 
 function renderReply(
-  reply: Exclude<EndpointReply, { kind: 'http-error' }>,
+  reply: Exclude<EndpointReply, { kind: 'http-error' | 'stream-error' }>,
 ): string {
   if (reply.kind === 'tool-call') {
     return renderToolCall(reply.name, reply.args, 'tool_calls');
@@ -298,6 +299,11 @@ export async function startScriptedEndpoint(
       response.writeHead(200, {
         'Content-Type': streaming ? 'text/event-stream' : 'application/json',
       });
+      if (reply.kind === 'stream-error') {
+        response.write(chunk({ role: 'assistant', content: reply.text }, null));
+        response.destroy();
+        return;
+      }
       response.end(streaming ? renderReply(reply) : renderJsonReply(reply));
     })().catch((error: unknown) =>
       response.destroy(error instanceof Error ? error : undefined),
@@ -381,6 +387,9 @@ export interface ScriptedRunOptions {
   readonly compressBeforePromptIndex?: number;
   /** Which wire protocol the local endpoint speaks. Default: openai. */
   readonly protocol?: 'openai' | 'anthropic';
+  readonly directGeneration?: boolean;
+  readonly promptId?: string;
+  readonly allowStreamError?: boolean;
   /**
    * Ephemeral settings applied before the first prompt. Refusal retries and
    * review are off unless a test turns them on (`undefined` restores the
@@ -440,12 +449,20 @@ async function runPrompts(
     if (promptIndex === options.compressBeforePromptIndex) {
       await agent.compress({ promptId: `refusal-audit-${promptIndex}` });
     }
-    for await (const event of agent.stream(
-      prompt,
-      options.signal === undefined ? undefined : { signal: options.signal },
-    )) {
-      events.push(event);
-      await options.onEvent?.(event, agent);
+    if (options.directGeneration === true) {
+      await agent.generate(prompt, { promptId: options.promptId });
+      continue;
+    }
+    try {
+      for await (const event of agent.stream(
+        prompt,
+        options.signal === undefined ? undefined : { signal: options.signal },
+      )) {
+        events.push(event);
+        await options.onEvent?.(event, agent);
+      }
+    } catch (error) {
+      if (options.allowStreamError !== true) throw error;
     }
   }
   return events;
