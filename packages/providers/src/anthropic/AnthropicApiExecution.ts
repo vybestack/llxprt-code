@@ -271,6 +271,9 @@ function anthropicDumpMetadata(
           promptId: attempt?.promptId ?? null,
           attemptIndex: attempt?.attemptIndex ?? null,
           runtimeId: attempt?.runtimeId ?? null,
+          ...(attempt === undefined
+            ? {}
+            : { retentionCoordinator: attempt.retentionCoordinator }),
           ...(retentionLimits === undefined ? {} : { retentionLimits }),
           ...(outcome === undefined ? {} : { outcome }),
         };
@@ -351,6 +354,9 @@ async function dumpAnthropicOutcome(
     promptId: attempt?.promptId ?? null,
     attemptIndex: attempt?.attemptIndex ?? null,
     runtimeId: attempt?.runtimeId ?? null,
+    ...(attempt === undefined
+      ? {}
+      : { retentionCoordinator: attempt.retentionCoordinator }),
     ...(attempt?.retentionLimits === undefined
       ? {}
       : { retentionLimits: attempt.retentionLimits }),

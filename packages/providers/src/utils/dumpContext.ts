@@ -20,6 +20,7 @@ import {
   markDumpGroupPublished,
   pruneDumpDirectory,
 } from './dump-retention.js';
+import type { DumpRetentionCoordinator } from './dump-retention.js';
 
 const logger = new DebugLogger('llxprt:core:dumpContext');
 
@@ -51,6 +52,7 @@ export interface DumpAttemptCorrelation {
     readonly maxBytes: number;
     readonly maxAgeDays: number;
   };
+  readonly retentionCoordinator?: DumpRetentionCoordinator;
 }
 
 export interface DumpData {
@@ -201,9 +203,10 @@ async function writeDumpFile(filepath: string, data: unknown): Promise<void> {
 async function pruneDumpFiles(
   dumpDir: string,
   limits: DumpAttemptCorrelation['retentionLimits'] = DEFAULT_DUMP_RETENTION,
+  coordinator?: DumpRetentionCoordinator,
 ): Promise<void> {
   try {
-    const result = await pruneDumpDirectory(dumpDir, limits);
+    const result = await pruneDumpDirectory(dumpDir, limits, coordinator);
     if (result.skipped === true)
       logger.debug(
         () => `Skipped dump retention for unverified directory: ${dumpDir}`,
@@ -241,22 +244,36 @@ export async function dumpRequestContext(
   const id = baseId ?? generateDumpBaseId(provider);
   const requestFilename = `${id}-request.json`;
   const filepath = path.join(dumpDir, requestFilename);
-  if (deferRetention) markDumpGroupActive(dumpDir, id);
 
   const redactedRequest = redactSensitiveData(request, options);
 
   const data: DumpData = {
     provider,
     timestamp: new Date().toISOString(),
-    ...(correlation ?? {}),
+    ...(correlation === undefined
+      ? {}
+      : {
+          promptId: correlation.promptId,
+          attemptIndex: correlation.attemptIndex,
+          runtimeId: correlation.runtimeId,
+          ...(correlation.outcome === undefined
+            ? {}
+            : { outcome: correlation.outcome }),
+        }),
     request: redactedRequest,
     // Sibling of `request`, never inside `request.body` (#1721).
     ...(chronology ? { chronology } : {}),
   };
 
+  if (deferRetention)
+    await markDumpGroupActive(dumpDir, id, correlation?.retentionCoordinator);
   await writeDumpFile(filepath, data);
   if (!deferRetention)
-    await pruneDumpFiles(dumpDir, correlation?.retentionLimits);
+    await pruneDumpFiles(
+      dumpDir,
+      correlation?.retentionLimits,
+      correlation?.retentionCoordinator,
+    );
   logger.debug(() => `Request context dumped to: ${filepath}`);
 
   return { baseId: id, requestFilename, dumpDir };
@@ -283,7 +300,16 @@ export async function dumpResponseContext(
   const data = {
     provider,
     timestamp: new Date().toISOString(),
-    ...(correlation ?? {}),
+    ...(correlation === undefined
+      ? {}
+      : {
+          promptId: correlation.promptId,
+          attemptIndex: correlation.attemptIndex,
+          runtimeId: correlation.runtimeId,
+          ...(correlation.outcome === undefined
+            ? {}
+            : { outcome: correlation.outcome }),
+        }),
     response: {
       ...response,
       headers: redactSensitiveHeaders(response.headers),
@@ -295,8 +321,17 @@ export async function dumpResponseContext(
   };
 
   await writeDumpFile(filepath, data);
-  if (baseId !== undefined) markDumpGroupPublished(dumpDir, baseId);
-  await pruneDumpFiles(dumpDir, correlation?.retentionLimits);
+  if (baseId !== undefined)
+    await markDumpGroupPublished(
+      dumpDir,
+      baseId,
+      correlation?.retentionCoordinator,
+    );
+  await pruneDumpFiles(
+    dumpDir,
+    correlation?.retentionLimits,
+    correlation?.retentionCoordinator,
+  );
   let retained = true;
   try {
     await fs.stat(filepath);

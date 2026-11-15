@@ -73,7 +73,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
         generateTurnKey: () => `turn-${crypto.randomUUID()}`,
         waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
       },
-      refusalStreamAudit: new RefusalStreamAudit(crypto.randomUUID()),
+      refusalStreamAudit: new RefusalStreamAudit(),
       refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),

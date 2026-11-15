@@ -158,6 +158,7 @@ export {
   type DumpAttemptContext,
   type DumpAttemptOutcome,
 } from './utils/dumpAttemptContext.js';
+export { DumpRetentionCoordinator } from './utils/dump-retention.js';
 
 // --- Provider utilities ---
 export {

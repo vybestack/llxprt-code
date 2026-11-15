@@ -5,16 +5,20 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type {
-  DumpAttemptContext,
-  DumpAttemptOutcome,
+import {
+  DumpRetentionCoordinator,
+  type DumpAttemptContext,
+  type DumpAttemptOutcome,
 } from '@vybestack/llxprt-code-providers';
 
 export class RefusalDumpPairing {
   private readonly runtimeId = randomUUID();
   private readonly pendingPromptIds = new Set<string>();
 
-  constructor(private readonly getAttemptIndex: () => number) {}
+  constructor(
+    private readonly getAttemptIndex: () => number,
+    private readonly retentionCoordinator = new DumpRetentionCoordinator(),
+  ) {}
 
   createAttempt(
     promptId: string,
@@ -25,6 +29,7 @@ export class RefusalDumpPairing {
       attemptIndex,
       runtimeId: this.runtimeId,
       pairedSuccess: this.pendingPromptIds.has(promptId),
+      retentionCoordinator: this.retentionCoordinator,
       recordDump: (outcome: DumpAttemptOutcome, baseId: string): void => {
         attempt.dumpBaseId = baseId;
         if (outcome === 'refusal') this.pendingPromptIds.add(promptId);

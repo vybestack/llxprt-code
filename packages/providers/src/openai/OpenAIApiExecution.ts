@@ -89,6 +89,9 @@ function chatDumpMetadata(
           promptId: attemptContext?.promptId ?? null,
           attemptIndex: attemptContext?.attemptIndex ?? null,
           runtimeId: attemptContext?.runtimeId ?? null,
+          ...(attemptContext === undefined
+            ? {}
+            : { retentionCoordinator: attemptContext.retentionCoordinator }),
           ...(limits === undefined ? {} : { retentionLimits: limits }),
           ...(outcome === undefined ? {} : { outcome }),
         };
@@ -292,7 +295,7 @@ function selectOpenAIDumpOutcome(value: unknown): DumpOutcome {
   const rawReason = lastChoice.finish_reason;
   if (typeof rawReason !== 'string') return undefined;
   const finishReason = mapFinishReason(rawReason).finishReason;
-  if (finishReason === 'refusal') return 'refusal';
+  if (finishReason === 'refusal' || finishReason === 'safety') return 'refusal';
   if (
     finishReason === 'stop' ||
     finishReason === 'tool_calls' ||
@@ -300,6 +303,15 @@ function selectOpenAIDumpOutcome(value: unknown): DumpOutcome {
   )
     return 'success';
   return undefined;
+}
+
+function selectOpenAIStreamingDumpOutcome(
+  response: Record<string, unknown>,
+): DumpOutcome {
+  if (response['completed'] !== true || !Array.isArray(response['chunks']))
+    return undefined;
+  const chunks = response['chunks'];
+  return selectOpenAIDumpOutcome(chunks[chunks.length - 1]);
 }
 
 export async function executeBoundedStreamingChatRequest(
@@ -451,7 +463,11 @@ function wrapOpenAIStreamingResponse(
       correlation,
       attemptContext === undefined
         ? undefined
-        : (baseId) => attemptContext.recordDump('success', baseId),
+        : (baseId, responseBody) => {
+            const outcome = selectOpenAIStreamingDumpOutcome(responseBody);
+            if (outcome !== undefined)
+              attemptContext.recordDump(outcome, baseId);
+          },
     );
   }
   if (!shouldDumpError) return response;
@@ -534,6 +550,31 @@ async function executeStreamingRequest(
   }
 }
 
+async function dumpSuccessfulNonStreamingResponse(
+  response: OpenAI.Chat.Completions.ChatCompletion,
+  opts: ApiExecutionOptions,
+  requestBaseId: string,
+): Promise<void> {
+  const attempt = opts.attemptContext;
+  const correlation = chatDumpMetadata(
+    opts.mergedHeaders,
+    opts.client.apiKey,
+    attempt,
+  ).correlation;
+  const written = await bestEffortDump('response', 'openai', () =>
+    dumpSDKResponseContext(
+      requestBaseId,
+      'openai',
+      { status: 200, streaming: false, response },
+      false,
+      correlation,
+    ),
+  );
+  const outcome = selectOpenAIDumpOutcome(response);
+  if (written !== undefined && attempt !== undefined && outcome !== undefined)
+    attempt.recordDump(outcome, requestBaseId);
+}
+
 /**
  * Execute non-streaming API request with dump and error handling.
  */
@@ -560,23 +601,7 @@ async function executeNonStreamingRequest(
     }
 
     if (shouldDumpSuccess && requestBaseId) {
-      const attempt = opts.attemptContext;
-      const correlation = chatDumpMetadata(
-        mergedHeaders,
-        client.apiKey,
-        attempt,
-      ).correlation;
-      const written = await bestEffortDump('response', 'openai', () =>
-        dumpSDKResponseContext(
-          requestBaseId,
-          'openai',
-          { status: 200, streaming: false, response },
-          false,
-          correlation,
-        ),
-      );
-      if (written !== undefined && attempt !== undefined)
-        attempt.recordDump('success', requestBaseId);
+      await dumpSuccessfulNonStreamingResponse(response, opts, requestBaseId);
     }
 
     return response;
@@ -644,6 +669,9 @@ async function dumpOpenAIOutcomeResponse(
       promptId: attempt?.promptId ?? null,
       attemptIndex: attempt?.attemptIndex ?? null,
       runtimeId: attempt?.runtimeId ?? null,
+      ...(attempt === undefined
+        ? {}
+        : { retentionCoordinator: attempt.retentionCoordinator }),
       ...(attempt?.retentionLimits === undefined
         ? {}
         : { retentionLimits: attempt.retentionLimits }),

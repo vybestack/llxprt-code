@@ -149,7 +149,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
       generationConfig: {},
       turnIdByPromptId: new Map<string, string>(),
       refusalDumpPairing: new RefusalDumpPairing(() => 0),
-      refusalStreamAudit: new RefusalStreamAudit(crypto.randomUUID()),
+      refusalStreamAudit: new RefusalStreamAudit(),
       refusalFingerprintByStream: new WeakMap(),
       logger: { debug: () => {}, warn: () => {} },
     });

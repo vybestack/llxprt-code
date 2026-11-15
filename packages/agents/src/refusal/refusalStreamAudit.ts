@@ -9,24 +9,9 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { RefusalContextTracker } from './refusalContextTracker.js';
 import type { RefusalContextFingerprint } from './refusalAudit.js';
 
-/** Owns per-session compression observation and the send fingerprint for each stream. */
-const trackersBySession = new Map<string, RefusalContextTracker>();
-
-function trackerForSession(sessionId: string): RefusalContextTracker {
-  let tracker = trackersBySession.get(sessionId);
-  if (tracker === undefined) {
-    tracker = new RefusalContextTracker();
-    trackersBySession.set(sessionId, tracker);
-  }
-  return tracker;
-}
-
+/** Owns the compression observations and send fingerprint for one stream processor. */
 export class RefusalStreamAudit {
-  private tracker: RefusalContextTracker;
-
-  constructor(private readonly sessionId: string) {
-    this.tracker = trackerForSession(sessionId);
-  }
+  private readonly tracker = new RefusalContextTracker();
 
   rebind(): void {
     this.tracker.resetBaseline();
@@ -61,8 +46,5 @@ export class RefusalStreamAudit {
 
   dispose(): void {
     this.tracker.reset();
-    if (trackersBySession.get(this.sessionId) === this.tracker) {
-      trackersBySession.delete(this.sessionId);
-    }
   }
 }

@@ -235,7 +235,7 @@ export function wrapStreamWithDump<T>(
   providerName: string,
   dumpResponse: typeof dumpSDKResponseContext = dumpSDKResponseContext,
   correlation?: DumpAttemptCorrelation,
-  recordDump?: (baseId: string) => void,
+  recordDump?: (baseId: string, response: Record<string, unknown>) => void,
 ): AsyncIterable<T> {
   const accumulated: T[] = [];
   let dumped = false;
@@ -254,7 +254,7 @@ export function wrapStreamWithDump<T>(
         ? dumpResponse(baseId, providerName, body, isError)
         : dumpResponse(baseId, providerName, body, isError, correlation),
     );
-    if (result !== undefined) recordDump?.(baseId);
+    if (result !== undefined) recordDump?.(baseId, body);
   }
 
   async function* iterate(): AsyncGenerator<T> {

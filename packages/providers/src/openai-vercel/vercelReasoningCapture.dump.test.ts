@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DumpRetentionCoordinator } from '../utils/dump-retention.js';
 import type { DumpAttemptContext } from '../utils/dumpAttemptContext.js';
 import {
   configureDumpCapture,
@@ -51,6 +52,7 @@ describe('OpenAI Vercel refusal dumps', () => {
       attemptIndex: 0,
       runtimeId: 'runtime-vercel-test',
       pairedSuccess: false,
+      retentionCoordinator: new DumpRetentionCoordinator(),
       recordDump(outcome, baseId) {
         writtenDump = { outcome, baseId };
       },
@@ -156,6 +158,7 @@ describe('OpenAI Vercel refusal dumps', () => {
         attemptIndex: 1,
         runtimeId: 'runtime-vercel-test',
         pairedSuccess: false,
+        retentionCoordinator: new DumpRetentionCoordinator(),
         recordDump(outcome) {
           recordedOutcome = outcome;
         },

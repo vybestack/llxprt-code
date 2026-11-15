@@ -73,6 +73,9 @@ export async function writeVercelDumpPair(
           promptId: attempt?.promptId ?? null,
           attemptIndex: attempt?.attemptIndex ?? null,
           runtimeId: attempt?.runtimeId ?? null,
+          ...(attempt === undefined
+            ? {}
+            : { retentionCoordinator: attempt.retentionCoordinator }),
           retentionLimits: attempt?.retentionLimits ?? capture.retentionLimits,
           outcome: dumpOutcome,
         };

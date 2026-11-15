@@ -5,6 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { DumpRetentionCoordinator } from './dump-retention.js';
 
 export const DUMP_ATTEMPT_CONTEXT_KEY = '__llxprtDumpAttemptContext';
 
@@ -15,6 +16,7 @@ export interface DumpAttemptContext {
   readonly attemptIndex: number;
   readonly runtimeId: string;
   readonly pairedSuccess: boolean;
+  readonly retentionCoordinator: DumpRetentionCoordinator;
   retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
   dumpBaseId?: string;
   recordDump(outcome: DumpAttemptOutcome, baseId: string): void;
@@ -30,6 +32,12 @@ function isDumpAttemptContext(value: unknown): value is DumpAttemptContext {
   if (typeof value['attemptIndex'] !== 'number') return false;
   if (typeof value['runtimeId'] !== 'string') return false;
   if (typeof value['pairedSuccess'] !== 'boolean') return false;
+  const retentionCoordinator = value['retentionCoordinator'];
+  if (
+    !isRecord(retentionCoordinator) ||
+    typeof retentionCoordinator['prune'] !== 'function'
+  )
+    return false;
   return typeof value['recordDump'] === 'function';
 }
 

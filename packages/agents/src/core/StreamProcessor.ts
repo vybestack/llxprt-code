@@ -1,6 +1,6 @@
-import type {
-  DumpAttemptContext,
-  ProviderFileLifecycle,
+import {
+  type DumpAttemptContext,
+  type ProviderFileLifecycle,
 } from '@vybestack/llxprt-code-providers';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 /**
@@ -172,9 +172,7 @@ export class StreamProcessor {
     private historyService: HistoryService,
     private readonly generationConfig: ChatSessionConfig,
   ) {
-    this.refusalStreamAudit = new RefusalStreamAudit(
-      this.ports.state.sessionId,
-    );
+    this.refusalStreamAudit = new RefusalStreamAudit();
     this.releaseCompressionAuditListener =
       this.compressionHandler.setCompressionAuditListener((provenance) =>
         this.refusalStreamAudit.recordCompression(provenance),

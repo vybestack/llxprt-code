@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lstat, readdir, realpath, unlink } from 'node:fs/promises';
+import { lstat, readdir, realpath, unlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 export const DEFAULT_DUMP_RETENTION = {
@@ -36,8 +36,69 @@ interface DumpGroup {
   readonly singleton: boolean;
 }
 
-const DIRECTORY_QUEUES = new Map<string, Promise<void>>();
-const ACTIVE_GROUPS = new Map<string, Set<string>>();
+const ACTIVE_MARKER_PREFIX = '.llxprt-dump-active-';
+const ACTIVE_MARKER_SUFFIX = '.json';
+
+function activeMarkerPath(directory: string, baseId: string): string {
+  return join(
+    directory,
+    `${ACTIVE_MARKER_PREFIX}${encodeURIComponent(baseId)}${ACTIVE_MARKER_SUFFIX}`,
+  );
+}
+
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
+}
+
+async function readActiveGroups(
+  directory: string,
+  now: number,
+  maxAgeDays: number,
+): Promise<Set<string>> {
+  const active = new Set<string>();
+  const expiration = now - maxAgeDays * 86_400_000;
+  const entries = await readdir(directory);
+  await Promise.all(
+    entries
+      .filter(
+        (name) =>
+          name.startsWith(ACTIVE_MARKER_PREFIX) &&
+          name.endsWith(ACTIVE_MARKER_SUFFIX),
+      )
+      .map(async (name) => {
+        let baseId: string;
+        try {
+          baseId = decodeURIComponent(
+            name.slice(
+              ACTIVE_MARKER_PREFIX.length,
+              -ACTIVE_MARKER_SUFFIX.length,
+            ),
+          );
+        } catch {
+          return;
+        }
+        const path = join(directory, name);
+        try {
+          const fileStat = await lstat(path);
+          if (!fileStat.isFile()) return;
+          if (fileStat.mtimeMs < expiration) {
+            await unlink(path);
+            return;
+          }
+          active.add(baseId);
+        } catch (error) {
+          if (isNotFound(error)) return;
+          throw error;
+        }
+      }),
+  );
+  return active;
+}
 
 async function readManagedGroups(
   directory: string,
@@ -95,12 +156,12 @@ async function removeGroup(
 async function prune(
   directory: string,
   limits: DumpRetentionLimits,
+  activeInProcess: ReadonlySet<string> = new Set(),
 ): Promise<DumpRetentionResult> {
-  const entries = await readManagedGroups(
-    directory,
-    ACTIVE_GROUPS.get(directory) ?? new Set(),
-  );
   const now = (limits.now ?? new Date()).getTime();
+  const active = await readActiveGroups(directory, now, limits.maxAgeDays);
+  for (const baseId of activeInProcess) active.add(baseId);
+  const entries = await readManagedGroups(directory, active);
   const expiration = now - limits.maxAgeDays * 86_400_000;
   // Another process may still be publishing the other half of a dump pair.
   // Do not treat a singleton as abandoned until it has been quiet for 10 minutes.
@@ -134,19 +195,91 @@ async function prune(
   return { managedBytes, removedGroups };
 }
 
-export function markDumpGroupActive(directory: string, baseId: string): void {
-  const active = ACTIVE_GROUPS.get(directory) ?? new Set<string>();
-  active.add(baseId);
-  ACTIVE_GROUPS.set(directory, active);
+export class DumpRetentionCoordinator {
+  private readonly activeGroups = new Map<string, Set<string>>();
+  private readonly directoryQueues = new Map<string, Promise<void>>();
+
+  async markActive(directory: string, baseId: string): Promise<void> {
+    const path = activeMarkerPath(directory, baseId);
+    try {
+      await writeFile(path, '', { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    } catch (error) {
+      if (!isAlreadyExists(error)) throw error;
+      const current = await lstat(path);
+      if (!current.isFile()) throw error;
+    }
+    const active = this.activeGroups.get(directory) ?? new Set<string>();
+    active.add(baseId);
+    this.activeGroups.set(directory, active);
+  }
+
+  async markPublished(directory: string, baseId: string): Promise<void> {
+    const active = this.activeGroups.get(directory);
+    active?.delete(baseId);
+    if (active?.size === 0) this.activeGroups.delete(directory);
+    const path = activeMarkerPath(directory, baseId);
+    try {
+      const current = await lstat(path);
+      if (current.isFile()) await unlink(path);
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+  }
+
+  async prune(
+    directory: string,
+    limits: DumpRetentionLimits,
+  ): Promise<DumpRetentionResult> {
+    const previous = this.directoryQueues.get(directory) ?? Promise.resolve();
+    let release: () => void = () => undefined;
+    const current = new Promise<void>((resolveCurrent) => {
+      release = resolveCurrent;
+    });
+    const queued = previous.then(() => current);
+    this.directoryQueues.set(directory, queued);
+    await previous;
+    try {
+      const verifiedPath = await verifiedDirectory(directory);
+      if (verifiedPath === undefined)
+        return { managedBytes: 0, removedGroups: [], skipped: true };
+      if ((await verifiedDirectory(directory)) !== verifiedPath)
+        return { managedBytes: 0, removedGroups: [], skipped: true };
+      return await prune(
+        verifiedPath,
+        limits,
+        this.activeGroups.get(directory),
+      );
+    } finally {
+      release();
+      if (this.directoryQueues.get(directory) === queued)
+        this.directoryQueues.delete(directory);
+    }
+  }
 }
 
-export function markDumpGroupPublished(
+export async function markDumpGroupActive(
   directory: string,
   baseId: string,
-): void {
-  const active = ACTIVE_GROUPS.get(directory);
-  active?.delete(baseId);
-  if (active?.size === 0) ACTIVE_GROUPS.delete(directory);
+  coordinator = new DumpRetentionCoordinator(),
+): Promise<void> {
+  await coordinator.markActive(directory, baseId);
+}
+
+export async function markDumpGroupPublished(
+  directory: string,
+  baseId: string,
+  coordinator = new DumpRetentionCoordinator(),
+): Promise<void> {
+  await coordinator.markPublished(directory, baseId);
+}
+
+function isAlreadyExists(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'EEXIST'
+  );
 }
 
 async function verifiedDirectory(
@@ -162,6 +295,7 @@ async function verifiedDirectory(
 export async function pruneDumpDirectory(
   directory: string,
   limits: DumpRetentionLimits,
+  coordinator = new DumpRetentionCoordinator(),
 ): Promise<DumpRetentionResult> {
   if (!Number.isSafeInteger(limits.maxBytes) || limits.maxBytes <= 0) {
     throw new RangeError(
@@ -173,25 +307,5 @@ export async function pruneDumpDirectory(
       'Dump retention maxAgeDays must be positive and finite',
     );
   }
-  const previous = DIRECTORY_QUEUES.get(directory) ?? Promise.resolve();
-  let release: () => void = () => undefined;
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const queued = previous.then(() => current);
-  DIRECTORY_QUEUES.set(directory, queued);
-  await previous;
-  try {
-    const verifiedPath = await verifiedDirectory(directory);
-    if (verifiedPath === undefined)
-      return { managedBytes: 0, removedGroups: [], skipped: true };
-    const currentPath = await verifiedDirectory(directory);
-    if (currentPath !== verifiedPath)
-      return { managedBytes: 0, removedGroups: [], skipped: true };
-    return await prune(verifiedPath, limits);
-  } finally {
-    release();
-    if (DIRECTORY_QUEUES.get(directory) === queued)
-      DIRECTORY_QUEUES.delete(directory);
-  }
+  return coordinator.prune(directory, limits);
 }

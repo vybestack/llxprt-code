@@ -81,7 +81,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       compressionHandler: compression,
       conversationManager: conversation,
       historyService: history,
-      refusalStreamAudit: new RefusalStreamAudit(crypto.randomUUID()),
+      refusalStreamAudit: new RefusalStreamAudit(),
       refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),

@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   rmSync,
@@ -105,6 +106,49 @@ describe('dump retention', () => {
 
     expect(result.managedBytes).toBe(0);
     expect(result.removedGroups).toStrictEqual(['pair']);
+  });
+
+  it('honors active dump markers shared with another process', async () => {
+    const directory = createFixture();
+    const now = new Date();
+    const old = new Date(now.getTime() - 20 * 86_400_000);
+    const request = join(directory, 'active-request.json');
+    const marker = join(directory, '.llxprt-dump-active-active.json');
+    writeFileSync(request, 'request');
+    utimesSync(request, old, old);
+    writeFileSync(marker, '');
+    utimesSync(marker, now, now);
+
+    const result = await pruneDumpDirectory(directory, {
+      maxBytes: 1,
+      maxAgeDays: 14,
+      now,
+    });
+
+    expect(result.removedGroups).toStrictEqual([]);
+    expect(existsSync(request)).toBe(true);
+  });
+
+  it('expires stale active markers and prunes abandoned dump groups', async () => {
+    const directory = createFixture();
+    const now = new Date('2026-11-14T12:00:00Z');
+    const old = new Date(now.getTime() - 20 * 86_400_000);
+    const request = join(directory, 'abandoned-request.json');
+    const marker = join(directory, '.llxprt-dump-active-abandoned.json');
+    writeFileSync(request, 'request');
+    utimesSync(request, old, old);
+    writeFileSync(marker, '');
+    utimesSync(marker, old, old);
+
+    const result = await pruneDumpDirectory(directory, {
+      maxBytes: 1,
+      maxAgeDays: 14,
+      now,
+    });
+
+    expect(result.removedGroups).toStrictEqual(['abandoned']);
+    expect(existsSync(request)).toBe(false);
+    expect(existsSync(marker)).toBe(false);
   });
   it('prunes old singleton halves but keeps recent ones during the cross-process grace period', async () => {
     const directory = createFixture();
