@@ -61,6 +61,7 @@ export interface ApiExecutionOptions {
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
   attemptContext?: DumpAttemptContext;
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
   logger: DebugLogger;
   getBaseURL: () => string | undefined;
 }
@@ -78,15 +79,17 @@ function chatDumpMetadata(
   apiKey: string | undefined,
   attemptContext?: DumpAttemptContext,
   outcome?: string,
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number },
 ): RequestDumpMetadata {
+  const limits = attemptContext?.retentionLimits ?? retentionLimits;
   const correlation =
-    attemptContext === undefined
+    attemptContext === undefined && limits === undefined
       ? undefined
       : {
-          promptId: attemptContext.promptId,
-          attemptIndex: attemptContext.attemptIndex,
-          runtimeId: attemptContext.runtimeId,
-          retentionLimits: attemptContext.retentionLimits,
+          promptId: attemptContext?.promptId ?? null,
+          attemptIndex: attemptContext?.attemptIndex ?? null,
+          runtimeId: attemptContext?.runtimeId ?? null,
+          ...(limits === undefined ? {} : { retentionLimits: limits }),
           ...(outcome === undefined ? {} : { outcome }),
         };
   // The SDK sends Authorization from the client api key; synthesize the
@@ -122,6 +125,7 @@ interface ErrorContext {
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
   attemptContext?: DumpAttemptContext;
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
   logger: DebugLogger;
   getBaseURL: () => string | undefined;
 }
@@ -357,11 +361,61 @@ async function dumpOpenAIRequest(
           opts.mergedHeaders,
           opts.client.apiKey,
           opts.attemptContext,
+          undefined,
+          opts.retentionLimits,
         ),
       ),
     opts.logger,
   );
   return result?.baseId;
+}
+
+function wrapOpenAIErrorStreamingResponse(
+  response: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+  opts: ApiExecutionOptions,
+): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
+  const {
+    client,
+    requestBody,
+    mergedHeaders,
+    baseURL,
+    attemptContext,
+    retentionLimits,
+  } = opts;
+  const metadata = chatDumpMetadata(
+    mergedHeaders,
+    client.apiKey,
+    attemptContext,
+    undefined,
+    retentionLimits,
+  );
+  const errorWrapped = wrapStreamWithSDKErrorDump(
+    response,
+    'openai',
+    '/chat/completions',
+    requestBody,
+    baseURL ?? 'https://api.openai.com/v1',
+    dumpSDKRequestContext,
+    dumpSDKResponseContext,
+    metadata,
+  );
+  const correlation = metadata.correlation ?? {
+    promptId: null,
+    attemptIndex: null,
+    runtimeId: null,
+    ...(retentionLimits === undefined ? {} : { retentionLimits }),
+  };
+  return wrapStreamWithOutcomeDump(
+    errorWrapped,
+    'openai',
+    '/chat/completions',
+    requestBody,
+    baseURL,
+    { ...metadata, correlation },
+    attemptContext?.pairedSuccess ?? false,
+    selectOpenAIDumpOutcome,
+    (outcome, baseId) => attemptContext?.recordDump(outcome, baseId),
+  );
 }
 
 function wrapOpenAIStreamingResponse(
@@ -371,45 +425,23 @@ function wrapOpenAIStreamingResponse(
   shouldDumpSuccess: boolean,
   shouldDumpError: boolean,
 ): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
-  const { client, requestBody, mergedHeaders, baseURL, attemptContext } = opts;
-  if (shouldDumpError && !shouldDumpSuccess) {
-    const errorWrapped = wrapStreamWithSDKErrorDump(
-      response,
-      'openai',
-      '/chat/completions',
-      requestBody,
-      baseURL ?? 'https://api.openai.com/v1',
-      dumpSDKRequestContext,
-      dumpSDKResponseContext,
-      chatDumpMetadata(mergedHeaders, client.apiKey, attemptContext),
-    );
-    return wrapStreamWithOutcomeDump(
-      errorWrapped,
-      'openai',
-      '/chat/completions',
-      requestBody,
-      baseURL,
-      {
-        ...chatDumpMetadata(mergedHeaders, client.apiKey, attemptContext),
-        correlation: {
-          promptId: attemptContext?.promptId ?? null,
-          attemptIndex: attemptContext?.attemptIndex ?? null,
-          runtimeId: attemptContext?.runtimeId ?? null,
-          ...(attemptContext?.retentionLimits === undefined
-            ? {}
-            : { retentionLimits: attemptContext.retentionLimits }),
-        },
-      },
-      attemptContext?.pairedSuccess ?? false,
-      selectOpenAIDumpOutcome,
-      (outcome, baseId) => attemptContext?.recordDump(outcome, baseId),
-    );
-  }
+  const {
+    client,
+    requestBody,
+    mergedHeaders,
+    baseURL,
+    attemptContext,
+    retentionLimits,
+  } = opts;
+  if (shouldDumpError && !shouldDumpSuccess)
+    return wrapOpenAIErrorStreamingResponse(response, opts);
   if (shouldDumpSuccess && requestBaseId !== undefined) {
     const correlation = chatDumpMetadata(
       mergedHeaders,
       client.apiKey,
       attemptContext,
+      undefined,
+      retentionLimits,
     ).correlation;
     return wrapStreamWithDump(
       response,
@@ -431,7 +463,13 @@ function wrapOpenAIStreamingResponse(
     baseURL ?? 'https://api.openai.com/v1',
     dumpSDKRequestContext,
     dumpSDKResponseContext,
-    chatDumpMetadata(mergedHeaders, client.apiKey, attemptContext),
+    chatDumpMetadata(
+      mergedHeaders,
+      client.apiKey,
+      attemptContext,
+      undefined,
+      retentionLimits,
+    ),
   );
 }
 
@@ -475,6 +513,7 @@ async function executeStreamingRequest(
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,
       attemptContext: opts.attemptContext,
+      retentionLimits: opts.retentionLimits,
       logger: opts.logger,
       getBaseURL: opts.getBaseURL,
     };
@@ -566,6 +605,7 @@ async function executeNonStreamingRequest(
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,
       attemptContext: opts.attemptContext,
+      retentionLimits: opts.retentionLimits,
       logger: opts.logger,
       getBaseURL: opts.getBaseURL,
     };

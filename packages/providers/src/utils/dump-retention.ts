@@ -33,6 +33,7 @@ interface DumpGroup {
   }>;
   readonly bytes: number;
   readonly oldestMtimeMs: number;
+  readonly singleton: boolean;
 }
 
 const DIRECTORY_QUEUES = new Map<string, Promise<void>>();
@@ -56,14 +57,15 @@ async function readManagedGroups(
       groups.set(baseId, files);
     }
   }
-  for (const [baseId, files] of groups) {
-    if (active.has(baseId) || files.length !== 2) groups.delete(baseId);
+  for (const [baseId] of groups) {
+    if (active.has(baseId)) groups.delete(baseId);
   }
   return [...groups].map(([baseId, files]) => ({
     baseId,
     files,
     bytes: files.reduce((total, file) => total + file.bytes, 0),
     oldestMtimeMs: Math.min(...files.map((file) => file.mtimeMs)),
+    singleton: files.length === 1,
   }));
 }
 
@@ -100,13 +102,19 @@ async function prune(
   );
   const now = (limits.now ?? new Date()).getTime();
   const expiration = now - limits.maxAgeDays * 86_400_000;
+  // Another process may still be publishing the other half of a dump pair.
+  // Do not treat a singleton as abandoned until it has been quiet for 10 minutes.
+  const singletonGraceExpiration = now - 10 * 60_000;
   const ordered = [...entries].sort((left, right) => {
     const ageComparison = left.oldestMtimeMs - right.oldestMtimeMs;
     if (ageComparison !== 0) return ageComparison;
     return left.baseId.localeCompare(right.baseId);
   });
-  const expired = ordered.filter((group) => group.oldestMtimeMs < expiration);
-  const keep = ordered.filter((group) => group.oldestMtimeMs >= expiration);
+  const isExpired = (group: DumpGroup): boolean =>
+    group.oldestMtimeMs < expiration ||
+    (group.singleton && group.oldestMtimeMs < singletonGraceExpiration);
+  const expired = ordered.filter(isExpired);
+  const keep = ordered.filter((group) => !isExpired(group));
   const removedGroups: string[] = [];
   for (const group of expired) {
     if (!(await removeGroup(directory, group)))
@@ -116,10 +124,12 @@ async function prune(
   let managedBytes = keep.reduce((total, group) => total + group.bytes, 0);
   for (const group of keep) {
     if (managedBytes <= limits.maxBytes) break;
-    if (!(await removeGroup(directory, group)))
-      return { managedBytes, removedGroups, skipped: true };
-    managedBytes -= group.bytes;
-    removedGroups.push(group.baseId);
+    if (!group.singleton) {
+      if (!(await removeGroup(directory, group)))
+        return { managedBytes, removedGroups, skipped: true };
+      managedBytes -= group.bytes;
+      removedGroups.push(group.baseId);
+    }
   }
   return { managedBytes, removedGroups };
 }

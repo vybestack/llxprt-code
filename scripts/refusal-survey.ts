@@ -16,7 +16,6 @@ import {
   type DumpIndexEntry,
 } from './lib/refusal-survey-dump-index.ts';
 import {
-  hasRecoveryContent,
   readJournalIndex,
   type Journal,
 } from './lib/refusal-survey-journal-index.ts';
@@ -179,81 +178,6 @@ function contentPreview(record: Journal): string {
   const speaker = str(content?.['speaker']) ?? 'entry';
   const label = speaker === 'tool' ? '' : `${speaker}: `;
   return `${label}${snippets.join(' ').slice(0, 300)}`;
-}
-
-const STOP_WORDS = new Set([
-  'tool',
-  'human',
-  'ai',
-  'run',
-  'shell',
-  'command',
-  'and',
-  'the',
-  'for',
-  'with',
-  'from',
-  'that',
-  'this',
-  'into',
-  'are',
-  'was',
-  'were',
-  'has',
-  'have',
-  'had',
-  'you',
-  'your',
-  'not',
-  'but',
-  'about',
-  'then',
-  'when',
-  'what',
-  'will',
-  'would',
-  'can',
-  'could',
-  'should',
-  'after',
-  'before',
-  'there',
-  'their',
-  'they',
-  'them',
-  'his',
-  'her',
-  'she',
-  'him',
-  'its',
-  'our',
-  'out',
-  'all',
-  'one',
-  'two',
-  'use',
-  'using',
-]);
-
-function terms(text: string): Set<string> {
-  const words = new Set<string>();
-  for (const match of text.matchAll(/[\p{L}\p{N}_]+/gu)) {
-    const original = match[0];
-    const word = original.toLocaleLowerCase();
-    if (isContentTerm(word) && !/[\p{Ll}][\p{Lu}]/u.test(original)) {
-      words.add(word);
-    }
-  }
-  return words;
-}
-
-function isContentTerm(value: string): boolean {
-  return (
-    value.length >= 3 &&
-    /^\p{L}+$/u.test(value) &&
-    !/^[\da-f]{8,}$/iu.test(value) &&
-    !STOP_WORDS.has(value)
-  );
 }
 
 type Malformed = { count: number; examples: string[] };
@@ -475,9 +399,37 @@ function summaryAuthor(
   return provider ? `${provider}/${model}` : model;
 }
 
-function recoveryStatus(recovered: boolean, rewritten: boolean): string {
+function recoveryStatus(
+  recovered: boolean | undefined,
+  rewritten: boolean,
+): string {
+  if (recovered === undefined) return 'unknown';
   if (!recovered) return 'none';
   return rewritten ? 'rewrite' : 'retry';
+}
+
+function isLaterMatchingSuccess(first: Attempt, call: ObservedCall): boolean {
+  if (call.refusal) return false;
+  if (call.projectHash !== first.projectHash) return false;
+  if (call.session !== first.session) return false;
+  if (call.runtime !== first.runtime) return false;
+  if (call.prompt !== first.prompt) return false;
+  return call.ts > first.ts;
+}
+
+function laterSuccessfulAttempt(
+  first: Attempt,
+  calls: readonly ObservedCall[],
+): boolean | undefined {
+  if (
+    first.projectHash === '' ||
+    first.session === '' ||
+    first.runtime === '' ||
+    first.prompt === ''
+  ) {
+    return undefined;
+  }
+  return calls.some((call) => isLaterMatchingSuccess(first, call));
 }
 
 function compressionCounts(
@@ -635,6 +587,7 @@ function decorateRun(
   journals: Map<string, Journal[]>,
   dumps: Map<string, DumpIndexEntry>,
   counts: Counts,
+  calls: readonly ObservedCall[],
 ): void {
   const list = run['attempts'] as Attempt[];
   const first = list[0]!;
@@ -644,9 +597,9 @@ function decorateRun(
   const context = contextFor(first, list, journal);
   const acceptedPair = acceptedDumpFor(first.prompt, first.dumpBaseId, dumps);
   const accepted = acceptedPair?.[1];
-  const recovered =
-    accepted !== undefined ||
-    hasRecoveryContent(journal, first.prompt, list.at(-1)!.attemptIndex);
+  const laterSuccess = laterSuccessfulAttempt(first, calls);
+  const recovered: boolean | undefined =
+    accepted?.outcome === 'success' ? true : laterSuccess;
   const author =
     context.lastCompression &&
     isObj(context.lastCompression.payload['summaryAuthor'])
@@ -662,26 +615,16 @@ function decorateRun(
     : null;
   const refusedDump =
     first.dumpBaseId === null ? undefined : dumps.get(first.dumpBaseId);
-  const refusedTerms =
-    refusedDump !== undefined && refusedDump.requestTerms.length > 0
-      ? new Set(refusedDump.requestTerms)
-      : terms(context.before.slice(-8).map(contentPreview).join(' '));
-  const acceptedTerms =
-    accepted !== undefined && accepted.requestTerms.length > 0
-      ? new Set(accepted.requestTerms)
-      : terms(
-          journal
-            .filter(
-              (entry) =>
-                entry.type === 'content' &&
-                isObj(entry.payload['content']) &&
-                entry.payload['content']['speaker'] === 'assistant',
-            )
-            .map(contentPreview)
-            .join(' '),
-        );
-  if (acceptedTerms.size > 0)
-    addTermCounts(refusedTerms, acceptedTerms, counts);
+  const termContrastAvailable =
+    refusedDump?.requestEvidence === true && accepted?.requestEvidence === true;
+  run['termContrastAvailable'] = termContrastAvailable;
+  const refusedTerms = new Set(
+    termContrastAvailable ? refusedDump.requestTerms : [],
+  );
+  const acceptedTerms = new Set(
+    termContrastAvailable ? accepted.requestTerms : [],
+  );
+  if (termContrastAvailable) addTermCounts(refusedTerms, acceptedTerms, counts);
   updateCounts(list, counts);
   writeRunFields(
     run,
@@ -703,7 +646,7 @@ function writeRunFields(
   context: Context,
   dumps: Map<string, DumpIndexEntry>,
   pair: [string, Obj] | undefined,
-  recovered: boolean,
+  recovered: boolean | undefined,
   authorProvider: string | null,
   authorModel: string | null,
   refusedTerms: Set<string>,
@@ -761,7 +704,8 @@ async function survey(options: ReturnType<typeof argumentsFrom>): Promise<Obj> {
     projects: {},
     terms: new Map(),
   };
-  for (const run of runs) decorateRun(run, evidence.journals, dumps, counts);
+  for (const run of runs)
+    decorateRun(run, evidence.journals, dumps, counts, evidence.calls);
   const compression = compressionCounts(evidence.calls, evidence.journals);
   const termContrasts = [...counts.terms.entries()]
     .map(([term, value]) => ({

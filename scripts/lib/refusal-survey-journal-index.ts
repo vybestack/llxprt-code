@@ -17,11 +17,24 @@ export type Journal = {
   runtime: string;
 };
 
+function hasStableIdentity(
+  entry: Journal,
+  identity: { readonly session: string; readonly runtime: string },
+): boolean {
+  return (
+    identity.session !== '' &&
+    identity.runtime !== '' &&
+    entry.session === identity.session &&
+    entry.runtime === identity.runtime
+  );
+}
+
 export function hasRecoveryContent(
   journal: readonly Journal[],
   prompt: string,
   attemptIndex: number | null,
-): boolean {
+  identity?: { readonly session: string; readonly runtime: string },
+): boolean | undefined {
   const refusal = journal.find(
     (entry) =>
       entry.type === 'refusal' &&
@@ -29,8 +42,16 @@ export function hasRecoveryContent(
       num(entry.payload['attempt_index']) === attemptIndex,
   );
   if (refusal === undefined) return false;
-  return journal.some((entry) => {
+  if (identity === undefined || !hasStableIdentity(refusal, identity)) {
+    return undefined;
+  }
+  const candidates = journal.filter((entry) => {
     if (entry.type !== 'content' || entry.seq <= refusal.seq) return false;
+    if (!hasStableIdentity(entry, identity)) return false;
+    return str(entry.payload['prompt_id']) === prompt;
+  });
+  if (candidates.length === 0) return undefined;
+  return candidates.some((entry) => {
     if (Date.parse(entry.ts) > Date.parse(refusal.ts) + 5 * 60_000)
       return false;
     const content = entry.payload['content'];
@@ -104,8 +125,13 @@ async function* readLines(
 function compactContent(type: string, payload: Obj): Obj {
   if (type === 'tool_response') return compactToolResponse(payload);
   const content = isObj(payload['content']) ? payload['content'] : {};
+  const metadata = isObj(content['metadata']) ? content['metadata'] : {};
   const blocks = Array.isArray(content['blocks']) ? content['blocks'] : [];
   return {
+    prompt_id:
+      str(payload['prompt_id']) ??
+      str(metadata['promptId']) ??
+      str(metadata['prompt_id']),
     content: {
       speaker: content['speaker'],
       blocks: blocks.flatMap((block): Obj[] => {

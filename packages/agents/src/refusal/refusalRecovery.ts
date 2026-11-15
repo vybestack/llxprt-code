@@ -166,6 +166,8 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
         model: attempt.model,
         refusals: budget.refusals,
         reviewer: started.reviewer.model,
+        category: attempt.stopDetails?.category,
+        explanation: attempt.stopDetails?.explanation,
       }),
       complete: resolve,
     };
@@ -190,6 +192,8 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
           reviewer: outcome.reviewer.model,
           changes: outcome.changes,
           operationId: outcome.operationId,
+          category: attempt.stopDetails?.category,
+          explanation: attempt.stopDetails?.explanation,
         }),
         rewrite: {
           pendingEdits: outcome.pendingEdits,

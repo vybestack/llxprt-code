@@ -17,6 +17,7 @@
 import type { DumpRequest } from '../utils/dumpContext.js';
 import {
   readDumpAttemptContext,
+  resolveDumpRetentionLimits,
   type DumpAttemptContext,
 } from '../utils/dumpAttemptContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
@@ -59,6 +60,7 @@ export interface CaptureBuffer {
   dumpCapture?: VercelDumpCapture;
   dumpMode?: DumpMode;
   attemptContext?: DumpAttemptContext;
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
   providerName?: string;
   status?: number;
 }
@@ -86,6 +88,14 @@ export function configureDumpCapture(
 ): void {
   captureBuffer.dumpMode =
     options.invocation.getEphemeral<DumpMode>('dumpcontext');
+  captureBuffer.retentionLimits = resolveDumpRetentionLimits({
+    'dump-retention-max-bytes': options.invocation.getEphemeral<number>(
+      'dump-retention-max-bytes',
+    ),
+    'dump-retention-max-age-days': options.invocation.getEphemeral<number>(
+      'dump-retention-max-age-days',
+    ),
+  });
   captureBuffer.attemptContext = readDumpAttemptContext(metadata);
 }
 
@@ -316,6 +326,9 @@ export function createReasoningCaptureFetch(
         ...(captureBuffer.attemptContext === undefined
           ? {}
           : { attemptContext: captureBuffer.attemptContext }),
+        ...(captureBuffer.retentionLimits === undefined
+          ? {}
+          : { retentionLimits: captureBuffer.retentionLimits }),
         request,
         providerName: captureBuffer.providerName ?? 'openaivercel',
         responseHeaders: responseHeadersRecord(response.headers),

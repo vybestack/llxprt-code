@@ -16,10 +16,13 @@ export class RefusalDumpPairing {
 
   constructor(private readonly getAttemptIndex: () => number) {}
 
-  createAttempt(promptId: string): DumpAttemptContext {
+  createAttempt(
+    promptId: string,
+    attemptIndex = this.getAttemptIndex(),
+  ): DumpAttemptContext {
     const attempt: DumpAttemptContext = {
       promptId,
-      attemptIndex: this.getAttemptIndex(),
+      attemptIndex,
       runtimeId: this.runtimeId,
       pairedSuccess: this.pendingPromptIds.has(promptId),
       recordDump: (outcome: DumpAttemptOutcome, baseId: string): void => {

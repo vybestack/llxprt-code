@@ -113,8 +113,13 @@ export function describeReviewStart(input: {
   readonly model: string;
   readonly refusals: number;
   readonly reviewer: string;
+  readonly category?: string | null;
+  readonly explanation?: string | null;
 }): string {
-  return `Model ${input.model} refused ${input.refusals} time(s); asking ${input.reviewer} to review the recent context.`;
+  return appendRefusalDiagnostics(
+    `Model ${input.model} refused ${input.refusals} time(s); asking ${input.reviewer} to review the recent context.`,
+    input,
+  );
 }
 
 /** Shown when a reviewer rewrote context and the request is about to resend. */
@@ -122,6 +127,8 @@ export function describeReviewRewrite(input: {
   readonly reviewer: string;
   readonly changes: readonly RewriteChangeSummary[];
   readonly operationId: string;
+  readonly category?: string | null;
+  readonly explanation?: string | null;
 }): string {
   const shown = input.changes.slice(0, PREVIEWED_CHANGES).map((change) =>
     // Tool results can hold credentials and the notice reaches every
@@ -132,7 +139,10 @@ export function describeReviewRewrite(input: {
   );
   const more = input.changes.length - shown.length;
   const list = more > 0 ? [...shown, `+${more} more`] : shown;
-  return `Refusal review by ${input.reviewer}: rewrote ${input.changes.length} message(s) [${list.join('; ')}] (operation ${input.operationId}). Retrying.`;
+  return appendRefusalDiagnostics(
+    `Refusal review by ${input.reviewer}: rewrote ${input.changes.length} message(s) [${list.join('; ')}] (operation ${input.operationId}). Retrying.`,
+    input,
+  );
 }
 
 /** Shown when the rewritten request finally succeeds. */

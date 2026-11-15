@@ -83,7 +83,10 @@ import {
 } from './OpenAIPromptProjectionPreparation.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
-import { readDumpAttemptContext } from '../utils/dumpAttemptContext.js';
+import {
+  readDumpAttemptContext,
+  resolveDumpRetentionLimits,
+} from '../utils/dumpAttemptContext.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import {
   finishMediaRequest,
@@ -706,10 +709,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     preparedRequestContext?: Awaited<ReturnType<typeof prepareRequest>>,
   ): AsyncGenerator<IContent, void, unknown> {
     const abortSignal = getRequestSignal(options);
-    const ephemeralSettings = (
-      options.invocation as { ephemerals?: Readonly<Record<string, unknown>> }
-    ).ephemerals;
-
     const { prepareRequest } = await import('./OpenAIRequestPreparation.js');
     const { executeApiRequest } = await import('./OpenAIApiExecution.js');
     const { mergeInvocationHeaders } = await import('./OpenAIClientFactory.js');
@@ -753,7 +752,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     const customHeaders = this.getCustomHeaders();
     const mergedHeaders = mergeInvocationHeaders(options, customHeaders);
-    const dumpMode = ephemeralSettings?.dumpcontext as DumpMode | undefined;
+    const dumpMode = options.invocation.ephemerals.dumpcontext as
+      | DumpMode
+      | undefined;
 
     const response = await executeApiRequest({
       client,
@@ -766,11 +767,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       formattedTools,
       streamingEnabled,
       attemptContext: readProviderAttemptContext(options),
+      retentionLimits: resolveDumpRetentionLimits(
+        options.invocation.ephemerals,
+      ),
       logger,
       getBaseURL: () => this.getBaseURL(),
     });
-
-    const reasoningFieldName = getReasoningFieldName(options.invocation);
 
     yield* this.dispatchResponse({
       response,
@@ -784,7 +786,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       mergedHeaders,
       baseURL,
       logger,
-      reasoningFieldName,
+      reasoningFieldName: getReasoningFieldName(options.invocation),
       onRawTokenDelta: resolveRawTokenDeltaNotifier(options.metadata),
     });
   }

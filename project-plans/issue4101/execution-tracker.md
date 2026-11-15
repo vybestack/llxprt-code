@@ -1,5 +1,19 @@
 # REQ-4101 execution tracker
 
+
+## Review round 2
+
+- Invocation retention: Vercel capture and both dump writers receive validated byte/age caps from invocation settings even without attempt identity. Anthropic and OpenAI metadata preserve retention limits separately from correlation. Vercel localhost endpoint tests configure the invocation caps and verify one-byte pruning and expired-singleton age pruning; Agent-level Anthropic/OpenAI tests cover configured retention.
+- Public `Agent.generate`: direct calls allocate session-local prompt IDs and attempt indices and use the streaming refusal/success pairing lifecycle. Anthropic and OpenAI behavior tests cover streaming enabled and disabled; the prior null-identity expectation now requires real identity and pairing.
+- Singleton dump halves: retention counts and prunes abandoned request-only and response-only files. The documented 10-minute grace protects fresh cross-process files, while epoch-old distinct singletons are eligible. The active-write interleaving test still verifies concurrent publication protection.
+- Refusal notices: review-start and rewrite notices carry sanitized category/explanation data; terminal Finished/done values carry the same stop details. Interactive dispatch and real non-interactive `processAgentStream` tests assert the terminal detail output; notice and diagnostic tests cover review surfaces and null handling.
+- Survey term evidence: paired term contrasts use the same request-window extraction, tokenizer, and budget, and require comparable dump evidence on both sides. Presentation previews are excluded from analysis. Missing evidence yields an unavailable contrast.
+- Recovery attribution: recovery requires a later successful attempt with matching project, session, runtime, and prompt identity from token usage or explicit journal correlation. The real-journal prompt A refusal followed by prompt B success remains unknown for A.
+- Focused terminal-notice checks passed: 12 tests across interactive dispatch and non-interactive output, 0 failures. `git diff --check` passed.
+- Full `npm run test`: initial `tmp/verify4101/test-R2.log` ended `rc=0`. A later full run, `tmp/verify4101/test-R2b.log`, included the new Vercel cap tests and ended `rc=1` in the scripts shard: two post-close process-group tests in `scripts/tests/bun-test-tree-join.bun.test.ts` hit `EPERM` while the fixture cleanup tried to signal its owned group. The unchanged file passed 3/3 standalone reruns (`19 pass, 0 fail` each; `tmp/verify4101/treejoin-alone-R2.log`). The two new Vercel tests passed in the full run and in 4/4 targeted runs. Final typecheck, lint, format, build, and focused notice checks passed. The required grep on the initial full-run log matched only two `(pass)` retry-runner self-test lines, with no `FAILED:` markers; the later log contains the one isolated native-test failure.
+- Both requested `lunahigh` smoke commands passed and returned haikus, including `--dumponerror`.
+- Real-log survey headline: 248 attempts in 86 runs, 22 definite and 226 suspected; 0.8% refusal rate after compression (6/791 calls), 2.3% elsewhere (239/10,485), and 0.0% with missing evidence (3/59,486). No terms were more common in the refused window. The run completed with `rc=0` in `tmp/verify4101/survey-R2b.log`.
+- Commit: recorded in the task completion report; branch `issue4101`; no push performed.
 Branch: `issue4101`; current phase: P05.
 
 Status: P05 implementation and verification completed. See `.completed/P05.md`.

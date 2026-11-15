@@ -11,6 +11,7 @@ export type DumpIndexEntry = {
   promptId: string | null;
   outcome: string | null;
   requestTerms: string[];
+  requestEvidence: boolean;
 };
 
 function walk(root: string): string[] {
@@ -144,14 +145,16 @@ export function readDumpIndex(
       const promptId = string(value['promptId']) ?? string(value['prompt_id']);
       const outcome =
         string(value['outcome']) ?? string(value['attempt_outcome']);
-      const requestTerms =
-        contentWindow.length > 0
-          ? words(JSON.stringify(contentWindow))
-          : undefined;
+      const isRequest = file.endsWith('-request.json');
+      const requestEvidence = isRequest && messages.length > 0;
+      const requestTerms = requestEvidence
+        ? words(JSON.stringify(contentWindow))
+        : undefined;
       const entry: DumpIndexEntry = {
         promptId: promptId ?? previous?.promptId ?? null,
         outcome: outcome ?? previous?.outcome ?? null,
         requestTerms: requestTerms ?? previous?.requestTerms ?? [],
+        requestEvidence: requestEvidence || previous?.requestEvidence === true,
       };
       dumps.set(id, entry);
     } catch {

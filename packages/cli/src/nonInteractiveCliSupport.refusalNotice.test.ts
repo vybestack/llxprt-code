@@ -78,7 +78,11 @@ describe('processAgentStream refusal-recovery notices (issue #4036)', () => {
   ): Promise<void> {
     const streamFormatter = mode.streamFormatter ?? null;
     await processAgentStream(
-      streamOf([...events, { type: 'done', reason: 'stop' }]),
+      streamOf(
+        events.at(-1)?.type === 'done'
+          ? events
+          : [...events, { type: 'done', reason: 'stop' }],
+      ),
       {
         ...createStreamSettingsFixture({ sessionId: 'notice-session' }),
         jsonOutput: mode.jsonOutput ?? false,
@@ -137,6 +141,27 @@ describe('processAgentStream refusal-recovery notices (issue #4036)', () => {
       message: 'Model m refused the request; retrying in 15 s (retry 1 of 2).',
     });
     expect(stderr.join('')).toBe('');
+  });
+
+  it('shows terminal refusal details in the non-interactive finish notice', async () => {
+    await run([
+      {
+        type: 'done',
+        reason: 'refusal',
+        finished: {
+          reason: 'refusal',
+          stopReason: 'refusal',
+          stopDetails: {
+            type: 'refusal',
+            category: 'cyber',
+            explanation: 'diagnostic explanation',
+          },
+        },
+      },
+    ]);
+
+    expect(stderr.join('')).toContain('Category: cyber.');
+    expect(stderr.join('')).toContain('diagnostic explanation');
   });
 
   it('keeps plain JSON stdout to the single result object', async () => {

@@ -25,7 +25,7 @@ afterEach(async () => {
 });
 
 describe('refusal survey journal reader', () => {
-  it('correlates recovery with camel-case prompt and attempt fields from a real journal', async () => {
+  it('keeps unrelated later prompts from proving recovery when old identity is missing', async () => {
     const root = await fs.mkdtemp(
       path.join(os.tmpdir(), 'refusal-survey-journal-'),
     );
@@ -51,12 +51,13 @@ describe('refusal survey journal reader', () => {
       } satisfies RefusalPayload);
       service.recordContent({
         speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
+        blocks: [{ type: 'text', text: 'unrelated prompt B response' }],
+        metadata: { promptId: 'prompt-2' },
       });
       await service.flush();
       const journal = await readJournalIndex(root, { count: 0, examples: [] });
 
-      expect(hasRecoveryContent(journal, 'prompt-1', 1)).toBe(true);
+      expect(hasRecoveryContent(journal, 'prompt-1', 1)).toBeUndefined();
       expect(hasRecoveryContent(journal, 'prompt-1', 0)).toBe(false);
       expect(hasRecoveryContent(journal, 'another-prompt', 1)).toBe(false);
     } finally {

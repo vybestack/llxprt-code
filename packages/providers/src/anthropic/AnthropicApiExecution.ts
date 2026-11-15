@@ -238,6 +238,7 @@ export interface ApiExecutionParams {
   requestBody: Record<string, unknown>;
   streamingEnabled: boolean;
   attemptContext?: DumpAttemptContext;
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
   headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };
 }
@@ -262,14 +263,15 @@ function anthropicDumpMetadata(
   outcome?: string,
 ): RequestDumpMetadata {
   const attempt = params.attemptContext;
+  const retentionLimits = attempt?.retentionLimits ?? params.retentionLimits;
   const correlation: DumpAttemptCorrelation | undefined =
-    attempt === undefined
+    attempt === undefined && retentionLimits === undefined
       ? undefined
       : {
-          promptId: attempt.promptId,
-          attemptIndex: attempt.attemptIndex,
-          runtimeId: attempt.runtimeId,
-          retentionLimits: attempt.retentionLimits,
+          promptId: attempt?.promptId ?? null,
+          attemptIndex: attempt?.attemptIndex ?? null,
+          runtimeId: attempt?.runtimeId ?? null,
+          ...(retentionLimits === undefined ? {} : { retentionLimits }),
           ...(outcome === undefined ? {} : { outcome }),
         };
   return {

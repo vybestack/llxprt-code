@@ -40,6 +40,7 @@ import type { DumpMode } from '../utils/dumpContext.js';
 import {
   dumpAttemptResultContent,
   readDumpAttemptContext,
+  resolveDumpRetentionLimits,
 } from '../utils/dumpAttemptContext.js';
 import {
   observeFirstResponseByte,
@@ -984,6 +985,9 @@ export class AnthropicProvider extends BaseProvider {
       streamingEnabled: requestContext.streamingEnabled,
       attemptContext: readDumpAttemptContext(
         options.metadata,
+        options.invocation.ephemerals,
+      ),
+      retentionLimits: resolveDumpRetentionLimits(
         options.invocation.ephemerals,
       ),
       headers: dumpHeaders,

@@ -20,6 +20,10 @@ import {
 export interface VercelDumpCapture {
   readonly mode: DumpMode;
   readonly attemptContext?: DumpAttemptContext;
+  readonly retentionLimits?: {
+    readonly maxBytes: number;
+    readonly maxAgeDays: number;
+  };
   readonly request: DumpRequest;
   readonly providerName: string;
   readonly responseHeaders?: Record<string, string>;
@@ -63,13 +67,13 @@ export async function writeVercelDumpPair(
   if (dumpOutcome === undefined) return;
 
   const correlation =
-    attempt === undefined
+    attempt === undefined && capture.retentionLimits === undefined
       ? undefined
       : {
-          promptId: attempt.promptId,
-          attemptIndex: attempt.attemptIndex,
-          runtimeId: attempt.runtimeId,
-          retentionLimits: attempt.retentionLimits,
+          promptId: attempt?.promptId ?? null,
+          attemptIndex: attempt?.attemptIndex ?? null,
+          runtimeId: attempt?.runtimeId ?? null,
+          retentionLimits: attempt?.retentionLimits ?? capture.retentionLimits,
           outcome: dumpOutcome,
         };
   const request = await bestEffortDump(

@@ -299,7 +299,7 @@ describe('refusal dump pairing (issue #4101)', () => {
     ['Anthropic', 'anthropic'],
     ['OpenAI', 'openai'],
   ] as const)(
-    'dumps a direct %s refusal without attempt context',
+    'dumps a direct %s refusal with attempt identity',
     async (_, protocol) => {
       await runScriptedPrompt(
         [{ kind: 'finish', finishReason: 'refusal', outputTokens: 0 }],
@@ -324,7 +324,8 @@ describe('refusal dump pairing (issue #4101)', () => {
         dumpDir,
         files.find((name) => name.endsWith('-request.json')) ?? '',
       );
-      expect(request['promptId']).toBeNull();
+      expect(request['promptId']).toBe('direct-prompt-4101');
+      expect(request['attemptIndex']).toBe(0);
     },
   );
 

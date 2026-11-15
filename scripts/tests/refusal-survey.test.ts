@@ -458,7 +458,7 @@ describe('refusal survey CLI', () => {
       'Before: tool:read_file: bounded tool output',
     );
     expect(output.stderr).toContain(
-      'Terms more common in refused window: baseline, bounded, output, topic, unusual',
+      'Terms more common in refused window: none',
     );
     expect(output.stderr).not.toContain('compression=undefined');
 

@@ -428,6 +428,7 @@ function* mapValueEventComplex(
       const v = value as {
         reason: string;
         stopReason?: string;
+        stopDetails?: FinishedValue['stopDetails'];
         usageMetadata?: UsageStats;
       };
       // A tool turn spans several model iterations and a provider only reports
@@ -444,6 +445,7 @@ function* mapValueEventComplex(
         reason: v.reason,
         ...(publicUsage !== undefined ? { usageMetadata: publicUsage } : {}),
         ...(v.stopReason !== undefined ? { stopReason: v.stopReason } : {}),
+        ...(v.stopDetails !== undefined ? { stopDetails: v.stopDetails } : {}),
       };
       return;
     }

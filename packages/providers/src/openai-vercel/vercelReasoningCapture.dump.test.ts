@@ -7,13 +7,21 @@
 import { afterAll, describe, expect, it } from 'bun:test';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { DumpAttemptContext } from '../utils/dumpAttemptContext.js';
 import {
+  configureDumpCapture,
   createCaptureBuffer,
   createReasoningCaptureFetch,
 } from './vercelReasoningCapture.js';
@@ -180,4 +188,74 @@ describe('OpenAI Vercel refusal dumps', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it.each([
+    ['one-byte cap', 1, 14],
+    ['immediate age cap', 1_000_000, 1e-12],
+  ])(
+    'applies invocation %s without attempt identity',
+    async (_, maxBytes, maxAgeDays) => {
+      const server = createServer((_request, response) => {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'local refusal output',
+                },
+                finish_reason: 'refusal',
+              },
+            ],
+          }),
+        );
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const address = server.address();
+      if (address === null || typeof address === 'string')
+        throw new Error('Missing local Vercel endpoint port');
+
+      try {
+        const expired = join(dumpDir, 'expired-singleton-request.json');
+        writeFileSync(expired, 'expired');
+        utimesSync(expired, new Date(0), new Date(0));
+        const values = new Map<string, unknown>([
+          ['dumpcontext', 'error'],
+          ['dump-retention-max-bytes', maxBytes],
+          ['dump-retention-max-age-days', maxAgeDays],
+        ]);
+        const captureBuffer = createCaptureBuffer();
+        configureDumpCapture(
+          captureBuffer,
+          {
+            invocation: {
+              getEphemeral: <T>(key: string) =>
+                values.get(key) as T | undefined,
+            },
+          },
+          {},
+        );
+        captureBuffer.providerName = 'openaivercel';
+        const response = await createReasoningCaptureFetch(
+          captureBuffer,
+          logger,
+          fetch,
+        )(`http://127.0.0.1:${address.port}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: 'fixture', stream: false }),
+        });
+        await response.text();
+
+        const files = readdirSync(dumpDir);
+        expect(files).not.toContain('expired-singleton-request.json');
+        expect(files.length).toBeLessThanOrEqual(maxBytes === 1 ? 0 : 2);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+  );
 });

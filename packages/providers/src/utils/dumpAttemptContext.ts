@@ -41,20 +41,26 @@ function isPositiveFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+export function resolveDumpRetentionLimits(
+  ephemerals: Readonly<Record<string, unknown>> | undefined,
+): { readonly maxBytes: number; readonly maxAgeDays: number } | undefined {
+  const maxBytes = ephemerals?.['dump-retention-max-bytes'];
+  const maxAgeDays = ephemerals?.['dump-retention-max-age-days'];
+  if (maxBytes === undefined && maxAgeDays === undefined) return undefined;
+  if (!isPositiveSafeInteger(maxBytes) || !isPositiveFiniteNumber(maxAgeDays)) {
+    throw new TypeError('Invalid dump retention limits in provider invocation');
+  }
+  return { maxBytes, maxAgeDays };
+}
+
 export function readDumpAttemptContext(
   metadata: Readonly<Record<string, unknown>> | undefined,
   ephemerals?: Readonly<Record<string, unknown>>,
 ): DumpAttemptContext | undefined {
+  const retentionLimits = resolveDumpRetentionLimits(ephemerals);
   const value = metadata?.[DUMP_ATTEMPT_CONTEXT_KEY];
   if (!isDumpAttemptContext(value)) return undefined;
-  const maxBytes = ephemerals?.['dump-retention-max-bytes'];
-  const maxAgeDays = ephemerals?.['dump-retention-max-age-days'];
-  if (maxBytes === undefined && maxAgeDays === undefined) return value;
-  if (!isPositiveSafeInteger(maxBytes) || !isPositiveFiniteNumber(maxAgeDays)) {
-    throw new TypeError('Invalid dump retention limits in provider invocation');
-  }
-  value.retentionLimits = { maxBytes, maxAgeDays };
-  return value;
+  return retentionLimits === undefined ? value : { ...value, retentionLimits };
 }
 
 export function dumpAttemptResultContent(

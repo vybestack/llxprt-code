@@ -106,4 +106,24 @@ describe('dump retention', () => {
     expect(result.managedBytes).toBe(0);
     expect(result.removedGroups).toStrictEqual(['pair']);
   });
+  it('prunes old singleton halves but keeps recent ones during the cross-process grace period', async () => {
+    const directory = createFixture();
+    const now = new Date('2026-11-14T12:00:00Z');
+    for (const name of ['orphan-request.json', 'legacy-response.json']) {
+      const file = join(directory, name);
+      writeFileSync(file, 'old');
+      utimesSync(file, new Date(0), new Date(0));
+    }
+    const recent = join(directory, 'recent-request.json');
+    writeFileSync(recent, 'recent');
+
+    const result = await pruneDumpDirectory(directory, {
+      maxBytes: 1_000,
+      maxAgeDays: 14,
+      now,
+    });
+
+    expect(result.removedGroups).toStrictEqual(['legacy', 'orphan']);
+    expect(readFileSync(recent, 'utf8')).toBe('recent');
+  });
 });
