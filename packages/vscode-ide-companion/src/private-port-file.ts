@@ -58,10 +58,19 @@ async function replaceFile(file: string, content: string): Promise<void> {
   await fs.writeFile(file, content, { mode: 0o600, flag: 'wx' });
 }
 
-export type PrivateFileWriter = (
-  file: string,
-  content: string,
-) => Promise<void>;
+export interface PrivateFileWriter {
+  /**
+   * Replaces `file` with `content`. Rejects with the failure of this
+   * replacement only, or immediately once the writer has been closed.
+   */
+  write(file: string, content: string): Promise<void>;
+  /**
+   * Stops accepting writes, synchronously, and resolves once every replacement
+   * accepted earlier has finished, whether it succeeded or failed. Never
+   * rejects, and may be called more than once.
+   */
+  close(): Promise<void>;
+}
 
 /**
  * Creates a writer that puts `content` in a new file that is private from the
@@ -73,22 +82,34 @@ export type PrivateFileWriter = (
  * fail with EEXIST. A failed replacement rejects only its own caller.
  *
  * The ordering state belongs to the returned writer, so the owner of the port
- * file creates one writer and uses it for every update of that file.
+ * file creates one writer and uses it for every update of that file. The owner
+ * closes the writer before removing the file, so that a replacement still
+ * queued cannot recreate the file afterwards.
  */
 export function createPrivateFileWriter(): PrivateFileWriter {
   /** Tail of the pending replacement chain for each file being written. */
   const pendingReplacements = new Map<string, Promise<void>>();
+  let closed = false;
 
-  return (file, content) => {
-    const previous = pendingReplacements.get(file) ?? Promise.resolve();
-    const run = previous.then(() => replaceFile(file, content));
-    const tail = run.catch(() => undefined);
-    pendingReplacements.set(file, tail);
-    void tail.then(() => {
-      if (pendingReplacements.get(file) === tail) {
-        pendingReplacements.delete(file);
+  return {
+    write(file, content) {
+      if (closed) {
+        return Promise.reject(new Error('Private file writer is closed'));
       }
-    });
-    return run;
+      const previous = pendingReplacements.get(file) ?? Promise.resolve();
+      const run = previous.then(() => replaceFile(file, content));
+      const tail = run.catch(() => undefined);
+      pendingReplacements.set(file, tail);
+      void tail.then(() => {
+        if (pendingReplacements.get(file) === tail) {
+          pendingReplacements.delete(file);
+        }
+      });
+      return run;
+    },
+    close() {
+      closed = true;
+      return Promise.all(pendingReplacements.values()).then(() => undefined);
+    },
   };
 }
