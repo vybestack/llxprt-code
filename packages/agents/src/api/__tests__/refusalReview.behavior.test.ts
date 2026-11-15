@@ -212,7 +212,7 @@ describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {
     }).toStrictEqual({ rewritten: true, original: false, answer: true });
   });
 
-  it('writes the original text again only inside the rewrite record', async () => {
+  it('keeps original text out of rewritten history while retaining bounded refusal audit evidence', async () => {
     const run = await recovered();
 
     const at = run.journalRecords.findIndex(
@@ -227,11 +227,13 @@ describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {
       inResultingHistory: JSON.stringify(rewrite.resultingHistory).includes(
         ORIGINAL_PHRASE,
       ),
-      laterRecords: later.length,
+      laterRecordTypes: later.map((record) => record['type']),
+      laterRefusalAudit: JSON.stringify(later),
     }).toStrictEqual({
       inChanges: true,
       inResultingHistory: false,
-      laterRecords: 0,
+      laterRecordTypes: ['refusal'],
+      laterRefusalAudit: expect.stringContaining(ORIGINAL_PHRASE),
     });
   });
 

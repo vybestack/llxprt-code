@@ -41,6 +41,16 @@ export function toSummaryTurnRecord(
     // in the summary rather than regressing the default log.
     finish_reason: full.finish_reason,
     raw_stop_reason: full.raw_stop_reason,
+    refusal_category: full.refusal_category,
+    refusal_explanation: full.refusal_explanation,
+    recommended_model: full.recommended_model,
+    // #4068's explicit summary field list excludes per-attempt IDs. Keep IDs
+    // for refusals and their retries, where they are needed for diagnosis.
+    ...((full.attempt_outcome === 'refusal' ||
+      (full.attempt_index !== undefined && full.attempt_index > 0)) && {
+      request_id: full.request_id,
+    }),
+    dump_base_id: full.dump_base_id,
     provider: full.provider,
     model: full.model,
     protocol: full.protocol,

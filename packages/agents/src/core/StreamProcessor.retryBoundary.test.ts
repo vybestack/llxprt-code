@@ -17,6 +17,8 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
+import { RefusalDumpPairing } from './refusalDumpPairing.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -146,6 +148,9 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
       providerRuntimeBuilder: mockProviderRuntimeBuilder,
       generationConfig: {},
       turnIdByPromptId: new Map<string, string>(),
+      refusalDumpPairing: new RefusalDumpPairing(() => 0),
+      refusalStreamAudit: new RefusalStreamAudit(),
+      refusalFingerprintByStream: new WeakMap(),
       logger: { debug: () => {}, warn: () => {} },
     });
 

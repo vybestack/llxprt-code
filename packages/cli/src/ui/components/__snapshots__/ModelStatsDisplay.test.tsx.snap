@@ -1,6 +1,14 @@
-// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`<ModelStatsDisplay /> should display a single model correctly 1`] = `
+exports[`<ModelStatsDisplay /> should render "no API calls" message when there are no active models 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  No API calls have been made in this session.                                                    │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`<ModelStatsDisplay /> should not display conditional rows if no model has data for them 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
 │  Model Stats For Nerds                                                                           │
@@ -13,11 +21,29 @@ exports[`<ModelStatsDisplay /> should display a single model correctly 1`] = `
 │  Avg Latency                 100ms                                                               │
 │  Tokens                                                                                          │
 │  Total                       30                                                                  │
-│    ↳ Input                   5                                                                   │
-│    ↳ Cache Reads             5 (50.0%)                                                           │
-│    ↳ Thoughts                2                                                                   │
-│    ↳ Tool                    1                                                                   │
+│    ↳ Input                   10                                                                  │
 │    ↳ Output                  20                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`<ModelStatsDisplay /> should display a Refusals row counting refusals separately from errors 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Model Stats For Nerds                                                                           │
+│                                                                                                  │
+│  Metric                      claude-opus-5-5                                                     │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
+│  API                                                                                             │
+│  Requests                    2                                                                   │
+│  Errors                      0 (0.0%)                                                            │
+│  Refusals                    1                                                                   │
+│  Refusals by category        cyber: 1                                                            │
+│  Avg Latency                 1.0s                                                                │
+│  Tokens                                                                                          │
+│  Total                       280                                                                 │
+│    ↳ Input                   240                                                                 │
+│    ↳ Output                  40                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -88,6 +114,28 @@ exports[`<ModelStatsDisplay /> should handle large values without wrapping or ov
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
+exports[`<ModelStatsDisplay /> should display a single model correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Model Stats For Nerds                                                                           │
+│                                                                                                  │
+│  Metric                      gemini-2.5-pro                                                      │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
+│  API                                                                                             │
+│  Requests                    1                                                                   │
+│  Errors                      0 (0.0%)                                                            │
+│  Avg Latency                 100ms                                                               │
+│  Tokens                                                                                          │
+│  Total                       30                                                                  │
+│    ↳ Input                   5                                                                   │
+│    ↳ Cache Reads             5 (50.0%)                                                           │
+│    ↳ Thoughts                2                                                                   │
+│    ↳ Tool                    1                                                                   │
+│    ↳ Output                  20                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
 exports[`<ModelStatsDisplay /> should handle models with long names (gemini-3-*-preview) without layout breaking 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │
@@ -106,53 +154,6 @@ exports[`<ModelStatsDisplay /> should handle models with long names (gemini-3-*-
 │    ↳ Thoughts                100                              200                                │
 │    ↳ Tool                    50                               100                                │
 │    ↳ Output                  4,000                            8,000                              │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`<ModelStatsDisplay /> should not display conditional rows if no model has data for them 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  Model Stats For Nerds                                                                           │
-│                                                                                                  │
-│  Metric                      gemini-2.5-pro                                                      │
-│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
-│  API                                                                                             │
-│  Requests                    1                                                                   │
-│  Errors                      0 (0.0%)                                                            │
-│  Avg Latency                 100ms                                                               │
-│  Tokens                                                                                          │
-│  Total                       30                                                                  │
-│    ↳ Input                   10                                                                  │
-│    ↳ Output                  20                                                                  │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`<ModelStatsDisplay /> should render "no API calls" message when there are no active models 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  No API calls have been made in this session.                                                    │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`<ModelStatsDisplay /> should display a Refusals row counting refusals separately from errors 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                  │
-│  Model Stats For Nerds                                                                           │
-│                                                                                                  │
-│  Metric                      claude-opus-5-5                                                     │
-│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
-│  API                                                                                             │
-│  Requests                    2                                                                   │
-│  Errors                      0 (0.0%)                                                            │
-│  Refusals                    1                                                                   │
-│  Avg Latency                 1.0s                                                                │
-│  Tokens                                                                                          │
-│  Total                       280                                                                 │
-│    ↳ Input                   240                                                                 │
-│    ↳ Output                  40                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;

@@ -17,6 +17,7 @@
 import { invalidateResponsesStatefulChainForRetainedRewrite as invalidateRetainedRewrite } from './IContent.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
+import type { CompressionAuditProvenance } from '../../core/compression/types.js';
 import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
 import {
   computeStatistics,
@@ -696,6 +697,7 @@ export class HistoryService extends HistoryServiceCore {
     summary?: IContent,
     itemsCompressed?: number,
     origin?: object,
+    provenance?: CompressionAuditProvenance,
   ): void {
     this.logger.debug('Compression complete - unlocking history', {
       pendingCount: this.pendingOperations.length,
@@ -713,7 +715,13 @@ export class HistoryService extends HistoryServiceCore {
         this.emit('compressionLockReleased', origin);
 
         if (summary && itemsCompressed !== undefined) {
-          this.emit('compressionEnded', summary, itemsCompressed, origin);
+          this.emit(
+            'compressionEnded',
+            summary,
+            itemsCompressed,
+            origin,
+            provenance,
+          );
         }
       });
     });

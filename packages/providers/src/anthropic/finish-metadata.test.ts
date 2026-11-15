@@ -9,7 +9,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { processAnthropicStream } from './AnthropicStreamProcessor.js';
 import { parseAnthropicResponse } from './AnthropicResponseParser.js';
 
-async function response(raw: string): Promise<Anthropic.Message> {
+async function response(
+  raw: string,
+  stopDetails?: unknown,
+): Promise<Anthropic.Message> {
   const client = new Anthropic({
     apiKey: 'test-only',
     fetch: async () =>
@@ -21,6 +24,7 @@ async function response(raw: string): Promise<Anthropic.Message> {
           model: 'test',
           content: [{ type: 'text', text: 'Answer' }],
           stop_reason: raw,
+          ...(stopDetails === undefined ? {} : { stop_details: stopDetails }),
           stop_sequence: null,
           usage: { input_tokens: 2, output_tokens: 3 },
         }),
@@ -59,6 +63,26 @@ describe('Anthropic terminal finish metadata', () => {
       rawStopReason: raw,
       usage: { totalTokens: 5 },
     });
+  });
+
+  it('omits malformed stop details without losing the finish reason', async () => {
+    const chunk = parseAnthropicResponse(
+      await response('refusal', { type: 7, category: { invalid: true } }),
+      {
+        isOAuth: false,
+        tools: undefined,
+        unprefixToolName: (name) => name,
+        findToolSchema: () => undefined,
+        cacheLogger: { debug: () => undefined },
+        includeThinkingInResponse: true,
+      },
+    );
+
+    expect(chunk.metadata).toMatchObject({
+      finishReason: 'refusal',
+      rawStopReason: 'refusal',
+    });
+    expect(chunk.metadata).not.toHaveProperty('stopDetails');
   });
 });
 

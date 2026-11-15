@@ -5,9 +5,13 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 4 - Part B)
  */
 
-import { mapStopReason } from './finishReasonMapping.js';
+import {
+  mapStopReason,
+  parseAnthropicStopDetails,
+} from './finishReasonMapping.js';
 import { logInputTransformations } from './inputTransformations.js';
 import type Anthropic from '@anthropic-ai/sdk';
+import { z } from 'zod';
 import type {
   IContent,
   ContentBlock,
@@ -185,6 +189,18 @@ export function parseAnthropicResponse(
       ...result.metadata,
       ...mapStopReason(message.stop_reason),
     };
+  }
+  const parsedMessage = z
+    .object({ stop_details: z.unknown().optional() })
+    .passthrough()
+    .safeParse(message);
+  if (parsedMessage.success) {
+    const stopDetails = parseAnthropicStopDetails(
+      parsedMessage.data.stop_details,
+    );
+    if (stopDetails !== undefined) {
+      result.metadata = { ...result.metadata, stopDetails };
+    }
   }
 
   return result;

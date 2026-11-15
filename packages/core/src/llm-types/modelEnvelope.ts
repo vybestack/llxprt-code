@@ -28,7 +28,7 @@ import type {
   UsageStats,
 } from '../services/history/IContent.js';
 import type { ToolCallRequest } from './toolCall.js';
-import type { CanonicalFinishReason } from './finishReasons.js';
+import type { CanonicalFinishReason, StopDetails } from './finishReasons.js';
 import { isRecord } from './jsonSchema.js';
 import {
   extractAfcHistory,
@@ -54,7 +54,17 @@ export interface ModelOutput {
   content: IContent;
   finishReason?: CanonicalFinishReason;
   rawStopReason?: string;
+  stopDetails?: StopDetails;
+  requestId?: string | null;
+  dumpBaseId?: string;
   usage?: UsageStats;
+  refusalAuditToolInputs?: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly input: string;
+    readonly complete: boolean;
+  }>;
+  firstByteToRefusalMs?: number | null;
   responseId?: string;
   hookRestrictions?: HookRestrictions;
   providerMetadata?: Record<string, unknown>;
@@ -90,6 +100,17 @@ export function emptyModelOutput(
   speaker: 'human' | 'ai' | 'tool' = 'ai',
 ): ModelOutput {
   return { content: { speaker, blocks: [] } };
+}
+
+function mergeRefusalAuditFields(
+  result: ModelOutput,
+  acc: ModelOutput,
+  chunk: ModelStreamChunk,
+): void {
+  const toolInputs = chunk.refusalAuditToolInputs ?? acc.refusalAuditToolInputs;
+  if (toolInputs !== undefined) result.refusalAuditToolInputs = toolInputs;
+  const timing = chunk.firstByteToRefusalMs ?? acc.firstByteToRefusalMs;
+  if (timing !== undefined) result.firstByteToRefusalMs = timing;
 }
 
 /**
@@ -130,12 +151,23 @@ export function accumulateModelStreamChunk(
     result.rawStopReason = rawStopReason;
   }
 
+  const stopDetails = chunk.stopDetails ?? acc.stopDetails;
+  if (stopDetails !== undefined) result.stopDetails = stopDetails;
+
+  const requestId =
+    chunk.requestId !== undefined ? chunk.requestId : acc.requestId;
+  if (requestId !== undefined) result.requestId = requestId;
+  const dumpBaseId = chunk.dumpBaseId ?? acc.dumpBaseId;
+  if (dumpBaseId !== undefined) result.dumpBaseId = dumpBaseId;
+
   const usage = chunk.usage ?? acc.usage;
   if (usage !== undefined) {
     // Defensive copy: last-write-wins semantics (whole-object replacement),
     // but the copied object is not shared with the input chunk/acc.
     result.usage = { ...usage };
   }
+
+  mergeRefusalAuditFields(result, acc, chunk);
 
   const responseId = chunk.responseId ?? acc.responseId;
   if (responseId !== undefined) {
@@ -203,6 +235,17 @@ export function getToolCalls(output: ModelOutput): ToolCallRequest[] {
   }
 
   return result;
+}
+function copyRefusalAuditMetadata(
+  result: ModelOutput,
+  metadata: IContent['metadata'],
+): void {
+  if (metadata?.refusalAuditToolInputs !== undefined) {
+    result.refusalAuditToolInputs = metadata.refusalAuditToolInputs;
+  }
+  if (metadata?.firstByteToRefusalMs !== undefined) {
+    result.firstByteToRefusalMs = metadata.firstByteToRefusalMs;
+  }
 }
 
 /**
@@ -273,6 +316,10 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
   if (meta?.rawStopReason !== undefined) {
     result.rawStopReason = meta.rawStopReason;
   }
+  if (meta?.stopDetails !== undefined) result.stopDetails = meta.stopDetails;
+  if (meta?.requestId !== undefined) result.requestId = meta.requestId;
+  if (meta?.dumpBaseId !== undefined) result.dumpBaseId = meta.dumpBaseId;
+  copyRefusalAuditMetadata(result, meta);
 
   if (meta?.usage) {
     // Defensive copy so callers cannot mutate the original IContent metadata.

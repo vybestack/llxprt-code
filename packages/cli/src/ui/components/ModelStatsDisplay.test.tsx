@@ -109,6 +109,7 @@ describe('<ModelStatsDisplay />', () => {
             totalRequests: 2,
             totalErrors: 0,
             totalRefusals: 1,
+            refusalsByCategory: [{ category: 'cyber', count: 1 }],
             totalLatencyMs: 2000,
           },
           tokens: {
@@ -127,6 +128,7 @@ describe('<ModelStatsDisplay />', () => {
     const output = lastFrame();
     expect(output).toMatch(/Refusals\s+1\b/);
     expect(output).toMatch(/Errors\s+0 \(0\.0%\)/);
+    expect(output).toContain('cyber: 1');
     expect(output).toMatchSnapshot();
   });
 
