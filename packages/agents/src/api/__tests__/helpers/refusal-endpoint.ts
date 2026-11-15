@@ -6,16 +6,35 @@
 
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+} from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
+import { isolateStorageRoots } from '@vybestack/llxprt-code-storage/testing';
 import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 
 const PROMPT_TOKENS = 120;
+
+export function isolateRefusalStorage(root: string): () => void {
+  if (process.env.LLXPRT_TEST_STORAGE_ISOLATED !== '1') isolateStorageRoots();
+  const previous = process.env.LLXPRT_LOG_HOME;
+  const logHome = join(root, 'log');
+  mkdirSync(logHome, { recursive: true });
+  process.env.LLXPRT_LOG_HOME = logHome;
+  return () => {
+    if (previous === undefined) delete process.env.LLXPRT_LOG_HOME;
+    else process.env.LLXPRT_LOG_HOME = previous;
+  };
+}
 
 /** What the local OpenAI-compatible endpoint answers to one request. */
 export type EndpointReply = {
@@ -432,6 +451,15 @@ async function runPrompts(
   return events;
 }
 
+async function startForegroundEndpoint(
+  replies: readonly EndpointReply[],
+  anthropic: boolean,
+): Promise<ScriptedEndpoint> {
+  return anthropic
+    ? startAnthropicEndpoint(replies)
+    : startScriptedEndpoint(replies);
+}
+
 export async function runScriptedPrompt(
   replies: readonly EndpointReply[],
   prompts: readonly string[] = ['please summarise the work'],
@@ -440,12 +468,11 @@ export async function runScriptedPrompt(
   const workingDir = realpathSync(
     mkdtempSync(join(tmpdir(), 'llxprt-refusal-')),
   );
+  const restoreStorage = isolateRefusalStorage(workingDir);
   const sessionId = `refusal-${randomUUID()}`;
   const profileManager = new ProfileManager();
   const anthropic = options.protocol === 'anthropic';
-  const endpoint = anthropic
-    ? await startAnthropicEndpoint(replies)
-    : await startScriptedEndpoint(replies);
+  const endpoint = await startForegroundEndpoint(replies, anthropic);
   const compressionProfile =
     options.compressionModel === undefined
       ? undefined
@@ -508,6 +535,7 @@ export async function runScriptedPrompt(
     }
     await endpoint.stop();
     await compressionEndpoint?.stop();
+    restoreStorage();
     rmSync(workingDir, { recursive: true, force: true });
   }
 }

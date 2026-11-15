@@ -1,8 +1,8 @@
 # REQ-4101 execution tracker
 
-Branch: `issue4101`; current phase: P04.
+Branch: `issue4101`; current phase: P05.
 
-Status: P04 implemented and verified; P01-P03 were committed before this phase. P05 has not started.
+Status: P05 implementation and verification completed. See `.completed/P05.md`.
 
 | Phase | State | Verification |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Status: P04 implemented and verified; P01-P03 were committed before this phase. 
 | P02 | Implemented and verified | Corrected provider behavior, fixture initialization, and full repository verification are recorded below. |
 | P03 | Implemented and verified | Details in `.completed/P03.md`; full verification log: `tmp/verify4101/test-P03.log`. |
 | P04 | Implemented and verified | See P04 verification record and `.completed/P04.md`; full suite log: `tmp/verify4101/test-P04c.log`. |
-| P05 | Not started | Out of scope for this phase. |
+| P05 | Implemented and verified | Offline refusal survey, 60-second compression correlation, bounded tool-response previews, content-word filtering, and isolated refusal harness logs; see `.completed/P05.md` and `tmp/verify4101/test-P05b.log`. |
 
 ## P04 verification record
 
