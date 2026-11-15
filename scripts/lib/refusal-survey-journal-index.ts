@@ -14,6 +14,7 @@ export type Journal = {
   type: string;
   payload: Record<string, unknown>;
   session: string;
+  runtime: string;
 };
 
 export function hasRecoveryContent(
@@ -147,6 +148,14 @@ function compactAudit(type: string, payload: Obj): Obj {
   };
 }
 
+function journalRuntime(row: Obj): string {
+  const payload = row['payload'];
+  const rowRuntime = str(row['runtime_id']) ?? str(row['runtimeId']);
+  if (rowRuntime !== null) return rowRuntime;
+  if (!isObj(payload)) return '';
+  return str(payload['runtime_id']) ?? str(payload['runtimeId']) ?? '';
+}
+
 export async function readJournalIndex(
   dir: string,
   malformed: Malformed,
@@ -176,6 +185,7 @@ export async function readJournalIndex(
             project: row['payload']['project'],
           },
           session,
+          runtime: journalRuntime(row),
         });
       } else if (
         [
@@ -195,6 +205,7 @@ export async function readJournalIndex(
               ? compactContent(row['type'], row['payload'])
               : compactAudit(row['type'], row['payload']),
           session,
+          runtime: journalRuntime(row),
         });
       }
     }

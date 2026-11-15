@@ -29,6 +29,7 @@ export function formatRefusalSurvey(report: Obj): string {
   sections.push(
     'Compression correlation: calls within 60 seconds after the latest compression are after-compression, older matched calls are elsewhere, and calls with no matched prior compression are missing-evidence; denominators count all observed provider calls in each bucket.',
   );
+  sections.push(`Join methods: ${JSON.stringify(summary['joins'])}`);
   const compression = summary['compression'] as Record<
     string,
     { attempts: number; refusals: number }
@@ -44,7 +45,7 @@ export function formatRefusalSurvey(report: Obj): string {
   }
   for (const run of runs) {
     sections.push(
-      `\n${run['firstTime']} ${run['model']} category=${run['category'] ?? 'unspecified'} project=${run['project']} session=${run['session']} prompt=${run['promptId']} attempts=${run['refusalAttempts']} context=${run['contextTokens'] ?? 'unknown'} compression=${run['compression'] ?? 'none'} recovery=${run['recovery']}`,
+      `\n${run['firstTime']} ${run['model']} category=${run['category'] ?? 'unspecified'} project=${run['project']} session=${run['session']} prompt=${run['promptId']} join=${run['join']} attempts=${run['refusalAttempts']} context=${run['contextTokens'] ?? 'unknown'} compression=${run['compression'] ?? 'none'} recovery=${run['recovery']}`,
     );
     sections.push(
       `  Entries since compression: ${run['entriesSinceCompression'] ?? 'unknown'}; summary author: ${run['summaryAuthor'] ?? 'unknown'}`,

@@ -22,9 +22,19 @@ Status: P05 implementation and verification completed. See `.completed/P05.md`.
 - Focused final regression batch: 67 tests across 10 files passed (`rc=0`).
 - The first full test cycle reached 10,577 passing tests, then the Agents API-surface declaration guard failed on an obsolete provenance type import. After removing the unused import, the final full verification passed: `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build`, and `npm run test` each recorded `rc=0` in `tmp/verify4101/{typecheck,lint,format,build,test}-R1b.log`.
 - The required grep, `grep -nE 'Native Bun test failed|^FAILED:' tmp/verify4101/test-R1b.log`, matched two `(pass)` retry-runner self-test lines only. There were no `FAILED:` suite markers.
-- Survey refresh: `bun scripts/refusal-survey.ts --since 2026-11-01 --json tmp/verify4101/survey.json > tmp/verify4101/survey.txt` passed (`rc=0`). Headline: 247 attempts in 85 runs (21 definite, 226 suspected); compression correlation was 0/4 after-compression, 0/8 elsewhere, and 247/68,339 missing-evidence. The 247 historical refusal records lack matched compression evidence.
+- Initial survey snapshot before the legacy-join correction: 247 attempts in 85 runs (21 definite, 226 suspected), with all refusal evidence unmatched. Superseded by the corrected survey results in the issue 4101 correlation regression follow-up below.
 - `git diff --check`: passed. Changes remain on branch `issue4101`; no push performed.
 
+
+## Issue 4101 correlation regression follow-up
+
+- Restored explicit correlation fallback order: exact project/session/runtime identity, a unique `legacy-prompt-prefix` match, then a unique `legacy-timestamp` journal span. Ambiguous cases without one unique journal remain unmatched. Child-runtime calls require that runtime to be present in journal records, preventing parent compression history from crossing runtime boundaries.
+- The per-run report labels its join method; the summary counts exact, both legacy methods, and unmatched calls. Fixture tests cover mismatched legacy IDs resolved by prefix, ambiguous prefix resolved by the unique timestamp span, and parent/child isolation.
+- Focused scripts regression: `bun test scripts/tests/refusal-survey.test.ts` passed 4/4 tests and 23 assertions. Full `npm run test` passed (`tmp/verify4101/test-R1c.log`, final `rc=0`); the log shows `scripts/tests/refusal-survey.test.ts` and all four tests passing. The failure-marker grep matched only `(pass)` retry-runner self-tests. `npm run typecheck`, `npm run lint`, and `npm run format` passed.
+- Survey refresh: 248 attempts in 86 runs (22 definite, 226 suspected). Compression buckets: after-compression 6/788, elsewhere 239/10,423, missing-evidence 3/58,511. Join methods: exact 0, legacy prompt-prefix 12,421, legacy timestamp 218, unmatched 57,083.
+- The first two Opus runs among `gone/branch-2` and `stranded/branch-2` are `gone/branch-2` at `2026-11-09T22:06:01.487Z` and `2026-11-09T22:06:05.670Z`; both use `legacy-prompt-prefix` and point to compression at `2026-11-09T18:51:24.355Z`, with 3 and 4 refusal attempts respectively. `stranded/branch-2` at `2026-11-13T22:38:03.500Z` is 0.261 seconds after compression at `22:38:03.239Z` and lands in after-compression.
+- Definite refusals by project/model: `projects/uqm` / `claude-opus-5-5` 18; `stranded/branch-1` / `claude-opus-5-5` 1; `T/llxprt-review-BJ3Lui` / `scripted-model` 2; `T/llxprt-refusal-6hmvRd` / `claude-opus-5-5` 1. The three `T/...` entries are test-harness sessions in the real log root, consistent with logs leaked before the harness isolation fix.
+- `git diff --check` passed. Branch remains `issue4101`; no push performed.
 
 | Phase | State | Verification |
 | --- | --- | --- |

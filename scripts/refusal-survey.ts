@@ -20,6 +20,11 @@ import {
   readJournalIndex,
   type Journal,
 } from './lib/refusal-survey-journal-index.ts';
+import {
+  correlationFor,
+  type Correlation,
+  type JoinMethod,
+} from './lib/refusal-survey-correlation.ts';
 import { formatRefusalSurvey } from './lib/refusal-survey-report.ts';
 
 type Obj = Record<string, unknown>;
@@ -30,6 +35,7 @@ type ObservedCall = {
   runtime: string;
   ts: string;
   refusal: boolean;
+  childRuntime: boolean;
 };
 type Attempt = {
   projectHash: string;
@@ -57,8 +63,6 @@ const str = (value: unknown): string | null =>
   typeof value === 'string' ? value : null;
 const num = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
-const sameSession = (usageSession: string, journalSession: string): boolean =>
-  usageSession === journalSession;
 const walk = (root: string): string[] => {
   if (!fs.existsSync(root)) return [];
   const found: string[] = [];
@@ -333,7 +337,20 @@ async function readUsage(
       const session = str(value['session_id']) ?? path.basename(file, '.jsonl');
       const prompt = str(value['prompt_id']) ?? '';
       const runtime = str(value['runtime_id']) ?? '';
-      calls.push({ projectHash, session, prompt, runtime, ts, refusal });
+      const childRuntime =
+        session.includes('::') ||
+        /(?:^|[:/])(?:child|subagent)(?:[:/]|$)/iu.test(runtime) ||
+        Boolean(str(value['subagent_id']) ?? str(value['subagent']) ?? '') ||
+        value['is_subagent'] === true;
+      calls.push({
+        projectHash,
+        session,
+        prompt,
+        runtime,
+        ts,
+        refusal,
+        childRuntime,
+      });
       if (refusal)
         attempts.push({
           projectHash,
@@ -466,20 +483,27 @@ function recoveryStatus(recovered: boolean, rewritten: boolean): string {
 function compressionCounts(
   calls: ObservedCall[],
   journals: Map<string, Journal[]>,
-): CompressionCounts {
+): { counts: CompressionCounts; joins: Record<JoinMethod, number> } {
   const counts: CompressionCounts = {
     'after-compression': { refusals: 0, attempts: 0 },
     elsewhere: { refusals: 0, attempts: 0 },
     'missing-evidence': { refusals: 0, attempts: 0 },
   };
+  const joins: Record<JoinMethod, number> = {
+    exact: 0,
+    'legacy-prompt-prefix': 0,
+    'legacy-timestamp': 0,
+    none: 0,
+  };
   for (const call of calls.sort((a, b) => a.ts.localeCompare(b.ts))) {
-    const latest = (journals.get(call.projectHash) ?? [])
-      .filter(
-        (record) =>
-          record.type === 'compressed' &&
-          sameSession(call.session, record.session) &&
-          record.ts <= call.ts,
-      )
+    const correlation = correlationFor(
+      call,
+      journals.get(call.projectHash) ?? [],
+    );
+    joins[correlation.method]++;
+    const latest = correlation.records
+      .filter((record) => record.type === 'compressed' && record.ts <= call.ts)
+      .sort((a, b) => a.ts.localeCompare(b.ts))
       .at(-1);
     const elapsed = latest ? Date.parse(call.ts) - Date.parse(latest.ts) : -1;
     const bucket = compressionBucket(
@@ -489,7 +513,7 @@ function compressionCounts(
     counts[bucket].attempts++;
     if (call.refusal) counts[bucket].refusals++;
   }
-  return counts;
+  return { counts, joins };
 }
 
 function contextFor(
@@ -583,6 +607,29 @@ function addTermCounts(
   }
 }
 
+function joinForAttempt(
+  first: Attempt,
+  journals: Map<string, Journal[]>,
+): Correlation {
+  return correlationFor(
+    {
+      projectHash: first.projectHash,
+      session: first.session,
+      prompt: first.prompt,
+      runtime: first.runtime,
+      ts: first.ts,
+      childRuntime:
+        first.session.includes('::') ||
+        /(?:^|[:/])(?:child|subagent)(?:[:/]|$)/iu.test(first.runtime) ||
+        Boolean(
+          str(first.raw['subagent_id']) ?? str(first.raw['subagent']) ?? '',
+        ) ||
+        first.raw['is_subagent'] === true,
+    },
+    journals.get(first.projectHash) ?? [],
+  );
+}
+
 function decorateRun(
   run: Run,
   journals: Map<string, Journal[]>,
@@ -591,9 +638,9 @@ function decorateRun(
 ): void {
   const list = run['attempts'] as Attempt[];
   const first = list[0]!;
-  const journal = (journals.get(first.projectHash) ?? []).filter((entry) =>
-    sameSession(first.session, entry.session),
-  );
+  const correlation = joinForAttempt(first, journals);
+  const journal = correlation.records;
+  run['join'] = correlation.method;
   const context = contextFor(first, list, journal);
   const acceptedPair = acceptedDumpFor(first.prompt, first.dumpBaseId, dumps);
   const accepted = acceptedPair?.[1];
@@ -715,6 +762,7 @@ async function survey(options: ReturnType<typeof argumentsFrom>): Promise<Obj> {
     terms: new Map(),
   };
   for (const run of runs) decorateRun(run, evidence.journals, dumps, counts);
+  const compression = compressionCounts(evidence.calls, evidence.journals);
   const termContrasts = [...counts.terms.entries()]
     .map(([term, value]) => ({
       term,
@@ -739,7 +787,8 @@ async function survey(options: ReturnType<typeof argumentsFrom>): Promise<Obj> {
       models: counts.models,
       categories: counts.categories,
       projects: counts.projects,
-      compression: compressionCounts(evidence.calls, evidence.journals),
+      compression: compression.counts,
+      joins: compression.joins,
       termContrasts,
     },
     diagnostics: {

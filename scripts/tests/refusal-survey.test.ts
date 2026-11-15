@@ -63,6 +63,101 @@ function runSurvey(
 }
 
 describe('refusal survey CLI', () => {
+  it('joins legacy token usage by prompt prefix when session ids differ', () => {
+    const root = path.join(fixtureRoot(), 'logs', 'tmp');
+    const project = path.join(root, 'legacy-prefix');
+    writeJsonLines(path.join(project, 'token-usage', 'usage-id.jsonl'), [
+      {
+        ts: '2026-11-02T10:00:00Z',
+        prompt_id: 'legacy-session-uuid-prompt-1',
+        session_id: 'usage-file-id',
+        provider: 'anthropic',
+        model: 'claude-opus-5-5',
+        attempt_outcome: 'refusal',
+        attempt_index: 0,
+      },
+    ]);
+    writeJsonLines(path.join(project, 'chats', 'journal.jsonl'), [
+      {
+        seq: 1,
+        ts: '2026-11-02T09:00:00Z',
+        type: 'session_start',
+        payload: {
+          sessionId: 'legacy-session-uuid',
+          workspaceDirs: ['/legacy'],
+        },
+      },
+      {
+        seq: 2,
+        ts: '2026-11-02T09:59:59.700Z',
+        type: 'compressed',
+        payload: {},
+      },
+    ]);
+    const output = runSurvey(root);
+    const report = JSON.parse(output.stdout) as {
+      runs: Array<Record<string, unknown>>;
+      summary: {
+        compression: Record<string, { refusals: number; attempts: number }>;
+        joins: Record<string, number>;
+      };
+    };
+    expect(report.runs[0]?.['join']).toBe('legacy-prompt-prefix');
+    expect(report.summary.joins['legacy-prompt-prefix']).toBe(1);
+    expect(report.summary.compression['after-compression']).toMatchObject({
+      refusals: 1,
+      attempts: 1,
+    });
+  });
+
+  it('uses a unique timestamp-covering journal when prompt prefixes are ambiguous', () => {
+    const root = path.join(fixtureRoot(), 'logs', 'tmp');
+    const project = path.join(root, 'legacy-time');
+    writeJsonLines(path.join(project, 'token-usage', 'usage.jsonl'), [
+      {
+        ts: '2026-11-02T10:00:00Z',
+        prompt_id: 'legacy-session-prompt',
+        session_id: 'different-usage-id',
+        provider: 'anthropic',
+        model: 'claude-opus-5-5',
+        attempt_outcome: 'refusal',
+        attempt_index: 0,
+      },
+    ]);
+    writeJsonLines(path.join(project, 'chats', 'first.jsonl'), [
+      {
+        seq: 1,
+        ts: '2026-11-02T08:00:00Z',
+        type: 'session_start',
+        payload: { sessionId: 'legacy' },
+      },
+      { seq: 2, ts: '2026-11-02T08:30:00Z', type: 'compressed', payload: {} },
+    ]);
+    writeJsonLines(path.join(project, 'chats', 'second.jsonl'), [
+      {
+        seq: 1,
+        ts: '2026-11-02T09:59:00Z',
+        type: 'session_start',
+        payload: { sessionId: 'legacy-session' },
+      },
+      { seq: 2, ts: '2026-11-02T10:00:00Z', type: 'compressed', payload: {} },
+    ]);
+    const output = runSurvey(root);
+    const report = JSON.parse(output.stdout) as {
+      runs: Array<Record<string, unknown>>;
+      summary: {
+        compression: Record<string, { refusals: number; attempts: number }>;
+        joins: Record<string, number>;
+      };
+    };
+    expect(report.runs[0]?.['join']).toBe('legacy-timestamp');
+    expect(report.summary.joins['legacy-timestamp']).toBe(1);
+    expect(report.summary.compression['after-compression']).toMatchObject({
+      refusals: 1,
+      attempts: 1,
+    });
+  });
+
   it('does not join a child session to its parent compression history', () => {
     const root = path.join(fixtureRoot(), 'logs', 'tmp');
     const project = path.join(root, 'project-isolation');
