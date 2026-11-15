@@ -380,7 +380,6 @@ export interface ConfigParameters {
     disableFuzzySearch?: boolean;
   };
   checkpointing?: boolean;
-  dumpOnError?: boolean;
   proxy?: string;
   cwd: string;
   includeDirectories?: string[];

@@ -59,6 +59,14 @@ function buildRefusalRows(activeModels: ActiveModelEntry[]): StatRowData[] {
         {m.api.totalRefusals.toLocaleString()}
       </Text>
     )),
+    createStatRow(activeModels, 'Refusals by category', (m) => {
+      const categories = m.api.refusalsByCategory ?? [];
+      return categories.length === 0
+        ? '—'
+        : categories
+            .map(({ category, count }) => `${category ?? 'unknown'}: ${count}`)
+            .join(', ');
+    }),
   ];
 }
 

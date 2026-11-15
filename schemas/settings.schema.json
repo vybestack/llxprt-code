@@ -238,6 +238,44 @@
         "$ref": "#/$defs/MCPServerConfig"
       }
     },
+    "dumpcontext": {
+      "title": "Context Dump Mode",
+      "description": "Default context dump mode for new sessions. Dumps can contain prompt content and are stored in the LLxprt cache directory.",
+      "markdownDescription": "Default context dump mode for new sessions. Dumps can contain prompt content and are stored in the LLxprt cache directory.\n\n- Category: `Diagnostics`\n- Requires restart: `yes`\n- Default: `off`",
+      "default": "off",
+      "type": "string",
+      "enum": ["off", "error", "on"]
+    },
+    "dumpRetention": {
+      "title": "Diagnostic Dump Retention",
+      "description": "Retention limits for provider request and response dumps. Files contain prompt content and are written with owner-only permissions.",
+      "markdownDescription": "Retention limits for provider request and response dumps. Files contain prompt content and are written with owner-only permissions.\n\n- Category: `Diagnostics`\n- Requires restart: `yes`\n- Default: `{\n  \"maxBytes\": 2147483648,\n  \"maxAgeDays\": 14\n}`",
+      "default": {
+        "maxBytes": 2147483648,
+        "maxAgeDays": 14
+      },
+      "type": "object",
+      "properties": {
+        "maxBytes": {
+          "title": "Maximum Dump Size (Bytes)",
+          "description": "Maximum total size of managed dump files.",
+          "markdownDescription": "Maximum total size of managed dump files.\n\n- Category: `Diagnostics`\n- Requires restart: `yes`\n- Default: `2147483648`",
+          "default": 2147483648,
+          "type": "number",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "maxAgeDays": {
+          "title": "Maximum Dump Age (Days)",
+          "description": "Maximum age of managed dump files in days.",
+          "markdownDescription": "Maximum age of managed dump files in days.\n\n- Category: `Diagnostics`\n- Requires restart: `yes`\n- Default: `14`",
+          "default": 14,
+          "type": "number",
+          "minimum": 5e-324
+        }
+      },
+      "additionalProperties": false
+    },
     "sessionRetention": {
       "title": "Session Retention",
       "description": "Settings for automatic session cleanup. Cleanup is enabled by default with a machine-wide 4 GiB aggregate size budget.",

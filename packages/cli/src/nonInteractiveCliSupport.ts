@@ -23,7 +23,7 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import { MAX_TURNS_MESSAGE } from './utils/errors.js';
 import { markMachineErrorReported } from './session/machineErrorReporting.js';
-import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
+import { formatRefusalNotice } from './utils/refusalNotice.js';
 import { AttemptSeparator } from './nonInteractiveAttemptSeparator.js';
 
 /** The slice of Config the printer reads, so callers need no full Config. */
@@ -403,6 +403,7 @@ function handleDone(
       emitFinalResult(context, responseText, startTime, getMetrics());
       return;
     case 'refusal': {
+      const notice = formatRefusalNotice(event.finished?.stopDetails);
       // @issue:2329 — surface the safety-classifier refusal as a user-visible
       // warning while still emitting the final result so stdout/json output
       // is preserved. DoneReason is authoritative here, so the shared notice
@@ -420,14 +421,10 @@ function handleDone(
         !context.jsonOutput &&
         context.streamFormatter === null
       ) {
-        process.stderr.write(`WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`);
+        process.stderr.write(`WARNING: ${notice}\n`);
       }
       if (!context.quiet) {
-        emitStreamError(
-          context.streamFormatter,
-          'warning',
-          REFUSAL_NOTICE_MESSAGE,
-        );
+        emitStreamError(context.streamFormatter, 'warning', notice);
       }
       emitFinalResult(
         context,

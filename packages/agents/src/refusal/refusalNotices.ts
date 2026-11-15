@@ -12,16 +12,55 @@ export function formatRefusalDelay(ms: number): string {
   return ms % 1000 === 0 ? `${ms / 1000} s` : `${ms} ms`;
 }
 
+function terminalText(value: string): string {
+  let sanitized = '';
+  for (const character of value) {
+    const code = character.codePointAt(0);
+    if (code !== undefined && (code < 0x20 || (code >= 0x7f && code <= 0x9f))) {
+      sanitized += ' ';
+    } else {
+      sanitized += character;
+    }
+  }
+  return sanitized.replace(/\s+/g, ' ').trim();
+}
+
+function refusalDiagnosticSuffix(input: {
+  readonly category?: string | null;
+  readonly explanation?: string | null;
+}): string {
+  const details: string[] = [];
+  if (input.category !== undefined && input.category !== null) {
+    details.push(`Category: ${terminalText(input.category)}.`);
+  }
+  if (input.explanation !== undefined && input.explanation !== null) {
+    details.push(terminalText(input.explanation));
+  }
+  return details.length === 0 ? '' : ` ${details.join(' ')}`;
+}
+
+export function appendRefusalDiagnostics(
+  message: string,
+  input: {
+    readonly category?: string | null;
+    readonly explanation?: string | null;
+  },
+): string {
+  return `${message}${refusalDiagnosticSuffix(input)}`;
+}
+
 /** Shown when a refused request is about to be resent. */
 export function describeRefusalRetry(input: {
   readonly model: string;
   readonly delayMs: number;
   readonly retryNumber: number;
   readonly retries: number;
+  readonly category?: string | null;
+  readonly explanation?: string | null;
 }): string {
   const wait =
     input.delayMs <= 0 ? 'now' : `in ${formatRefusalDelay(input.delayMs)}`;
-  return `Model ${input.model} refused the request; retrying ${wait} (retry ${input.retryNumber} of ${input.retries}).`;
+  return `Model ${input.model} refused the request; retrying ${wait} (retry ${input.retryNumber} of ${input.retries}).${refusalDiagnosticSuffix(input)}`;
 }
 
 /** One review that rewrote context, as the stop summary reports it. */
@@ -36,6 +75,8 @@ export function describeRefusalStop(input: {
   readonly refusals: number;
   readonly delaysMs: readonly number[];
   readonly rewrites: readonly RewriteSummary[];
+  readonly category?: string | null;
+  readonly explanation?: string | null;
 }): string {
   const retries = input.delaysMs.length;
   const backoff = input.delaysMs.every((ms) => ms <= 0)
@@ -49,7 +90,7 @@ export function describeRefusalStop(input: {
     rewrote.length === 0
       ? ''
       : `; ${rewrote.join(', then ')} and the model refused again`;
-  return `Model ${input.model} refused ${input.refusals} times (${retries} ${noun} with ${backoff}${reviewed}). Stopping.`;
+  return `Model ${terminalText(input.model)} refused ${input.refusals} times (${retries} ${noun} with ${backoff}${reviewed}). Stopping.${refusalDiagnosticSuffix(input)}`;
 }
 
 /** What one rewritten entry looked like before and after, for the user. */
@@ -100,8 +141,13 @@ export function describeReviewStart(input: {
   readonly model: string;
   readonly refusals: number;
   readonly reviewer: string;
+  readonly category?: string | null;
+  readonly explanation?: string | null;
 }): string {
-  return `Model ${input.model} refused ${input.refusals} time(s); asking ${input.reviewer} to review the recent context.`;
+  return appendRefusalDiagnostics(
+    `Model ${input.model} refused ${input.refusals} time(s); asking ${input.reviewer} to review the recent context.`,
+    input,
+  );
 }
 
 /** Shown when a reviewer must retry after dropping protected literals. */
@@ -122,6 +168,8 @@ export function describeReviewRewrite(input: {
   readonly reviewer: string;
   readonly changes: readonly RewriteChangeSummary[];
   readonly operationId: string;
+  readonly category?: string | null;
+  readonly explanation?: string | null;
 }): string {
   const shown = input.changes.slice(0, PREVIEWED_CHANGES).map((change) =>
     // Tool results can hold credentials and the notice reaches every
@@ -132,7 +180,10 @@ export function describeReviewRewrite(input: {
   );
   const more = input.changes.length - shown.length;
   const list = more > 0 ? [...shown, `+${more} more`] : shown;
-  return `Refusal review by ${input.reviewer}: rewrote ${input.changes.length} message(s) [${list.join('; ')}] (operation ${input.operationId}). Retrying.`;
+  return appendRefusalDiagnostics(
+    `Refusal review by ${input.reviewer}: rewrote ${input.changes.length} message(s) [${list.join('; ')}] (operation ${input.operationId}). Retrying.`,
+    input,
+  );
 }
 
 /** Shown when the rewritten request finally succeeds. */

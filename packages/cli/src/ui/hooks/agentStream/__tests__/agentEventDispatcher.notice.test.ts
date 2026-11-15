@@ -95,7 +95,9 @@ function render(events: readonly AgentEvent[]): string[] {
     handleUserCancelledEvent: vi.fn(),
     handleErrorEvent: vi.fn(),
     handleChatCompressionEvent: vi.fn(),
-    handleFinishedNotice: vi.fn(),
+    handleFinishedNotice: (message) => {
+      if (message !== null) shown.push(`finished:${message}`);
+    },
     handleMaxSessionTurnsEvent: vi.fn(),
     handleContextWindowWillOverflowEvent: vi.fn(),
     handleCitationEvent: vi.fn(),
@@ -125,6 +127,28 @@ describe('dispatchAgentEvent refusal-recovery notices (issue #4036)', () => {
     expect(shown).toStrictEqual([
       'info:Model m refused the request; retrying in 15 s (retry 1 of 2).',
     ]);
+  });
+
+  it('shows terminal refusal details with the interactive finish notice', () => {
+    const shown = render([
+      {
+        type: 'done',
+        reason: 'refusal',
+        finished: {
+          reason: 'refusal',
+          stopReason: 'refusal',
+          stopDetails: {
+            type: 'refusal',
+            category: 'cyber',
+            explanation: 'diagnostic explanation',
+          },
+        },
+      },
+    ]);
+
+    expect(shown).toContain(
+      'finished:Request declined: the model’s safety classifier refused to answer this request. Try rephrasing, or switch to a different model. Category: cyber. diagnostic explanation',
+    );
   });
 
   it('shows the notice after the refused attempt text was discarded', () => {

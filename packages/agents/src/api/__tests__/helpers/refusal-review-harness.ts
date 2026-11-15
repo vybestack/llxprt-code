@@ -31,6 +31,7 @@ import {
 import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 import {
   emptyRefusalReply,
+  isolateRefusalStorage,
   readJsonl,
   requestedWaits,
   startScriptedEndpoint,
@@ -381,6 +382,7 @@ export async function runReviewScenario(
   const workingDir = realpathSync(
     mkdtempSync(join(tmpdir(), 'llxprt-review-')),
   );
+  const restoreStorage = isolateRefusalStorage(workingDir);
   const env: ScenarioEnv = { workingDir };
   const sessionId = `review-${randomUUID()}`;
   const answerReview =
@@ -438,6 +440,7 @@ export async function runReviewScenario(
     if (profileName !== undefined) {
       await new ProfileManager().deleteProfile(profileName).catch(() => {});
     }
+    restoreStorage();
     rmSync(workingDir, { recursive: true, force: true });
   }
 }

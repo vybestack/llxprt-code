@@ -29,6 +29,32 @@ export function toRefusalPayload(
     ...(attempt.rawStopReason !== undefined && {
       rawStopReason: attempt.rawStopReason,
     }),
+    ...(attempt.stopDetails !== undefined && {
+      refusal_category: attempt.stopDetails.category,
+      refusal_explanation: attempt.stopDetails.explanation,
+      ...(attempt.stopDetails.recommendedModel === undefined
+        ? {}
+        : { recommended_model: attempt.stopDetails.recommendedModel }),
+    }),
+    request_id: attempt.requestId ?? null,
+    ...(attempt.dumpBaseId === undefined
+      ? {}
+      : { dump_base_id: attempt.dumpBaseId }),
+    ...(attempt.partialOutput === undefined
+      ? {}
+      : {
+          partial_output: {
+            ...attempt.partialOutput,
+            items: [...attempt.partialOutput.items],
+          },
+        }),
+    ...(attempt.outputTokens === undefined
+      ? {}
+      : { output_tokens: attempt.outputTokens }),
+    first_byte_to_refusal_ms: attempt.firstByteToRefusalMs,
+    ...(attempt.contextFingerprint === undefined
+      ? {}
+      : { context_fingerprint: attempt.contextFingerprint }),
     ...(usage !== undefined && {
       usage: {
         promptTokens: usage.promptTokens,

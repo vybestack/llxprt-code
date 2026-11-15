@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -65,11 +66,15 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
         recordStreamingHistory: vi.fn(),
       },
       historyService: {
+        on: vi.fn(),
+        off: vi.fn(),
         add: vi.fn(),
         getAll: () => [],
         generateTurnKey: () => `turn-${crypto.randomUUID()}`,
         waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
       },
+      refusalStreamAudit: new RefusalStreamAudit(),
+      refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });

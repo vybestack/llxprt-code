@@ -174,6 +174,8 @@ export class MiddleOutStrategy implements CompressionStrategy {
       toCompress,
       toKeepBottom,
       capturedUsage,
+      providerResult.provider.name,
+      providerResult.resolvedOptions?.model ?? null,
     );
 
     return { kind: 'applied', newHistory, metadata };
@@ -233,6 +235,8 @@ export class MiddleOutStrategy implements CompressionStrategy {
     toCompress: IContent[],
     toKeepBottom: IContent[],
     capturedUsage: UsageStats | undefined,
+    summaryAuthorProvider: string,
+    summaryAuthorModel: string | null,
   ): CompressionResultMetadata {
     return {
       originalMessageCount: history.length,
@@ -242,6 +246,11 @@ export class MiddleOutStrategy implements CompressionStrategy {
       topPreserved: toKeepTop.length,
       bottomPreserved: toKeepBottom.length,
       middleCompressed: toCompress.length,
+      auditProvenance: {
+        summaryAuthorModel,
+        summaryAuthorProvider,
+        compressionStrategy: 'middle-out',
+      },
       ...(capturedUsage ? { usage: capturedUsage } : {}),
     };
   }

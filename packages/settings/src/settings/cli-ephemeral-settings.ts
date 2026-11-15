@@ -57,6 +57,12 @@ export function applyCliSetArguments(
       continue;
     }
 
+    if (key === 'dumpcontext' && !['off', 'error', 'on'].includes(rawValue)) {
+      throw new Error(
+        `Invalid --set dumpcontext mode '${rawValue}'. Use off, error, or on.`,
+      );
+    }
+
     const parseResult = parseEphemeralSettingValue(key, rawValue);
 
     if (!parseResult.success) {

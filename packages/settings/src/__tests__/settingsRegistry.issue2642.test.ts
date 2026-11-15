@@ -3,8 +3,8 @@
  *
  * Every registry key must carry a non-empty `owner` and `propagation`, the
  * owner values must fall within the documented union, and the application-owned
- * cluster (emojifilter / dumponerror / dumpcontext) must be excluded from
- * profile persistence while the new application-owned helpers agree.
+ * keys (emojifilter / dumpcontext) must be excluded from profile persistence;
+ * the legacy dumponerror key has no active registry entry.
  *
  * These are pure registry tests — no filesystem, no mocks.
  */
@@ -69,9 +69,16 @@ describe('settings registry — owner / propagation metadata (#2642)', () => {
     }
   });
 
+  it('has no active dumponerror registry entry', () => {
+    expect(SETTINGS_REGISTRY.some((spec) => spec.key === 'dumponerror')).toBe(
+      false,
+    );
+    expect(isApplicationOwnedKey('dumponerror')).toBe(false);
+  });
+
   it('getApplicationOwnedKeys includes the application-owned keys', () => {
     const appKeys = getApplicationOwnedKeys();
-    for (const key of ['emojifilter', 'dumponerror', 'dumpcontext']) {
+    for (const key of ['emojifilter', 'dumpcontext']) {
       expect(appKeys).toContain(key);
     }
   });
@@ -92,16 +99,16 @@ describe('settings registry — owner / propagation metadata (#2642)', () => {
     expect(keys.length).toBeGreaterThan(0);
     expect(persistable.has('auth-key')).toBe(true);
 
-    for (const key of ['emojifilter', 'dumponerror', 'dumpcontext']) {
+    for (const key of ['emojifilter', 'dumpcontext']) {
       expect(persistable.has(key)).toBe(false);
     }
   });
 
-  it('the three application keys declare persistToProfile: false in the registry', () => {
+  it('application-owned settings declare persistToProfile: false in the registry', () => {
     // Asserting the registry data directly, not just the derived list: if
     // getProfilePersistableKeys() ever excluded these for an unrelated reason
     // the exclusion test above would still pass while the data stayed wrong.
-    for (const key of ['emojifilter', 'dumponerror', 'dumpcontext']) {
+    for (const key of ['emojifilter', 'dumpcontext']) {
       const spec = SETTINGS_REGISTRY.find((s) => s.key === key);
       expect(spec).toBeDefined();
       expect(spec?.owner).toBe('application');

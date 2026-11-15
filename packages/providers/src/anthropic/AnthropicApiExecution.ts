@@ -14,7 +14,9 @@ import { hasHeaderName } from './AnthropicProviderInternals.js';
 
 import type Anthropic from '@anthropic-ai/sdk';
 import { enforcesPreservedThinkingPrefixCheck } from './AnthropicModelData.js';
-import type { DumpMode } from '../utils/dumpContext.js';
+import type { DumpMode, DumpAttemptCorrelation } from '../utils/dumpContext.js';
+import type { DumpAttemptContext } from '../utils/dumpAttemptContext.js';
+import { mapStopReason } from './finishReasonMapping.js';
 import {
   BoundedJsonBody,
   BoundedJsonEnvelopeOverflowError,
@@ -29,6 +31,7 @@ import {
   dumpSDKResponseContext,
   wrapStreamWithDump,
   wrapStreamWithSDKErrorDump,
+  wrapStreamWithOutcomeDump,
   bestEffortDump,
   dumpSDKErrorRequestResponse,
   type RequestDumpMetadata,
@@ -234,6 +237,8 @@ export interface ApiExecutionParams {
   baseURL: string;
   requestBody: Record<string, unknown>;
   streamingEnabled: boolean;
+  attemptContext?: DumpAttemptContext;
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
   headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };
 }
@@ -244,6 +249,7 @@ export interface ApiExecutionParams {
 export interface ApiExecutionResult {
   response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   responseHeaders: Headers | undefined;
+  requestId: string | null;
   rateLimitInfo?: AnthropicRateLimitInfo;
 }
 
@@ -254,10 +260,27 @@ export interface ApiExecutionResult {
  */
 function anthropicDumpMetadata(
   params: ApiExecutionParams,
+  outcome?: string,
 ): RequestDumpMetadata {
+  const attempt = params.attemptContext;
+  const retentionLimits = attempt?.retentionLimits ?? params.retentionLimits;
+  const correlation: DumpAttemptCorrelation | undefined =
+    attempt === undefined && retentionLimits === undefined
+      ? undefined
+      : {
+          promptId: attempt?.promptId ?? null,
+          attemptIndex: attempt?.attemptIndex ?? null,
+          runtimeId: attempt?.runtimeId ?? null,
+          ...(attempt === undefined
+            ? {}
+            : { retentionCoordinator: attempt.retentionCoordinator }),
+          ...(retentionLimits === undefined ? {} : { retentionLimits }),
+          ...(outcome === undefined ? {} : { outcome }),
+        };
   return {
     headers: params.headers,
     transport: { type: 'http' },
+    ...(correlation === undefined ? {} : { correlation }),
   };
 }
 
@@ -282,6 +305,94 @@ async function dumpAnthropicRequest(
     params.rateLimitLogger,
   );
   return reqResult?.baseId;
+}
+
+function isAnthropicMessageResponse(
+  response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>,
+): response is Anthropic.Message {
+  return !(Symbol.asyncIterator in response);
+}
+
+function mapAnthropicDumpOutcome(
+  value: unknown,
+): 'refusal' | 'success' | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  let rawReason: unknown;
+  if ('type' in value && value.type === 'message_delta' && 'delta' in value) {
+    const delta = value.delta;
+    if (
+      typeof delta !== 'object' ||
+      delta === null ||
+      !('stop_reason' in delta)
+    ) {
+      return undefined;
+    }
+    rawReason = delta.stop_reason;
+  } else if ('stop_reason' in value) {
+    rawReason = value.stop_reason;
+  }
+  if (typeof rawReason !== 'string') return undefined;
+  const finishReason = mapStopReason(rawReason).finishReason;
+  if (finishReason === 'refusal') return 'refusal';
+  if (
+    finishReason === 'stop' ||
+    finishReason === 'tool_calls' ||
+    finishReason === 'max_tokens'
+  ) {
+    return 'success';
+  }
+  return undefined;
+}
+
+async function dumpAnthropicOutcome(
+  params: ApiExecutionParams,
+  response: Anthropic.Message,
+  outcome: 'refusal' | 'paired-success',
+): Promise<void> {
+  const attempt = params.attemptContext;
+  const correlation: DumpAttemptCorrelation = {
+    promptId: attempt?.promptId ?? null,
+    attemptIndex: attempt?.attemptIndex ?? null,
+    runtimeId: attempt?.runtimeId ?? null,
+    ...(attempt === undefined
+      ? {}
+      : { retentionCoordinator: attempt.retentionCoordinator }),
+    ...(attempt?.retentionLimits === undefined
+      ? {}
+      : { retentionLimits: attempt.retentionLimits }),
+    outcome,
+  };
+  const metadata = anthropicDumpMetadata(params, outcome);
+  const request = await bestEffortDump(
+    'outcome-request',
+    'anthropic',
+    () =>
+      dumpSDKRequestContext(
+        'anthropic',
+        '/v1/messages',
+        params.requestBody,
+        params.baseURL,
+        { ...metadata, correlation },
+        true,
+      ),
+    params.rateLimitLogger,
+  );
+  if (request === undefined) return;
+  const responseResult = await bestEffortDump(
+    'outcome-response',
+    'anthropic',
+    () =>
+      dumpSDKResponseContext(
+        request.baseId,
+        'anthropic',
+        response,
+        false,
+        correlation,
+      ),
+    params.rateLimitLogger,
+  );
+  if (responseResult !== undefined)
+    attempt?.recordDump(outcome, request.baseId);
 }
 
 async function dumpAnthropicApiError(
@@ -317,6 +428,44 @@ async function dumpAnthropicApiError(
   );
 }
 
+function wrapAnthropicErrorStream(
+  params: ApiExecutionParams,
+  response: AsyncIterable<Anthropic.MessageStreamEvent>,
+): AsyncIterable<Anthropic.MessageStreamEvent> {
+  const attempt = params.attemptContext;
+  const errorWrapped = wrapStreamWithSDKErrorDump(
+    response,
+    'anthropic',
+    '/v1/messages',
+    params.requestBody,
+    params.baseURL,
+    dumpSDKRequestContext,
+    dumpSDKResponseContext,
+    anthropicDumpMetadata(params),
+  );
+  return wrapStreamWithOutcomeDump(
+    errorWrapped,
+    'anthropic',
+    '/v1/messages',
+    params.requestBody,
+    params.baseURL,
+    {
+      ...anthropicDumpMetadata(params),
+      correlation: {
+        promptId: attempt?.promptId ?? null,
+        attemptIndex: attempt?.attemptIndex ?? null,
+        runtimeId: attempt?.runtimeId ?? null,
+        ...(attempt?.retentionLimits === undefined
+          ? {}
+          : { retentionLimits: attempt.retentionLimits }),
+      },
+    },
+    attempt?.pairedSuccess ?? false,
+    mapAnthropicDumpOutcome,
+    (outcome, baseId) => attempt?.recordDump(outcome, baseId),
+  );
+}
+
 async function handleAnthropicSuccessDump(
   params: ApiExecutionParams,
   response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>,
@@ -331,27 +480,41 @@ async function handleAnthropicSuccessDump(
         requestBaseId,
         'anthropic',
         dumpSDKResponseContext,
+        anthropicDumpMetadata(params).correlation,
       );
     }
     await bestEffortDump(
       'response',
       'anthropic',
-      () => dumpSDKResponseContext(requestBaseId, 'anthropic', response, false),
+      () =>
+        dumpSDKResponseContext(
+          requestBaseId,
+          'anthropic',
+          response,
+          false,
+          anthropicDumpMetadata(params).correlation,
+        ),
       params.rateLimitLogger,
     );
     return response;
   }
-  if (params.streamingEnabled && shouldDumpError) {
-    return wrapStreamWithSDKErrorDump(
-      response as AsyncIterable<Anthropic.MessageStreamEvent>,
-      'anthropic',
-      '/v1/messages',
-      params.requestBody,
-      params.baseURL,
-      dumpSDKRequestContext,
-      dumpSDKResponseContext,
-      anthropicDumpMetadata(params),
-    );
+  if (shouldDumpError) {
+    if (params.streamingEnabled)
+      return wrapAnthropicErrorStream(
+        params,
+        response as AsyncIterable<Anthropic.MessageStreamEvent>,
+      );
+    const outcome = mapAnthropicDumpOutcome(response);
+    if (isAnthropicMessageResponse(response) && outcome === 'refusal') {
+      await dumpAnthropicOutcome(params, response, 'refusal');
+    }
+    if (
+      isAnthropicMessageResponse(response) &&
+      outcome === 'success' &&
+      params.attemptContext?.pairedSuccess === true
+    ) {
+      await dumpAnthropicOutcome(params, response, 'paired-success');
+    }
   }
   return response;
 }
@@ -398,9 +561,14 @@ export async function executeAnthropicApiCall(
       shouldDumpError,
       requestBaseId,
     );
+    const responseInfo = extractAnthropicRateLimitInfo(
+      result.response,
+      params.rateLimitLogger,
+    );
     return {
       response,
-      ...extractAnthropicRateLimitInfo(result.response, params.rateLimitLogger),
+      ...responseInfo,
+      requestId: responseInfo.responseHeaders?.get('request-id') ?? null,
     };
   } catch (error) {
     if (shouldDumpError) {

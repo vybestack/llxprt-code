@@ -250,6 +250,11 @@ function installCompressingStrategy(): void {
                 originalMessageCount: context.history.length,
                 compressedMessageCount: 3,
                 strategyUsed: 'middle-out',
+                auditProvenance: {
+                  summaryAuthorModel: COMPRESSION_MODEL,
+                  summaryAuthorProvider: COMPRESSION_PROVIDER,
+                  compressionStrategy: 'middle-out',
+                },
                 llmCallMade: true,
                 topPreserved: 0,
                 bottomPreserved: 2,

@@ -8,7 +8,37 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { describeReviewRewrite } from './refusalNotices.js';
+import {
+  describeRefusalStop,
+  describeReviewRewrite,
+} from './refusalNotices.js';
+
+describe('terminal refusal notices', () => {
+  it('shows diagnostic details while preserving null evidence and stripping terminal controls', () => {
+    const notice = describeRefusalStop({
+      model: 'model\nname',
+      refusals: 1,
+      delaysMs: [],
+      rewrites: [],
+      category: 'cyber\t',
+      explanation: 'detail\nline',
+    });
+
+    expect(notice).toContain('Category: cyber. detail line');
+    expect(notice).not.toContain('\n');
+    expect(notice).not.toContain('\t');
+    expect(
+      describeRefusalStop({
+        model: 'model',
+        refusals: 1,
+        delaysMs: [],
+        rewrites: [],
+        category: null,
+        explanation: null,
+      }),
+    ).not.toContain('Category:');
+  });
+});
 
 describe('the rewrite notice', () => {
   it('shows a preview of a rewritten message', () => {

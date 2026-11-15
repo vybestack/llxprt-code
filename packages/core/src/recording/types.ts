@@ -24,6 +24,7 @@
  */
 
 import { type IContent } from '../services/history/IContent.js';
+import type { CompressionAuditProvenance } from '../core/compression/types.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 export const SESSION_TITLE_MAX_LENGTH = 120;
@@ -117,6 +118,26 @@ export interface CompressedPayload {
   summary: IContent;
   /** Number of items that were compressed into the summary. */
   itemsCompressed: number;
+  /** Summarizer provenance, absent in older session records. */
+  summary_author_model?: string | null;
+  summary_author_provider?: string | null;
+  compression_strategy?: CompressionAuditProvenance['compressionStrategy'];
+}
+
+export function compressedRecordPayload(
+  summary: IContent,
+  itemsCompressed: number,
+  provenance?: CompressionAuditProvenance,
+): CompressedPayload {
+  return {
+    summary,
+    itemsCompressed,
+    ...(provenance !== undefined && {
+      summary_author_model: provenance.summaryAuthorModel,
+      summary_author_provider: provenance.summaryAuthorProvider,
+      compression_strategy: provenance.compressionStrategy,
+    }),
+  };
 }
 
 /**

@@ -421,6 +421,7 @@ export class TurnProcessor {
 
     let hasYieldedChunk = false;
     let attemptUsage: UsageStats | undefined;
+    let attemptRequestId: string | null | undefined;
     try {
       const currentParams = applyRetryTemperature(
         params,
@@ -437,6 +438,7 @@ export class TurnProcessor {
       for await (const chunk of stream) {
         hasYieldedChunk ||= chunkHasVisibleOutput(chunk);
         attemptUsage = chunk.usage ?? attemptUsage;
+        if (chunk.requestId !== undefined) attemptRequestId = chunk.requestId;
         yield wrapChunk(chunk);
       }
       const recovered = this.refusalRecovery.recovered(prompt_id);
@@ -482,6 +484,7 @@ export class TurnProcessor {
           hasYieldedChunk,
           attemptUsage,
           this.compressionHandler.lastPromptTokenCount,
+          attemptRequestId,
         );
         return { error, action: 'retry' };
       }
