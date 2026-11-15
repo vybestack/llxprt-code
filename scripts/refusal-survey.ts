@@ -11,8 +11,12 @@ import {
   resolveGlobalCacheDir,
   resolveGlobalLogDir,
 } from '../packages/storage/src/config/path-resolver.ts';
-import { readDumpIndex } from './lib/refusal-survey-dump-index.ts';
 import {
+  readDumpIndex,
+  type DumpIndexEntry,
+} from './lib/refusal-survey-dump-index.ts';
+import {
+  hasRecoveryContent,
   readJournalIndex,
   type Journal,
 } from './lib/refusal-survey-journal-index.ts';
@@ -53,14 +57,8 @@ const str = (value: unknown): string | null =>
   typeof value === 'string' ? value : null;
 const num = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
-const sameSession = (
-  usageSession: string,
-  journalSession: string,
-  prompt = '',
-): boolean =>
-  usageSession === journalSession ||
-  usageSession.startsWith(`${journalSession}::`) ||
-  prompt.startsWith(journalSession);
+const sameSession = (usageSession: string, journalSession: string): boolean =>
+  usageSession === journalSession;
 const walk = (root: string): string[] => {
   if (!fs.existsSync(root)) return [];
   const found: string[] = [];
@@ -402,16 +400,27 @@ function compareAttempts(a: Attempt, b: Attempt): number {
   return (a.attemptIndex ?? -1) - (b.attemptIndex ?? -1);
 }
 
+function sameRunContext(previous: Run, attempt: Attempt): boolean {
+  return (
+    previous['projectHash'] === attempt.projectHash &&
+    previous['session'] === attempt.session &&
+    previous['runtime'] === attempt.runtime
+  );
+}
+
+function sameRun(previous: Run, attempt: Attempt): boolean {
+  return (
+    sameRunContext(previous, attempt) &&
+    previous['file'] === attempt.file &&
+    previous['promptId'] === attempt.prompt
+  );
+}
+
 function groupRuns(attempts: Attempt[]): Run[] {
   const runs: Run[] = [];
   for (const attempt of attempts.sort(compareAttempts)) {
     const previous = runs.at(-1);
-    if (
-      previous &&
-      previous['file'] === attempt.file &&
-      previous['promptId'] === attempt.prompt &&
-      previous['projectHash'] === attempt.projectHash
-    ) {
+    if (previous !== undefined && sameRun(previous, attempt)) {
       (previous['attempts'] as Attempt[]).push(attempt);
       previous['lastTime'] = attempt.ts;
     } else {
@@ -468,7 +477,7 @@ function compressionCounts(
       .filter(
         (record) =>
           record.type === 'compressed' &&
-          sameSession(call.session, record.session, call.prompt) &&
+          sameSession(call.session, record.session) &&
           record.ts <= call.ts,
       )
       .at(-1);
@@ -520,7 +529,11 @@ function contextFor(
   const rewritten = journal.some(
     (entry) =>
       entry.type === 'refusal_rewrite' &&
-      str(entry.payload['prompt_id']) === first.prompt,
+      str(entry.payload['prompt_id']) === first.prompt &&
+      list.some(
+        (attempt) =>
+          attempt.attemptIndex === num(entry.payload['attempt_index']),
+      ),
   );
   return { prior, before, lastCompression, contentSince, rewritten };
 }
@@ -528,11 +541,11 @@ function contextFor(
 function acceptedDumpFor(
   prompt: string,
   refusedId: string | null,
-  dumps: Map<string, Obj>,
-): [string, Obj] | undefined {
+  dumps: Map<string, DumpIndexEntry>,
+): [string, DumpIndexEntry] | undefined {
   return [...dumps.entries()].find(([id, item]) => {
-    const promptId = str(item['promptId']) ?? str(item['prompt_id']);
-    const outcome = str(item['outcome']) ?? str(item['attempt_outcome']);
+    const promptId = item.promptId;
+    const outcome = item.outcome;
     return (
       id !== refusedId &&
       promptId === prompt &&
@@ -573,30 +586,20 @@ function addTermCounts(
 function decorateRun(
   run: Run,
   journals: Map<string, Journal[]>,
-  dumps: Map<string, Obj>,
+  dumps: Map<string, DumpIndexEntry>,
   counts: Counts,
 ): void {
   const list = run['attempts'] as Attempt[];
   const first = list[0]!;
   const journal = (journals.get(first.projectHash) ?? []).filter((entry) =>
-    sameSession(first.session, entry.session, first.prompt),
+    sameSession(first.session, entry.session),
   );
   const context = contextFor(first, list, journal);
   const acceptedPair = acceptedDumpFor(first.prompt, first.dumpBaseId, dumps);
   const accepted = acceptedPair?.[1];
-  const recoveryEntries = journal.filter(
-    (entry) =>
-      entry.type === 'content' &&
-      Date.parse(entry.ts) > Date.parse(list.at(-1)!.ts) &&
-      Date.parse(entry.ts) <= Date.parse(list.at(-1)!.ts) + 5 * 60_000,
-  );
   const recovered =
     accepted !== undefined ||
-    recoveryEntries.some(
-      (entry) =>
-        isObj(entry.payload['content']) &&
-        entry.payload['content']['speaker'] === 'assistant',
-    );
+    hasRecoveryContent(journal, first.prompt, list.at(-1)!.attemptIndex);
   const author =
     context.lastCompression &&
     isObj(context.lastCompression.payload['summaryAuthor'])
@@ -610,16 +613,15 @@ function decorateRun(
     ? (str(context.lastCompression.payload['summary_author_provider']) ??
       str(author?.['provider']))
     : null;
-  const refusedTerms = terms(
-    context.before.slice(-8).map(contentPreview).join(' '),
-  );
+  const refusedDump =
+    first.dumpBaseId === null ? undefined : dumps.get(first.dumpBaseId);
+  const refusedTerms =
+    refusedDump !== undefined && refusedDump.requestTerms.length > 0
+      ? new Set(refusedDump.requestTerms)
+      : terms(context.before.slice(-8).map(contentPreview).join(' '));
   const acceptedTerms =
-    isObj(accepted) && Array.isArray(accepted['requestTerms'])
-      ? new Set(
-          accepted['requestTerms'].filter(
-            (term): term is string => typeof term === 'string',
-          ),
-        )
+    accepted !== undefined && accepted.requestTerms.length > 0
+      ? new Set(accepted.requestTerms)
       : terms(
           journal
             .filter(
@@ -652,7 +654,7 @@ function writeRunFields(
   run: Run,
   list: Attempt[],
   context: Context,
-  dumps: Map<string, Obj>,
+  dumps: Map<string, DumpIndexEntry>,
   pair: [string, Obj] | undefined,
   recovered: boolean,
   authorProvider: string | null,

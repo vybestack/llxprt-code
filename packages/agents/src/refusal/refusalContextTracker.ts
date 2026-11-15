@@ -62,14 +62,21 @@ function lastOf<T>(items: readonly T[]): T | undefined {
   return items.length === 0 ? undefined : items[items.length - 1];
 }
 
-function boundedPreviews(entries: readonly EntrySnapshot[]): {
-  previews: ContextEntryPreview[];
+function boundedPreviews(
+  entries: ReadonlyArray<{
+    readonly kind: 'added' | 'pending';
+    readonly entry: EntrySnapshot;
+  }>,
+): {
+  previews: Array<ContextEntryPreview & { readonly kind: 'added' | 'pending' }>;
   omitted: number;
 } {
-  const previews: ContextEntryPreview[] = [];
+  const previews: Array<
+    ContextEntryPreview & { readonly kind: 'added' | 'pending' }
+  > = [];
   let remaining = MAX_PREVIEW_BYTES;
   let omitted = Math.max(0, entries.length - MAX_PREVIEW_ENTRIES);
-  for (const entry of entries.slice(-MAX_PREVIEW_ENTRIES)) {
+  for (const { kind, entry } of entries.slice(-MAX_PREVIEW_ENTRIES)) {
     const bytes = new TextEncoder().encode(entry.preview).byteLength;
     if (bytes > remaining) {
       omitted++;
@@ -77,6 +84,7 @@ function boundedPreviews(entries: readonly EntrySnapshot[]): {
     }
     remaining -= bytes;
     previews.push({
+      kind,
       identity: entry.identity,
       speaker: entry.speaker,
       preview: entry.preview,
@@ -124,7 +132,10 @@ export class RefusalContextTracker {
         (entry) =>
           !committedEntries.has(`${entry.identity}:${entry.content_hash}`),
       );
-    const previews = boundedPreviews([...added, ...pending]);
+    const previews = boundedPreviews([
+      ...added.map((entry) => ({ kind: 'added' as const, entry })),
+      ...pending.map((entry) => ({ kind: 'pending' as const, entry })),
+    ]);
     const digest = createHash('sha256');
     for (const entry of [...added, ...pending]) {
       digest.update(entry.identity);
@@ -147,10 +158,14 @@ export class RefusalContextTracker {
       baseline_prompt_id: this.baselinePromptId,
       baseline_attempt_index: this.baselineAttemptIndex,
       baseline_time: this.baselineTime,
-      added_entries: previews.previews.slice(0, added.length),
+      added_entries: previews.previews
+        .filter((entry) => entry.kind === 'added')
+        .map(({ kind: _kind, ...entry }) => entry),
       added_entry_count: added.length,
       omitted_entry_count: previews.omitted,
-      pending_entries: previews.previews.slice(added.length),
+      pending_entries: previews.previews
+        .filter((entry) => entry.kind === 'pending')
+        .map(({ kind: _kind, ...entry }) => entry),
       compression_count:
         this.compressionEvents.length > 0
           ? this.compressionEvents.length

@@ -165,6 +165,15 @@ describe('Anthropic refusal diagnostics (REQ-4101-A1)', () => {
       recommended_model: 'claude-sonnet-5-5',
       request_id: 'anthropic-json-request',
     });
+    expect(
+      run.events
+        .filter(isNoticeEvent)
+        .some((event) =>
+          event.message.includes(
+            `Category: cyber. ${CYBER_DETAILS.explanation}`,
+          ),
+        ),
+    ).toBe(true);
   });
 
   it('keeps stop details when the terminal stream event has no usage', async () => {

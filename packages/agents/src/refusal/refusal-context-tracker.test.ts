@@ -72,6 +72,27 @@ describe('RefusalContextTracker (REQ-4101-D2)', () => {
     expect(afterReset.baseline_time).toBeNull();
   });
 
+  it('keeps pending previews pending when an earlier added entry exceeds the byte budget', () => {
+    const tracker = new RefusalContextTracker();
+    tracker.commit([entry(1, 'baseline')], 'p1', 0);
+    const oversized = entry(2, 'x'.repeat(32 * 1024 + 1));
+    const pending: IContent = {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'short pending request' }],
+    };
+
+    const result = tracker.snapshot(
+      [entry(1, 'baseline'), oversized],
+      [pending],
+    );
+
+    expect(result.added_entries).toHaveLength(0);
+    expect(result.pending_entries.map((item) => item.preview)).toStrictEqual([
+      'short pending request',
+    ]);
+    expect(result.omitted_entry_count).toBe(1);
+  });
+
   it('advances only on commit and bounds previews under one UTF-8 budget', () => {
     const tracker = new RefusalContextTracker();
     tracker.commit([entry(1, 'baseline')], 'p1', 0);

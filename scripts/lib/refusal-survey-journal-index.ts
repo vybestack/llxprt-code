@@ -16,6 +16,27 @@ export type Journal = {
   session: string;
 };
 
+export function hasRecoveryContent(
+  journal: readonly Journal[],
+  prompt: string,
+  attemptIndex: number | null,
+): boolean {
+  const refusal = journal.find(
+    (entry) =>
+      entry.type === 'refusal' &&
+      str(entry.payload['prompt_id']) === prompt &&
+      num(entry.payload['attempt_index']) === attemptIndex,
+  );
+  if (refusal === undefined) return false;
+  return journal.some((entry) => {
+    if (entry.type !== 'content' || entry.seq <= refusal.seq) return false;
+    if (Date.parse(entry.ts) > Date.parse(refusal.ts) + 5 * 60_000)
+      return false;
+    const content = entry.payload['content'];
+    return isObj(content) && content['speaker'] === 'ai';
+  });
+}
+
 type Malformed = { count: number; examples: string[] };
 type Obj = Record<string, unknown>;
 
@@ -116,9 +137,9 @@ function compactAudit(type: string, payload: Obj): Obj {
     };
   }
   return {
-    prompt_id: payload['prompt_id'],
-    promptId: payload['promptId'],
-    attempt_index: payload['attempt_index'],
+    prompt_id: payload['prompt_id'] ?? payload['promptId'],
+    attempt_index: payload['attempt_index'] ?? payload['attemptIndex'],
+
     refusal_category: payload['refusal_category'],
     partial_output: payload['partial_output'],
     dump_base_id: payload['dump_base_id'],

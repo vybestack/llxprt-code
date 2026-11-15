@@ -219,6 +219,11 @@ function rebuildHistoryInPlace(historyService: HistoryService): void {
 function compressUnderLock(
   historyService: HistoryService,
   summaryText: string,
+  provenance?: {
+    readonly summaryAuthorModel: string | null;
+    readonly summaryAuthorProvider: string | null;
+    readonly compressionStrategy: 'one-shot';
+  },
 ): void {
   historyService.startCompression();
   const snapshot = historyService.getCurated();
@@ -230,6 +235,8 @@ function compressUnderLock(
   historyService.endCompression(
     textContent(summaryText, 'ai'),
     itemsCompressed,
+    undefined,
+    provenance,
   );
 }
 
@@ -429,6 +436,25 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
     ]);
     expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
     expect(countType(events, 'compressed')).toBe(1);
+  });
+
+  it('persists compression summarizer provenance and replays legacy compressed records', async () => {
+    harness.historyService.add(textContent('before summary'));
+    compressUnderLock(harness.historyService, 'dedicated summary', {
+      summaryAuthorModel: 'summary-model',
+      summaryAuthorProvider: 'summary-provider',
+      compressionStrategy: 'one-shot',
+    });
+
+    const events = await flushAndReadEvents();
+    const compressed = events.find((event) => event.type === 'compressed');
+    expect(compressed?.payload).toMatchObject({
+      summary_author_model: 'summary-model',
+      summary_author_provider: 'summary-provider',
+      compression_strategy: 'one-shot',
+    });
+    const replay = await flushAndReplay();
+    expect(textsOf(replay.history)).toStrictEqual(['dedicated summary']);
   });
 
   it('keeps content that arrives mid-compression in history without duplicating records', async () => {

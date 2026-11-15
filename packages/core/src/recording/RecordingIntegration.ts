@@ -24,6 +24,7 @@ import {
   type PreparedContentBatch,
   type SessionRecordingService,
 } from './SessionRecordingService.js';
+import type { CompressionAuditProvenance } from '../core/compression/types.js';
 import type { RefusalPayload } from './refusalPayload.js';
 import type { RefusalRewritePayload } from './refusalRewritePayload.js';
 import type {
@@ -417,10 +418,11 @@ export class RecordingIntegration {
       summary: IContent,
       itemsCompressed: number,
       origin?: object,
+      provenance?: CompressionAuditProvenance,
     ) => {
       if (this.disposed || !acceptsOrigin(owner, origin)) return;
       this.compressionInProgress = false;
-      this.recording.recordCompressed(summary, itemsCompressed);
+      this.recording.recordCompressed(summary, itemsCompressed, provenance);
       this.persist(historyService);
     };
 

@@ -111,6 +111,13 @@ function isContentTerm(value: string): boolean {
   );
 }
 
+function requestMessages(request: unknown): unknown[] {
+  if (!object(request)) return [];
+  const body = request['body'];
+  if (object(body) && Array.isArray(body['messages'])) return body['messages'];
+  return Array.isArray(request['messages']) ? request['messages'] : [];
+}
+
 export function readDumpIndex(
   cacheRoot: string,
   malformed: () => void,
@@ -126,11 +133,27 @@ export function readDumpIndex(
       const fileId = path
         .basename(file, '.json')
         .replace(/-(request|response)$/, '');
-      dumps.set(base ?? fileId, {
-        promptId: string(value['promptId']) ?? string(value['prompt_id']),
-        outcome: string(value['outcome']) ?? string(value['attempt_outcome']),
-        requestTerms: words(JSON.stringify(value['request'] ?? '')),
-      });
+      const id = base ?? fileId;
+      const previous = dumps.get(id);
+      const messages = requestMessages(value['request']);
+      const contentWindow = messages
+        .slice(-8)
+        .map((message) =>
+          object(message) ? (message['content'] ?? '') : message,
+        );
+      const promptId = string(value['promptId']) ?? string(value['prompt_id']);
+      const outcome =
+        string(value['outcome']) ?? string(value['attempt_outcome']);
+      const requestTerms =
+        contentWindow.length > 0
+          ? words(JSON.stringify(contentWindow))
+          : undefined;
+      const entry: DumpIndexEntry = {
+        promptId: promptId ?? previous?.promptId ?? null,
+        outcome: outcome ?? previous?.outcome ?? null,
+        requestTerms: requestTerms ?? previous?.requestTerms ?? [],
+      };
+      dumps.set(id, entry);
     } catch {
       malformed();
     }

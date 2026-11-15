@@ -182,9 +182,14 @@ describe('refusal audit context (REQ-4101-D1, REQ-4101-D2)', () => {
       'dedicated-summarizer-model',
     );
     expect(run.requests[6]?.model).toBe('scripted-model');
-    expect(
-      run.journalRecords.filter((record) => record['type'] === 'compressed'),
-    ).toHaveLength(1);
+    const compressed = run.journalRecords.find(
+      (record) => record['type'] === 'compressed',
+    );
+    expect(asRecord(compressed?.['payload'])).toMatchObject({
+      summary_author_provider: 'openai',
+      summary_author_model: 'dedicated-summarizer-model',
+      compression_strategy: 'one-shot',
+    });
   });
 
   it('records empty previews and zero reported output tokens for a pre-output refusal', async () => {

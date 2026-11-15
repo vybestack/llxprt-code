@@ -5,6 +5,7 @@
  */
 
 import {
+  appendRefusalDiagnostics,
   describeRefusalRecovered,
   describeRefusalRetry,
   describeRefusalStop,
@@ -157,7 +158,7 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
       signal: context.signal,
     });
     const resolve = async (): Promise<ResolvedRefusalDecision> =>
-      this.afterReview(await started.run(), budget);
+      this.afterReview(await started.run(), budget, attempt);
     if (started.reviewer === undefined) return resolve();
     return {
       action: 'review',
@@ -173,6 +174,7 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
   private afterReview(
     outcome: ReviewOutcome,
     budget: RequestBudget,
+    attempt: RefusalAttempt,
   ): ResolvedRefusalDecision {
     if (outcome.kind === 'rewritten') {
       budget.rewritesUsed += 1;
@@ -199,19 +201,31 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
     if (outcome.kind === 'disallowed') {
       return {
         action: 'stop',
-        notice: describeReviewDisallowed({
-          reviewer: outcome.reviewer.model,
-          explanation: outcome.explanation,
-        }),
+        notice: appendRefusalDiagnostics(
+          describeReviewDisallowed({
+            reviewer: outcome.reviewer.model,
+            explanation: outcome.explanation,
+          }),
+          {
+            category: attempt.stopDetails?.category,
+            explanation: attempt.stopDetails?.explanation,
+          },
+        ),
       };
     }
     return {
       action: 'stop',
-      notice: describeReviewStopped({
-        reason: outcome.reason,
-        reviewer: outcome.reviewer?.model,
-        detail: outcome.detail,
-      }),
+      notice: appendRefusalDiagnostics(
+        describeReviewStopped({
+          reason: outcome.reason,
+          reviewer: outcome.reviewer?.model,
+          detail: outcome.detail,
+        }),
+        {
+          category: attempt.stopDetails?.category,
+          explanation: attempt.stopDetails?.explanation,
+        },
+      ),
     };
   }
 
@@ -219,9 +233,6 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
     attempt: RefusalAttempt,
     budget: RequestBudget,
   ): ResolvedRefusalDecision {
-    if (budget.delaysMs.length === 0 && budget.rewrites.length === 0) {
-      return { action: 'stop' };
-    }
     return {
       action: 'stop',
       notice: describeRefusalStop({
@@ -229,6 +240,8 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
         refusals: budget.refusals,
         delaysMs: budget.delaysMs,
         rewrites: budget.rewrites,
+        category: attempt.stopDetails?.category,
+        explanation: attempt.stopDetails?.explanation,
       }),
     };
   }

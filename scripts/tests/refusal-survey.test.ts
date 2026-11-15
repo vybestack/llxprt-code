@@ -63,6 +63,65 @@ function runSurvey(
 }
 
 describe('refusal survey CLI', () => {
+  it('does not join a child session to its parent compression history', () => {
+    const root = path.join(fixtureRoot(), 'logs', 'tmp');
+    const project = path.join(root, 'project-isolation');
+    writeJsonLines(path.join(project, 'token-usage', 'child.jsonl'), [
+      {
+        ts: '2026-11-02T10:00:00Z',
+        prompt_id: 'same-prompt',
+        session_id: 'parent::child',
+        runtime_id: 'child-runtime',
+        provider: 'anthropic',
+        model: 'claude-opus-5-5',
+        output_tokens: 0,
+        attempt_outcome: 'refusal',
+        attempt_index: 0,
+      },
+    ]);
+    writeJsonLines(path.join(project, 'chats', 'parent.jsonl'), [
+      {
+        v: 1,
+        seq: 1,
+        ts: '2026-11-02T09:59:00Z',
+        type: 'session_start',
+        payload: { sessionId: 'parent', workspaceDirs: ['/project'] },
+      },
+      {
+        v: 1,
+        seq: 2,
+        ts: '2026-11-02T09:59:40Z',
+        type: 'compressed',
+        payload: { summary_author_model: 'parent-summary' },
+      },
+    ]);
+    writeJsonLines(path.join(project, 'chats', 'child.jsonl'), [
+      {
+        v: 1,
+        seq: 1,
+        ts: '2026-11-02T09:59:00Z',
+        type: 'session_start',
+        payload: { sessionId: 'parent::child', workspaceDirs: ['/project'] },
+      },
+    ]);
+
+    const output = runSurvey(root);
+    const report = JSON.parse(output.stdout) as {
+      summary: {
+        compression: Record<string, { refusals: number; attempts: number }>;
+      };
+    };
+
+    expect(report.summary.compression['missing-evidence']).toMatchObject({
+      refusals: 1,
+      attempts: 1,
+    });
+    expect(report.summary.compression['after-compression']).toMatchObject({
+      refusals: 0,
+      attempts: 0,
+    });
+  });
+
   it('groups refusal attempts and correlates compression, recovery, dumps and categories', () => {
     const root = path.join(fixtureRoot(), 'logs', 'tmp');
     const project = path.join(root, 'project-alpha');
