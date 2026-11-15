@@ -160,17 +160,73 @@ interface TestContext {
 
 function createContext(onEnvironmentCleared: () => void): TestContext {
   let port: number | undefined;
-  const context = {
-    subscriptions: [],
-    environmentVariableCollection: {
-      replace: (variable: string, value: string) => {
+  const environmentVariableCollection: vscode.GlobalEnvironmentVariableCollection =
+    {
+      persistent: true,
+      description: undefined,
+      replace: (variable, value) => {
         if (variable === 'LLXPRT_CODE_IDE_SERVER_PORT') {
           port = Number(value);
         }
       },
+      append: () => undefined,
+      prepend: () => undefined,
+      get: () => undefined,
+      forEach: () => undefined,
+      delete: () => undefined,
       clear: onEnvironmentCleared,
+      getScoped: () => environmentVariableCollection,
+      [Symbol.iterator]: function* () {
+        yield* [];
+      },
+    };
+  const createMemento = (): vscode.Memento => ({
+    keys: () => [],
+    get: <T>() => undefined,
+    update: async () => undefined,
+  });
+  const extensionUri = vscode.Uri.file('/test/extension');
+  const extension: vscode.Extension<unknown> = {
+    id: 'test.extension',
+    extensionUri,
+    extensionPath: extensionUri.fsPath,
+    isActive: true,
+    packageJSON: {},
+    extensionKind: 1,
+    exports: undefined,
+    activate: async () => undefined,
+  };
+  const context: vscode.ExtensionContext = {
+    subscriptions: [],
+    workspaceState: createMemento(),
+    globalState: {
+      ...createMemento(),
+      setKeysForSync: () => undefined,
     },
-  } as unknown as vscode.ExtensionContext;
+    secrets: {
+      get: async () => undefined,
+      store: async () => undefined,
+      delete: async () => undefined,
+      onDidChange: () => ({ dispose: () => undefined }),
+    },
+    extensionUri,
+    extensionPath: extensionUri.fsPath,
+    environmentVariableCollection,
+    asAbsolutePath: (relativePath) =>
+      path.join(extensionUri.fsPath, relativePath),
+    storageUri: undefined,
+    storagePath: undefined,
+    globalStorageUri: vscode.Uri.file('/test/global-storage'),
+    globalStoragePath: '/test/global-storage',
+    logUri: vscode.Uri.file('/test/log'),
+    logPath: '/test/log',
+    extensionMode: 3,
+    extension,
+    languageModelAccessInformation: {
+      onDidChange: () => ({ dispose: () => undefined }),
+      canSendRequest: () => undefined,
+    },
+  };
   return {
     context,
     port: () => {
@@ -180,6 +236,25 @@ function createContext(onEnvironmentCleared: () => void): TestContext {
       return port;
     },
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parsePortFile(content: string): {
+  port: number;
+  authToken: string;
+} {
+  const parsed: unknown = JSON.parse(content);
+  if (!isRecord(parsed)) {
+    throw new Error('Invalid IDE server port file');
+  }
+  const { port, authToken } = parsed;
+  if (typeof port !== 'number' || typeof authToken !== 'string') {
+    throw new Error('Invalid IDE server port file');
+  }
+  return { port, authToken };
 }
 
 describe('IDEServer shutdown and the port file', () => {
@@ -239,9 +314,9 @@ describe('IDEServer shutdown and the port file', () => {
   it('writes the port file with the server port and token on start', async () => {
     await server.start(target.context);
 
-    const content = JSON.parse(
+    const content = parsePortFile(
       await fs.readFile(portFileFor(target.port()), 'utf8'),
-    ) as { port: number; authToken: string };
+    );
     expect(content.port).toBe(target.port());
     expect(content.authToken).not.toBe('');
   });
@@ -342,9 +417,7 @@ describe('IDEServer shutdown and the port file', () => {
     await server.start(restarted.context);
     const secondPortFile = portFileFor(restarted.port());
 
-    const content = JSON.parse(await fs.readFile(secondPortFile, 'utf8')) as {
-      port: number;
-    };
+    const content = parsePortFile(await fs.readFile(secondPortFile, 'utf8'));
     expect(content.port).toBe(restarted.port());
     expect(await exists(firstPortFile)).toBe(false);
 
