@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ReviewEntryKind } from './reviewWindow.js';
+
 /** "15 s", "250 ms" or "now" for a wait in milliseconds. */
 export function formatRefusalDelay(ms: number): string {
   if (ms <= 0) return 'now';
@@ -60,6 +62,32 @@ export interface RewriteChangeSummary {
 const PREVIEW_LENGTH = 80;
 const PREVIEWED_CHANGES = 3;
 
+interface DroppedLiteralNoticeEntry {
+  readonly id: string;
+  readonly kind: ReviewEntryKind;
+  readonly literals: readonly string[];
+}
+
+function describeDroppedLiteralNoticeEntry(
+  entry: DroppedLiteralNoticeEntry,
+): string {
+  return entry.kind === 'tool_result'
+    ? `${entry.literals.length} literal(s) from ${entry.id} (tool_result text omitted)`
+    : `${entry.literals.join(', ')} from ${entry.id}`;
+}
+
+export function describeDroppedLiteralStopDetail(
+  dropped: readonly DroppedLiteralNoticeEntry[],
+): string {
+  return dropped
+    .map((entry) =>
+      entry.kind === 'tool_result'
+        ? describeDroppedLiteralNoticeEntry(entry)
+        : `the replacement for ${entry.id} drops ${entry.literals.join(', ')}`,
+    )
+    .join('; ');
+}
+
 function preview(text: string): string {
   const firstLine = text.split('\n', 1)[0];
   return firstLine.length > PREVIEW_LENGTH || text.includes('\n')
@@ -79,15 +107,12 @@ export function describeReviewStart(input: {
 /** Shown when a reviewer must retry after dropping protected literals. */
 export function describeDroppedLiteralsReview(input: {
   readonly reviewer: string;
-  readonly dropped: ReadonlyArray<{
-    readonly id: string;
-    readonly literals: readonly string[];
-  }>;
+  readonly dropped: readonly DroppedLiteralNoticeEntry[];
   readonly reviewNumber: number;
   readonly reviews: number;
 }): string {
   const omissions = input.dropped
-    .map(({ id, literals }) => `${literals.join(', ')} from ${id}`)
+    .map(describeDroppedLiteralNoticeEntry)
     .join('; ');
   return `Refusal review by ${input.reviewer} dropped ${omissions}; asking it again to keep them (review ${input.reviewNumber} of ${input.reviews}).`;
 }

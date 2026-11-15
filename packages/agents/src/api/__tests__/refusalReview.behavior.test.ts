@@ -253,6 +253,108 @@ describe('rejected literals stay inside the untrusted review data (issue #4115)'
       originalRoundTripped: true,
     });
   });
+
+  it('redacts tool-result literals from retry and exhausted-review notices while preserving reviewer feedback', async () => {
+    const secret = '`sk-test-SECRET123`';
+    const toolText = `Tool output contained ${secret}.`;
+    const history = [
+      ...seedHistory(SUMMARY_ORIGINAL),
+      {
+        speaker: 'tool' as const,
+        blocks: [
+          {
+            type: 'tool_response' as const,
+            callId: 'call-secret',
+            toolName: 'read_file',
+            result: toolText,
+          },
+        ],
+      },
+    ];
+
+    let retryReviews = 0;
+    const retryRun = await runReviewScenario({
+      profile: PROFILE,
+      settings: { 'refusal.max-rewrites': 2 },
+      history,
+      reviewer: (request) => {
+        retryReviews += 1;
+        const entry = reviewEntries(request).find(
+          (candidate) => candidate.kind === 'tool_result',
+        );
+        return retryReviews > 1
+          ? verdictReply({
+              verdict: 'rewrite',
+              explanation: 'Preserved the credential literal.',
+              rewrites: [
+                {
+                  id: entry?.id ?? 'missing',
+                  newText: `Tool output contained ${secret}.`,
+                },
+              ],
+            })
+          : verdictReply({
+              verdict: 'rewrite',
+              explanation: 'Simplified tool output.',
+              rewrites: [
+                { id: entry?.id ?? 'missing', newText: 'Tool output.' },
+              ],
+            });
+      },
+    });
+    const retryNotice = notices(retryRun).find((notice) =>
+      notice.includes('asking it again'),
+    );
+    const retryEntryId = reviewEntries(retryRun.reviews[0]).find(
+      (entry) => entry.kind === 'tool_result',
+    )?.id;
+    const rejectionData = reviewData(retryRun.reviews[1])
+      ?.previousAnswerRejected?.entries[0];
+
+    const exhaustedRun = await runReviewScenario({
+      profile: PROFILE,
+      settings: { 'refusal.max-rewrites': 1 },
+      history,
+      reviewer: (request) => {
+        const entry = reviewEntries(request).find(
+          (candidate) => candidate.kind === 'tool_result',
+        );
+        return verdictReply({
+          verdict: 'rewrite',
+          explanation: 'Simplified tool output.',
+          rewrites: [{ id: entry?.id ?? 'missing', newText: 'Tool output.' }],
+        });
+      },
+    });
+    const stopNotice = notices(exhaustedRun).find((notice) =>
+      notice.endsWith('Stopping.'),
+    );
+    const exhaustedEntryId = reviewEntries(exhaustedRun.reviews[0]).find(
+      (entry) => entry.kind === 'tool_result',
+    )?.id;
+
+    expect({
+      retryContainsSecret: retryNotice?.includes('sk-test-SECRET123'),
+      retryNamesEntryAndCount:
+        retryNotice !== undefined &&
+        retryNotice.includes(`1 literal(s) from ${retryEntryId}`) &&
+        retryNotice.includes('(tool_result text omitted)'),
+      stopContainsSecret: stopNotice?.includes('sk-test-SECRET123'),
+      stopNamesEntryAndCount:
+        stopNotice !== undefined &&
+        stopNotice.includes(`1 literal(s) from ${exhaustedEntryId}`) &&
+        stopNotice.includes('(tool_result text omitted)'),
+      exactLiteralForNextReview: rejectionData?.mustKeepExactly,
+      matchingRejectedEntry: rejectionData?.id === retryEntryId,
+    }).toStrictEqual({
+      retryContainsSecret: false,
+      retryNamesEntryAndCount: true,
+      stopContainsSecret: false,
+      stopNamesEntryAndCount: true,
+      exactLiteralForNextReview: [secret],
+      matchingRejectedEntry: true,
+    });
+  });
 });
 
 describe('a refusal that a reviewer rewrite recovers (issue #4036)', () => {

@@ -9,6 +9,7 @@ import {
   describeRefusalRetry,
   describeRefusalStop,
   describeDroppedLiteralsReview,
+  describeDroppedLiteralStopDetail,
   describeReviewDisallowed,
   describeReviewRewrite,
   describeReviewStart,
@@ -269,7 +270,7 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
       notice: describeReviewStopped({
         reason: 'invalid-reply',
         reviewer: outcome.reviewer.model,
-        detail: outcome.detail,
+        detail: describeDroppedLiteralStopDetail(outcome.dropped),
       }),
     };
   }

@@ -115,7 +115,9 @@ function checkRewrites(
     );
     if (entry === undefined) return [];
     const literals = findDroppedLiterals(entry.text, rewrite.newText);
-    return literals.length === 0 ? [] : [{ id: rewrite.id, literals }];
+    return literals.length === 0
+      ? []
+      : [{ id: rewrite.id, kind: entry.kind, literals }];
   });
   if (dropped.length === 0) return undefined;
   const reason = dropped

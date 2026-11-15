@@ -233,7 +233,9 @@ describe('reviewer commit (issue #4036)', () => {
   it('sends keep-feedback after the prompt and before the untrusted session data', async () => {
     const { providerRequests } = await review({
       abortBeforeCommit: false,
-      keepLiterals: [{ id: 'c21389.0', literals: ['Casters/SSAO'] }],
+      keepLiterals: [
+        { id: 'c21389.0', kind: 'summary', literals: ['Casters/SSAO'] },
+      ],
     });
     const blocks = providerRequests[0][0].blocks.flatMap((block) =>
       block.type === 'text' ? [block.text] : [],

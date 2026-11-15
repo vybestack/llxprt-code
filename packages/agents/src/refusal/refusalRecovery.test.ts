@@ -52,7 +52,7 @@ const DROPPED: ReviewOutcome = {
   kind: 'dropped-literals',
   reviewer: REVIEWER,
   detail: 'the replacement for c21389.0 drops Casters/SSAO',
-  dropped: [{ id: 'c21389.0', literals: ['Casters/SSAO'] }],
+  dropped: [{ id: 'c21389.0', kind: 'summary', literals: ['Casters/SSAO'] }],
 };
 const REWRITTEN: ReviewOutcome = {
   kind: 'rewritten',
@@ -150,7 +150,16 @@ describe('RefusalRecoveryCoordinator wait', () => {
     }).toStrictEqual({
       action: 'retry',
       rewrite: { pendingEdits: [], historyRewritten: true },
-      requests: [undefined, [{ id: 'c21389.0', literals: ['Casters/SSAO'] }]],
+      requests: [
+        undefined,
+        [
+          {
+            id: 'c21389.0',
+            kind: 'summary',
+            literals: ['Casters/SSAO'],
+          },
+        ],
+      ],
       notices: [
         'Model scripted-model refused 1 time(s); asking reviewer-model to review the recent context.',
         'Refusal review by reviewer-model dropped Casters/SSAO from c21389.0; asking it again to keep them (review 2 of 2).',

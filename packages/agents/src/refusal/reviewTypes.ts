@@ -34,6 +34,7 @@ export interface ChangedEntry {
 /** Protected facts omitted by a rejected replacement. */
 export interface DroppedLiteralEntry {
   readonly id: string;
+  readonly kind: ReviewEntryKind;
   readonly literals: readonly string[];
 }
 
