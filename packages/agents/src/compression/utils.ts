@@ -469,15 +469,32 @@ function verificationMessages(initialSummary: string): IContent[] {
   ];
 }
 
+/**
+ * Select the summary entry THIS compression produced from a strategy's
+ * candidate history, or undefined when it produced none.
+ *
+ * Entries the strategy carried over from history already carry a chronology
+ * marker (HistoryService stamps every entry it stores), while a summary the
+ * strategy just generated does not have one yet. Carried entries are skipped:
+ * from the second compression on, a strategy that preserves the head of
+ * history (middle-out) or keeps most of it (high-density, truncation) returns
+ * the earlier compression's summary ahead of, or instead of, a new one. That
+ * entry still has the earlier call's usage and text, so returning it reported
+ * stale usage and journaled a stale `compressed` record that a resume would
+ * collapse history onto (#4067).
+ */
 export function selectCompressionSummary(
   newHistory: readonly IContent[],
 ): IContent | undefined {
-  for (const entry of newHistory) {
+  const produced = newHistory.filter(
+    (entry) => entry.metadata?.chronology === undefined,
+  );
+  for (const entry of produced) {
     if (entry.metadata?.reason === 'compression-state-snapshot') {
       return entry;
     }
   }
-  for (const entry of newHistory) {
+  for (const entry of produced) {
     if (
       entry.metadata?.isSummary === true ||
       (entry.metadata?.synthetic === true &&

@@ -97,7 +97,7 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
   });
 
   it('writes nothing for the first send of a session', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-opus-5'),
@@ -107,7 +107,7 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
   });
 
   it('writes nothing when the same provider and model serve again', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     const state = stateFor('anthropic', 'claude-opus-5');
     await recordProviderOrModelSwitch(logger, state, TURN_ID);
     await recordProviderOrModelSwitch(logger, state, TURN_ID);
@@ -115,7 +115,7 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
   });
 
   it('records a model_switch when the model changes under one provider', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-opus-5'),
@@ -140,7 +140,7 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
   });
 
   it('records a provider_switch when the provider changes', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-opus-5'),
@@ -166,7 +166,7 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
   });
 
   it('records each switch once, not once per subsequent send', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
+    const logger = new TokenUsageLogger('debug', logFile);
     const anthropic = stateFor('anthropic', 'claude-opus-5');
     const codex = stateFor('codex', 'gpt-5.6-sol');
     await recordProviderOrModelSwitch(logger, anthropic, TURN_ID);
@@ -178,7 +178,7 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
   });
 
   it('writes nothing when the logger is disabled', async () => {
-    const logger = new TokenUsageLogger(false, logFile);
+    const logger = new TokenUsageLogger('off', logFile);
     await recordProviderOrModelSwitch(
       logger,
       stateFor('anthropic', 'claude-opus-5'),

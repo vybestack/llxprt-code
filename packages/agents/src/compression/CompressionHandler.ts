@@ -39,7 +39,10 @@ import { createCompressionApplyCallback } from './compressionApplyCallback.js';
 import { buildCompressionContext as buildContext } from './compressionContextBuilder.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
-import { recordCompressionTelemetry } from './compressionLifecycleTelemetry.js';
+import {
+  CompressionRunReport,
+  recordCompressionTelemetry,
+} from './compressionLifecycleTelemetry.js';
 import { completeCompressionAttempt } from './compressionCompletion.js';
 import {
   applyCompressionAuditResult,
@@ -109,6 +112,8 @@ export class CompressionHandler {
   private lastSuccessfulCompressionTime: number | null = null;
   private compressionSummary: IContent | undefined;
   private compressionAuditProvenance: CompressionAuditProvenance | undefined;
+  /** #4067: report usage from the applied strategy result, not history summary. */
+  private readonly runReport = new CompressionRunReport();
   private onCompressionAudit?: (provenance: CompressionAuditProvenance) => void;
   densityDirty: boolean = true;
   private _suppressDensityDirty: boolean = false;
@@ -659,6 +664,7 @@ export class CompressionHandler {
     // counter/timestamp changes entirely. (Issue #2602)
     let compressionOutcome: 'applied' | 'noop' | 'failed' = 'failed';
     this.resetCompressionAttemptAudit();
+    this.runReport.begin();
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -705,7 +711,7 @@ export class CompressionHandler {
           this.historyService,
           (profileName) => this.providerResolver(profileName),
           tokensBefore,
-          this.compressionSummary,
+          this.runReport.telemetry(),
           this.compressionAuditProvenance,
         ),
     );
@@ -772,6 +778,7 @@ export class CompressionHandler {
 
     const attemptPrimary = async (): Promise<StrategyCompressionResult> => {
       const strategy = this.strategy(configuredStrategyName);
+      this.runReport.countAttempt();
       return strategy.compress(context);
     };
 
@@ -870,6 +877,7 @@ export class CompressionHandler {
     context: CompressionContext,
   ): Promise<StrategyCompressionResult> {
     const oneShot = this.strategy('one-shot');
+    this.runReport.countAttempt();
     return oneShot.compress(context);
   }
 
@@ -900,6 +908,7 @@ export class CompressionHandler {
         this.onCompressionAudit?.(provenance);
       },
     );
+    this.runReport.recordApplied(result.metadata);
     this.compressionFailureCount = 0;
     this.lastCompressionFailureTime = null;
     this.lastSuccessfulCompressionTime = Date.now();
@@ -909,6 +918,7 @@ export class CompressionHandler {
     context: CompressionContext,
   ): Promise<StrategyCompressionResult> {
     const fallback = this.strategy('top-down-truncation');
+    this.runReport.countAttempt();
     return fallback.compress(context);
   }
 

@@ -92,7 +92,7 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
   useTempLogFile();
 
   it('serializes attached timing as ttft_ms, generation_ms, provider_request_ms, chunk_count', async () => {
-    const logger = new TokenUsageLogger(true, logFilePath);
+    const logger = new TokenUsageLogger('debug', logFilePath);
     const record = await recordTurnWithTiming(logger, 'timing-full', {
       ttftMs: 200,
       lastTokenMs: 1200,
@@ -107,7 +107,7 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
   });
 
   it('omits generation_ms when lastTokenMs equals ttftMs (single-instant window)', async () => {
-    const logger = new TokenUsageLogger(true, logFilePath);
+    const logger = new TokenUsageLogger('debug', logFilePath);
     const record = await recordTurnWithTiming(logger, 'timing-equal', {
       ttftMs: 300,
       lastTokenMs: 300,
@@ -121,7 +121,7 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
   });
 
   it('omits generation_ms when lastTokenMs precedes ttftMs', async () => {
-    const logger = new TokenUsageLogger(true, logFilePath);
+    const logger = new TokenUsageLogger('debug', logFilePath);
     const record = await recordTurnWithTiming(logger, 'timing-inverted', {
       ttftMs: 900,
       lastTokenMs: 100,
@@ -134,7 +134,7 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
   });
 
   it('omits generation_ms when only one endpoint of the window is measured', async () => {
-    const logger = new TokenUsageLogger(true, logFilePath);
+    const logger = new TokenUsageLogger('debug', logFilePath);
     const noLastToken = await recordTurnWithTiming(logger, 'timing-no-last', {
       ttftMs: 200,
       lastTokenMs: null,
@@ -155,7 +155,7 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
   });
 
   it('a later timing attach fully replaces the prior attempt timing (retry overwrite)', async () => {
-    const logger = new TokenUsageLogger(true, logFilePath);
+    const logger = new TokenUsageLogger('debug', logFilePath);
     const record = await recordTurnWithTiming(
       logger,
       'timing-retry',
@@ -181,7 +181,7 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
   });
 
   it('omits non-finite timing values instead of serializing them as null', async () => {
-    const logger = new TokenUsageLogger(true, logFilePath);
+    const logger = new TokenUsageLogger('debug', logFilePath);
     const record = await recordTurnWithTiming(logger, 'timing-nonfinite', {
       // JSON.stringify would write NaN/Infinity as null, which the schema
       // forbids: these must be omitted from the record entirely.
@@ -199,7 +199,7 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
   });
 
   it('emits none of the timing fields when no timing was attached', async () => {
-    const logger = new TokenUsageLogger(true, logFilePath);
+    const logger = new TokenUsageLogger('debug', logFilePath);
     const record = await recordTurnWithTiming(logger, 'timing-absent');
 
     expect('ttft_ms' in record).toBe(false);

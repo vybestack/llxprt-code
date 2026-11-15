@@ -325,3 +325,21 @@ describe('resolveRetentionConfig — byte overflow surfaces clearly (finding D)'
     expect(resolved.maxTotalSizeBytes).toBeGreaterThan(0);
   });
 });
+
+describe('token-usage retention budget (#4068)', () => {
+  it('defaults to 1 GiB, separate from the recording budget', () => {
+    const resolved = resolveRetentionConfig({ maxTotalSizeMB: 4096 });
+    expect(resolved.tokenUsageMaxTotalSizeBytes).toBe(1024 * 1024 * 1024);
+    expect(resolved.maxTotalSizeBytes).toBe(4096 * 1024 * 1024);
+  });
+
+  it('honours an explicit budget and rejects a non-positive one', () => {
+    expect(
+      resolveRetentionConfig({ tokenUsageMaxTotalSizeMB: 64 })
+        .tokenUsageMaxTotalSizeBytes,
+    ).toBe(64 * 1024 * 1024);
+    expect(() =>
+      resolveRetentionConfig({ tokenUsageMaxTotalSizeMB: 0 }),
+    ).toThrow('Invalid sessionRetention.tokenUsageMaxTotalSizeMB');
+  });
+});

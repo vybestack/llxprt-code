@@ -131,6 +131,9 @@ export interface SessionRetentionSettings {
 
   /** Machine-wide aggregate size limit in MiB (defaults to 4096 = 4 GiB). */
   maxTotalSizeMB?: number;
+
+  /** Machine-wide size limit in MiB for token-usage logs (defaults to 1024). */
+  tokenUsageMaxTotalSizeMB?: number;
 }
 
 export interface SettingsError {
