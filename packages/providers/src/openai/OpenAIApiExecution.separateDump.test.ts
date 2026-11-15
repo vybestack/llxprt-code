@@ -191,7 +191,6 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       'openai',
       { streaming: true, chunks, completed: true },
       false,
-      undefined,
     );
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
   });
@@ -242,7 +241,6 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
         completed: false,
       },
       true,
-      undefined,
     );
   });
 

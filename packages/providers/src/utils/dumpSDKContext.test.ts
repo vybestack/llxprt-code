@@ -398,7 +398,6 @@ describe('wrapStreamWithDump', () => {
       'openai',
       { streaming: true, chunks, completed: true },
       false,
-      undefined,
     );
   });
 
@@ -437,7 +436,6 @@ describe('wrapStreamWithDump', () => {
         completed: false,
       },
       true,
-      undefined,
     );
   });
 
@@ -469,7 +467,6 @@ describe('wrapStreamWithDump', () => {
       'gemini',
       { streaming: true, chunks: [chunks[0]], completed: false },
       false,
-      undefined,
     );
   });
 
