@@ -17,17 +17,19 @@ interface CompressionHookRuntime {
   ): Promise<CompressionContext>;
 }
 
-interface CompressionHookOptions {
+export interface CompressionAttemptOptions {
+  readonly bypassCooldown?: boolean;
   readonly modelParameters?: AdmittedModelParameters;
   readonly transcriptPathProvider?: () => string | undefined;
   readonly trigger?: 'manual' | 'auto';
   readonly hookOwner?: HookExecutionOwner;
+  readonly historyOrigin?: object;
 }
 
 export function fireCompressionHookForAttempt(
   runtime: CompressionHookRuntime,
   promptId: string,
-  options: CompressionHookOptions | undefined,
+  options: CompressionAttemptOptions | undefined,
   hookTrigger: (
     context: CompressionContext,
     owner?: HookExecutionOwner,

@@ -133,17 +133,24 @@ A `summary` record holds only these fields, all scalar. A field the provider
 did not report, or a value that was not measured, is omitted rather than
 written as zero.
 
-| Group             | Fields                                                                                                                                 |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Record            | `record_type`, `schema_version`                                                                                                        |
-| Identity, lineage | `ts`, `session_id`, `turn_id`, `runtime_id`, `parent_runtime_id`, `subagent_name`, `prompt_id`, `attempt_index`, `attempt_outcome`     |
-| Attempt end       | `finish_reason`, `raw_stop_reason` (only when reported; kept for #4036 refusal accounting)                                             |
-| Model             | `provider`, `model`, `protocol`                                                                                                        |
-| Usage             | `actual_prompt_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `reasoning_tokens` (only when the provider reports it) |
-| Estimate          | `estimated_tokens`, `estimator_family`, `stateful_parent_used`                                                                         |
-| Timing            | `ttft_ms`, `provider_request_ms`, `generation_ms`, `timing_source`                                                                     |
-| Fixed overhead    | `fixed_tokens`                                                                                                                         |
-| Tool results      | `new_tool_result_count`, `new_tool_result_tokens`, `carried_tool_result_tokens`                                                        |
+| Group             | Fields                                                                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Record            | `record_type`, `schema_version`                                                                                                                  |
+| Identity, lineage | `ts`, `session_id`, `turn_id`, `runtime_id`, `parent_runtime_id`, `subagent_name`, `prompt_id`, `attempt_index`, `attempt_outcome`               |
+| Attempt end       | `finish_reason`, `raw_stop_reason` (only when reported; kept for #4036 refusal accounting)                                                       |
+| Refusal evidence  | `refusal_category`, `refusal_explanation`, `recommended_model`, `dump_base_id` (on refusal attempts); `request_id` on refusal and retry attempts |
+| Model             | `provider`, `model`, `protocol`                                                                                                                  |
+| Usage             | `actual_prompt_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `reasoning_tokens` (only when the provider reports it)           |
+| Estimate          | `estimated_tokens`, `estimator_family`, `stateful_parent_used`                                                                                   |
+| Timing            | `ttft_ms`, `provider_request_ms`, `generation_ms`, `timing_source`                                                                               |
+| Fixed overhead    | `fixed_tokens`                                                                                                                                   |
+| Tool results      | `new_tool_result_count`, `new_tool_result_tokens`, `carried_tool_result_tokens`                                                                  |
+
+The #4068 scalar summary field list excludes per-attempt request IDs to protect
+its size target. Summary records retain request IDs for refusal attempts and
+subsequent retries, including the accepted attempt paired with a refusal. A
+refusal without a provider request ID keeps `request_id: null` so the missing
+header evidence remains visible; an ordinary first attempt omits its request ID.
 
 A summary record is about 1 KB for a subagent request, most of it the field
 names and the composite session, runtime and prompt identifiers. Timing fields

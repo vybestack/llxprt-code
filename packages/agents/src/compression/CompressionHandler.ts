@@ -79,7 +79,10 @@ import {
   attachCompressionCallback,
   clearCompressionCallback,
 } from './providerCompressionCallback.js';
-import { fireCompressionHookForAttempt } from './compressionHookExecution.js';
+import {
+  fireCompressionHookForAttempt,
+  type CompressionAttemptOptions,
+} from './compressionHookExecution.js';
 import {
   TOKEN_SAFETY_MARGIN,
   CONTEXT_LIMIT_FUDGE_FACTOR,
@@ -112,7 +115,6 @@ export class CompressionHandler {
   private lastSuccessfulCompressionTime: number | null = null;
   private compressionSummary: IContent | undefined;
   private compressionAuditProvenance: CompressionAuditProvenance | undefined;
-  /** #4067: report usage from the applied strategy result, not history summary. */
   private readonly runReport = new CompressionRunReport();
   private onCompressionAudit?: (provenance: CompressionAuditProvenance) => void;
   densityDirty: boolean = true;
@@ -607,11 +609,6 @@ export class CompressionHandler {
     this.lastCompressionFailureTime = Date.now();
   }
 
-  private resetCompressionAttemptAudit(): void {
-    this.compressionSummary = undefined;
-    this.compressionAuditProvenance = undefined;
-  }
-
   /**
    * Perform compression with retry, fallback, and cooldown logic.
    *
@@ -620,14 +617,7 @@ export class CompressionHandler {
    */
   async performCompression(
     prompt_id: string,
-    options?: {
-      bypassCooldown?: boolean;
-      trigger?: 'manual' | 'auto';
-      transcriptPathProvider?: () => string | undefined;
-      historyOrigin?: object;
-      hookOwner?: HookExecutionOwner;
-      modelParameters?: AdmittedModelParameters;
-    },
+    options?: CompressionAttemptOptions,
   ): Promise<PerformCompressionResult> {
     // Cooldown: skip compression if we have too many recent failures
     // When bypassCooldown is true (called from enforceContextWindow), skip this check
@@ -663,7 +653,8 @@ export class CompressionHandler {
     // On 'noop', we must avoid history mutation, recording events, and
     // counter/timestamp changes entirely. (Issue #2602)
     let compressionOutcome: 'applied' | 'noop' | 'failed' = 'failed';
-    this.resetCompressionAttemptAudit();
+    this.compressionSummary = undefined;
+    this.compressionAuditProvenance = undefined;
     this.runReport.begin();
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
@@ -777,9 +768,8 @@ export class CompressionHandler {
     );
 
     const attemptPrimary = async (): Promise<StrategyCompressionResult> => {
-      const strategy = this.strategy(configuredStrategyName);
       this.runReport.countAttempt();
-      return strategy.compress(context);
+      return this.strategy(configuredStrategyName).compress(context);
     };
 
     let primaryError: unknown;

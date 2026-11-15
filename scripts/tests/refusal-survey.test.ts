@@ -63,6 +63,56 @@ function runSurvey(
 }
 
 describe('refusal survey CLI', () => {
+  it('parses #4068 summary turn records with refusal evidence', () => {
+    const root = path.join(fixtureRoot(), 'logs', 'tmp');
+    const project = path.join(root, 'summary-format');
+    writeJsonLines(path.join(project, 'token-usage', 'usage.jsonl'), [
+      {
+        record_type: 'turn',
+        schema_version: 1,
+        ts: '2026-11-02T10:00:00Z',
+        session_id: 'summary-session',
+        turn_id: 'turn-1',
+        runtime_id: 'runtime-1',
+        parent_runtime_id: null,
+        subagent_name: null,
+        prompt_id: 'summary-prompt',
+        attempt_index: 0,
+        attempt_outcome: 'refusal',
+        finish_reason: 'refusal',
+        raw_stop_reason: 'refusal',
+        refusal_category: 'policy',
+        refusal_explanation: 'Request blocked',
+        recommended_model: 'claude-sonnet-5',
+        request_id: 'req-summary-1',
+        dump_base_id: 'dump-summary-1',
+        provider: 'anthropic',
+        model: 'claude-opus-5-5',
+        protocol: 'anthropic',
+        actual_prompt_tokens: 1200,
+        cached_tokens: 0,
+        output_tokens: 0,
+        estimated_tokens: 1200,
+        estimator_family: 'anthropic-char',
+        stateful_parent_used: false,
+        fixed_tokens: 100,
+        new_tool_result_count: 0,
+        new_tool_result_tokens: 0,
+        carried_tool_result_tokens: 0,
+      },
+    ]);
+
+    const { stdout } = runSurvey(root);
+    const report = JSON.parse(stdout) as {
+      runs: Array<{ category: string | null; refusalAttempts: number }>;
+    };
+    expect(report.runs).toHaveLength(1);
+    expect(report.runs[0]).toMatchObject({
+      category: 'policy',
+      refusalAttempts: 1,
+    });
+  });
+
   it('joins legacy token usage by prompt prefix when session ids differ', () => {
     const root = path.join(fixtureRoot(), 'logs', 'tmp');
     const project = path.join(root, 'legacy-prefix');

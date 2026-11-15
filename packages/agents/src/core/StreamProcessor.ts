@@ -382,8 +382,7 @@ export class StreamProcessor {
     // This is also the attempt's request boundary for the live token-usage
     // level (#4068); an unlogged attempt gets no bridge.
     const apiCall = () => {
-      if (requestAttempt > 0) semanticMediaPurge?.markRetryHandoff();
-      requestAttempt += 1;
+      if (requestAttempt++ > 0) semanticMediaPurge?.markRetryHandoff();
       this.currentRawTokenDeltaBridge = beginTokenUsageAttempt(
         this.compressionHandler.tokenUsageLogger,
       );
@@ -765,12 +764,8 @@ export class StreamProcessor {
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
     let finish: StreamFinishInfo = {};
-    // Constructed at generator-body start (first pull — the provider call
-    // boundary), so provider_request_ms covers the stream lifecycle alone
-    // and excludes send-seam estimation (#3257). The provider stream is only
-    // iterated inside this generator body, so attach always happens before
-    // any provider code can fire a raw delta. A null bridge means the attempt
-    // is not logged (#4068), so no tracker is created.
+    // Starts on first pull (provider-call boundary), excluding send-seam time (#3257).
+    // Attach precedes raw deltas; a null bridge means no token-usage tracker (#4068).
     const timing = startAttemptTiming(rawTokenDeltaBridge);
 
     // The caller iterates this generator after _sendProviderRequest returned,

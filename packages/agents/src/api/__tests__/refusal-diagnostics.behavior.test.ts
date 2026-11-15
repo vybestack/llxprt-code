@@ -211,7 +211,7 @@ describe('Anthropic refusal diagnostics (REQ-4101-A1)', () => {
         },
       ],
       [PROMPT],
-      { protocol: 'anthropic' },
+      { protocol: 'anthropic', settings: { 'token-usage-log': 'debug' } },
     );
 
     expect(turnRecords(run.tokenRecords)).toHaveLength(1);
@@ -224,7 +224,7 @@ describe('Anthropic refusal diagnostics (REQ-4101-A1)', () => {
     const run = await runScriptedPrompt(
       [{ ...stopReply('ordinary response'), requestId: null }],
       [PROMPT],
-      { protocol: 'anthropic' },
+      { protocol: 'anthropic', settings: { 'token-usage-log': 'debug' } },
     );
 
     expect(turnRecords(run.tokenRecords)).toHaveLength(1);
