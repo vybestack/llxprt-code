@@ -50,6 +50,33 @@ export async function applyCompressionAuditResult(
   return audit;
 }
 
+export async function applyFallbackCompressionResult(input: {
+  readonly result: StrategyCompressionResult;
+  readonly applyResult: (
+    newHistory: IContent[],
+    summary: IContent | undefined,
+    topPreserved: number,
+  ) => Promise<void>;
+  readonly recordApplied: (
+    metadata: StrategyCompressionResult['metadata'],
+  ) => void;
+  readonly notifyAudit: (audit: CompressionAuditResult) => void;
+  readonly notifyNoop: (reason: string) => void;
+  readonly resetFailures: () => void;
+}): Promise<void> {
+  if (input.result.kind === 'noop') {
+    input.notifyNoop(input.result.reason);
+    return;
+  }
+  await applyCompressionAuditResult(
+    input.result,
+    input.applyResult,
+    input.notifyAudit,
+  );
+  input.recordApplied(input.result.metadata);
+  input.resetFailures();
+}
+
 export function finishCompressionLifecycle(
   history: HistoryService,
   outcome: 'applied' | 'noop' | 'failed',

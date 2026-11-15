@@ -89,6 +89,13 @@ describe('TokenUsageLogger refusal records (issue #4036)', () => {
       requestId: 'req-accepted-1',
       dumpBaseId: 'dump-accepted-1',
     });
+    summaryLogger.recordEstimate('prompt-2', {
+      provider: 'claudecode',
+      model: 'claude-opus-5-5',
+      estimatedTokens: 90,
+      estimator: 'anthropic-char',
+      tiktokenTokens: null,
+    });
     await summaryLogger.recordActual('prompt-2', {
       actualPromptTokens: 90,
       cachedTokens: 0,
@@ -99,6 +106,11 @@ describe('TokenUsageLogger refusal records (issue #4036)', () => {
     });
 
     const records = readJsonl(logFile);
+    expect(records).toHaveLength(3);
+    expect(records[2]).toMatchObject({
+      prompt_id: 'prompt-2',
+      attempt_outcome: 'success',
+    });
     expect(records[0]).toMatchObject({
       record_type: 'turn',
       attempt_outcome: 'refusal',

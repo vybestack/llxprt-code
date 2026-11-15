@@ -34,6 +34,8 @@ type ObservedCall = {
   runtime: string;
   ts: string;
   refusal: boolean;
+  attemptOutcome: string | null;
+  finishReason: string | null;
   childRuntime: boolean;
 };
 type Attempt = {
@@ -253,8 +255,9 @@ async function readUsage(
     for await (const value of readLines(file, malformed)) {
       if (!isIncludedUsage(value, options.since)) continue;
       const ts = str(value['ts']) ?? '';
-      const outcome =
-        str(value['attempt_outcome']) ?? str(value['finish_reason']) ?? '';
+      const attemptOutcome = str(value['attempt_outcome']);
+      const finishReason = str(value['finish_reason']);
+      const outcome = attemptOutcome ?? finishReason ?? '';
       const model = str(value['model']) ?? 'unknown';
       const legacy = isLegacyRefusal(value, outcome, model);
       const refusal = isRefusal(value, outcome, legacy);
@@ -273,6 +276,8 @@ async function readUsage(
         runtime,
         ts,
         refusal,
+        attemptOutcome,
+        finishReason,
         childRuntime,
       });
       if (refusal)
@@ -408,7 +413,17 @@ function recoveryStatus(
   return rewritten ? 'rewrite' : 'retry';
 }
 
+function hasSuccessfulOutcome(call: ObservedCall): boolean {
+  if (call.attemptOutcome !== null) return call.attemptOutcome === 'success';
+  return (
+    call.finishReason === 'stop' ||
+    call.finishReason === 'max_tokens' ||
+    call.finishReason === 'tool_calls'
+  );
+}
+
 function isLaterMatchingSuccess(first: Attempt, call: ObservedCall): boolean {
+  if (!hasSuccessfulOutcome(call)) return false;
   if (call.refusal) return false;
   if (call.projectHash !== first.projectHash) return false;
   if (call.session !== first.session) return false;

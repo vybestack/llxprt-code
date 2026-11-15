@@ -213,6 +213,51 @@ describe('compression telemetry usage comes from the compression that ran (#4067
     }
   });
 
+  it('keeps telemetry bound to each direct compression attempt', async () => {
+    const harness = await createHarness();
+    const handler = harness.handler('middle-out');
+    addTurns(harness.historyService, 'seed', 20);
+
+    let releaseFirstWait: () => void = () => undefined;
+    let signalFirstWait: () => void = () => undefined;
+    const firstWaitStarted = new Promise<void>((resolve) => {
+      signalFirstWait = resolve;
+    });
+    const firstWaitGate = new Promise<void>((resolve) => {
+      releaseFirstWait = resolve;
+    });
+    const waitForTokenUpdates = harness.historyService.waitForTokenUpdates.bind(
+      harness.historyService,
+    );
+    let completedCompressions = 0;
+    let firstWaitBlocked = false;
+    harness.historyService.on('compressionEnded', () => {
+      completedCompressions += 1;
+    });
+    harness.historyService.waitForTokenUpdates = async () => {
+      if (completedCompressions === 1 && !firstWaitBlocked) {
+        firstWaitBlocked = true;
+        signalFirstWait();
+        await firstWaitGate;
+      }
+      await waitForTokenUpdates();
+    };
+
+    const firstAttempt = handler.performCompression('prompt-1', {
+      trigger: 'manual',
+    });
+    await firstWaitStarted;
+    await compress(handler);
+    releaseFirstWait();
+    await firstAttempt;
+
+    const records = await compressionRecords(harness.logPath);
+    expect(records).toHaveLength(2);
+    expect(
+      records.map((record) => record.compression_prompt_tokens),
+    ).toStrictEqual([2007, 1007]);
+  });
+
   it('hands the session recording the summary this compression produced, not the retained one', async () => {
     const harness = await createHarness();
     const middleOut = harness.handler('middle-out');

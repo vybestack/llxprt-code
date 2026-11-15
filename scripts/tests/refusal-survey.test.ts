@@ -100,17 +100,81 @@ describe('refusal survey CLI', () => {
         new_tool_result_tokens: 0,
         carried_tool_result_tokens: 0,
       },
+      {
+        record_type: 'turn',
+        ts: '2026-11-02T10:00:01Z',
+        session_id: 'summary-session',
+        runtime_id: 'runtime-1',
+        prompt_id: 'summary-prompt',
+        attempt_index: 1,
+        attempt_outcome: 'error',
+        finish_reason: 'error',
+        provider: 'anthropic',
+        model: 'claude-opus-5-5',
+      },
     ]);
 
     const { stdout } = runSurvey(root);
     const report = JSON.parse(stdout) as {
-      runs: Array<{ category: string | null; refusalAttempts: number }>;
+      runs: Array<{
+        category: string | null;
+        refusalAttempts: number;
+        recovery: string;
+      }>;
     };
     expect(report.runs).toHaveLength(1);
     expect(report.runs[0]).toMatchObject({
       category: 'policy',
       refusalAttempts: 1,
+      recovery: 'none',
     });
+  });
+
+  it('does not count errored, aborted, or abandoned attempts as recovery', () => {
+    const root = path.join(fixtureRoot(), 'logs', 'tmp');
+    const outcomes = ['error', 'aborted', 'abandoned'] as const;
+    for (const [index, outcome] of outcomes.entries()) {
+      const project = path.join(root, `outcome-${outcome}`);
+      const sessionId = `session-${outcome}`;
+      const promptId = `prompt-${outcome}`;
+      writeJsonLines(path.join(project, 'token-usage', 'usage.jsonl'), [
+        {
+          record_type: 'turn',
+          ts: '2026-11-02T10:00:00Z',
+          session_id: sessionId,
+          runtime_id: `runtime-${index}`,
+          prompt_id: promptId,
+          attempt_index: 0,
+          attempt_outcome: 'refusal',
+          finish_reason: 'refusal',
+          provider: 'anthropic',
+          model: 'claude-opus-5-5',
+        },
+        {
+          record_type: 'turn',
+          ts: '2026-11-02T10:00:01Z',
+          session_id: sessionId,
+          runtime_id: `runtime-${index}`,
+          prompt_id: promptId,
+          attempt_index: 1,
+          attempt_outcome: outcome,
+          finish_reason: 'error',
+          provider: 'anthropic',
+          model: 'claude-opus-5-5',
+        },
+      ]);
+    }
+
+    const { stdout } = runSurvey(root);
+    const report = JSON.parse(stdout) as {
+      runs: Array<{ recovery: string }>;
+    };
+    expect(report.runs).toHaveLength(outcomes.length);
+    expect(report.runs.map((run) => run.recovery)).toEqual([
+      'none',
+      'none',
+      'none',
+    ]);
   });
 
   it('joins legacy token usage by prompt prefix when session ids differ', () => {
