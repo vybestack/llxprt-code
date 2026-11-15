@@ -250,7 +250,9 @@ export function wrapStreamWithDump<T>(
     }
     dumped = true;
     const result = await bestEffortDump(operation, providerName, () =>
-      dumpResponse(baseId, providerName, body, isError, correlation),
+      correlation === undefined
+        ? dumpResponse(baseId, providerName, body, isError)
+        : dumpResponse(baseId, providerName, body, isError, correlation),
     );
     if (result !== undefined) recordDump?.(baseId);
   }
