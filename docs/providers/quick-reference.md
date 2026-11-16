@@ -41,29 +41,30 @@ time and are kept in the dated
 [Provider Models and Limits](./models-and-limits.md#default-models-by-alias)
 page; the table below lists only the stable alias and authentication details.
 
-| Provider                   | Alias           | Auth method                    |
-| -------------------------- | --------------- | ------------------------------ |
-| Anthropic (API key)        | `anthropic`     | API key (`ANTHROPIC_API_KEY`)  |
-| Claude Code (subscription) | `claudecode`    | OAuth                          |
-| Google Gemini              | `gemini`        | API key (`GEMINI_API_KEY`)     |
-| OpenAI (API)               | `openai`        | API key (`OPENAI_API_KEY`)     |
-| OpenAI Codex (ChatGPT sub) | `codex`         | OAuth                          |
-| Qwen (DashScope)           | `qwen`          | API key (`DASHSCOPE_API_KEY`)  |
-| Kimi                       | `kimi`          | API key                        |
-| xAI (Grok)                 | `xai`           | API key (`XAI_API_KEY`)        |
-| DeepSeek                   | `deepseek`      | API key (`DEEPSEEK_API_KEY`)   |
-| Z.AI                       | `zai`           | API key (`ZAI_API_KEY`)        |
-| Synthetic                  | `synthetic`     | API key                        |
-| Chutes AI                  | `chutes-ai`     | API key (`CHUTES_API_KEY`)     |
-| Makora                     | `makora`        | API key (`MAKORA_API_KEY`)     |
-| Fireworks                  | `fireworks`     | API key (`FIREWORKS_API_KEY`)  |
-| OpenRouter                 | `openrouter`    | API key (`OPENROUTER_API_KEY`) |
-| Cerebras Code              | `cerebras-code` | API key (`CEREBRAS_API_KEY`)   |
-| Mistral                    | `mistral`       | API key (`MISTRAL_API_KEY`)    |
-| LiteLLM (gateway)          | `litellm`       | API key (`LITELLM_API_KEY`)    |
-| Ollama Cloud (hosted)      | `ollama-cloud`  | API key (`OLLAMA_API_KEY`)     |
-| LM Studio (local)          | `lm-studio`     | None required                  |
-| llama.cpp (local)          | `llama-cpp`     | None required                  |
+| Provider                    | Alias              | Auth method                           |
+| --------------------------- | ------------------ | ------------------------------------- |
+| Anthropic (API key)         | `anthropic`        | API key (`ANTHROPIC_API_KEY`)         |
+| Claude Code (subscription)  | `claudecode`       | OAuth                                 |
+| Google Gemini               | `gemini`           | API key (`GEMINI_API_KEY`)            |
+| OpenAI (API)                | `openai`           | API key (`OPENAI_API_KEY`)            |
+| OpenAI Codex (ChatGPT sub)  | `codex`            | OAuth                                 |
+| Qwen (DashScope)            | `qwen`             | API key (`DASHSCOPE_API_KEY`)         |
+| Kimi                        | `kimi`             | API key                               |
+| xAI (Grok)                  | `xai`              | API key (`XAI_API_KEY`)               |
+| DeepSeek                    | `deepseek`         | API key (`DEEPSEEK_API_KEY`)          |
+| Z.AI                        | `zai`              | API key (`ZAI_API_KEY`)               |
+| Synthetic                   | `synthetic`        | API key                               |
+| Chutes AI                   | `chutes-ai`        | API key (`CHUTES_API_KEY`)            |
+| Makora                      | `makora`           | API key (`MAKORA_API_KEY`)            |
+| Fireworks                   | `fireworks`        | API key (`FIREWORKS_API_KEY`)         |
+| OpenRouter                  | `openrouter`       | API key (`OPENROUTER_API_KEY`)        |
+| Cerebras Code               | `cerebras-code`    | API key (`CEREBRAS_API_KEY`)          |
+| Mistral                     | `mistral`          | API key (`MISTRAL_API_KEY`)           |
+| LiteLLM (gateway)           | `litellm`          | API key (`LITELLM_API_KEY`)           |
+| Cheaper Inference (gateway) | `CheaperInference` | API key (`CHEAPER_INFERENCE_API_KEY`) |
+| Ollama Cloud (hosted)       | `ollama-cloud`     | API key (`OLLAMA_API_KEY`)            |
+| LM Studio (local)           | `lm-studio`        | None required                         |
+| llama.cpp (local)           | `llama-cpp`        | None required                         |
 
 For the current default model name each alias uses, see
 [Default models by alias](./models-and-limits.md#default-models-by-alias). For
@@ -435,6 +436,22 @@ Or without the alias:
 ```
 
 **Environment variable:** `export LITELLM_API_KEY=sk-...`
+
+### Cheaper Inference
+
+[Cheaper Inference](https://cheaperinference.com) is an OpenAI-compatible LLM
+gateway. One API key gives access to models from several labs.
+
+```bash
+/provider CheaperInference
+/key your-cheaper-inference-key
+/model gpt-5.4-mini
+```
+
+**Environment variable:** `export CHEAPER_INFERENCE_API_KEY=ci_live_...`
+
+See the [Cheaper Inference docs](https://cheaperinference.com/docs) for the
+model list.
 
 ## Local models
 
