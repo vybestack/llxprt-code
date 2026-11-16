@@ -1,0 +1,248 @@
+{
+  "excludingTests": {
+    "includeTests": false,
+    "namedOnly": false,
+    "expectedTop10": [
+      "chatSession.ts:constructor:99",
+      "coreToolScheduler.ts:attemptExecutionOfScheduledCalls:99",
+      "boundaryRecovery.ts:recoverPendingBoundary:97",
+      "client.ts:restoreHistory:95",
+      "MessageStreamTerminalHandler.ts:handleErrorEvent:89",
+      "turn.ts:acquireFirstStreamEvent:89",
+      "turn.ts:run:87",
+      "MessageStreamOrchestrator.ts:_processStreamIteration:86",
+      "clientLlmUtilities.ts:generateJson:85",
+      "subagentNonInteractive.ts:readStreamToCompletion:85"
+    ],
+    "tiedAtCutoff": 4,
+    "rowsFound": 10,
+    "inTop10": 0,
+    "inTop10ExactLength": 0,
+    "results": [
+      {
+        "row": "| 1 | createPurgeChat | packages/agents/src/core/chatSession.media-history.test.ts | 169 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 2 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.todoPause.test.ts | 161 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 3 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.contextOverflow.test.ts | 159 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 4 | createFixture | packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts | 154 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 5 | send | packages/agents/src/core/chat-session-empty-tools.test.ts | 145 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 6 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.modelinfo.test.ts | 145 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 7 | buildSubagentFixture | packages/agents/src/core/subagentRuntimeSetup.assembler.test.ts | 144 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 8 | buildFixture | packages/agents/src/core/chatSession.systemPromptAssembly.test.ts | 139 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 9 | runDirectNonInteractive | packages/agents/src/core/subagentNonInteractive.issue3535.test.ts | 126 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      },
+      {
+        "row": "| 10 | buildHarness | packages/agents/src/core/messageStreamOrchestrator.retryDiscard.test.ts | 125 |",
+        "matched": null,
+        "inTop10": false,
+        "lengthDelta": null
+      }
+    ]
+  },
+  "all": {
+    "includeTests": true,
+    "namedOnly": false,
+    "expectedTop10": [
+      "__tests__/subagentOrchestrator-runtime.test.ts:<anonymous>:843",
+      "chatSession.media-history.test.ts:<anonymous>:825",
+      "subagent.runNonInteractive-term.test.ts:<anonymous>:815",
+      "chatSession.runtime.history.test.ts:<anonymous>:783",
+      "TokenUsageLogger.integration.test.ts:<anonymous>:783",
+      "profile/__tests__/profileController.lifecycle.test.ts:<anonymous>:763",
+      "chatSession.issue2150.test.ts:<anonymous>:753",
+      "profile/__tests__/profileController.serialization.test.ts:<anonymous>:748",
+      "turn.preRequestTimeout.test.ts:<anonymous>:744",
+      "client.sendMessageStream-overflow.test.ts:<anonymous>:740"
+    ],
+    "tiedAtCutoff": 2,
+    "rowsFound": 10,
+    "inTop10": 0,
+    "inTop10ExactLength": 0,
+    "results": [
+      {
+        "row": "| 1 | createPurgeChat | packages/agents/src/core/chatSession.media-history.test.ts | 169 |",
+        "matched": "chatSession.media-history.test.ts:createPurgeChat:169",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 2 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.todoPause.test.ts | 161 |",
+        "matched": "MessageStreamOrchestrator.todoPause.test.ts:buildOrchestrator:161",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 3 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.contextOverflow.test.ts | 159 |",
+        "matched": "MessageStreamOrchestrator.contextOverflow.test.ts:buildOrchestrator:159",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 4 | createFixture | packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts | 154 |",
+        "matched": "turnMediaAdmission.lifecycle.test.ts:createFixture:154",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 5 | send | packages/agents/src/core/chat-session-empty-tools.test.ts | 145 |",
+        "matched": "chat-session-empty-tools.test.ts:send:145",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 6 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.modelinfo.test.ts | 145 |",
+        "matched": "MessageStreamOrchestrator.modelinfo.test.ts:buildOrchestrator:145",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 7 | buildSubagentFixture | packages/agents/src/core/subagentRuntimeSetup.assembler.test.ts | 144 |",
+        "matched": "subagentRuntimeSetup.assembler.test.ts:buildSubagentFixture:144",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 8 | buildFixture | packages/agents/src/core/chatSession.systemPromptAssembly.test.ts | 139 |",
+        "matched": "chatSession.systemPromptAssembly.test.ts:buildFixture:139",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 9 | runDirectNonInteractive | packages/agents/src/core/subagentNonInteractive.issue3535.test.ts | 126 |",
+        "matched": "subagentNonInteractive.issue3535.test.ts:runDirectNonInteractive:126",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 10 | buildHarness | packages/agents/src/core/messageStreamOrchestrator.retryDiscard.test.ts | 125 |",
+        "matched": "messageStreamOrchestrator.retryDiscard.test.ts:buildHarness:125",
+        "inTop10": false,
+        "lengthDelta": 0
+      }
+    ]
+  },
+  "namedIncludingTests": {
+    "includeTests": true,
+    "namedOnly": true,
+    "expectedTop10": [
+      "chatSession.media-history.test.ts:createPurgeChat:169",
+      "MessageStreamOrchestrator.todoPause.test.ts:buildOrchestrator:161",
+      "MessageStreamOrchestrator.contextOverflow.test.ts:buildOrchestrator:159",
+      "turnMediaAdmission.lifecycle.test.ts:createFixture:154",
+      "chat-session-empty-tools.test.ts:send:145",
+      "MessageStreamOrchestrator.modelinfo.test.ts:buildOrchestrator:145",
+      "subagentRuntimeSetup.assembler.test.ts:buildSubagentFixture:144",
+      "chatSession.systemPromptAssembly.test.ts:buildFixture:139",
+      "subagent.runInteractive-term.test.ts:observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall:139",
+      "coreToolScheduler.cancellation.test.ts:observeCompleteAllToolsWhenFirstToolIsCancelledMidBatch:130"
+    ],
+    "tiedAtCutoff": 1,
+    "rowsFound": 10,
+    "inTop10": 8,
+    "inTop10ExactLength": 8,
+    "results": [
+      {
+        "row": "| 1 | createPurgeChat | packages/agents/src/core/chatSession.media-history.test.ts | 169 |",
+        "matched": "chatSession.media-history.test.ts:createPurgeChat:169",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 2 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.todoPause.test.ts | 161 |",
+        "matched": "MessageStreamOrchestrator.todoPause.test.ts:buildOrchestrator:161",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 3 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.contextOverflow.test.ts | 159 |",
+        "matched": "MessageStreamOrchestrator.contextOverflow.test.ts:buildOrchestrator:159",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 4 | createFixture | packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts | 154 |",
+        "matched": "turnMediaAdmission.lifecycle.test.ts:createFixture:154",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 5 | send | packages/agents/src/core/chat-session-empty-tools.test.ts | 145 |",
+        "matched": "chat-session-empty-tools.test.ts:send:145",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 6 | buildOrchestrator | packages/agents/src/core/MessageStreamOrchestrator.modelinfo.test.ts | 145 |",
+        "matched": "MessageStreamOrchestrator.modelinfo.test.ts:buildOrchestrator:145",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 7 | buildSubagentFixture | packages/agents/src/core/subagentRuntimeSetup.assembler.test.ts | 144 |",
+        "matched": "subagentRuntimeSetup.assembler.test.ts:buildSubagentFixture:144",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 8 | buildFixture | packages/agents/src/core/chatSession.systemPromptAssembly.test.ts | 139 |",
+        "matched": "chatSession.systemPromptAssembly.test.ts:buildFixture:139",
+        "inTop10": true,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 9 | runDirectNonInteractive | packages/agents/src/core/subagentNonInteractive.issue3535.test.ts | 126 |",
+        "matched": "subagentNonInteractive.issue3535.test.ts:runDirectNonInteractive:126",
+        "inTop10": false,
+        "lengthDelta": 0
+      },
+      {
+        "row": "| 10 | buildHarness | packages/agents/src/core/messageStreamOrchestrator.retryDiscard.test.ts | 125 |",
+        "matched": "messageStreamOrchestrator.retryDiscard.test.ts:buildHarness:125",
+        "inTop10": false,
+        "lengthDelta": 0
+      }
+    ]
+  }
+}

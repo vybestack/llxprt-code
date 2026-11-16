@@ -9,6 +9,7 @@ import type {} from '@vybestack/llxprt-code-tools';
 import {
   ChildToolDisplay,
   type ChildToolDisplayCallbacks,
+  type ChildToolDisplaySubscription,
 } from '../../session/childToolDisplay.js';
 
 /**
@@ -100,9 +101,12 @@ type ToolUpdateCallback = (u: ToolUpdate) => void;
 export class ToolControl implements AgentToolControl {
   private readonly childDisplay: ChildToolDisplay;
 
-  subscribeChildTools(callbacks: ChildToolDisplayCallbacks): Unsubscribe {
+  subscribeChildTools(
+    callbacks: ChildToolDisplayCallbacks,
+    options?: ChildToolDisplaySubscription,
+  ): Unsubscribe {
     if (this.disposal) throw new Error('Agent tools disposed');
-    return this.childDisplay.subscribe(callbacks);
+    return this.childDisplay.subscribe(callbacks, options);
   }
   private readonly confirmationCallbacks = new Set<ConfirmationCallback>();
   private readonly toolUpdateCallbacks = new Set<ToolUpdateCallback>();

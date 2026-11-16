@@ -28,6 +28,11 @@ import type { TruncationMetadata } from '../acquisition/types.js';
 export interface ShellExecutionResult {
   /** Standard output and error combined. */
   output: string;
+  /**
+   * Stdout and stderr kept apart, when the execution method separates them
+   * (child_process). Absent when a PTY merged the streams.
+   */
+  streams?: { readonly stdout: string; readonly stderr: string };
   /** Process exit code, null if terminated by signal. */
   exitCode: number | null;
   /** Signal that terminated the process, null for normal exit. */

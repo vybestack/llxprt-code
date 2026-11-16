@@ -1,0 +1,23 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["ResultAggregator.publishBufferedResultsPass"]:::caller
+C["ResultAggregator.publishResult<br/>packages/agents/src/scheduler/result-aggregator.ts"]:::center
+R0["getFallbackOutputConfig (callback)"]:::callee
+R1["convertToFunctionResponse (success)"]:::callee
+R2["extractAgentIdFromMetadata"]:::callee
+R3["extractModelFacingErrorText"]:::callee
+R4["createErrorResponse (error)"]:::callee
+R5["setSuccess (injected callback)"]:::callee
+R6["setError (injected callback)"]:::callee
+R7["logger.debug"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3
+C --> R4
+C --> R5
+C --> R6
+C --> R7

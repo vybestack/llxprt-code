@@ -56,6 +56,11 @@ import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/to
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createTaskRegistration } from '../api/runtimeFactories.js';
 import { SessionToolCatalogOwner } from './session-tool-catalog-owner.js';
+import {
+  readCodeModeLimits,
+  type CodeModeSettings,
+} from '../code-mode/code-mode-settings.js';
+import { republishOnCodeModeChange } from '../code-mode/code-mode-publication.js';
 
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
@@ -271,6 +276,8 @@ export class SessionClientOwner {
       readonly authority: CredentialAuthority;
       readonly borrowedBus: MessageBus | undefined;
       readonly requestInteractiveAuth: InteractiveAuthPromptOperation;
+      /** Code mode enablement and surface, read live (issue #4084). */
+      readonly readCodeMode: () => CodeModeSettings;
     },
   ) {
     const { config, settingsOwner } = environment;
@@ -299,6 +306,7 @@ export class SessionClientOwner {
       composition.readTaskSchemaPolicy,
       () => settingsOwner.readToolExecutionPolicy(),
       factories.manager.fetchNetwork,
+      { readCodeMode: composition.readCodeMode },
     );
     this.clients = new SessionClientAcquisitionOwner(
       { ...environment, readMcpInstructions: () => this.readMcpInstructions() },
@@ -310,7 +318,12 @@ export class SessionClientOwner {
         readPolicy: () => this.sessionPolicy,
       },
     );
+    this.releaseCodeModePublication = republishOnCodeModeChange(
+      (changed) => settingsOwner.subscribeProviderSettings(changed),
+      () => this.clients.publishTools(),
+    );
   }
+  private readonly releaseCodeModePublication: () => void;
   private readMcpInstructions: () => string | undefined;
 
   /**
@@ -327,6 +340,8 @@ export class SessionClientOwner {
       readonly authority: CredentialAuthority;
       readonly borrowedBus: MessageBus | undefined;
       readonly requestInteractiveAuth: InteractiveAuthPromptOperation;
+      /** Code mode enablement and surface, read live (issue #4084). */
+      readonly readCodeMode: () => CodeModeSettings;
     },
   ): Promise<SessionClientOwner> {
     const owner = new SessionClientOwner(environment, factories, composition);
@@ -431,6 +446,10 @@ export class SessionClientOwner {
             createChildSettings: () =>
               this.environment.settingsOwner.createChildStore(),
             foregroundConfig: this.environment.config,
+            readCallerCodeModeLimits: () =>
+              readCodeModeLimits((key) =>
+                this.environment.settingsOwner.readNamedParameter(key),
+              ),
           },
           {
             runtimeLoader: loadAgentRuntime,
@@ -533,8 +552,12 @@ export class SessionClientOwner {
     const bindingClosing = Promise.resolve().then(() =>
       this.releaseMcpBinding?.(),
     );
+    const publicationClosing = Promise.resolve().then(() =>
+      this.releaseCodeModePublication(),
+    );
     this.closing = Promise.allSettled([
       bindingClosing,
+      publicationClosing,
       auxiliaryClosing,
       executionClosing,
     ]).then(async (binding) => {

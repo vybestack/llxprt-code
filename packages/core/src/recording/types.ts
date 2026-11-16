@@ -26,11 +26,13 @@
 import { type IContent } from '../services/history/IContent.js';
 import type { CompressionAuditProvenance } from '../core/compression/types.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
+import type { ToolScriptEventPayload } from './toolScriptEventPayload.js';
 
 export const SESSION_TITLE_MAX_LENGTH = 120;
 
 export type { RefusalPayload } from './refusalPayload.js';
 export type { RefusalRewritePayload } from './refusalRewritePayload.js';
+export type { ToolScriptEventPayload } from './toolScriptEventPayload.js';
 
 // ---------------------------------------------------------------------------
 // Event type discriminator
@@ -60,7 +62,8 @@ export type SessionEventType =
   | 'session_named'
   | 'semantic_media_purge'
   | 'refusal'
-  | 'refusal_rewrite';
+  | 'refusal_rewrite'
+  | 'tool_script_event';
 
 // ---------------------------------------------------------------------------
 // Event envelope
@@ -352,6 +355,11 @@ export type ReplayResult =
       eventCount: number;
       warnings: string[];
       sessionEvents: SessionEventPayload[];
+      /**
+       * Code mode script records (issue #4084), in file order. Display and
+       * audit only; never part of `history`.
+       */
+      toolScriptEvents: ToolScriptEventPayload[];
       /** Checkpoints folded from lifecycle metadata events. */
       checkpoints?: readonly CheckpointMetadataView[];
       /** Mutable session name from the most recent `session_named` event. */

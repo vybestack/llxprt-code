@@ -84,6 +84,11 @@ export interface IndividualToolCallDisplay {
   outputFile?: string;
   ptyId?: number;
   retention?: ToolResultRetention;
+  /**
+   * Set for a call a code mode script made (#4084): the script's purpose
+   * and the `execute_tool_script` call that ran it, for the row's label.
+   */
+  scriptOrigin?: { readonly parentCallId: string; readonly purpose: string };
 }
 
 export interface CompressionProps {

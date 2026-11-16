@@ -16,6 +16,12 @@ export interface ShellExecutionResult {
   rawOutput: Buffer;
   /** The combined, decoded output as a string. */
   output: string;
+  /**
+   * Separately decoded stdout and stderr, when the execution method keeps the
+   * streams apart (child_process). A PTY merges them at the terminal, so PTY
+   * results omit this.
+   */
+  streams?: { readonly stdout: string; readonly stderr: string };
   /** Acquisition-time truncation details when output exceeded retention. */
   outputTruncation?: TruncationMetadata;
   /** The process exit code, or null if terminated by a signal. */

@@ -1,0 +1,100 @@
+
+     ░██        ░██        ░██    ░██░█████████ ░█████████░██████████
+░██  ░██        ░██         ░██  ░██ ░██     ░██░██     ░██   ░██
+ ░██ ░██        ░██          ░██░██  ░██     ░██░██     ░██   ░██
+  ░██░██        ░██           ░███   ░█████████ ░█████████    ░██
+ ░██ ░██        ░██          ░██░██  ░██        ░██   ░██     ░██
+░██  ░██        ░██         ░██  ░██ ░██        ░██    ░██    ░██
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+
+Tips for getting started:
+1. Ask questions, edit files, or run commands.
+2. Be specific for the best results.
+3. /help for more information.
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  > Call execute_tool_script exactly once and no other tool. Use purpose "issue4084 nested approval probe", tools ["glob",               │
+│    "run_shell_command"], and this exact source: const readme = await tools["glob"]({ pattern: "README.md" }); const shell = await       │
+│    tools["run_shell_command"]({ command: "printf issue4084-nested-approval-ok" }); return { readmeFound: readme.ok, stdout: shell.ok ?  │
+│    shell.value.stdout.trim() : null };  After the tool returns, reply with the stdout value only.                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Responding with: lunahigh:gpt-6-luna
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ Execute tool script issue4084 nested approval probe [tools: glob, run_shell_command]                                                   │
+ ││                                                                                                                                        │
+ ││    Purpose: issue4084 nested approval probe                                                                                            │
+ ││    Status: completed in 281 ms                                                                                                         │
+ ││    Tool calls: 2 (2 ok)                                                                                                                │
+ ││      ✓ glob {"pattern":"README.md"}                                                                                                    │
+ ││      ✓ run_shell_command {"command":"printf issue4084-nested-approval-ok"}                                                             │
+ ││    Script (1 line):                                                                                                                    │
+ ││      const readme = await tools["glob"]({ pattern: "README.md" }); const shell = await tools["run_shell_command"]({ command: "printf   │
+ ││    issue4084-nested-approval-ok" })                                                                                                    │
+ ││    Result: {"readmeFound":true,"stdout":"issue4084-nested-approval-ok"}                                                                │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ issue4084-nested-approval-ok
+
+╭────────────╮
+│  > /stats  │
+╰────────────╯
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                         │
+│  Session Stats                                                                                                                          │
+│                                                                                                                                         │
+│  Session API                                                                                                                            │
+│  Total Requests:             2                                                                                                          │
+│  Total Errors:               0                                                                                                          │
+│  Avg Latency:                5.6s                                                                                                       │
+│                                                                                                                                         │
+│  Interaction Summary                                                                                                                    │
+│  Session ID:                 session-1794641398372-jj1ei6l80                                                                            │
+│  Tool Calls:                 3 ( OK 3 ERR 0 )                                                                                           │
+│    » Total Duration:         561ms                                                                                                      │
+│  Success Rate:               100.0%                                                                                                     │
+│  User Agreement:             100.0% (3 reviewed)                                                                                        │
+│                                                                                                                                         │
+│  Performance                                                                                                                            │
+│  Wall Time:                  30.6s                                                                                                      │
+│  Agent Active:               11.5s (interval union)                                                                                     │
+│  Accumulated Work:           11.7s (API+Tool)                                                                                           │
+│    » API Time:               11.2s (95.2%)                                                                                              │
+│    » Tool Time:              561ms (4.8%)                                                                                               │
+│    » Throughput (TPM):       251.00k TPM (session weighted)                                                                             │
+│    » Last Request TPM:       209.49k TPM                                                                                                │
+│    » TTFT (last):            6628ms (avg: 5521ms)                                                                                       │
+│    » Output Gen Rate:        10639.80 tok/s (session weighted) (last: 10639.80)                                                         │
+│    » Input Rate (eff):       4215.00 tok/s (ΣP/ΣTTFT) (last: 3527.97)                                                                   │
+│    » Uncached Input:         2128.24 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │
+│  ────────────────────────────────────────────────────────────────────────────                                                           │
+│  gpt-6-luna                     2         23,498        23,040            168                                                           │
+│    Latency: 5.6s avg / 11.2s total                                                                                                      │
+│                                                                                                                                         │
+│  Savings Highlight: 23,040 (49.5%) of input tokens were served from the cache, reducing costs.                                          │
+│                                                                                                                                         │
+│  Quota Information                                                                                                                      │
+│  ## Claude Code Quota Information                                                                                                       │
+│                                                                                                                                         │
+│    7-day window: 92.0% used (resets in 122h 29m)                                                                                        │
+│  ## Codex Quota Information                                                                                                             │
+│                                                                                                                                         │
+│    5-hour limit: 20% used (resets in 160h 14m)                                                                                          │
+│    Credits: None                                                                                                                        │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084*Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 23,382/262,144 tokens | TPM: 250.97k | Wait: 0ms | 04:30:29
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 46,706

@@ -65,6 +65,19 @@ toolName = "task"
 decision = "allow"
 priority = 50
 
+# Code mode (issue #4084): the script and discovery tools have no effect of
+# their own. Every tool call a script makes is authorized, and where policy
+# asks, approved, on its own.
+[[rule]]
+toolName = "execute_tool_script"
+decision = "allow"
+priority = 50
+
+[[rule]]
+toolName = "discover_tool_api"
+decision = "allow"
+priority = 50
+
 [[rule]]
 toolName = "todo_read"
 decision = "allow"

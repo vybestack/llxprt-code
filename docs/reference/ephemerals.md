@@ -113,6 +113,20 @@ A rewrite is one commit: the history changes together with a `refusal_rewrite` r
 
 The review call is a single tool-less request that never runs refusal recovery itself and is logged under its own purpose (`refusal-review`) in the token-usage log. If the reviewer is itself refused, errors or times out, the request stops and nothing is rewritten. When the reviewer was refused, set `refusal.review-profile` to a different model.
 
+## Code Mode
+
+Code mode adds two tools, `execute_tool_script` and `discover_tool_api`. A script is a short JavaScript program that runs in a QuickJS sandbox in its own process. It calls read and search tools and foreground shell commands, and only its final JSON value enters the conversation. Every call a script makes goes through the same policy, hooks and approval prompts as a direct call. Scripts cannot write files, start subagents or reach the network.
+
+Code mode is off for every model unless a profile or `/set` turns it on. Changing `code-mode` or `code-mode-tool-surface` applies to the next model request. The limits are read when a script starts. A subagent uses its own profile's settings and can lower its caller's limits but not raise them.
+
+| Setting                      | Type   | Default     | Profile | Description                                                                                                                                                                                                                                         |
+| ---------------------------- | ------ | ----------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `code-mode`                  | enum   | `off`       | yes     | `on` registers and advertises the two code mode tools.                                                                                                                                                                                              |
+| `code-mode-tool-surface`     | enum   | `alongside` | yes     | `alongside` advertises every tool plus the code mode tools. `compact` advertises only the code mode tools and direct control tools (todos, `task`, file edits and writes, memory, skills). Scripts can still call the hidden read and search tools. |
+| `code-mode-max-calls`        | number | `64`        | yes     | Most tool calls one script may make, 1 to 10000. More calls end the run with `CALL_LIMIT`.                                                                                                                                                          |
+| `code-mode-wall-timeout-ms`  | number | `300000`    | yes     | Wall-clock deadline of one script in milliseconds, 1 to 3600000, never past a subagent's own timeout. A late run ends with `TIMEOUT`.                                                                                                               |
+| `code-mode-max-result-bytes` | number | `16384`     | yes     | Largest JSON value a script may return, 1 to 1048576 bytes. A larger value ends with `RESULT_TOO_LARGE` and is never cut short.                                                                                                                     |
+
 ## Tool Output Limits
 
 Prevent tools from flooding the context. Applied to all tools via the batch scheduler. See [Settings and Profiles](../settings-and-profiles.md#tool-output-limits) for how these interact.

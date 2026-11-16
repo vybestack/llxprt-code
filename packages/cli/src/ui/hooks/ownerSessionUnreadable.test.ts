@@ -132,6 +132,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
       BROKEN_NAME,
       'allowed',
       next.session.listBrowserTargetsDetailed.bind(next.session),
+      next.session.getToolScriptRuns.bind(next.session),
     ).then(
       () => null,
       (error: unknown) => error,

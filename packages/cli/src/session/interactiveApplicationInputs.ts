@@ -30,7 +30,7 @@ import type { SlashCommandProcessorPorts } from '../ui/hooks/useSlashCommandProc
 import type { LayoutRuntime } from '../ui/layouts/DefaultAppLayoutHelpers.js';
 import type { AppDialogsRuntime } from '../ui/containers/AppContainer/hooks/useAppDialogs.js';
 import type { EmojiFilterSettingsSource } from '../ui/utils/iContentToHistoryItems.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { Agent, ToolScriptRunView } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { OperationLifecycleRegistry } from '../ui/hooks/agentStream/operationLifecycle.js';
 import type { MemoryTelemetryController } from '../ui/hooks/memoryTrend/memoryTelemetry.js';
@@ -109,6 +109,7 @@ export interface InteractiveApplicationInputs
     | 'getRecording'
     | 'resume'
     | 'listBrowserTargetsDetailed'
+    | 'getToolScriptRuns'
     | 'importSession'
     | 'getHistory'
     | 'replaceHistory'
@@ -213,6 +214,7 @@ export interface InteractiveApplicationInputs
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
+  resumedToolScriptRuns?: readonly ToolScriptRunView[];
   version: string;
   terminalBackgroundColor?: string;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */

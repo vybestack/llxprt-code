@@ -1,0 +1,100 @@
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ Execute tool script Inspect glob results to identify the TypeScript files in the requested directory. [tools: glob]                    │
+ ││                                                                                                                                        │
+ ││    Purpose: Inspect glob results to identify the TypeScript files in the requested directory.                                          │
+ ││    Status: completed in 1180 ms                                                                                                        │
+ ││    Tool calls: 1 (1 ok)                                                                                                                │
+ ││      ✓ glob {"pattern":"packages/agents/src/core/**/*.ts","dir_path":"/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code"}  │
+ ││    Script (1 line):                                                                                                                    │
+ ││      const r = await                                                                                                                   │
+ ││    tools["glob"]({pattern:"packages/agents/src/core/**/*.ts",dir_path:"/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code"});
+ ││    return r;                                                                                                                           │
+ ││    Result: {"ok":true,"value":{"text":"Found 443 file(s) matching \"packages/agents/src/core/**/*.ts\" within                          │
+ ││    /Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code, sorted by modification time (newest                                  │
+ ││    first):\n/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code/packages/agents/src/core/turn.ts\n/Volumes/XS1000/acoliver/pro
+ ││    cts/llxprt/branch-5/llxprt-code/packages/agents/src/core/__tests__/child-launch-fixture.ts\n/Volumes/XS1000/acoliver/projects/llxprt/
+ ││    anch-5/llxprt-code/packages/agents/src/core/subagent.ts\n/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code/packages/age…│
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Preparing full file contents
+
+ Batching full file reads
+
+ Preparing full file contents: **Batching full file reads**
+
+
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ x                                                                                                                                      │
+ ││ Execute tool script Read every TypeScript file recursively under packages/agents/src/core and return a path-to-full-content object. [t…█
+ ││                                                                                                                                        █
+ ││    {"ok":false,"error":{"code":"RESULT_TOO_LARGE","message":"The return value exceeds 16384 bytes when                                 █
+ ││    serialized."},"callCount":3,"partial":true,"completedCalls":[{"tool":"glob","status":"ok"},{"tool":"read_many_files","status":"ok"},█
+ ││    ool":"read_many_files","status":"ok"}],"logs":[]}                                                                                   █
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Assessing 443-file response                                                                                                               █
+                                                                                                                                           █
+ There are 443 .ts files under packages/agents/src/core. execute_tool_script hit its 16,384-byte serialized-result limit before it could   █
+ return them all in one object. I can return the contents in smaller chunks instead.                                                       █
+                                                                                                                                           █
+╭────────────╮                                                                                                                             █
+│  > /stats  │                                                                                                                             █
+╰────────────╯                                                                                                                             █
+                                                                                                                                           █
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮█
+│                                                                                                                                         │█
+│  Session Stats                                                                                                                          │█
+│                                                                                                                                         │█
+│  Session API                                                                                                                            │█
+│  Total Requests:             4                                                                                                          │█
+│  Total Errors:               0                                                                                                          │█
+│  Avg Latency:                8.8s                                                                                                       │█
+│                                                                                                                                         │█
+│  Interaction Summary                                                                                                                    │█
+│  Session ID:                 session-1794641332740-r3l58zccp                                                                            │█
+│  Tool Calls:                 9 ( OK 7 ERR 2 )                                                                                           │█
+│    » Total Duration:         3.8s                                                                                                       │█
+│  Success Rate:               77.8%                                                                                                      │█
+│  User Agreement:             100.0% (8 reviewed)                                                                                        │█
+│                                                                                                                                         │█
+│  Performance                                                                                                                            │█
+│  Wall Time:                  59.2s                                                                                                      │█
+│  Agent Active:               37.8s (interval union)                                                                                     │█
+│  Accumulated Work:           39.2s (API+Tool)                                                                                           │█
+│    » API Time:               35.4s (90.3%)                                                                                              │█
+│    » Tool Time:              3.8s (9.7%)                                                                                                │█
+│    » Throughput (TPM):       168.48k TPM (session weighted)                                                                             │█
+│    » Last Request TPM:       149.24k TPM                                                                                                │█
+│    » TTFT (last):            10379ms (avg: 6655ms)                                                                                      │█
+│    » Output Gen Rate:        123.62 tok/s (session weighted) (last: 11643.16)                                                           │█
+│    » Input Rate (eff):       3686.71 tok/s (ΣP/ΣTTFT) (last: 2532.95)                                                                   │█
+│    » Uncached Input:         1008.50 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │█
+│                                                                                                                                         │█
+│                                                                                                                                         │█
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │█
+│  ────────────────────────────────────────────────────────────────────────────                                                           │█
+│  gpt-6-luna                     4         26,847        71,296          1,237                                                           │█
+│    Latency: 8.8s avg / 35.4s total                                                                                                      │█
+│                                                                                                                                         │█
+│  Savings Highlight: 71,296 (72.6%) of input tokens were served from the cache, reducing costs.                                          │█
+│                                                                                                                                         │█
+│  Quota Information                                                                                                                      │█
+│  ## Claude Code Quota Information                                                                                                       │█
+│                                                                                                                                         │█
+│    7-day window: 92.0% used (resets in 122h 30m)                                                                                        │█
+│  ## Codex Quota Information                                                                                                             │█
+│                                                                                                                                         │█
+│    5-hour limit: 20% used (resets in 160h 14m)                                                                                          │█
+│    Credits: None                                                                                                                        │█
+│                                                                                                                                         │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084)Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 26,290/262,144 tokens | TPM: 168.47k | Wait: 0ms | 04:29:53
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 99,380

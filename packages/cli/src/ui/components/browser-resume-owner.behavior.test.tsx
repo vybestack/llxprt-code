@@ -42,6 +42,7 @@ describe('session browser owned resume', () => {
           item.kind === 'session' ? item.session.sessionId : item.checkpointId,
           'allowed',
           owner.session.listBrowserTargetsDetailed.bind(owner.session),
+          owner.session.getToolScriptRuns.bind(owner.session),
         ),
       ui.commands.loadHistory,
       ui.commands.addItem,

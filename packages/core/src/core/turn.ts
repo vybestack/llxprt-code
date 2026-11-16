@@ -134,6 +134,19 @@ export interface ToolCallRequestInfo {
   agentId?: string;
   checkpoint?: string;
   hookRestrictedAllowedTools?: string[];
+  /**
+   * Set on calls a code mode script made (issue #4084): the
+   * `execute_tool_script` call that ran the script, the run's ID and the
+   * script's stated purpose (for labelling the nested call in displays).
+   */
+  script?: ToolCallScriptOrigin;
+}
+
+/** Serializable link from a nested script call to the script that made it. */
+export interface ToolCallScriptOrigin {
+  readonly parentCallId: string;
+  readonly runId: string;
+  readonly purpose: string;
 }
 
 export interface ToolCallResponseInfo {

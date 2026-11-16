@@ -66,6 +66,7 @@ describe('interactive owner session replay', () => {
       'first-owner',
       'allowed',
       next.session.listBrowserTargetsDetailed.bind(next.session),
+      next.session.getToolScriptRuns.bind(next.session),
     );
     expect(
       replay.history.some((item) =>
@@ -109,6 +110,7 @@ describe('interactive owner session replay', () => {
       checkpoint.checkpointId,
       'allowed',
       agent.session.listBrowserTargetsDetailed.bind(agent.session),
+      agent.session.getToolScriptRuns.bind(agent.session),
     );
     expect(
       replay.uiHistory.some(
@@ -141,6 +143,7 @@ describe('interactive owner session replay', () => {
         'absent-owner',
         'allowed',
         agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        agent.session.getToolScriptRuns.bind(agent.session),
       ),
     ).rejects.toThrow('Failed to resume session');
     await agent.session.recordRecordingEvent({

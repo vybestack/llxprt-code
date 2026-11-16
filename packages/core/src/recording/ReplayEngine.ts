@@ -36,6 +36,7 @@ import {
 export { foldCheckpointMetadata } from './replayCheckpointMetadata.js';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
 import { RefusalPayloadSchema } from './refusalPayload.js';
+import { collectToolScriptEvent } from './toolScriptEventPayload.js';
 import { RefusalRewritePayloadSchema } from './refusalRewritePayload.js';
 import { formatReplayDiagnostic } from './replayErrorFormatting.js';
 import {
@@ -57,6 +58,7 @@ import {
   type SessionForkedPayload,
   type SemanticMediaPurgePayload,
   type SessionRecordLine,
+  type ToolScriptEventPayload,
 } from './types.js';
 import {
   invalidateResponsesStatefulChain,
@@ -80,6 +82,7 @@ interface ReplayAccumulators {
   eventCount: number;
   warnings: string[];
   sessionEvents: SessionEventPayload[];
+  toolScriptEvents: ToolScriptEventPayload[];
   lineNumber: number;
   totalLines: number;
   malformedCount: number;
@@ -100,6 +103,7 @@ function createAccumulators(): ReplayAccumulators {
     eventCount: 0,
     warnings: [],
     sessionEvents: [],
+    toolScriptEvents: [],
     lineNumber: 0,
     totalLines: 0,
     malformedCount: 0,
@@ -669,6 +673,9 @@ function dispatchEvent(
     case 'refusal_rewrite':
       handleRefusalRewrite(payload, acc, lineNumber);
       break;
+    case 'tool_script_event':
+      collectToolScriptEvent(payload, acc, lineNumber);
+      break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);
       break;
@@ -770,6 +777,7 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
     eventCount: acc.eventCount,
     warnings: acc.warnings,
     sessionEvents: acc.sessionEvents,
+    toolScriptEvents: acc.toolScriptEvents,
     checkpoints: folded,
     sessionName,
     ancestry,

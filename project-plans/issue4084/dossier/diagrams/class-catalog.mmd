@@ -1,0 +1,62 @@
+classDiagram
+ direction LR
+ class ToolRegistry {
+  -tools Map
+  +registerTool(tool)
+  +getTool(name, context)
+  +getEnabledTools()
+  +getFunctionDeclarations()
+  +getFunctionDeclarationsFiltered(names)
+ }
+ class ToolSelection {
+  <<interface>>
+  +getTool(name, context)
+  +getEnabledTools()
+  +getFunctionDeclarations()
+ }
+ class SessionToolCatalogOwner {
+  -builtins ToolRegistry
+  -workspace ToolSelection
+  +selection ToolSelection
+  +initialize(workspace, session)
+  +acquireChildTools() ToolSelection
+  +closeAdmission() Promise
+  +dispose() Promise
+ }
+ class ToolDispatchAdmission {
+  -closedError Error
+  -closing Promise
+  +assertOpen()
+  +bind(tool)
+  +close() Promise
+ }
+ class DeclarativeTool {
+  +schema FunctionDeclaration
+  +build(params) ToolInvocation
+ }
+ class DiscoveredMCPTool {
+  -mcpTool CallableTool
+  +build(params) ToolInvocation
+ }
+ class CallableTool {
+  <<interface>>
+  +tool()
+  +callTool(functionCalls, signal) Promise
+ }
+ class McpCallableTool {
+  +tool()
+  +callTool(functionCalls, signal) Promise
+ }
+ class Client {
+  +callTool(request)
+ }
+ ToolRegistry *-- DeclarativeTool : registry entries
+ ToolRegistry ..|> ToolSelection : structural
+ SessionToolCatalogOwner *-- ToolRegistry : builtins
+ SessionToolCatalogOwner *-- ToolDispatchAdmission
+ SessionToolCatalogOwner ..> ToolSelection : borrows workspace selection
+ ToolDispatchAdmission ..> DeclarativeTool : wraps admitted calls
+ DiscoveredMCPTool o-- CallableTool : retains reference
+ CallableTool <|.. McpCallableTool
+ McpCallableTool ..> Client : borrows SDK client
+

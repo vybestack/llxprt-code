@@ -36,6 +36,15 @@ export class ToolCallEvent {
   agent_id: string;
   /** Unique tool call ID for deduplication */
   call_id?: string;
+  /**
+   * `script` for a call a code mode script made (issue #4084); absent for a
+   * call the model asked for directly.
+   */
+  origin?: 'script';
+  /** The `execute_tool_script` call whose script made this call. */
+  parent_call_id?: string;
+  /** The script run that made this call. */
+  script_run_id?: string;
   /** Monotonic start timestamp (ms) for interval unioning */
   start_ms?: number;
   /** Monotonic end timestamp (ms) for interval unioning */
@@ -61,6 +70,11 @@ export class ToolCallEvent {
     this.tool_type = isMcpToolTelemetryShape(call.tool) ? 'mcp' : 'native';
     this.agent_id = call.request.agentId ?? DEFAULT_AGENT_ID;
     this.call_id = call.request.callId;
+    if (call.request.script !== undefined) {
+      this.origin = 'script';
+      this.parent_call_id = call.request.script.parentCallId;
+      this.script_run_id = call.request.script.runId;
+    }
 
     if (call.startMs !== undefined && call.endMs !== undefined) {
       this.start_ms = call.startMs;
@@ -171,6 +185,61 @@ export class ToolOutputTruncatedEvent {
     this.truncated_content_length = params.truncatedContentLength;
     this.threshold = params.threshold;
     this.lines = params.lines;
+  }
+}
+
+/**
+ * Lifecycle metrics of one code mode script run (issue #4084). The script's
+ * purpose is model-written text and is exported only when prompt logging is
+ * on; the source is the parent call's arguments, which `logToolCall` already
+ * gates the same way.
+ */
+export class ToolScriptRunEvent {
+  'event.name': 'tool_script_run';
+  prompt_id: string;
+  agent_id: string;
+  parent_call_id: string;
+  script_run_id: string;
+  duration_ms: number;
+  nested_call_count: number;
+  /** Bytes of tool results handed to the guest. */
+  input_bytes: number;
+  /** Bytes of the final JSON value the script returned. */
+  final_bytes: number;
+  /** True when any result the guest received was partial. */
+  partial: boolean;
+  success: boolean;
+  /** `completed`, or the named failure code that ended the run. */
+  termination_reason: string;
+  purpose: string;
+
+  constructor(params: {
+    promptId: string;
+    agentId: string;
+    parentCallId: string;
+    scriptRunId: string;
+    durationMs: number;
+    nestedCallCount: number;
+    inputBytes: number;
+    finalBytes: number;
+    partial: boolean;
+    success: boolean;
+    terminationReason: string;
+    purpose: string;
+  }) {
+    this['event.name'] = 'tool_script_run';
+    this.prompt_id = params.promptId;
+    this.agent_id = params.agentId;
+    this.parent_call_id = params.parentCallId;
+    this.script_run_id = params.scriptRunId;
+    this.duration_ms = params.durationMs;
+    this.nested_call_count = params.nestedCallCount;
+    this.input_bytes = params.inputBytes;
+    this.final_bytes = params.finalBytes;
+    this.partial = params.partial;
+    this.success = params.success;
+    this.termination_reason = params.terminationReason;
+    this.purpose = params.purpose;
   }
 }
 

@@ -26,6 +26,7 @@ import {
 } from './SessionRecordingService.js';
 import type { CompressionAuditProvenance } from '../core/compression/types.js';
 import type { RefusalPayload } from './refusalPayload.js';
+import type { ToolScriptEventPayload } from './toolScriptEventPayload.js';
 import type { RefusalRewritePayload } from './refusalRewritePayload.js';
 import type {
   PreparedPersistenceSave,
@@ -576,6 +577,16 @@ export class RecordingIntegration {
       return;
     }
     this.recording.recordRefusal(payload);
+  }
+
+  /** Display and audit record of a code mode script run (issue #4084). */
+  recordToolScriptEvent(payload: ToolScriptEventPayload): void {
+    if (this.disposed) {
+      return;
+    }
+    // Operational metadata: it does not materialize the file and never
+    // changes replayed history.
+    this.recording.enqueue('tool_script_event', payload);
   }
 
   /**

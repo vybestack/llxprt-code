@@ -513,6 +513,11 @@ class ForegroundSessionHost {
         skillOperations: this.#skillOperations,
         restartExtension: this.#restartExtension,
         resumedHistory: history ?? undefined,
+        // Code mode script cards of the resumed session (#4084).
+        resumedToolScriptRuns:
+          history === null
+            ? undefined
+            : await agent.session.getToolScriptRuns(),
         suppressStartupWelcome: hasExplicitProviderProfileSelector(
           this.inputs.argv,
         ),

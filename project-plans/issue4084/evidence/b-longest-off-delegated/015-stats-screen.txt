@@ -1,0 +1,100 @@
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓  Task Run subagent 'coder' to accomplish: Read-only task: identify the 10 longest functions in `packages/agents/src/core` by line co…
+ ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││    |---:|---|---|---:|                                                                                                                 │
+ ││    | 1 | `createPurgeChat` | `packages/agents/src/core/chatSession.media-history.test.ts` | 169 (339–507) |                            │
+ ││    | 2 | `buildOrchestrator` | `packages/agents/src/core/MessageStreamOrchestrator.todoPause.test.ts` | 161 (122–282) |                │
+ ││    | 3 | `buildOrchestrator` | `packages/agents/src/core/MessageStreamOrchestrator.contextOverflow.test.ts` | 159 (95–253) |           │
+ ││    | 4 | `createFixture` | `packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts` | 154 (177–330) |                           │
+ ││    | 5 | `send` | `packages/agents/src/core/chat-session-empty-tools.test.ts` | 145 (95–239) |                                         │
+ ││    | 6 | `buildOrchestrator` | `packages/agents/src/core/MessageStreamOrchestrator.modelinfo.test.ts` | 145 (119–263) |                │
+ ││    | 7 | `buildSubagentFixture` | `packages/agents/src/core/subagentRuntimeSetup.assembler.test.ts` | 144 (105–248) |                  │
+ ││    | 8 | `buildFixture` | `packages/agents/src/core/chatSession.systemPromptAssembly.test.ts` | 139 (75–213) |                         │
+ ││    | 9 | `runDirectNonInteractive` | `packages/agents/src/core/subagentNonInteractive.issue3535.test.ts` | 126 (260–385) |             │
+ ││    | 10 | `buildHarness` | `packages/agents/src/core/messageStreamOrchestrator.retryDiscard.test.ts` | 125 (118–242) |                 │
+ ││                                                                                                                                        │
+ ││    Assumptions: Parsed TypeScript/TSX with the TypeScript AST; included functions, methods/accessors/constructors, and clearly         │
+ ││    function-valued variable/property declarations. Tests and fixtures are included because they are inside the requested directory.    │
+ ││    Counted from the declaration/signature's first line through the closing brace line, inclusive; excluded anonymous inline callbacks an
+ ││    non-function blocks. Read back and verified each listed source range and its boundary lines. No files were modified.                │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ The 10 longest functions in packages/agents/src/core, including tests and fixtures:
+
+
+  ┌──────┬─────────────────────────┬────────────────────────────────────────────────────────────────────────────┬───────┐
+  │ Rank │ Function                │ File                                                                       │ Lines │
+  ├──────┼─────────────────────────┼────────────────────────────────────────────────────────────────────────────┼───────┤
+  │ 1    │ createPurgeChat         │ packages/agents/src/core/chatSession.media-history.test.ts                 │ 169   │
+  │ 2    │ buildOrchestrator       │ packages/agents/src/core/MessageStreamOrchestrator.todoPause.test.ts       │ 161   │
+  │ 3    │ buildOrchestrator       │ packages/agents/src/core/MessageStreamOrchestrator.contextOverflow.test.ts │ 159   │
+  │ 4    │ createFixture           │ packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts              │ 154   │
+  │ 5    │ send                    │ packages/agents/src/core/chat-session-empty-tools.test.ts                  │ 145   │
+  │ 6    │ buildOrchestrator       │ packages/agents/src/core/MessageStreamOrchestrator.modelinfo.test.ts       │ 145   │
+  │ 7    │ buildSubagentFixture    │ packages/agents/src/core/subagentRuntimeSetup.assembler.test.ts            │ 144   │
+  │ 8    │ buildFixture            │ packages/agents/src/core/chatSession.systemPromptAssembly.test.ts          │ 139   │
+  │ 9    │ runDirectNonInteractive │ packages/agents/src/core/subagentNonInteractive.issue3535.test.ts          │ 126   │
+  │ 10   │ buildHarness            │ packages/agents/src/core/messageStreamOrchestrator.retryDiscard.test.ts    │ 125   │
+  └──────┴─────────────────────────┴────────────────────────────────────────────────────────────────────────────┴───────┘
+
+
+  Counts include the declaration/signature and closing-brace lines.
+
+╭────────────╮
+│  > /stats  │
+╰────────────╯
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                         │
+│  Session Stats                                                                                                                          │
+│                                                                                                                                         │
+│  Session API                                                                                                                            │
+│  Total Requests:             11                                                                                                         │
+│  Total Errors:               0                                                                                                          │
+│  Avg Latency:                10.9s                                                                                                      │
+│                                                                                                                                         │
+│  Interaction Summary                                                                                                                    │
+│  Session ID:                 session-1794639776010-yjqtc0bh8                                                                            │
+│  Tool Calls:                 26 ( OK 26 ERR 0 )                                                                                         │
+│    » Total Duration:         1m 47s                                                                                                     │
+│  Success Rate:               100.0%                                                                                                     │
+│  User Agreement:             100.0% (26 reviewed)                                                                                       │
+│                                                                                                                                         │
+│  Performance                                                                                                                            │
+│  Wall Time:                  2m 20s                                                                                                     │
+│  Agent Active:               2m 3s (interval union)                                                                                     │
+│  Accumulated Work:           3m 47s (API+Tool)                                                                                          │
+│    » API Time:               2m (52.7%)                                                                                                 │
+│    » Tool Time:              1m 47s (47.3%)                                                                                             │
+│    » Throughput (TPM):       200.14k TPM (session weighted)                                                                             │
+│    » Last Request TPM:       219.75k TPM                                                                                                │
+│    » TTFT (last):            590ms (avg: 5913ms)                                                                                        │
+│    » Output Gen Rate:        90.79 tok/s (session weighted) (last: 56.63)                                                               │
+│    » Input Rate (eff):       6070.52 tok/s (ΣP/ΣTTFT) (last: 42464.48)                                                                  │
+│    » Uncached Input:         1431.77 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │
+│  ────────────────────────────────────────────────────────────────────────────                                                           │
+│  gpt-6-luna                    11         93,120       301,696          5,778                                                           │
+│    Latency: 10.9s avg / 2m total                                                                                                        │
+│                                                                                                                                         │
+│  Savings Highlight: 301,696 (76.4%) of input tokens were served from the cache, reducing costs.                                         │
+│                                                                                                                                         │
+│  Quota Information                                                                                                                      │
+│  ## Claude Code Quota Information                                                                                                       │█
+│                                                                                                                                         │█
+│    7-day window: 90.0% used (resets in 122h 54m)                                                                                        │█
+│  ## Codex Quota Information                                                                                                             │█
+│                                                                                                                                         │█
+│    5-hour limit: 19% used (resets in 160h 39m)                                                                                          │█
+│    Credits: None                                                                                                                        │█
+│                                                                                                                                         │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084*Heap: 0.3GB External: 0.3GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 25,061/262,144 tokens | TPM: 228.50k | Wait: 0ms | 04:05:18
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 71,850

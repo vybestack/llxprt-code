@@ -76,6 +76,7 @@ export class ToolDispatchAdmission {
           [
             'withBackgroundJobs',
             'withChildDisplay',
+            'withScriptDisplay',
             'withAsyncTaskService',
             'withSessionApproval',
           ].includes(String(key)) &&
@@ -105,7 +106,14 @@ export class ToolDispatchAdmission {
           return async (...args: Parameters<AnyToolInvocation['execute']>) => {
             assertAuthorized();
             return this.accept(args[0], assertAuthorized, (signal) =>
-              target.execute(signal, args[1], args[2], args[3], args[4]),
+              target.execute(
+                signal,
+                args[1],
+                args[2],
+                args[3],
+                args[4],
+                args[5],
+              ),
             );
           };
         if (key === 'shouldConfirmExecute')

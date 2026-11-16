@@ -244,6 +244,10 @@ function buildSessionScopedControls(
 ): SessionScopedControls {
   const tools = buildToolControl(owners, controls, providerControl);
   const session = buildSessionControl(owners, providerControl, tools);
+  // Code mode script records (issue #4084) reach the session recording.
+  controls.childDisplay?.subscribe({
+    onToolScriptEvent: (event) => session.recordToolScriptEvent(event),
+  });
   return {
     tools,
     session,

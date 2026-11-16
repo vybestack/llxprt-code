@@ -1,0 +1,100 @@
+
+     ░██        ░██        ░██    ░██░█████████ ░█████████░██████████
+░██  ░██        ░██         ░██  ░██ ░██     ░██░██     ░██   ░██
+ ░██ ░██        ░██          ░██░██  ░██     ░██░██     ░██   ░██
+  ░██░██        ░██           ░███   ░█████████ ░█████████    ░██
+ ░██ ░██        ░██          ░██░██  ░██        ░██   ░██     ░██
+░██  ░██        ░██         ░██  ░██ ░██        ░██    ░██    ░██
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+
+Tips for getting started:
+1. Ask questions, edit files, or run commands.
+2. Be specific for the best results.
+3. /help for more information.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084)        Heap: 0.2GB External: 0.1GB ArrayBuffers: 0.0GB RSS: 0.3GB | Context: 0/262,144 tokens | TPM: 0.00 | Wait: 0ms | 04:26:48
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                      lunahigh:gpt-6-luna | Tokens: 0

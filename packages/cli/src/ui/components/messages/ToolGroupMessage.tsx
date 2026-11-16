@@ -225,6 +225,13 @@ function renderToolCallItem(
 
   return (
     <Box key={tool.callId} flexDirection="column" minHeight={1}>
+      {tool.scriptOrigin !== undefined && (
+        <Box marginLeft={1}>
+          <Text color={theme.text.secondary}>
+            {`↳ from script: ${tool.scriptOrigin.purpose}`}
+          </Text>
+        </Box>
+      )}
       <ToolMessage
         key={tool.callId}
         {...tool}

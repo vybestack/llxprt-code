@@ -61,6 +61,7 @@ describe('interactive owner transcript', () => {
         checkpoint.checkpointId,
         'allowed',
         agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        agent.session.getToolScriptRuns.bind(agent.session),
       );
       const forkPath = agent.session.getRecording().path;
       if (!forkPath) throw new Error('Expected fork transcript');
@@ -91,6 +92,7 @@ describe('interactive owner transcript', () => {
         target.session.sessionId,
         'allowed',
         next.session.listBrowserTargetsDetailed.bind(next.session),
+        next.session.getToolScriptRuns.bind(next.session),
       );
       const resumed = render(
         <Transcript

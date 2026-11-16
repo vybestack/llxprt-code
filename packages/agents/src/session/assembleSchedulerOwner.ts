@@ -16,6 +16,11 @@ import type {
   AgentSchedulerHandle,
 } from '../api/config-types.js';
 import { SessionSchedulerOwner } from './sessionSchedulerOwner.js';
+import type {
+  NestedCodeModeInputs,
+  NestedExecutionComposition,
+} from '../scheduler/nested-execution.js';
+import { logToolScriptRun } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 
 export type SchedulerConstruction = (
   options: CoreToolSchedulerOptions,
@@ -54,24 +59,73 @@ export function bindSchedulerOwner(
   getToolGovernance: CoreToolSchedulerOptions['getToolGovernance'],
   readApprovalMode: CoreToolSchedulerOptions['readApprovalMode'],
   telemetry: CoreToolSchedulerOptions['telemetry'],
+  nested?: NestedCodeModeInputs,
 ): (callbacks: SchedulerCallbacks) => SessionSchedulerOwner {
   const label = config.getSessionId();
+  const base: Omit<CoreToolSchedulerOptions, keyof SchedulerCallbacks> = {
+    config,
+    telemetry,
+    readExecutionPolicy,
+    readApprovalMode,
+    getToolGovernance,
+    messageBus,
+    toolRegistry,
+    toolContextInteractiveMode: interactiveMode,
+  };
+  const nestedExecution =
+    nested === undefined
+      ? undefined
+      : composeNestedExecution(label, base, construct, nested);
   return (callbacks) =>
     assembleSchedulerOwner(
       label,
       {
-        config,
-        telemetry,
-        readExecutionPolicy,
-        readApprovalMode,
-        getToolGovernance,
-        messageBus,
-        toolRegistry,
-        toolContextInteractiveMode: interactiveMode,
+        ...base,
+        ...(nestedExecution === undefined ? {} : { nestedExecution }),
         ...callbacks,
       },
       construct,
     );
+}
+
+export type NestedSchedulerBase = Omit<
+  CoreToolSchedulerOptions,
+  keyof SchedulerCallbacks
+>;
+
+/**
+ * The code mode composition of a caller's scheduler (issue #4084). Nested
+ * runs get fresh schedulers from the same options but without a nested
+ * composition, so a script cannot start another script. Used by the session
+ * loop and by subagent schedulers.
+ */
+export function composeNestedExecution(
+  label: string,
+  base: NestedSchedulerBase,
+  construct: SchedulerConstruction,
+  inputs: NestedCodeModeInputs,
+): NestedExecutionComposition {
+  return {
+    messageBus: base.messageBus,
+    approval: inputs.approval,
+    interactiveMode: base.toolContextInteractiveMode === true,
+    selection: base.toolRegistry,
+    readGovernance: base.getToolGovernance,
+    createScheduler: (callbacks, { promptsAvailable }) =>
+      assembleSchedulerOwner(
+        `${label}#script`,
+        {
+          ...base,
+          ...callbacks,
+          confirmationPromptsAvailable: promptsAvailable,
+        },
+        construct,
+      ),
+    logScriptRun: (event) =>
+      logToolScriptRun(base.config, event, base.telemetry),
+    readCodeModeLimits: inputs.readCodeModeLimits,
+    readDeadline: inputs.readDeadline ?? (() => undefined),
+  };
 }
 
 /**
@@ -149,6 +203,18 @@ function createDefaultToolSchedulerFactory(options: {
         ? {
             toolContextInteractiveMode:
               schedulerOptions.toolContextInteractiveMode,
+          }
+        : {}),
+      ...(schedulerOptions.onToolResult !== undefined
+        ? { onToolResult: schedulerOptions.onToolResult }
+        : {}),
+      ...(schedulerOptions.nestedExecution !== undefined
+        ? { nestedExecution: schedulerOptions.nestedExecution }
+        : {}),
+      ...(schedulerOptions.confirmationPromptsAvailable !== undefined
+        ? {
+            confirmationPromptsAvailable:
+              schedulerOptions.confirmationPromptsAvailable,
           }
         : {}),
     });

@@ -261,6 +261,15 @@ export type {
   LiveOutputUpdate,
 } from './tools/tools.js';
 
+export { ToolApprovalRequiredError } from './tools/approval-required-error.js';
+export type {
+  NestedToolExecution,
+  ToolExecutionScope,
+  ToolOutputCompleteness,
+  ToolStructuredOutput,
+  ToolStructuredValue,
+} from './tools/tool-execution-scope.js';
+
 export {
   isModifiableDeclarativeTool,
   modifyWithEditor,

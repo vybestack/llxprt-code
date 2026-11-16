@@ -1,0 +1,66 @@
+{
+  "run": "h3-subagent-on-named",
+  "commit": "bdb7fca979f139ba3131c74f0bfd262f8e5a5866",
+  "sessionId": "076a2e5d-986b-44e2-b3bc-6ca102a6ea9b",
+  "harnessWallSeconds": 131,
+  "turnSeconds": 100.565,
+  "parent": {
+    "requests": 2,
+    "failedAttempts": [],
+    "inputTokens": 49707,
+    "cachedTokens": 22400,
+    "outputTokens": 1517,
+    "lastRequestInputTokens": 27128,
+    "maxRequestInputTokens": 27128,
+    "toolResultTokens": 4368,
+    "toolCalls": 1,
+    "toolCallsByName": {
+      "task": 1
+    }
+  },
+  "children": {
+    "issue4084-gatherer-on": {
+      "requests": 4,
+      "failedAttempts": [],
+      "inputTokens": 195747,
+      "cachedTokens": 135800,
+      "outputTokens": 15942,
+      "lastRequestInputTokens": 59939,
+      "maxRequestInputTokens": 59939,
+      "toolResultTokens": 4426,
+      "toolCalls": 3,
+      "toolCallsByName": {
+        "execute_tool_script": 2,
+        "self_emitvalue": 1
+      }
+    }
+  },
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "task": 1
+  },
+  "nestedToolCalls": 113,
+  "nestedToolCallsByName": {
+    "run_shell_command": 113
+  },
+  "scriptRuns": [
+    {
+      "ok": true,
+      "callCount": 62,
+      "partial": false,
+      "inputBytes": 25676,
+      "finalBytes": 1466,
+      "durationMs": 3840.531583
+    },
+    {
+      "ok": true,
+      "callCount": 51,
+      "partial": false,
+      "inputBytes": 2603895,
+      "finalBytes": 2507,
+      "durationMs": 4941.673917
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

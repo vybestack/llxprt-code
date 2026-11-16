@@ -26,6 +26,10 @@ import {
   boundResultDisplayForRetention,
   stringifyForDisplayDetailed,
 } from './toolResultRetention.js';
+import {
+  formatToolScriptCard,
+  type ToolScriptRunView,
+} from '@vybestack/llxprt-code-agents';
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -244,10 +248,101 @@ function combineMarkdownSegments(segments: MarkdownSegment[]): string {
   }, '');
 }
 
+const SCRIPT_TOOL = 'execute_tool_script';
+
+/**
+ * The value a recorded `execute_tool_script` response returned, as JSON text,
+ * when the script succeeded. Recorded responses are read back from disk, so
+ * one that is not the script summary simply has no result to show.
+ */
+function recordedResponseText(result: unknown): string | undefined {
+  if (typeof result === 'string') return result;
+  if (typeof result === 'object' && result !== null && 'output' in result)
+    return String((result as { output: unknown }).output);
+  return undefined;
+}
+
+function scriptResultText(result: unknown): string | undefined {
+  const text = recordedResponseText(result);
+  const start = text?.indexOf('{"ok"') ?? -1;
+  if (text === undefined || start < 0) return undefined;
+  const summary = parseRecordedJson(text.slice(start));
+  if (typeof summary !== 'object' || summary === null) return undefined;
+  if (!('ok' in summary) || summary.ok !== true) return undefined;
+  return 'value' in summary ? JSON.stringify(summary.value) : undefined;
+}
+
+function parseRecordedJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A resumed `execute_tool_script` call shows the script card rebuilt from
+ * its recorded `tool_script_event` records (#4084), the same card the live
+ * run ended with. The script is not run again.
+ */
+function scriptCardFor(
+  call: ToolCallBlock,
+  response: { result: unknown; error?: string } | undefined,
+  run: ToolScriptRunView,
+): string {
+  const source = (call.parameters as { source?: unknown } | undefined)?.source;
+  const result =
+    response === undefined ? undefined : scriptResultText(response.result);
+  return formatToolScriptCard(run, {
+    ...(typeof source === 'string' ? { source } : {}),
+    ...(result === undefined ? {} : { result }),
+  });
+}
+
+/**
+ * A finished run's own outcome decides its status: a cancelled run has no
+ * tool response (the turn ended without one) or a synthesized one, and must
+ * not read as pending or as an ordinary failure.
+ */
+function scriptRunStatus(run: ToolScriptRunView): ToolCallStatus | undefined {
+  const finished = run.finished;
+  if (finished === undefined) return undefined;
+  if (finished.ok) return ToolCallStatus.Success;
+  return finished.errorCode === 'CANCELLED'
+    ? ToolCallStatus.Canceled
+    : ToolCallStatus.Error;
+}
+
+function toolCallDisplay(
+  tc: ToolCallBlock,
+  responseMap: Map<string, { result: unknown; error?: string }>,
+  scriptRuns: ReadonlyMap<string, ToolScriptRunView>,
+): IndividualToolCallDisplay {
+  const response = responseMap.get(tc.id);
+  const run = tc.name === SCRIPT_TOOL ? scriptRuns.get(tc.id) : undefined;
+  const card = run === undefined ? undefined : scriptCardFor(tc, response, run);
+  const display =
+    response !== undefined && card === undefined
+      ? safeToolResultToDisplayText(response.result)
+      : undefined;
+  return {
+    callId: tc.id,
+    name: tc.name,
+    description: tc.description ?? tc.name,
+    resultDisplay: card ?? display?.text,
+    status:
+      (run === undefined ? undefined : scriptRunStatus(run)) ??
+      toToolCallStatus(response),
+    confirmationDetails: undefined,
+    retention: display?.retention,
+  };
+}
+
 function processAiContent(
   content: IContent,
   responseMap: Map<string, { result: unknown; error?: string }>,
   items: HistoryItemWithoutId[],
+  scriptRuns: ReadonlyMap<string, ToolScriptRunView>,
 ): void {
   const segments: MarkdownSegment[] = [];
   const thinkingBlocks: ThinkingBlock[] = [];
@@ -286,22 +381,9 @@ function processAiContent(
   }
 
   if (toolCallBlocks.length > 0) {
-    const tools: IndividualToolCallDisplay[] = toolCallBlocks.map((tc) => {
-      const response = responseMap.get(tc.id);
-      const display =
-        response !== undefined
-          ? safeToolResultToDisplayText(response.result)
-          : undefined;
-      return {
-        callId: tc.id,
-        name: tc.name,
-        description: tc.description ?? tc.name,
-        resultDisplay: display?.text,
-        status: toToolCallStatus(response),
-        confirmationDetails: undefined,
-        retention: display?.retention,
-      };
-    });
+    const tools: IndividualToolCallDisplay[] = toolCallBlocks.map((tc) =>
+      toolCallDisplay(tc, responseMap, scriptRuns),
+    );
     items.push({ type: 'tool_group', tools });
   }
 }
@@ -322,15 +404,21 @@ function processAiContent(
  * @param emojiFilterModeOverride The resolved filter mode; defaults to
  *   'auto'. Pass `'allowed'` (or `resolveEmojiFilterMode`'s output) to
  *   honor the current setting.
+ * @param toolScriptRuns Recorded code mode runs (`session.getToolScriptRuns()`);
+ *   an `execute_tool_script` call with a recorded run shows its script card.
  */
 export function iContentToHistoryItems(
   contents: IContent[],
   emojiFilterModeOverride?: EmojiFilterMode,
+  toolScriptRuns: readonly ToolScriptRunView[] = [],
 ): HistoryItem[] {
   const filter = createEmojiFilter(emojiFilterModeOverride);
   const items: HistoryItemWithoutId[] = [];
 
   const responseMap = buildResponseMap(contents);
+  const scriptRuns = new Map(
+    toolScriptRuns.map((run) => [run.parentCallId, run]),
+  );
 
   for (const content of contents) {
     if (content.speaker === 'human') {
@@ -345,7 +433,7 @@ export function iContentToHistoryItems(
     }
 
     if (content.speaker === 'ai') {
-      processAiContent(content, responseMap, items);
+      processAiContent(content, responseMap, items, scriptRuns);
     }
   }
 

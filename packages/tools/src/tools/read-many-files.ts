@@ -140,6 +140,9 @@ class ReadManyFilesToolInvocation extends BaseToolInvocation<
   ReadManyFilesParams,
   ToolResult
 > {
+  /** Set when a limit of this tool cut discovery, the file list or a file. */
+  private producerTruncated = false;
+
   constructor(
     private readonly host: IToolHost,
     params: ReadManyFilesParams,
@@ -298,6 +301,7 @@ ${this.host.getTargetDir()}
     return {
       llmContent: contentParts,
       returnDisplay: displayMessage.trim(),
+      completeness: this.producerTruncated ? 'partial' : 'unknown',
     };
   }
 
@@ -543,6 +547,7 @@ ${this.host.getTargetDir()}
     discoveryTruncated: boolean,
   ): ToolResult | undefined {
     const filesExceedCap = sortedFiles.length > limits.maxFileCount;
+    this.producerTruncated ||= discoveryTruncated || filesExceedCap;
     if (!filesExceedCap) {
       if (discoveryTruncated && limits.truncateMode === 'warn')
         skippedFiles.push({
@@ -637,6 +642,7 @@ ${this.host.getTargetDir()}
         maxLinesPerFile,
       );
       if (result.error !== undefined || result.done) {
+        this.producerTruncated ||= result.done === true;
         return result;
       }
       totalTokens = result.totalTokens;
@@ -726,6 +732,7 @@ ${this.host.getTargetDir()}
       imageResizePolicy,
       imageBudget,
     );
+    this.producerTruncated ||= fileReadResult.isTruncated === true;
     const imageError =
       getImageResizeToolResult(fileReadResult, currentTokens) ??
       getImageBudgetToolResult(fileReadResult, currentTokens);

@@ -50,6 +50,7 @@ describe('owner-backed interactive session operations', () => {
       sourceId,
       'allowed',
       next.session.listBrowserTargetsDetailed.bind(next.session),
+      next.session.getToolScriptRuns.bind(next.session),
     );
     expect(hasUserTurn(replay.uiHistory, 'browse source')).toBe(true);
     expect(
@@ -79,6 +80,7 @@ describe('owner-backed interactive session operations', () => {
       checkpoint.checkpointId,
       'allowed',
       agent.session.listBrowserTargetsDetailed.bind(agent.session),
+      agent.session.getToolScriptRuns.bind(agent.session),
     );
     expect(hasUserTurn(replay.uiHistory, 'checkpoint source')).toBe(true);
     await agent.session.deleteCheckpoint(checkpoint.checkpointId);
@@ -106,6 +108,7 @@ describe('owner-backed interactive session operations', () => {
         'missing-session',
         'allowed',
         agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        agent.session.getToolScriptRuns.bind(agent.session),
       ),
     ).rejects.toThrow('Failed to resume session');
     const checkpoint = await agent.session.createCheckpoint('discarded-branch');
@@ -116,6 +119,7 @@ describe('owner-backed interactive session operations', () => {
         checkpoint.checkpointId,
         'allowed',
         agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        agent.session.getToolScriptRuns.bind(agent.session),
       ),
     ).rejects.toThrow('Failed to resume session');
     const activeId = (await agent.session.listSessions()).at(0)?.id;

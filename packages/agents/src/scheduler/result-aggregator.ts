@@ -1,4 +1,7 @@
-import { parseToolOutputMaxTokens } from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
+import {
+  parseToolOutputMaxTokens,
+  type ParsedToolOutputMaxTokens,
+} from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
 import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 /**
  * @license
@@ -31,6 +34,8 @@ import {
 import { type ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type { ToolResultSink } from './nested-execution.js';
+import { ToolHookStopError } from './tool-executor.js';
 
 const logger = new DebugLogger('llxprt:scheduler:result-aggregator');
 
@@ -45,6 +50,8 @@ export interface ResultPublishCallbacks {
   setSuccess(callId: string, response: ToolCallResponseInfo): void;
   /** Transition a call to the 'error' terminal state. */
   setError(callId: string, response: ToolCallResponseInfo): void;
+  /** Receives the post-hook result before model formatting (#4084). */
+  deliverResult?: ToolResultSink;
   /**
    * Returns the active Config (or equivalent provider) so ResultAggregator
    * can compute per-tool token limits when no batch override is in effect.
@@ -127,7 +134,10 @@ export class ResultAggregator {
     const errorResult: ToolResult = {
       error: {
         message: error.message,
-        type: ToolErrorType.UNHANDLED_EXCEPTION,
+        type:
+          error instanceof ToolHookStopError
+            ? ToolErrorType.STOP_EXECUTION
+            : ToolErrorType.UNHANDLED_EXCEPTION,
       },
       llmContent: error.message,
       returnDisplay: error.message,
@@ -213,6 +223,19 @@ export class ResultAggregator {
     }
   }
 
+  /**
+   * The model-facing token budget of a result published in the current
+   * batch: the batch's equal share when a parallel batch divided it, else
+   * the configured `tool-output-max-tokens`.
+   */
+  modelOutputLimit(): ParsedToolOutputMaxTokens {
+    return parseToolOutputMaxTokens(
+      this.currentOutputConfig().readExecutionPolicy()[
+        'tool-output-max-tokens'
+      ],
+    );
+  }
+
   // ---- state reset ---------------------------------------------------------
 
   /**
@@ -229,6 +252,10 @@ export class ResultAggregator {
   }
 
   // ---- private helpers -----------------------------------------------------
+
+  private currentOutputConfig(): ToolOutputSettingsProvider {
+    return this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();
+  }
 
   /** Find a buffered entry by its executionIndex. */
   private findByExecutionIndex(index: number): BufferedEntry | undefined {
@@ -342,9 +369,12 @@ export class ResultAggregator {
     _signal: AbortSignal,
   ): Promise<void> {
     const { result, callId, toolName, scheduledCall } = buffered;
+    this.callbacks.deliverResult?.({ callId, toolName, result });
 
-    const outputConfig =
-      this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();
+    // Bounded script JSON is fitted before this point, including its hook
+    // decoration and the provider-visible wrapper. Keep the ordinary limiter
+    // active here so a stale or invalid bounded result fails normally.
+    const outputConfig = this.currentOutputConfig();
 
     if (result.error === undefined) {
       const responseParts = convertToFunctionResponse(
@@ -382,7 +412,12 @@ export class ResultAggregator {
         result.error.type,
         extractModelFacingErrorText(result.llmContent, toolName, outputConfig),
       );
-      this.callbacks.setError(callId, errorResponse);
+      this.callbacks.setError(
+        callId,
+        result.displayOnError === true
+          ? { ...errorResponse, resultDisplay: result.returnDisplay }
+          : errorResponse,
+      );
     }
   }
 

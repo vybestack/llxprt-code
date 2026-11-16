@@ -1,0 +1,100 @@
+
+     ░██        ░██        ░██    ░██░█████████ ░█████████░██████████
+░██  ░██        ░██         ░██  ░██ ░██     ░██░██     ░██   ░██
+ ░██ ░██        ░██          ░██░██  ░██     ░██░██     ░██   ░██
+  ░██░██        ░██           ░███   ░█████████ ░█████████    ░██
+ ░██ ░██        ░██          ░██░██  ░██        ░██   ░██     ░██
+░██  ░██        ░██         ░██  ░██ ░██        ░██    ░██    ░██
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+
+Tips for getting started:
+1. Ask questions, edit files, or run commands.
+2. Be specific for the best results.
+3. /help for more information.
+
+╭───────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  > Using execute_tool_script, run `git log -5 --format=%s` and then `git branch --show-current` and return both.  │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Responding with: lunahigh:gpt-6-luna
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ││ ✓                                                                                                                                      │
+ ││ Execute tool script Read the five latest commit subjects and current branch. [tools: run_shell_command]                                │
+ ││                                                                                                                                        │
+ ││    Purpose: Read the five latest commit subjects and current branch.                                                                   │
+ ││    Status: completed in 460 ms                                                                                                         │
+ ││    Tool calls: 1 (1 ok)                                                                                                                │
+ ││      ✓ run_shell_command {"command":"git log -5 --format=%s && git branch --show-current","description":"Read recent commit subjects and
+ ││    current branch"}                                                                                                                    │
+ ││    Script (1 line):                                                                                                                    │
+ ││      const r = await tools["run_shell_command"]({command:"git log -5 --format=%s && git branch --show-current",description:"Read recent
+ ││    commit subjects and current b                                                                                                       │
+ ││    Result: {"stdout":"test(scripts): use shell commands the local policy does not pre-approve in E (#4084)\ntest(scripts): add named cod
+ ││    mode runs for scenarios A and B (#4084)\ntest(scripts): score named-function readings of B and keep B and D single-agent            │
+ ││    (#4084)\ntest(scripts): fit /stats on screen, quit cleanly and keep scenario A single-agent (#4084)\ntest(scripts): pin code mode   │
+ ││    scenario A to @plan markers at e3c1782b96 (#4084)\nissue4084\n","exitCode":0}                                                       │
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[lunahigh:gpt-6-luna]
+ Latest five commit subjects:
+
+   test(scripts): use shell commands the local policy does not pre-approve in E (#4084)
+   test(scripts): add named code mode runs for scenarios A and B (#4084)
+   test(scripts): score named-function readings of B and keep
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+⠴ I want you to hit me as hard as you can. (esc to cancel, 2s)
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084*)  Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 10,705/262,144 tokens | TPM: 0.00 | Wait: 0ms | 04:31:10
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                      lunahigh:gpt-6-luna | Tokens: 0

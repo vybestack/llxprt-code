@@ -157,6 +157,7 @@ describe('owner session browser', () => {
             : target.checkpointId,
           'allowed',
           next.session.listBrowserTargetsDetailed.bind(next.session),
+          next.session.getToolScriptRuns.bind(next.session),
         );
         return { ok: true };
       },
@@ -225,6 +226,7 @@ describe('owner session browser', () => {
             : target.checkpointId,
           'allowed',
           next.session.listBrowserTargetsDetailed.bind(next.session),
+          next.session.getToolScriptRuns.bind(next.session),
         );
         shown = replay.uiHistory.some(
           (item) =>

@@ -62,6 +62,7 @@ export function bindFixtureOwnerResume(
           action.sessionRef,
           mode,
           agent.session.listBrowserTargetsDetailed.bind(agent.session),
+          agent.session.getToolScriptRuns.bind(agent.session),
         )
       : importOwnerSession(
           agent.session.importSession.bind(agent.session),

@@ -1,0 +1,106 @@
+{
+  "description": "Issue #4084 scenario H3: parent with code mode off delegates task A to the same cheap subagent with code mode on (profile issue4084-haiku-code-on). Run `bun scripts/issue4084-subagent-setup.ts` first.",
+  "tmux": {
+    "cols": 140,
+    "rows": 100,
+    "historyLimit": 50000,
+    "scrollbackLines": 8000,
+    "initialWaitMs": 8000
+  },
+  "yolo": true,
+  "startCommand": [
+    "bun",
+    "scripts/start.ts",
+    "--profile-load",
+    "lunahigh",
+    "--set",
+    "code-mode=off"
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "capture",
+      "label": "ready"
+    },
+    {
+      "type": "line",
+      "text": "Use the task tool with subagent_name \"issue4084-gatherer-on\" and give it this goal: \"Find every `@plan` marker in TypeScript files changed between commits e3c1782b96~10 and e3c1782b96, reading each file as it is at e3c1782b96. Report the count per plan ID, the count per package (packages/<name>), and, using git blame at e3c1782b96 on each marker line, the count per short commit hash that last touched the line. Give the total.\" Then report the subagent's answer.",
+      "postTypeMs": 1500
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "prompt-submitted"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "answer"
+    },
+    {
+      "type": "line",
+      "text": "/stats",
+      "postTypeMs": 800
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Session Stats",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "stats"
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter", "Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 60000
+    }
+  ]
+}

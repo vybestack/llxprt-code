@@ -32,6 +32,7 @@ import { stringOrDefault } from '../utils/stringCoalescing.js';
 import { resolveImageResizePolicy } from '../utils/imageResize.js';
 import { resolveImageDimensionBudget } from '../utils/imageDimensionBudget.js';
 import { ToolErrorType } from '../types/tool-error.js';
+import type { ToolOutputCompleteness } from './tool-execution-scope.js';
 
 /**
  * Parameters for the ReadFile tool
@@ -400,7 +401,25 @@ ${formattedContent}`;
     return {
       llmContent,
       returnDisplay: result.returnDisplay || '',
+      completeness: this.completenessOf(result),
     };
+  }
+
+  /**
+   * A read is partial when this tool cut it: the default line limit stopped
+   * before the end of the file, or long lines were clipped. A window the
+   * caller asked for with `limit` is complete. Media reads carry no evidence.
+   */
+  private completenessOf(
+    result: ProcessedFileReadResult,
+  ): ToolOutputCompleteness {
+    if (typeof result.llmContent !== 'string') return 'unknown';
+    if (result.isTruncated !== true) return 'complete';
+    const clipped = (result.clippedLines ?? []).length > 0;
+    const end = result.linesShown?.[1] ?? 0;
+    const cutByDefaultLimit =
+      this.params.limit == null && end < (result.originalLineCount ?? 0);
+    return clipped || cutByDefaultLimit ? 'partial' : 'complete';
   }
 }
 

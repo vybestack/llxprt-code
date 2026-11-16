@@ -24,6 +24,7 @@ import {
 } from '../useReactToolScheduler.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import { classifyCompletedTools } from './toolCompletionHandler.js';
+import { useCancelledScriptCards } from './cancelledScriptCards.js';
 import { useKeypress, type Key } from '../useKeypress.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 
@@ -112,6 +113,12 @@ export function useToolSchedulerSetup(
     onEditorClose,
     onEditorOpen,
   );
+  useCancelledScriptCards(
+    subscribeChildTools,
+    toolSchedulerResult[0],
+    addItem,
+    toolSchedulerResult[2],
+  );
 
   return { toolSchedulerResult };
 }
@@ -135,6 +142,11 @@ function processPrimaryCompletion(
   }
 }
 
+/**
+ * Child completions become history items, except calls a code mode script
+ * made (#4084): those are summarized by their parent `execute_tool_script`
+ * card, so a 64-call script adds one item rather than 64.
+ */
 function processSecondaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
   markToolsAsDisplayCleared: (callIds: string[]) => void,
@@ -144,10 +156,11 @@ function processSecondaryCompletion(
     (toolCall) => toolCall.request.callId,
   );
   if (callIdsToMark.length > 0) markToolsAsDisplayCleared(callIdsToMark);
-  addItem(
-    mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
-    Date.now(),
+  const shown = completedToolCallsFromScheduler.filter(
+    (toolCall) => toolCall.request.script === undefined,
   );
+  if (shown.length > 0)
+    addItem(mapTrackedToolCallsToDisplay(shown), Date.now());
 }
 
 export function useShellCommandSetup({

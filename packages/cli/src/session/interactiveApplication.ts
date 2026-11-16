@@ -181,6 +181,7 @@ export class InteractiveApplication {
             action.sessionRef,
             mode,
             session.listBrowserTargetsDetailed.bind(session),
+            session.getToolScriptRuns.bind(session),
           )
         : importOwnerSession(
             session.importSession.bind(session),
@@ -554,6 +555,7 @@ export class InteractiveApplication {
     | 'settings'
     | 'startupWarnings'
     | 'resumedHistory'
+    | 'resumedToolScriptRuns'
     | 'version'
     | 'terminalBackgroundColor'
     | 'recordingIntegration'
@@ -584,6 +586,7 @@ export class InteractiveApplication {
       settings: props.settings,
       startupWarnings: props.startupWarnings,
       resumedHistory: props.resumedHistory,
+      resumedToolScriptRuns: props.resumedToolScriptRuns,
       version: props.version,
       terminalBackgroundColor: props.terminalBackgroundColor,
       recordingIntegration: props.recordingIntegration,

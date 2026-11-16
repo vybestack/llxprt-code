@@ -1,0 +1,17 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["CodeModeRuntime host-call callback"]:::caller
+C["NestedToolExecutionSession.invoke<br/>packages/agents/src/code-mode/nested-tool-execution-session.ts (proposed)"]:::center
+R0["Check revision, authority and budgets"]:::callee
+R1["FIFO admission queue"]:::callee
+R2["TurnToolExecutionOwner lease.schedule"]:::callee
+R3["Typed post-hook completion sink"]:::callee
+R4["CodeModeEventSink nested events"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3
+C --> R4

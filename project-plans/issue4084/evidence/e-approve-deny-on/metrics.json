@@ -1,0 +1,43 @@
+{
+  "run": "e-approve-deny-on",
+  "commit": "5e2c1835e2001e1d158db8b44812c78f48c3e8f7",
+  "sessionId": "b7ced705-fffd-4091-bd06-1b0fd699ed37",
+  "harnessWallSeconds": 44,
+  "turnSeconds": 12.262,
+  "parent": {
+    "requests": 2,
+    "failedAttempts": [],
+    "inputTokens": 46461,
+    "cachedTokens": 22912,
+    "outputTokens": 331,
+    "lastRequestInputTokens": 23376,
+    "maxRequestInputTokens": 23376,
+    "toolResultTokens": 74,
+    "toolCalls": 1,
+    "toolCallsByName": {
+      "execute_tool_script": 1
+    }
+  },
+  "children": {},
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "execute_tool_script": 1
+  },
+  "nestedToolCalls": 2,
+  "nestedToolCallsByName": {
+    "run_shell_command": 2
+  },
+  "scriptRuns": [
+    {
+      "ok": false,
+      "errorCode": "APPROVAL_DENIED",
+      "callCount": 2,
+      "partial": false,
+      "inputBytes": 509,
+      "finalBytes": 0,
+      "durationMs": 2909.2036660000012
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

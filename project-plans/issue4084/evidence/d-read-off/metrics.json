@@ -1,0 +1,31 @@
+{
+  "run": "d-read-off",
+  "commit": "1f34cd743553cdba4f72de6a7e9034869de2bc54",
+  "sessionId": "5c740dd7-9079-4d99-ad9d-0be04a3b4d89",
+  "harnessWallSeconds": 33,
+  "turnSeconds": 6.202,
+  "parent": {
+    "requests": 2,
+    "failedAttempts": [],
+    "inputTokens": 51231,
+    "cachedTokens": 22272,
+    "outputTokens": 350,
+    "lastRequestInputTokens": 28758,
+    "maxRequestInputTokens": 28758,
+    "toolResultTokens": 6226,
+    "toolCalls": 1,
+    "toolCallsByName": {
+      "read_file": 1
+    }
+  },
+  "children": {},
+  "directToolCalls": 1,
+  "directToolCallsByName": {
+    "read_file": 1
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

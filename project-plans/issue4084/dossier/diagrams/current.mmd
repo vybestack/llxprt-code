@@ -1,0 +1,83 @@
+classDiagram
+ direction TB
+ class ToolBuilder {
+  <<interface>>
+  +name string
+  +schema FunctionDeclaration
+  +build(params) ToolInvocation
+ }
+ class DeclarativeTool {
+  <<abstract>>
+  +name string
+  +kind Kind
+  +parameterSchema unknown
+  +schema FunctionDeclaration
+  +build(params) ToolInvocation
+  +buildAndExecute(params, signal) Promise
+ }
+ class BaseDeclarativeTool {
+  <<abstract>>
+  +build(params) ToolInvocation
+  #validateToolParamValues(params)
+  #createInvocation(params) ToolInvocation
+ }
+ class ToolInvocation {
+  <<interface>>
+  +params object
+  +getDescription() string
+  +toolLocations() ToolLocation[]
+  +shouldConfirmExecute(signal) Promise
+  +execute(signal, updateOutput, columns, rows, setPid) Promise
+ }
+ class BaseToolInvocation {
+  <<abstract>>
+  +params object
+  #messageBus IToolMessageBus
+  +getPolicyContext() object
+  +shouldConfirmExecute(signal) Promise
+  +execute(signal, updateOutput, columns, rows, setPid) Promise
+ }
+ class ToolResult {
+  <<interface>>
+  +llmContent ContentPartListUnion
+  +returnDisplay ToolResultDisplay
+  +metadata object
+  +error object
+ }
+ class ShellTool {
+  +Name run_shell_command
+  #createInvocation(params) ShellToolInvocation
+ }
+ class DiscoveredMCPTool {
+  #createInvocation(params) ToolInvocation
+ }
+ class TaskTool {
+  +Name task
+  #createInvocation(params) ToolInvocation
+ }
+ class ShellToolInvocation {
+  +execute(signal, updateOutput, columns, rows, setPid) Promise
+  +shouldConfirmExecute(signal) Promise
+ }
+ class DiscoveredMCPToolInvocation {
+  +execute(signal) Promise
+ }
+ class TaskToolInvocation {
+  -attemptLaunch()
+  +execute(signal, updateOutput) Promise
+ }
+ ToolBuilder <|.. DeclarativeTool
+ DeclarativeTool <|-- BaseDeclarativeTool
+ BaseDeclarativeTool <|-- ShellTool
+ BaseDeclarativeTool <|-- DiscoveredMCPTool
+ BaseDeclarativeTool <|-- TaskTool
+ ToolInvocation <|.. BaseToolInvocation
+ BaseToolInvocation <|-- ShellToolInvocation
+ BaseToolInvocation <|-- DiscoveredMCPToolInvocation
+ BaseToolInvocation <|-- TaskToolInvocation
+ ToolBuilder ..> ToolInvocation : builds
+ ToolInvocation ..> ToolResult : returns
+ ShellTool ..> ShellToolInvocation : creates
+ DiscoveredMCPTool ..> DiscoveredMCPToolInvocation : creates
+ TaskTool ..> TaskToolInvocation : creates
+

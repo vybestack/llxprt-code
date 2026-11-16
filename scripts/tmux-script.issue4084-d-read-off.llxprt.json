@@ -1,0 +1,106 @@
+{
+  "description": "Issue #4084 scenario D, code mode off: a task where the model must read the file itself.",
+  "tmux": {
+    "cols": 140,
+    "rows": 100,
+    "historyLimit": 50000,
+    "scrollbackLines": 8000,
+    "initialWaitMs": 8000
+  },
+  "yolo": true,
+  "startCommand": [
+    "bun",
+    "scripts/start.ts",
+    "--profile-load",
+    "lunahigh",
+    "--set",
+    "code-mode=off"
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "capture",
+      "label": "ready"
+    },
+    {
+      "type": "line",
+      "text": "What does packages/agents/src/tools/task.ts export? Read it and explain. Do the work yourself in this session; do not delegate to a subagent.",
+      "postTypeMs": 1500
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "prompt-submitted"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "answer"
+    },
+    {
+      "type": "line",
+      "text": "/stats",
+      "postTypeMs": 800
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Session Stats",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "stats"
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter", "Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 60000
+    }
+  ]
+}

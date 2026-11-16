@@ -356,6 +356,13 @@ export interface AgentConfig
   readonly hooks?: AgentHooks;
   readonly memory?: string;
   readonly skillsSupport?: boolean;
+  /**
+   * The host's default for the `code-mode` setting (issue #4084) when the
+   * session has no value for it. The setting, read live, decides whether the
+   * session lists and advertises `execute_tool_script` and
+   * `discover_tool_api`; `/set code-mode` and profiles override this default.
+   */
+  readonly codeMode?: boolean;
   readonly disabledSkills?: readonly string[];
   readonly adminSkillsEnabled?: boolean;
   readonly streamIdleTimeoutMs?: number;

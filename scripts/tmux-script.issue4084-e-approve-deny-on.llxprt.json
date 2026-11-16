@@ -1,0 +1,175 @@
+{
+  "description": "Issue #4084 scenario E (not yolo): approve the first nested shell prompt, deny the second; expect APPROVAL_DENIED listing the completed first call and one model-visible response. The second command is `git branch --show-current` instead of the issue's `git status --short`, because the user policy on the test machine (auto-saved.toml) allows `git status` without a prompt.",
+  "tmux": {
+    "cols": 140,
+    "rows": 100,
+    "historyLimit": 50000,
+    "scrollbackLines": 8000,
+    "initialWaitMs": 8000
+  },
+  "yolo": false,
+  "startCommand": [
+    "bun",
+    "scripts/start.ts",
+    "--profile-load",
+    "lunahigh",
+    "--set",
+    "code-mode=on"
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "capture",
+      "label": "ready"
+    },
+    {
+      "type": "line",
+      "text": "Using execute_tool_script, run `git log -5 --format=%s` and then `git branch --show-current` as two separate run_shell_command calls in one script, and return both outputs.",
+      "postTypeMs": 1500
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "prompt-submitted"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "from script:",
+      "timeoutMs": 300000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Allow once",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "capture",
+      "label": "first-nested-prompt"
+    },
+    {
+      "type": "approveTool",
+      "confirmation": {
+        "contains": "Allow once"
+      },
+      "choice": "once",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "after-approve"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Allow once",
+      "timeoutMs": 300000
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "from script:"
+    },
+    {
+      "type": "capture",
+      "label": "second-nested-prompt"
+    },
+    {
+      "type": "approveTool",
+      "confirmation": {
+        "contains": "Allow once"
+      },
+      "choice": "no",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "after-deny"
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "APPROVAL_DENIED",
+      "timeoutMs": 300000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 900000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "answer"
+    },
+    {
+      "type": "line",
+      "text": "/stats",
+      "postTypeMs": 800
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Session Stats",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "stats"
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter", "Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 60000
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+░██  ░██        ░██         ░██  ░██ ░██        ░██    ░██    ░██
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+
+Tips for getting started:
+1. Ask questions, edit files, or run commands.
+2. Be specific for the best results.                                                                                                       ▄
+3. /help for more information.                                                                                                             █
+                                                                                                                                           █
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮   █
+│  > List the 10 longest functions in packages/agents/src/core by line count, with file path and length. Do the work yourself in this  │   █
+│    session; do not delegate to a subagent.                                                                                           │   █
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯   █
+                                                                                                                                           █
+                                                                                                                                           █
+  Responding with: lunahigh:gpt-6-luna                                                                                                     █
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Locating source files                                                                                                                     █
+                                                                                                                                           █
+                                                                                                                                           █
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ ││ ✓                                                                                                                                      █
+ ││ FindFiles 'packages/agents/src/core/**/*' within .                                                                                     █
+ ││                                                                                                                                        █
+ ││    Found 443 matching file(s)                                                                                                          █
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Checking TypeScript parser setup                                                                                                          █
+                                                                                                                                           █
+ Inspecting TypeScript sources                                                                                                             █
+                                                                                                                                           █
+ Checking TypeScript parser setup: **Inspecting TypeScript sources**                                                                       █
+                                                                                                                                           █
+                                                                                                                                           █
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ ││ ✓                                                                                                                                      █
+ ││ Shell bun -e 'import ts from "typescript"; import { readdirSync, readFileSync } from "node:fs"; import { join, relative } from         █
+ ││ "node:path"; const root="packages/agents/src/core"; const files=[]; function walk(dir){for(const e of                                  █
+ ││ readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name); if(e.isDirectory()){if(e.name!=="__tests__") walk(p)} else            █
+ ││ if(e.name.endsWith(".ts") && !/(^|\.)(test|spec)\.ts$/.test(e.name) && !e.name.includes("fixture")) files.push(p)}} walk(root); const  █
+ ││ rows=[]; for(const file of files){const text=readFileSync(file,"utf8"); const                                                          █
+ ││ sf=ts.createSourceFile(file,text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS); function label(n){if(ts.isFunctionDeclaration(n))return█
+ ││ n.name?.text??"<anonymous function>"; if(ts.isMethodDeclaration(n)||ts.isGetAccessor(n)||ts.isSetAccessor(n)) return                   █
+ ││ n.name.getText(sf); if(ts.isConstructorDeclaration(n))return "constructor"; if(ts.isArrowFunction(n)||ts.isFunctionExpression(n)){const█
+ ││ p=n.parent; if(ts.isVariableDeclaration(p))return p.name.getText(sf); if(ts.isPropertyAssignment(p))return p.name.getText(sf);         █
+ ││ if(ts.isPropertyDeclaration(p))return p.name.getText(sf); if(ts.isCallExpression(p))return "<callback>"; return "<anonymous function>"}█
+ ││ return ""} function                                                                                                                    █
+ ││ visit(n){if(ts.isFunctionDeclaration(n)||ts.isMethodDeclaration(n)||ts.isGetAccessor(n)||ts.isSetAccessor(n)||ts.isConstructorDeclarati█
+ ││ on(n)||ts.isArrowFunction(n)||ts.isFunctionExpression(n)){const a=sf.getLineAndCharacterOfPosition(n.getStart(sf)).line+1; const       █
+ ││ b=sf.getLineAndCharacterOfPosition(n.getEnd()).line+1; rows.push({file:relative(".",file),name:label(n),start:a,end:b,lines:b-a+1})}   █
+ ││ ts.forEachChild(n,visit)} visit(sf)} rows.sort((a,b)=>b.lines-a.lines||a.file.localeCompare(b.file)); for(const r of rows.slice(0,10)) █
+ ││ console.log(`${r.lines}\t${r.file}:${r.start}-${r.end}\t${r.name}`);' [in                                                              █
+ ││ /Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code] (Measure production TypeScript function lengths in                      █
+ ││ packages/agents/src/core)                                                                                                              █
+ ││                                                                                                                                        █
+ ││    99    packages/agents/src/core/chatSession.ts:268-366    constructor                                                                █
+ ││    99    packages/agents/src/core/coreToolScheduler.ts:710-808    attemptExecutionOfScheduledCalls                                     █
+ ││    97    packages/agents/src/core/boundaryRecovery.ts:313-409    recoverPendingBoundary                                                █
+ ││    95    packages/agents/src/core/client.ts:661-755    restoreHistory                                                                  █
+ ││    89    packages/agents/src/core/MessageStreamTerminalHandler.ts:365-453    handleErrorEvent                                          █
+ ││    89    packages/agents/src/core/turn.ts:749-837    acquireFirstStreamEvent                                                           █
+ ││    87    packages/agents/src/core/turn.ts:625-711    run                                                                               █
+ ││    86    packages/agents/src/core/MessageStreamOrchestrator.ts:542-627    _processStreamIteration                                      █
+ ││    85    packages/agents/src/core/clientLlmUtilities.ts:63-147    generateJson                                                         █
+ ││    85    packages/agents/src/core/subagentNonInteractive.ts:316-400    readStreamToCompletion                                          █
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Resolving constructor inclusion                                                                                                           █
+                                                                                                                                           █
+ Verifying AST function ranges                                                                                                             █
+                                                                                                                                           █
+ Resolving constructor inclusion: **Verifying AST function ranges**                                                                        █
+                                                                                                                                           █
+ Using TypeScript AST boundaries, I counted lines from each function-like implementation’s first line through its last, including blank and█
+ comment lines. I excluded tests and fixtures; constructors are included.                                                                  █
+                                                                                                                                           █
+                                                                                                                                           █
+  ┌───────┬──────────────────────────────────┬──────────────────────────────────────────────────────────────────┐                          █
+  │ Lines │ Function                         │ File                                                             │                          █
+  ├───────┼──────────────────────────────────┼──────────────────────────────────────────────────────────────────┤                          █
+  │ 99    │ constructor                      │ packages/agents/src/core/chatSession.ts:268–366                  │                          █
+  │ 99    │ attemptExecutionOfScheduledCalls │ packages/agents/src/core/coreToolScheduler.ts:710–808            │                          █
+  │ 97    │ recoverPendingBoundary           │ packages/agents/src/core/boundaryRecovery.ts:313–409             │                          █
+  │ 95    │ restoreHistory                   │ packages/agents/src/core/client.ts:661–755                       │                          █
+  │ 89    │ handleErrorEvent                 │ packages/agents/src/core/MessageStreamTerminalHandler.ts:365–453 │                          █
+  │ 89    │ acquireFirstStreamEvent          │ packages/agents/src/core/turn.ts:749–837                         │                          █
+  │ 87    │ run                              │ packages/agents/src/core/turn.ts:625–711                         │                          █
+  │ 86    │ _processStreamIteration          │ packages/agents/src/core/MessageStreamOrchestrator.ts:542–627    │                          █
+  │ 85    │ generateJson                     │ packages/agents/src/core/clientLlmUtilities.ts:63–147            │                          █
+  │ 85    │ readStreamToCompletion           │ packages/agents/src/core/subagentNonInteractive.ts:316–400       │                          █
+  └───────┴──────────────────────────────────┴──────────────────────────────────────────────────────────────────┘                          █
+                                                                                                                                           █
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084)Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3GB | Context: 26,203/262,144 tokens | TPM: 115.23k | Wait: 0ms | 04:08:18
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 48,001

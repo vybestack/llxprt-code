@@ -47,6 +47,7 @@ export {
   ToolCallEvent,
   HookCallEvent,
   ToolOutputTruncatedEvent,
+  ToolScriptRunEvent,
   FileOperation,
   FileOperationEvent,
 } from './events/tool-events.js';

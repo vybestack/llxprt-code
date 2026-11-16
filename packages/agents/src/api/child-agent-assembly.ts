@@ -55,6 +55,14 @@ import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
+  lowerCodeModeLimits,
+  readCodeModeLimits,
+  readCodeModeSettings,
+  type CodeModeSettingLimits,
+} from '../code-mode/code-mode-settings.js';
+import { selectCodeModeSurface } from '../code-mode/code-mode-surface.js';
+import type { SubagentCodeMode } from '../core/subagent-scheduler-owner.js';
+import {
   cleanupAfterFailure,
   disposeHistoryLike,
   runCleanupSteps,
@@ -103,6 +111,24 @@ export interface ChildAgentAcquisition {
   readonly authority: CredentialAuthority;
   readonly createChildSettings: () => SettingsService;
   readonly foregroundConfig: Config;
+  /** The caller's code mode limits; a subagent may only lower them. */
+  readonly readCallerCodeModeLimits: () => CodeModeSettingLimits;
+}
+
+/**
+ * Code mode as the subagent's own settings (its profile) allow it, with
+ * limits lowered to the caller's (issue #4084).
+ */
+function childCodeMode(
+  settings: SettingsService,
+  readCallerLimits: () => CodeModeSettingLimits,
+): SubagentCodeMode {
+  const read = (key: string): unknown => settings.get(key);
+  return {
+    readSettings: () => readCodeModeSettings(read, false),
+    readLimits: () =>
+      lowerCodeModeLimits(readCodeModeLimits(read), readCallerLimits()),
+  };
 }
 
 export interface ChildAgentRuntimeFactories {
@@ -426,7 +452,13 @@ export class ChildAgentAssembly {
       manager,
       tokenizer,
       content,
-      this.operations.tools,
+      selectCodeModeSurface(
+        this.operations.tools,
+        childCodeMode(
+          workspace.settings,
+          this.acquisition.readCallerCodeModeLimits,
+        ).readSettings,
+      ),
       this.data.state,
       settingsSnapshot,
       createSubagentProviderRuntime(
@@ -485,6 +517,10 @@ export class ChildAgentAssembly {
         toolsView: loaded.runtimeContext.tools,
         settingsSnapshot: loaded.settingsSnapshot,
         foregroundConfig: this.acquisition.foregroundConfig,
+        codeMode: childCodeMode(
+          settings,
+          this.acquisition.readCallerCodeModeLimits,
+        ),
       },
       {
         instructions: this.operations.instructions,

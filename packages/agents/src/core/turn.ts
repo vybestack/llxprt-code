@@ -257,7 +257,10 @@ export class Turn {
     const functionCalls = allowedBlocks.filter(
       (block): block is ToolCallBlock => block.type === 'tool_call',
     );
-    yield* this.emitFunctionCallRequests(functionCalls);
+    yield* this.emitFunctionCallRequests(
+      functionCalls,
+      chunk.hookRestrictions?.allowedToolNames,
+    );
     yield* this.emitChunkCompletion(
       chunk,
       allowedBlocks,
@@ -288,11 +291,13 @@ export class Turn {
 
   private *emitFunctionCallRequests(
     functionCalls: ToolCallBlock[],
+    hookRestrictedAllowedTools: readonly string[] | undefined,
   ): Generator<ServerAgentStreamEvent> {
     for (const [functionCallIndex, functionCall] of functionCalls.entries()) {
       const event = this.handlePendingFunctionCall(
         functionCall,
         functionCallIndex,
+        hookRestrictedAllowedTools,
       );
       if (event) {
         yield event;
@@ -838,6 +843,7 @@ export class Turn {
   private handlePendingFunctionCall(
     fnCall: ToolCallBlock,
     functionCallIndex: number,
+    hookRestrictedAllowedTools: readonly string[] | undefined,
   ): ServerAgentStreamEvent | null {
     const callId =
       fnCall.id !== ''
@@ -863,6 +869,12 @@ export class Turn {
       isClientInitiated: false,
       prompt_id: this.prompt_id,
       agentId: (this.agentId as string | undefined) ?? DEFAULT_AGENT_ID,
+      // A tool-selection hook's restriction travels with the call, so the
+      // scheduler and anything the call starts (code mode scripts, #4084)
+      // stay inside it.
+      ...(hookRestrictedAllowedTools === undefined
+        ? {}
+        : { hookRestrictedAllowedTools: [...hookRestrictedAllowedTools] }),
     };
 
     this.pendingToolCalls.push(toolCallRequest);

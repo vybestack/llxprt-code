@@ -219,11 +219,20 @@ function getBaseDisplayProperties(
   IndividualToolCallDisplay,
   'status' | 'resultDisplay' | 'confirmationDetails'
 > {
+  const script = trackedCall.request.script;
   return {
     callId: trackedCall.request.callId,
     name: getDisplayName(trackedCall),
     description: getDescription(trackedCall),
     renderOutputAsMarkdown: getRenderOutputAsMarkdown(trackedCall),
+    ...(script === undefined
+      ? {}
+      : {
+          scriptOrigin: {
+            parentCallId: script.parentCallId,
+            purpose: script.purpose,
+          },
+        }),
   };
 }
 

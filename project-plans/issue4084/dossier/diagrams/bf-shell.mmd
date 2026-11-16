@@ -1,0 +1,21 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["ToolExecutor.execute (invocation interface)"]:::caller
+C["ShellToolInvocation.execute<br/>packages/tools/src/tools/shell.ts"]:::center
+R0["validateFilterParams"]:::callee
+R1["host.stripShellWrapper"]:::callee
+R2["resolveTimeoutResolution"]:::callee
+R3["shouldRunAsBackground"]:::callee
+R4["resolveBackgroundCommand"]:::callee
+R5["executeBackground"]:::callee
+R6["executeForeground"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3
+C --> R4
+C --> R5
+C --> R6

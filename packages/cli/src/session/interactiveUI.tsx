@@ -76,7 +76,7 @@ import {
   type InteractiveMouseTeardown,
   type InteractiveTerminalRestore,
 } from './interactiveUiLifecycle.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { Agent, ToolScriptRunView } from '@vybestack/llxprt-code-agents';
 import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
 import { buildInteractiveUiPorts } from './interactiveUiPorts.js';
 import { type InteractiveCommandPorts } from '../ui/cliCommandPorts.js';
@@ -230,6 +230,12 @@ function extractTerminalRows(stream: { rows?: number }): number {
   return stream.rows ?? 0;
 }
 
+/** What a resumed session shows at startup: history and script cards. */
+type ResumedDisplay = Pick<
+  CommitInteractiveStartupArgs,
+  'resumedHistory' | 'resumedToolScriptRuns'
+>;
+
 /**
  * Builds the root JSX element tree for Ink render. Extracted from
  * startInteractiveUI to keep the composition function within the
@@ -243,7 +249,7 @@ function buildRenderElement(
   startupWarnings: string[],
   version: string,
   recordingIntegration: RecordingIntegration | undefined,
-  resumedHistory: IContent[] | undefined,
+  resumed: ResumedDisplay,
   initialRecordingService: SessionRecordingService | undefined,
   initialLockHandle: LockHandle | null | undefined,
   suppressStartupWelcome: boolean | undefined,
@@ -298,15 +304,15 @@ function buildRenderElement(
         version,
         terminalBackgroundColor:
           commandPorts.containerTerminal.getTerminalBackground(),
+        ...resumed,
+        suppressStartupWelcome,
         ...(recordingOwner === 'agent'
-          ? { recordingOwner, resumedHistory, suppressStartupWelcome }
+          ? { recordingOwner }
           : {
               recordingIntegration,
               recordingOwner,
-              resumedHistory,
               initialRecordingService,
               initialLockHandle,
-              suppressStartupWelcome,
             }),
         operationLifecycle: perfOwner?.registry,
         memoryController: perfOwner?.memoryController ?? undefined,
@@ -360,6 +366,7 @@ export interface OwnerInteractiveStartup {
   >;
   readonly recordingOwner: 'agent';
   readonly resumedHistory?: IContent[];
+  readonly resumedToolScriptRuns?: readonly ToolScriptRunView[];
   readonly suppressStartupWelcome?: boolean;
 }
 
@@ -545,6 +552,7 @@ export type CommitInteractiveStartupArgs = {
   readonly startupWarnings: string[];
   readonly ports?: Partial<InteractiveStartupPorts>;
   readonly resumedHistory?: IContent[];
+  readonly resumedToolScriptRuns?: readonly ToolScriptRunView[];
   readonly suppressStartupWelcome?: boolean;
 } & (
   | {
@@ -701,7 +709,10 @@ export async function commitInteractiveStartup(
             args.startupWarnings,
             args.version,
             args.recordingIntegration,
-            args.resumedHistory,
+            {
+              resumedHistory: args.resumedHistory,
+              resumedToolScriptRuns: args.resumedToolScriptRuns,
+            },
             args.initialRecordingService,
             args.initialLockHandle,
             args.suppressStartupWelcome,

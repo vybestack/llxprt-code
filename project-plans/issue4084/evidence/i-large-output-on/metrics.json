@@ -1,0 +1,60 @@
+{
+  "run": "i-large-output-on",
+  "commit": "9e3d89e4bac581af9268296c69a7efff1d304b9f",
+  "sessionId": "f941a994-f281-4b3b-970e-1f96e517807c",
+  "harnessWallSeconds": 65,
+  "turnSeconds": 33.217,
+  "parent": {
+    "requests": 4,
+    "failedAttempts": [],
+    "inputTokens": 98143,
+    "cachedTokens": 71296,
+    "outputTokens": 1237,
+    "lastRequestInputTokens": 26290,
+    "maxRequestInputTokens": 26290,
+    "toolResultTokens": 2135,
+    "toolCalls": 3,
+    "toolCallsByName": {
+      "execute_tool_script": 3
+    }
+  },
+  "children": {},
+  "directToolCalls": 3,
+  "directToolCallsByName": {
+    "execute_tool_script": 3
+  },
+  "nestedToolCalls": 6,
+  "nestedToolCallsByName": {
+    "glob": 3,
+    "read_many_files": 3
+  },
+  "scriptRuns": [
+    {
+      "ok": true,
+      "callCount": 2,
+      "partial": false,
+      "inputBytes": 6392,
+      "finalBytes": 133,
+      "durationMs": 204.46812499999942
+    },
+    {
+      "ok": true,
+      "callCount": 1,
+      "partial": false,
+      "inputBytes": 6283,
+      "finalBytes": 6283,
+      "durationMs": 1179.835458999998
+    },
+    {
+      "ok": false,
+      "errorCode": "RESULT_TOO_LARGE",
+      "callCount": 3,
+      "partial": true,
+      "inputBytes": 359671,
+      "finalBytes": 0,
+      "durationMs": 401.48720799999865
+    }
+  ],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

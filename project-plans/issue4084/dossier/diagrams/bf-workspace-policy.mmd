@@ -1,0 +1,11 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["SessionPolicyOwner.decisions.evaluate (closure)"]:::caller
+C["WorkspacePolicyOwner.evaluate<br/>packages/core/src/policy/policy-owner.ts"]:::center
+R0["Workspace trust query"]:::callee
+R1["PolicyEngine.evaluate"]:::callee
+L0 --> C
+C --> R0
+C --> R1

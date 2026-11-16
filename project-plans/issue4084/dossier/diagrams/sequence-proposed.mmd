@@ -1,0 +1,63 @@
+sequenceDiagram
+ autonumber
+ participant Model as Parent model
+ participant Parent as Parent scheduler
+ participant Owner as CodeModeRunOwner
+ participant Guest as QuickJS guest and private IPC
+ participant Broker as NestedToolExecutionSession
+ participant Child as Separate child scheduler
+ participant Policy as Prepared invocation and policy
+ participant UI as Approval handler
+ participant Host as Real tool host
+ participant Sink as Typed result sink
+ participant Audit as UI and operational recording
+ Model->>Parent: discover_tool_api(shell, read_file)
+ Parent-->>Model: admitted declarations and revision
+ Model->>Parent: execute_tool_script(source, tools, revision)
+ Parent->>Parent: outer policy and execution scope
+ Parent->>Owner: execute under caller cancellation
+ Owner->>Broker: begin child approval ownership
+ Owner->>Guest: fresh credential-free process and VM
+ Guest->>Broker: call run_shell_command(resolve HEAD and commits)
+ Broker->>Broker: finite FIFO admission, host-issued call ID
+ Broker->>Child: lease.schedule(request, signal, inherited hooks)
+ Child->>Policy: prepare hook-adjusted invocation, validate and authorize
+ Policy-->>Child: ASK with confirmation details
+ Child->>UI: exact command + parent script + child call ID
+ Note over Guest,UI: Guest promise remains pending, no model inference
+ UI-->>Child: approve exact invocation
+ Child->>Host: execute approved shell operation
+ Host-->>Child: post-hook bounded ToolResult
+ Child->>Sink: typed completion before model formatting
+ Sink-->>Broker: value and completeness
+ Broker-->>Guest: resolve promise
+ Child->>Audit: child status, approval, bytes, parent/run IDs
+ loop selected files
+ Guest->>Broker: read_file(path) then authorized blame query
+ Broker->>Child: admitted concrete call
+ Child->>Policy: same validation and policy on every call
+ alt allowed
+ Child->>Host: execute
+ Host-->>Sink: bounded post-hook result
+ Sink-->>Guest: data for grouping
+ else denied or revoked
+ Policy-->>Child: DENY
+ Child->>Broker: POLICY_VIOLATION
+ Broker->>Owner: terminate run, close admission
+ Owner->>Guest: interrupt and terminate
+ Owner->>Child: abort and join real work, retire approval route
+ Owner->>Audit: failure and completed-call summary, no rollback
+ Owner-->>Parent: bounded error with partial execution status
+ end
+ end
+ opt no denial and all calls awaited
+ Guest->>Guest: group TODOs by blame author, check coverage
+ Guest-->>Owner: compact JSON
+ Owner->>Broker: close, join, retire approval subscription
+ Owner->>Guest: dispose process and handles
+ Owner->>Audit: final metrics, discard intermediate buffers
+ Owner-->>Parent: one ToolResult
+ end
+ Parent-->>Model: one meta-tool response in model history
+ Note over Model,Audit: Nested records remain outside provider history on both success and failure
+

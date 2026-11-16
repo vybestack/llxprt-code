@@ -106,6 +106,8 @@ export interface ToolCallRequest {
   isClientInitiated: boolean;
   prompt_id: string;
   agentId?: string;
+  /** Present on calls a code mode script made (issue #4084). */
+  script?: { readonly parentCallId: string; readonly runId: string };
 }
 
 export interface ToolCallError {

@@ -18,6 +18,10 @@ import type {
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolGovernance } from './toolGovernance.js';
+import type {
+  NestedExecutionComposition,
+  ToolResultSink,
+} from '../scheduler/nested-execution.js';
 
 /**
  * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
@@ -40,4 +44,20 @@ export interface CoreToolSchedulerOptions {
   onEditorClose: () => void;
   onEditorOpen?: () => void;
   toolContextInteractiveMode?: boolean;
+  /**
+   * Receives each finished call's post-hook result before it is formatted
+   * for the model. Code mode's nested broker reads results here (#4084).
+   */
+  onToolResult?: ToolResultSink;
+  /**
+   * Composition handed to invocations as their nested-execution port. Absent
+   * for schedulers that must not start nested runs (nested schedulers).
+   */
+  nestedExecution?: NestedExecutionComposition;
+  /**
+   * False when nobody can answer this scheduler's approval prompts, so a
+   * call that needs one fails with an approval-required error instead of
+   * waiting. Defaults to true; code mode sets it per run (#4084).
+   */
+  confirmationPromptsAvailable?: boolean;
 }

@@ -11,9 +11,13 @@ import {
   RecordingIntegration,
   type LockHandle,
   type RefusalPayload,
+  type ToolScriptEventPayload,
   type RefusalRewritePayload,
+  type LocalMediaStore,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
+import type { ToolScriptRunView } from '../../code-mode/tool-script-card.js';
+import { readRecordedToolScriptRuns } from './sessionToolScriptRuns.js';
 import type { PreparedHistoryBatchEffect } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
@@ -190,6 +194,7 @@ export class SessionRecordingLifetime {
     private readonly nativeHistory: SessionNativeHistory,
     public recordingSessionId: string,
     private readonly origin: object,
+    private readonly mediaStore: LocalMediaStore,
   ) {}
   /**
    * The live recording service when recording is enabled, or null when it is
@@ -219,6 +224,27 @@ export class SessionRecordingLifetime {
   async recordRefusal(refusal: RefusalPayload): Promise<void> {
     this.integration?.recordRefusal(refusal);
     await this.integration?.flushAtTurnBoundary();
+  }
+
+  /**
+   * Code mode script record (issue #4084). Enqueued without a flush: it is
+   * display metadata, written with the turn's next flush. A no-op while no
+   * recording is active.
+   */
+  recordToolScriptEvent(event: ToolScriptEventPayload): void {
+    this.integration?.recordToolScriptEvent(event);
+  }
+
+  /** Code mode runs recorded in the active session file (issue #4084). */
+  readToolScriptRuns(
+    projectHash: string,
+  ): Promise<readonly ToolScriptRunView[]> {
+    return readRecordedToolScriptRuns(
+      this.recording,
+      this.integration,
+      projectHash,
+      this.mediaStore,
+    );
   }
 
   /**

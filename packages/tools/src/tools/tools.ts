@@ -27,6 +27,11 @@ import {
   type ToolConfirmationPayload,
 } from '../types/tool-confirmation-types.js';
 import { ToolErrorType } from '../types/tool-error.js';
+import type {
+  ToolExecutionScope,
+  ToolOutputCompleteness,
+  ToolStructuredOutput,
+} from './tool-execution-scope.js';
 
 export { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 export type { ToolConfirmationPayload } from '../types/tool-confirmation-types.js';
@@ -73,6 +78,7 @@ export interface ToolInvocation<
    * @param terminalColumns Optional terminal width for PTY mode.
    * @param terminalRows Optional terminal height for PTY mode.
    * @param setPidCallback Optional callback to propagate PTY PID.
+   * @param scope Provenance supplied by the scheduler for this execution.
    * @returns Result of the tool execution.
    */
   execute(
@@ -81,6 +87,7 @@ export interface ToolInvocation<
     terminalColumns?: number,
     terminalRows?: number,
     setPidCallback?: (pid: number) => void,
+    scope?: ToolExecutionScope,
   ): Promise<TResult>;
 }
 /**
@@ -426,6 +433,7 @@ export abstract class BaseToolInvocation<
     terminalColumns?: number,
     terminalRows?: number,
     setPidCallback?: (pid: number) => void,
+    scope?: ToolExecutionScope,
   ): Promise<TResult>;
 }
 
@@ -762,6 +770,32 @@ export interface ToolResult {
    * @requirement:HOOK-132 - AfterTool suppressOutput support
    */
   suppressDisplay?: boolean;
+
+  /**
+   * Whether the output covers everything the request asked for. Programmatic
+   * callers (code mode scripts) read this; the model sees `llmContent`.
+   */
+  completeness?: ToolOutputCompleteness;
+
+  /**
+   * Typed output for programmatic callers, taken from the tool's own data
+   * rather than parsed back out of `llmContent`. Dropped when a hook replaces
+   * or extends the model-facing text.
+   */
+  structuredOutput?: ToolStructuredOutput;
+
+  /**
+   * The tool returns a bounded JSON envelope. Hook text is represented inside
+   * that JSON and refitted against the full provider-visible output budget.
+   */
+  boundedOutput?: boolean;
+
+  /**
+   * When the call fails, show `returnDisplay` instead of `error.message`
+   * (the code mode script card, which summarizes a failed run better than
+   * its error text does).
+   */
+  displayOnError?: boolean;
 }
 
 /**

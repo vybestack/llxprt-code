@@ -1,0 +1,33 @@
+{
+  "totalExpected": 233,
+  "totalsMentioned": [
+    233
+  ],
+  "totalCorrect": true,
+  "planIds": {
+    "expected": 48,
+    "exact": 45,
+    "wrong": [
+      "PLAN-20260707-AGENTNEUTRAL.P07: expected 4, got 5"
+    ],
+    "missing": [
+      "PLAN-20260707-AGENTNEUTRAL.P07/P11 (1)",
+      "project-plans/issue4001.md (1)"
+    ],
+    "extra": []
+  },
+  "packages": {
+    "expected": 8,
+    "exact": 8,
+    "wrong": [],
+    "missing": [],
+    "extra": []
+  },
+  "commits": {
+    "expected": 42,
+    "exact": 42,
+    "wrong": [],
+    "missing": [],
+    "extra": []
+  }
+}

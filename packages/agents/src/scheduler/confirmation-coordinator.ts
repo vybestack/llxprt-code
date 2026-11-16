@@ -40,7 +40,10 @@ import {
   isModifiableDeclarativeTool,
   modifyWithEditor,
 } from '@vybestack/llxprt-code-tools';
-import { type ModifyContext } from '@vybestack/llxprt-code-tools';
+import {
+  ToolApprovalRequiredError,
+  type ModifyContext,
+} from '@vybestack/llxprt-code-tools';
 import { doesToolInvocationMatch } from '@vybestack/llxprt-code-core/utils/tool-utils.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {
@@ -81,7 +84,7 @@ export interface StatusMutator {
  * execution. The getter MUST return the current array on each call — stored
  * references become stale because setStatusInternal reassigns toolCalls[].
  */
-export class ConfirmationRequiredError extends Error {}
+export class ConfirmationRequiredError extends ToolApprovalRequiredError {}
 
 export interface SchedulerAccessor {
   attemptExecution(signal: AbortSignal): Promise<void>;
@@ -183,6 +186,12 @@ export class ConfirmationCoordinator {
     ) => Promise<unknown>,
     private readonly readApprovalMode: () => ApprovalMode = () =>
       ApprovalMode.DEFAULT,
+    /**
+     * False when nobody can answer a prompt from this scheduler (a code mode
+     * run whose host has no approval handler and no answering display, issue
+     * #4084), so a call that needs approval fails at once instead of waiting.
+     */
+    private readonly promptsAvailable: boolean = true,
   ) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -228,6 +237,20 @@ export class ConfirmationCoordinator {
   }
 
   // ── Policy evaluation and routing ─────────────────────────────────────────
+
+  /**
+   * Whether policy denies an approval-edited invocation. Edited arguments are
+   * authorized before they replace the prepared invocation (issue #4084).
+   */
+  isEditedInvocationDenied(toolCall: ValidatingToolCall): boolean {
+    return (
+      evaluatePolicyDecision(
+        toolCall.invocation,
+        toolCall.request,
+        this.messageBus,
+      ).decision === PolicyDecision.DENY
+    );
+  }
 
   /**
    * Synchronous fast-path for ALLOW and DENY policy decisions.
@@ -348,6 +371,13 @@ export class ConfirmationCoordinator {
         `Tool execution for "${
           toolCall.tool.displayName || toolCall.tool.name
         }" requires user confirmation, which is not supported in non-interactive mode.`,
+      );
+    }
+    if (!this.promptsAvailable) {
+      throw new ConfirmationRequiredError(
+        `Tool execution for "${
+          toolCall.tool.displayName || toolCall.tool.name
+        }" requires user confirmation, and this host cannot show approvals for script tool calls.`,
       );
     }
 
@@ -693,10 +723,24 @@ export class ConfirmationCoordinator {
     );
 
     this.statusMutator.setArgs(callId, updatedParams);
+    if (this.isTerminal(callId)) {
+      // Policy denied the edited arguments; finish the batch instead of
+      // asking again for a call that can no longer run.
+      await this.schedulerAccessor.attemptExecution(signal);
+      return;
+    }
 
     if (isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)) {
       this.rePublishConfirmation(callId, waitingToolCall, updatedDiff, signal);
     }
+  }
+
+  /** True once a call reached a terminal status, e.g. a denied edit. */
+  private isTerminal(callId: string): boolean {
+    const status = this.schedulerAccessor
+      .getToolCalls()
+      .find((call) => call.request.callId === callId)?.status;
+    return status === 'error' || status === 'success' || status === 'cancelled';
   }
 
   private rePublishConfirmation(

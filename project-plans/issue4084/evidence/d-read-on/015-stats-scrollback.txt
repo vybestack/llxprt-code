@@ -1,0 +1,100 @@
+     ░██████████░██████████░██    ░██░██        ░██     ░██   ░██
+
+Tips for getting started:
+1. Ask questions, edit files, or run commands.
+2. Be specific for the best results.
+3. /help for more information.
+                                                                                                                                           ▄
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮█
+│  > What does packages/agents/src/tools/task.ts export? Read it and explain. Do the work yourself in this session; do not delegate to a  │█
+│    subagent.                                                                                                                            │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+                                                                                                                                           █
+                                                                                                                                           █
+  Responding with: lunahigh:gpt-6-luna                                                                                                     █
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Reading the file                                                                                                                          █
+                                                                                                                                           █
+                                                                                                                                           █
+ ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+ ││ ✓                                                                                                                                      █
+ ││ ReadFile packages/agents/src/tools/task.ts                                                                                             █
+ ││                                                                                                                                        █
+ ││                                                                                                                                        █
+ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────█
+[lunahigh:gpt-6-luna]                                                                                                                      █
+ Clarifying exported interfaces                                                                                                            █
+                                                                                                                                           █
+ packages/agents/src/tools/task.ts has three named exports:                                                                                █
+                                                                                                                                           █
+   - `TaskToolParams`: the input shape for the tool. It includes the subagent name and goal, optional behavior prompts, tool whitelist,    █
+     expected outputs, context, timeout and turn limits, and an async flag.                                                                █
+   - `TaskToolDependencies`: the dependencies needed to create the tool, including the child-launch function, task-policy and              █
+     tool-governance readers, and a message bus. It also accepts optional display, environment, registry, and launch-owner dependencies.   █
+   - `TaskTool`: the tool class itself. It registers as task, validates and normalizes parameters, then creates an invocation that launches█
+     a subagent. It supports foreground execution with streaming, timeout and cancellation handling, and async execution. It can also be   █
+     copied with child-display callbacks using withChildDisplay().                                                                         █
+                                                                                                                                           █
+  TaskTool requires a concrete message bus and a child-launch function; its constructor throws if either is missing. The invocation class  █
+  and the helper imports are not exported from this file.                                                                                  █
+                                                                                                                                           █
+╭────────────╮                                                                                                                             █
+│  > /stats  │                                                                                                                             █
+╰────────────╯                                                                                                                             █
+                                                                                                                                           █
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮█
+│                                                                                                                                         │█
+│  Session Stats                                                                                                                          │█
+│                                                                                                                                         │█
+│  Session API                                                                                                                            │█
+│  Total Requests:             2                                                                                                          │█
+│  Total Errors:               0                                                                                                          │█
+│  Avg Latency:                4.9s                                                                                                       │█
+│                                                                                                                                         │█
+│  Interaction Summary                                                                                                                    │█
+│  Session ID:                 session-1794640849958-02mkfs1f4                                                                            │█
+│  Tool Calls:                 1 ( OK 1 ERR 0 )                                                                                           │█
+│    » Total Duration:         61ms                                                                                                       │█
+│  Success Rate:               100.0%                                                                                                     │█
+│  User Agreement:             100.0% (1 reviewed)                                                                                        │█
+│                                                                                                                                         │█
+│  Performance                                                                                                                            │█
+│  Wall Time:                  31.0s                                                                                                      │█
+│  Agent Active:               9.9s (interval union)                                                                                      │█
+│  Accumulated Work:           9.9s (API+Tool)                                                                                            │█
+│    » API Time:               9.8s (99.4%)                                                                                               │█
+│    » Tool Time:              61ms (0.6%)                                                                                                │█
+│    » Throughput (TPM):       322.64k TPM (session weighted)                                                                             │█
+│    » Last Request TPM:       286.32k TPM                                                                                                │█
+│    » TTFT (last):            4747ms (avg: 4124ms)                                                                                       │█
+│    » Output Gen Rate:        263.37 tok/s (session weighted) (last: 221.98)                                                             │█
+│    » Input Rate (eff):       6358.10 tok/s (ΣP/ΣTTFT) (last: 6187.61)                                                                   │█
+│    » Uncached Input:         3580.02 tok/s (Σmax(0,P-C)/ΣTTFT)                                                                          │█
+│                                                                                                                                         │█
+│                                                                                                                                         │█
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                                                           │█
+│  ────────────────────────────────────────────────────────────────────────────                                                           │█
+│  gpt-6-luna                     2         29,526        22,912            379                                                           │█
+│    Latency: 4.9s avg / 9.8s total                                                                                                       │█
+│                                                                                                                                         │█
+│  Savings Highlight: 22,912 (43.7%) of input tokens were served from the cache, reducing costs.                                          │█
+│                                                                                                                                         │█
+│  Quota Information                                                                                                                      │█
+│  ## Claude Code Quota Information                                                                                                       │█
+│                                                                                                                                         │█
+│    7-day window: 91.0% used (resets in 122h 38m)                                                                                        │█
+│  ## Codex Quota Information                                                                                                             │█
+│                                                                                                                                         │█
+│    5-hour limit: 19% used (resets in 160h 23m)                                                                                          │█
+│    Credits: None                                                                                                                        │█
+│                                                                                                                                         │█
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯█
+
+ 1 .LLXPRT_SYSTEM file | 2 LLXPRT.md files | 0 skill                                                          YOLO mode (ctrl + y to toggle)
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+(issue4084* Heap: 0.3GB External: 0.2GB ArrayBuffers: 0.1GB RSS: 0.3G | Context: 29,371/262,144 tokens | TPM: 322.60k | Wait: 0ms | 04:21:22
+)
+/Volumes/XS1000/acoliver/projects/llxprt/branch-5/llxprt-code  [no sandbox (see /docs)]                 lunahigh:gpt-6-luna | Tokens: 52,817

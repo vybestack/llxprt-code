@@ -1,0 +1,111 @@
+classDiagram
+ direction TB
+ class BaseDeclarativeTool {
+  +build(params) ToolInvocation
+ }
+ class BaseToolInvocation {
+  +execute(signal) Promise
+ }
+ class ExecuteToolScriptTool {
+  +name execute_tool_script
+  +parameterSchema object
+  #createInvocation(params) ExecuteToolScriptInvocation
+ }
+ class ExecuteToolScriptInvocation {
+  -params ScriptRunRequest
+  +execute(signal, context) Promise
+ }
+ class DiscoverToolApiTool {
+  +name discover_tool_api
+  +build(params) ToolInvocation
+ }
+ class ToolApiCatalog {
+  -selection ToolSelection
+  -descriptors Map
+  +search(query, cursor)
+  +describe(names)
+  +bindRevision(names, revision)
+ }
+ class CodeModeRunOwner {
+  -policy CodeModePolicy
+  -controller AbortController
+  -nested NestedToolExecutionSession
+  -runtime CodeModeRuntime
+  +run(request, context, signal) Promise
+  +close() Promise
+ }
+ class CodeModeRuntime {
+  <<interface>>
+  +run(request, invoke, signal) Promise
+ }
+ class QuickJsProcessRuntime {
+  -child ChildProcess
+  -protocol BoundedPipeProtocol
+  +run(request, invoke, signal) Promise
+  +terminateAndJoin() Promise
+ }
+ class NestedToolExecution {
+  <<interface>>
+  +invoke(call, signal) Promise
+  +close() Promise
+ }
+ class NestedToolExecutionSession {
+  -queue ScriptCall[]
+  -pending Map
+  -turnOwner TurnToolExecutionOwner
+  +invoke(call, signal) Promise
+  +close() Promise
+ }
+ class CodeModeEventSink {
+  +started(runId, parentCallId)
+  +nestedCall(event)
+  +completed(summary)
+ }
+ class CodeModePolicy {
+  +maxCalls number
+  +wallTimeoutMs number
+  +maxResultBytes number
+  +allowedTools string[]
+ }
+ class ToolSelection {
+  +getTool(name, context)
+  +getEnabledTools()
+ }
+ class TurnToolExecutionOwner {
+  +begin()
+  +acquire(callbacks)
+  +retire()
+ }
+ class SessionSchedulerOwner {
+  -lifetime Lifetime
+  +acquire() SchedulerLease
+  +hasPendingWork() boolean
+  +dispose() Promise
+ }
+ class CoreToolScheduler {
+  +schedule(request, signal, hookOwner)
+ }
+ class ResultAggregator {
+  +publishResult()
+  +typedCompletionSink ToolResultSink
+ }
+ BaseDeclarativeTool <|-- ExecuteToolScriptTool
+ BaseDeclarativeTool <|-- DiscoverToolApiTool
+ BaseToolInvocation <|-- ExecuteToolScriptInvocation
+ ExecuteToolScriptTool ..> ExecuteToolScriptInvocation : creates
+ ExecuteToolScriptInvocation ..> CodeModeRunOwner : delegates
+ DiscoverToolApiTool ..> ToolApiCatalog
+ ToolApiCatalog ..> ToolSelection : borrows admitted selection
+ CodeModeRunOwner *-- CodeModePolicy : immutable snapshot
+ CodeModeRunOwner *-- NestedToolExecutionSession
+ CodeModeRunOwner *-- QuickJsProcessRuntime
+ CodeModeRunOwner ..> CodeModeEventSink
+ CodeModeRuntime <|.. QuickJsProcessRuntime
+ NestedToolExecution <|.. NestedToolExecutionSession
+ NestedToolExecutionSession *-- TurnToolExecutionOwner
+ NestedToolExecutionSession ..> ToolSelection : borrows
+ TurnToolExecutionOwner ..> SessionSchedulerOwner : injected factory
+ SessionSchedulerOwner *-- CoreToolScheduler : separate scheduler lifetime
+ CoreToolScheduler *-- ResultAggregator
+ ResultAggregator ..> NestedToolExecutionSession : new post-hook typed sink
+

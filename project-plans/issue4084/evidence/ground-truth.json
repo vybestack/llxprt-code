@@ -1,0 +1,2098 @@
+{
+  "base": "e3c1782b96d0a968f12a09401c04671cc29cacb9",
+  "ref": "e2ceba83d92514e998fa3c5f374633b728f40c97",
+  "a": {
+    "ref": "e3c1782b96d0a968f12a09401c04671cc29cacb9",
+    "files": [
+      "integration-tests/hooks-system.test.ts",
+      "integration-tests/sandboxCheckpointPersistence.real.test.ts",
+      "packages/a2a-server/src/agent/__tests__/executor.refusalNotice.test.ts",
+      "packages/a2a-server/src/agent/executor.ts",
+      "packages/agent-core/index.ts",
+      "packages/agent-core/src/definition-boundary.test.ts",
+      "packages/agent-core/src/definition.test.ts",
+      "packages/agent-core/src/definition.ts",
+      "packages/agent-core/src/errors.ts",
+      "packages/agent-core/src/fake-ports.test.ts",
+      "packages/agent-core/src/plain-data.ts",
+      "packages/agent-core/src/ports.ts",
+      "packages/agent-core/src/testing/fake-ports.ts",
+      "packages/agent-core/src/types-contracts.ts",
+      "packages/agent-core/src/types-events.ts",
+      "packages/agent-core/src/types.ts",
+      "packages/agent-core/type-fixtures/invalid-contract.ts",
+      "packages/agent-core/type-fixtures/valid-content-unions.ts",
+      "packages/agents/src/api/__tests__/apiSessionControl.characterization.test.ts",
+      "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+      "packages/agents/src/api/__tests__/fromConfig-cleanup.behavior.test.ts",
+      "packages/agents/src/api/__tests__/helpers/anthropic-refusal-endpoint.ts",
+      "packages/agents/src/api/__tests__/helpers/create-mcp-runtime.ts",
+      "packages/agents/src/api/__tests__/helpers/mcp-network.ts",
+      "packages/agents/src/api/__tests__/helpers/provider-acquisition.ts",
+      "packages/agents/src/api/__tests__/helpers/refusal-endpoint.ts",
+      "packages/agents/src/api/__tests__/helpers/refusal-review-harness.ts",
+      "packages/agents/src/api/__tests__/mcp-cancellation-failures.behavior.test.ts",
+      "packages/agents/src/api/__tests__/mcp-connected-disposal.test.ts",
+      "packages/agents/src/api/__tests__/mcp-manual-auth-lifetime.test.ts",
+      "packages/agents/src/api/__tests__/mcp-manual-auth-storage.test.ts",
+      "packages/agents/src/api/__tests__/mcp-proxy-root.behavior.test.ts",
+      "packages/agents/src/api/__tests__/modelRefusal.behavior.test.ts",
+      "packages/agents/src/api/__tests__/preflight-acquisition-closure.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalRecovery.anthropic.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalRecovery.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalRetained.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalReview.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalReviewCancel.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalReviewNotice.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalReviewPending.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalReviewRoute.behavior.test.ts",
+      "packages/agents/src/api/__tests__/refusalSettings.behavior.test.ts",
+      "packages/agents/src/api/__tests__/session-client-owner-join.behavior.test.ts",
+      "packages/agents/src/api/__tests__/session-client-stop-admission.behavior.test.ts",
+      "packages/agents/src/api/__tests__/session-shutdown-public.behavior.test.ts",
+      "packages/agents/src/api/__tests__/turn-provider-compression.behavior.test.ts",
+      "packages/agents/src/api/activationPreflightState.ts",
+      "packages/agents/src/api/adopted-agent-assembly.ts",
+      "packages/agents/src/api/agent-operations.ts",
+      "packages/agents/src/api/agentMetrics.ts",
+      "packages/agents/src/api/agentRuntimeAssembly.ts",
+      "packages/agents/src/api/agentStatsProjector.ts",
+      "packages/agents/src/api/control/session-authentication.test.ts",
+      "packages/agents/src/api/control/session-authentication.ts",
+      "packages/agents/src/api/control/sessionControl.ts",
+      "packages/agents/src/api/control/sessionControlInfo.ts",
+      "packages/agents/src/api/control/sessionControlRollback.ts",
+      "packages/agents/src/api/event-schema.ts",
+      "packages/agents/src/api/event-types.ts",
+      "packages/agents/src/api/eventAdapter.ts",
+      "packages/agents/src/api/mcp-runtime-construction.ts",
+      "packages/agents/src/api/mcp-runtime-oauth.ts",
+      "packages/agents/src/api/mcpOAuthAssembly.ts",
+      "packages/agents/src/api/mcpRuntimeAssembly.ts",
+      "packages/agents/src/api/policyComposition.ts",
+      "packages/agents/src/api/profile-preflight.ts",
+      "packages/agents/src/api/profile-provider-acquisition.ts",
+      "packages/agents/src/api/provider-runtime-acquisition.ts",
+      "packages/agents/src/api/recordingExecution.ts",
+      "packages/agents/src/api/skill-discovery.ts",
+      "packages/agents/src/core/CompressionProfileResolver.purpose.test.ts",
+      "packages/agents/src/core/CompressionProfileResolver.ts",
+      "packages/agents/src/core/MessageStreamOrchestrator.ts",
+      "packages/agents/src/core/StreamProcessor.ts",
+      "packages/agents/src/core/TokenUsageLogger.refusal.test.ts",
+      "packages/agents/src/core/TokenUsageLogger.ts",
+      "packages/agents/src/core/TurnProcessor.ts",
+      "packages/agents/src/core/__tests__/subagent-test-helpers.ts",
+      "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+      "packages/agents/src/core/agenticLoop/AgenticLoop.ts",
+      "packages/agents/src/core/agenticLoop/__tests__/agenticLoop.refusal.test.ts",
+      "packages/agents/src/core/attemptActivity.ts",
+      "packages/agents/src/core/chat-session-empty-tools.test.ts",
+      "packages/agents/src/core/chatSession.ts",
+      "packages/agents/src/core/chatSessionPorts.ts",
+      "packages/agents/src/core/chatSessionProviderRuntime.ts",
+      "packages/agents/src/core/hookToolRestrictions.ts",
+      "packages/agents/src/core/hookWireAdapter.ts",
+      "packages/agents/src/core/hooks-caller-application.test.ts",
+      "packages/agents/src/core/processorRetryBoundary.test.ts",
+      "packages/agents/src/core/semanticMediaPurgeSession.test.ts",
+      "packages/agents/src/core/semanticMediaPurgeSession.ts",
+      "packages/agents/src/core/sendRequestState.ts",
+      "packages/agents/src/core/streamAfterModelHook.ts",
+      "packages/agents/src/core/streamTelemetryLogger.ts",
+      "packages/agents/src/core/subagent-interactive-iteration.refusal.test.ts",
+      "packages/agents/src/core/subagent-interactive-iteration.ts",
+      "packages/agents/src/core/subagent-interactive-output.ts",
+      "packages/agents/src/core/subagentExecution.ts",
+      "packages/agents/src/core/subagentNonInteractive.refusal.test.ts",
+      "packages/agents/src/core/subagentNonInteractive.ts",
+      "packages/agents/src/core/tokenUsageActualLogger.ts",
+      "packages/agents/src/core/tokenUsageRecords.ts",
+      "packages/agents/src/core/turn.ts",
+      "packages/agents/src/core/turnHistoryCommit.ts",
+      "packages/agents/src/core/turnHookControl.ts",
+      "packages/agents/src/core/turnLogging.ts",
+      "packages/agents/src/refusal/index.ts",
+      "packages/agents/src/refusal/protectedLiterals.test.ts",
+      "packages/agents/src/refusal/protectedLiterals.ts",
+      "packages/agents/src/refusal/refusalDetection.ts",
+      "packages/agents/src/refusal/refusalJournal.ts",
+      "packages/agents/src/refusal/refusalNotices.test.ts",
+      "packages/agents/src/refusal/refusalNotices.ts",
+      "packages/agents/src/refusal/refusalPolicy.test.ts",
+      "packages/agents/src/refusal/refusalPolicy.ts",
+      "packages/agents/src/refusal/refusalPostTurn.ts",
+      "packages/agents/src/refusal/refusalRecovery.test.ts",
+      "packages/agents/src/refusal/refusalRecovery.ts",
+      "packages/agents/src/refusal/refusalReviewer.test.ts",
+      "packages/agents/src/refusal/refusalReviewer.ts",
+      "packages/agents/src/refusal/refusalSettlement.ts",
+      "packages/agents/src/refusal/refusalTurn.test.ts",
+      "packages/agents/src/refusal/refusalTurn.ts",
+      "packages/agents/src/refusal/refusalTypes.ts",
+      "packages/agents/src/refusal/refusalWait.ts",
+      "packages/agents/src/refusal/reviewBudget.ts",
+      "packages/agents/src/refusal/reviewCall.test.ts",
+      "packages/agents/src/refusal/reviewCall.ts",
+      "packages/agents/src/refusal/reviewProfile.ts",
+      "packages/agents/src/refusal/reviewPrompt.ts",
+      "packages/agents/src/refusal/reviewTypes.ts",
+      "packages/agents/src/refusal/reviewVerdict.test.ts",
+      "packages/agents/src/refusal/reviewVerdict.ts",
+      "packages/agents/src/refusal/reviewWindow.test.ts",
+      "packages/agents/src/refusal/reviewWindow.ts",
+      "packages/agents/src/refusal/rewriteApplier.test.ts",
+      "packages/agents/src/refusal/rewriteApplier.ts",
+      "packages/agents/src/session/session-client-acquisition-owner.ts",
+      "packages/agents/src/session/session-client-owner.ts",
+      "packages/auth/src/__tests__/keyring-token-store.lock-behavior.test.ts",
+      "packages/auth/src/network-fetch.ts",
+      "packages/cli/src/cli.tsx",
+      "packages/cli/src/cliBootstrap.debug-owner.behavior.test.ts",
+      "packages/cli/src/cliBootstrap.tsx",
+      "packages/cli/src/cliProviderInit.git-stats-owner.test.ts",
+      "packages/cli/src/cliProviderInit.ts",
+      "packages/cli/src/cliStartupOrdering.test.ts",
+      "packages/cli/src/commands/mcp/list.ts",
+      "packages/cli/src/nonInteractiveCliSupport.refusalNotice.test.ts",
+      "packages/cli/src/nonInteractiveCliSupport.ts",
+      "packages/cli/src/ui/commands/mcp-auth-owner.test.ts",
+      "packages/cli/src/ui/commands/setCommand.refusal.test.ts",
+      "packages/cli/src/ui/components/ModelStatsDisplay.test.tsx",
+      "packages/cli/src/ui/components/ModelStatsDisplay.tsx",
+      "packages/cli/src/ui/components/StatsDisplay.sections.test.tsx",
+      "packages/cli/src/ui/components/StatsDisplay.test.tsx",
+      "packages/cli/src/ui/contexts/SessionContext.tsx",
+      "packages/cli/src/ui/hooks/agentStream/__tests__/agentEventDispatcher.notice.test.ts",
+      "packages/cli/src/ui/hooks/agentStream/__tests__/helpers/createFakeAgent.ts",
+      "packages/cli/src/ui/hooks/agentStream/__tests__/useSubmitQuery.background-clear.test.tsx",
+      "packages/cli/src/ui/hooks/agentStream/agentEventDispatcher.ts",
+      "packages/cli/src/ui/hooks/command-registration-settles.behavior.test.tsx",
+      "packages/cli/src/ui/hooks/useAtCompletion.subagent.test.ts",
+      "packages/cli/src/ui/hooks/useUtilityCommands.ts",
+      "packages/cli/src/ui/utils/InlineMarkdownRenderer.test.ts",
+      "packages/cli/src/ui/utils/InlineMarkdownRenderer.tsx",
+      "packages/cli/src/ui/utils/computeStats.test.ts",
+      "packages/cli/src/utils/shellJobShutdownNotice.test.ts",
+      "packages/core/src/config/config.ts",
+      "packages/core/src/core/chatSessionTypes.ts",
+      "packages/core/src/core/clientContract.ts",
+      "packages/core/src/core/subagentTypes.ts",
+      "packages/core/src/core/turn.ts",
+      "packages/core/src/hooks/hookRunner.physical.test.ts",
+      "packages/core/src/index.ts",
+      "packages/core/src/recording/RecordingIntegration.cancelBeforeCommit.test.ts",
+      "packages/core/src/recording/RecordingIntegration.journalCommit.test.ts",
+      "packages/core/src/recording/RecordingIntegration.ts",
+      "packages/core/src/recording/ReplayEngine.ts",
+      "packages/core/src/recording/SessionRecordingService.refusal.test.ts",
+      "packages/core/src/recording/SessionRecordingService.refusalRewrite.test.ts",
+      "packages/core/src/recording/SessionRecordingService.ts",
+      "packages/core/src/recording/recording-batch-completion.test.ts",
+      "packages/core/src/recording/recording-batch-completion.ts",
+      "packages/core/src/recording/recording-drain-failure.ts",
+      "packages/core/src/recording/recording-pending-record.ts",
+      "packages/core/src/recording/refusalPayload.ts",
+      "packages/core/src/recording/refusalRewritePayload.ts",
+      "packages/core/src/recording/session-media-package.refusalRewrite.test.ts",
+      "packages/core/src/recording/session-media-package.ts",
+      "packages/core/src/recording/types.ts",
+      "packages/core/src/runtime/AgentRuntimeContext.ts",
+      "packages/core/src/runtime/createAgentRuntimeContext.ts",
+      "packages/core/src/runtime/providerRequestDiagnostics.ts",
+      "packages/core/src/services/git-stats-service.ts",
+      "packages/core/src/services/history/HistoryService.batch.test.ts",
+      "packages/core/src/services/history/HistoryService.replaceIfUnchanged.test.ts",
+      "packages/core/src/services/history/HistoryService.ts",
+      "packages/core/src/services/history/HistoryServiceCore.ts",
+      "packages/core/src/services/history/historyMutationEffects.ts",
+      "packages/core/src/services/history/historyMutationFailure.ts",
+      "packages/core/src/services/shellJobDisposalError.ts",
+      "packages/core/src/services/shellJobManager.ts",
+      "packages/core/src/services/shellJobManagerDisposeInFlightKill.test.ts",
+      "packages/core/src/services/shellPtyLifecycle.test.ts",
+      "packages/core/src/session/session-settings-owner.ts",
+      "packages/core/src/storage/conversation-file-writer-owner.test.ts",
+      "packages/core/src/storage/storage-compat.test.ts",
+      "packages/core/src/telemetry/loggers.basic.test.ts",
+      "packages/core/src/telemetry/uiTelemetry.test.ts",
+      "packages/core/src/test-utils/shellPtyProbe.ts",
+      "packages/core/src/tools-adapters/CoreToolHostAdapter.ts",
+      "packages/core/src/utils/fetch.ts",
+      "packages/ide-integration/src/ide/process-utils.test.ts",
+      "packages/mcp/src/auth/oauth-auth-lifetime.behavior.test.ts",
+      "packages/mcp/src/auth/oauth-cancellation.behavior.test.ts",
+      "packages/mcp/src/auth/oauth-owner-selection.behavior.test.ts",
+      "packages/mcp/src/auth/oauth-provider.authenticate.test.ts",
+      "packages/mcp/src/auth/oauth-provider.token.test.ts",
+      "packages/mcp/src/auth/oauth-provider.ts",
+      "packages/mcp/src/auth/oauth-refresh-cancellation.behavior.test.ts",
+      "packages/mcp/src/auth/oauth-utils.test.ts",
+      "packages/mcp/src/auth/oauth-utils.ts",
+      "packages/mcp/src/client/__tests__/manager-fixtures.ts",
+      "packages/mcp/src/client/__tests__/manager-trust-fixtures.ts",
+      "packages/mcp/src/client/mcp-auth-factory-owner.test.ts",
+      "packages/mcp/src/client/mcp-auth-owner.behavior.test.ts",
+      "packages/mcp/src/client/mcp-client-manager-helpers.ts",
+      "packages/mcp/src/client/mcp-client-manager.fake-discovery.test.ts",
+      "packages/mcp/src/client/mcp-client-manager.partial-failure.test.ts",
+      "packages/mcp/src/client/mcp-client-manager.restart.test.ts",
+      "packages/mcp/src/client/mcp-client-manager.status-failure.test.ts",
+      "packages/mcp/src/client/mcp-client-manager.test.ts",
+      "packages/mcp/src/client/mcp-client-manager.trust.test.ts",
+      "packages/mcp/src/client/mcp-client-manager.ts",
+      "packages/mcp/src/client/mcp-client.auth-cancellation.behavior.test.ts",
+      "packages/mcp/src/client/mcp-client.disconnect-cleanup.test.ts",
+      "packages/mcp/src/client/mcp-client.discover-rollback.test.ts",
+      "packages/mcp/src/client/mcp-client.discovery.test.ts",
+      "packages/mcp/src/client/mcp-client.lifecycle.test.ts",
+      "packages/mcp/src/client/mcp-client.oauth.test.ts",
+      "packages/mcp/src/client/mcp-client.publication-authorization.test.ts",
+      "packages/mcp/src/client/mcp-client.resource-refresh.test.ts",
+      "packages/mcp/src/client/mcp-client.stale-error.test.ts",
+      "packages/mcp/src/client/mcp-client.tools.test.ts",
+      "packages/mcp/src/client/mcp-client.transport.test.ts",
+      "packages/mcp/src/client/mcp-client.ts",
+      "packages/mcp/src/client/mcp-connection-lifetime.held-delete.test.ts",
+      "packages/mcp/src/client/mcp-connection-lifetime.session-termination.test.ts",
+      "packages/mcp/src/client/mcp-connection-lifetime.ts",
+      "packages/mcp/src/client/mcp-connection.ts",
+      "packages/mcp/src/client/mcp-oauth-helpers.ts",
+      "packages/mcp/src/client/mcp-owner-status.behavior.test.ts",
+      "packages/mcp/src/client/mcp-proxy-oauth.behavior.test.ts",
+      "packages/mcp/src/client/mcp-proxy-sse.behavior.test.ts",
+      "packages/mcp/src/client/mcp-transport.ts",
+      "packages/mcp/src/client/test-support/oauth.ts",
+      "packages/mcp/src/host/manager-feedback-owner.test.ts",
+      "packages/providers/src/LoggingProviderWrapper.test.ts",
+      "packages/providers/src/auth/oauth-foreground-lifetime.ts",
+      "packages/providers/src/auth/oauth-manager.dispose-flights.behavior.test.ts",
+      "packages/providers/src/auth/oauth-manager.ts",
+      "packages/providers/src/auth/proxy/__tests__/github-broker-issue4001.test.ts",
+      "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+      "packages/providers/src/auth/token-access-coordinator.ts",
+      "packages/providers/src/auth/token-refresh-helper.ts",
+      "packages/providers/src/composition/providerManagerInstance.ts",
+      "packages/providers/src/logging/conversationLogger.test.ts",
+      "packages/providers/src/logging/conversationLogger.ts",
+      "packages/providers/src/logging/telemetryEmitter.ts",
+      "packages/providers/src/types/IProviderConfig.ts",
+      "packages/settings/src/__tests__/refusalSettings.test.ts",
+      "packages/settings/src/profiles/types.ts",
+      "packages/settings/src/settings/registry/registry-entries-4.ts",
+      "packages/settings/src/settings/settingsRegistry.ts",
+      "packages/storage/src/conversation/ConversationFileWriter.test.ts",
+      "packages/storage/src/conversation/ConversationFileWriter.ts",
+      "packages/storage/src/testing.ts",
+      "packages/telemetry/src/telemetry/refusalCounting.behavior.test.ts",
+      "packages/telemetry/src/telemetry/sessionMetricsAggregator.ts",
+      "packages/telemetry/src/telemetry/uiTelemetry.ts",
+      "packages/test-utils/src/network/test-utils/owned-fetch.ts",
+      "packages/test-utils/src/process-run.ts",
+      "packages/test-utils/src/test-rig.test.ts",
+      "packages/zed-acp/src/__tests__/physical-terminal-peer.ts",
+      "packages/zed-acp/src/zed-workspace-release.behavior.test.ts",
+      "plugins/google-gemini/src/gemini/GeminiProvider.ts",
+      "plugins/google-gemini/src/test/GeminiProvider.auth.test.ts",
+      "plugins/google-gemini/src/test/google-owner-isolation.behavior.test.ts",
+      "plugins/google-mcp-auth/src/index.composition.test.ts",
+      "scripts/assembly-closure-guard.ts",
+      "scripts/bun-test-roots.ts",
+      "scripts/check-agent-core-import-boundary.ts",
+      "scripts/check-runtime-dependency-declarations.ts",
+      "scripts/check-runtime-state-boundary.ts",
+      "scripts/runtime-entry-manifest.ts",
+      "scripts/runtime-state-baseline.ts",
+      "scripts/runtime-state-roots.ts",
+      "scripts/runtime-state-scan.ts",
+      "scripts/sandbox-image-probe.ts",
+      "scripts/test-shards.ts",
+      "scripts/tests/agent-core-import-boundary.test.ts",
+      "scripts/tests/ambient-runtime-symbols-guard.test.ts",
+      "scripts/tests/ambient-runtime-symbols-guard.ts",
+      "scripts/tests/assembly-closure-guard.test.ts",
+      "scripts/tests/bun-test-roots.bun.test.ts",
+      "scripts/tests/issue-2754-vsce-release-only.test.ts",
+      "scripts/tests/issue-3241-dockerfile-npm-retry.bun.test.ts",
+      "scripts/tests/mcp-standalone-behavior-fixture.ts",
+      "scripts/tests/native-path-inputs.test.ts",
+      "scripts/tests/native-shard-provider-environment.bun.test.ts",
+      "scripts/tests/plugins-topology.test.ts",
+      "scripts/tests/release-artifact-handoff.bun.test.ts",
+      "scripts/tests/release-homebrew-prepared-tarball.test.ts",
+      "scripts/tests/release-process-b.test.ts",
+      "scripts/tests/release-process.test.ts",
+      "scripts/tests/release-tag-creation.bun.test.ts",
+      "scripts/tests/release-workflow-gates.bun.test.ts",
+      "scripts/tests/runtime-ambient-delegation-guard.test.ts",
+      "scripts/tests/runtime-ambient-delegation-guard.ts",
+      "scripts/tests/runtime-boundary-ratchet.test.ts",
+      "scripts/tests/runtime-dependency-declarations.test.ts",
+      "scripts/tests/runtime-service-shape-aggregates.test.ts",
+      "scripts/tests/runtime-service-shape-calls.test.ts",
+      "scripts/tests/runtime-service-shape-guard.test.ts",
+      "scripts/tests/runtime-service-shape-guard.ts",
+      "scripts/tests/runtime-service-shape-holders.test.ts",
+      "scripts/tests/runtime-service-shape-test-helpers.ts",
+      "scripts/tests/runtime-source-discovery.test.ts",
+      "scripts/tests/runtime-state-baseline.test.ts",
+      "scripts/tests/runtime-state-boundary.test.ts",
+      "scripts/tests/runtime-state-mutation-analysis.ts",
+      "scripts/tests/runtime-state-roots.test.ts",
+      "scripts/tests/runtime-state-structure-guard.test.ts",
+      "scripts/tests/runtime-state-structure-guard.ts",
+      "scripts/tests/sandbox-ui-ripgrep.bun.test.ts",
+      "scripts/tests/test-isolation-contract.test.ts",
+      "scripts/update-homebrew-formula.ts"
+    ],
+    "total": 233,
+    "byPlanId": {
+      "PLAN-20260617-COREAPI.P10": 48,
+      "PLAN-20260617-COREAPI.P20": 25,
+      "PLAN-20260211-SESSIONRECORDING.P05": 20,
+      "PLAN-20251028-STATELESS6.P06": 11,
+      "PLAN-20251202-THINKING.P03b": 10,
+      "PLAN-20260731-GHBROKER.P17": 10,
+      "PLAN-20260211-SESSIONRECORDING.P14": 9,
+      "PLAN-20251028-STATELESS6.P07": 7,
+      "PLAN-20260211-COMPRESSION.P12": 7,
+      "PLAN-20260707-AGENTNEUTRAL.P13": 7,
+      "PLAN-20260707-AGENTNEUTRAL.P11": 6,
+      "PLAN-20260608-ISSUE1586.P15": 5,
+      "PLAN-20260731-GHBROKER.P19": 5,
+      "PLAN-20260211-HIGHDENSITY.P15": 4,
+      "PLAN-20260211-SESSIONRECORDING.P08": 4,
+      "PLAN-20260603-ISSUE1584.P05": 4,
+      "PLAN-20260707-AGENTNEUTRAL.P07": 4,
+      "PLAN-20250823-AUTHFIXES.P14": 3,
+      "PLAN-20260211-HIGHDENSITY.P08": 3,
+      "PLAN-20260608-ISSUE1586.P12": 3,
+      "PLAN-20260617-COREAPI.P22": 3,
+      "PLAN-20260707-AGENTNEUTRAL.P19": 3,
+      "PLAN-20260211-SESSIONRECORDING.P03": 2,
+      "PLAN-20260603-ISSUE1584.P12": 2,
+      "PLAN-20260608-ISSUE1588.P05": 2,
+      "PLAN-20260610-ISSUE1592.P01": 2,
+      "PLAN-20260617-COREAPI.P04": 2,
+      "PLAN-20260707-AGENTNEUTRAL.P27": 2,
+      "ISSUE-3222": 1,
+      "PLAN-20251027-STATELESS5.P06": 1,
+      "PLAN-20260130-ASYNCTASK.P09": 1,
+      "PLAN-20260216-HOOKSYSTEMREWRITE.P21": 1,
+      "PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P06": 1,
+      "PLAN-20260603-ISSUE1584.P11": 1,
+      "PLAN-20260609-ISSUE1590.P04b": 1,
+      "PLAN-20260610-ISSUE1592.P03": 1,
+      "PLAN-20260617-COREAPI.P14": 1,
+      "PLAN-20260617-COREAPI.P15": 1,
+      "PLAN-20260702-LLMTYPES.P04": 1,
+      "PLAN-20260707-AGENTNEUTRAL.P07/P11": 1,
+      "PLAN-20260707-AGENTNEUTRAL.P08": 1,
+      "PLAN-20260707-AGENTNEUTRAL.P15": 1,
+      "PLAN-20260707-AGENTNEUTRAL.P26": 1,
+      "PLAN-20260806-ISSUE3048.P08": 1,
+      "PLAN-20260825-SHELLMEM.P02": 1,
+      "PLAN-20260827-ISSUE2562.P04": 1,
+      "PLAN-20260914-HOOKWIREV2": 1,
+      "project-plans/issue4001.md": 1
+    },
+    "byPackage": {
+      "packages/agents": 115,
+      "packages/core": 85,
+      "packages/providers": 25,
+      "packages/mcp": 3,
+      "packages/settings": 2,
+      "packages/cli": 1,
+      "packages/storage": 1,
+      "packages/telemetry": 1
+    },
+    "byCommit": {
+      "fbd20c170ca9ad59e1af2400d7d84745b2b8f260": 64,
+      "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1": 21,
+      "c9895f44076c8fae5709769fe1d862d6c69f7146": 17,
+      "9169c2948c920c705b5e3f513d4951587baf4a41": 15,
+      "44dd67c86ac53d2ba821f9486a500612f13447c8": 9,
+      "7c598c30fa8e501f98d271209d1702b0a26d10b4": 9,
+      "e5cb79a8b4d1e6747b69687461d01f3daab2a264": 9,
+      "85da6b377bde9a56ff00c04d1ba18cedd2d21b77": 8,
+      "2a0cd9ddfef6d29f9de17754e8f1e67832ef7cd6": 7,
+      "aed9b68fa9c9b14cc479091fbb8269a34902adf4": 7,
+      "b1c1eb0b6c84f8aea17ff3678586b143ae20a01b": 6,
+      "205b0e5d3425ef756f610e866c5ac3a21c0c7b3f": 5,
+      "293093b5f55d3cf4441074a340f19848c12fec8a": 5,
+      "2077498481a5d3399d3bf1abd9ae2a47222d7446": 4,
+      "edbbc310661baf6ec876e1585f062b6db089366b": 4,
+      "1abefc1d14a2b287775c1a76a4ce579efb204813": 3,
+      "4312970ddaa0113bab8d9fd64694d938fd55d2de": 3,
+      "96a42dafb715915f12839ee46161d2fb72e2bbfb": 3,
+      "c3ec9d30d269b4455519621a3959c9fbc0ee6ae1": 3,
+      "e3e41b498edd933341011faccffcc3d44e1917af": 3,
+      "065db2db7dc9776d556522606fc84f7df8e98857": 2,
+      "104acfbe01cb305588ea5b70e357a18e50388579": 2,
+      "794c53ad1dbd8076b18101fb6ddb30e6f8f7dbec": 2,
+      "9507c4710ab5bf9b12e13e64b1db3b66eb26a9cd": 2,
+      "acb4a26a6a12ec8ca4cb42ddee7e132f37f6c85b": 2,
+      "f43536cdd2459cbde44663f9721c59fa3612f26e": 2,
+      "066ec9711e13584d9bf8df3d3f733805e37b1540": 1,
+      "1af23ee9bf9d825bd96aef2dfe54fdb5cf1c9c96": 1,
+      "274e9e9f023ae0792f91b8dbf7ff49accb19995e": 1,
+      "3aee3d95c0d02f5e1390e91a918011a41a29242d": 1,
+      "4f09796173c308d30b00c1ea9109d57ab8731c36": 1,
+      "6c4a1a1f0948244d7ba9651d5fcdc518942ecbcb": 1,
+      "83cfce566f64aebb3515b36db35104a10218ea71": 1,
+      "870d8f220222b2bd99b433c06c82d4b25db0abdc": 1,
+      "a404d5d8fa459412151abcc6135ca868c1fb4b42": 1,
+      "b3cebcc58ddd3265538b2acfb6f68e4952255345": 1,
+      "b4052a098b1215f2287c153bc8f4e5fd9452fd1e": 1,
+      "d2effd463b32d4c5c9dd98408c04c2c0f1ef6747": 1,
+      "d860795c0988dc863d523ce75ee9d287a594a779": 1,
+      "e0ab0cc618a472b3472105919ec60aa948a67290": 1,
+      "e6e8f1bfa138c1ce7fcbfc0a21ae8328b784714c": 1,
+      "ff0a0faa0bb17d845ff5d11602f09bfde69c0453": 1
+    },
+    "markers": [
+      {
+        "file": "packages/agents/src/api/__tests__/apiSessionControl.characterization.test.ts",
+        "line": 28,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P26",
+        "commit": "ff0a0faa0bb17d845ff5d11602f09bfde69c0453"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 8,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 96,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 97,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 110,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 111,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 123,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 132,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 148,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 156,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 165,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 178,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 185,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 205,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 210,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 223,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 234,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 242,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 295,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 296,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 307,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 316,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 338,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 349,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 358,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 368,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 378,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 379,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 386,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 396,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 397,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 409,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 423,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 424,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 437,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 449,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 450,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 456,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 462,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 468,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 476,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 488,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 500,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 512,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 520,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 541,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 554,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 603,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/__tests__/event-characterization.spec.ts",
+        "line": 657,
+        "planId": "PLAN-20260617-COREAPI.P10",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/agentRuntimeAssembly.ts",
+        "line": 39,
+        "planId": "ISSUE-3222",
+        "commit": "066ec9711e13584d9bf8df3d3f733805e37b1540"
+      },
+      {
+        "file": "packages/agents/src/api/agentStatsProjector.ts",
+        "line": 13,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "c3ec9d30d269b4455519621a3959c9fbc0ee6ae1"
+      },
+      {
+        "file": "packages/agents/src/api/agentStatsProjector.ts",
+        "line": 90,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "c3ec9d30d269b4455519621a3959c9fbc0ee6ae1"
+      },
+      {
+        "file": "packages/agents/src/api/agentStatsProjector.ts",
+        "line": 136,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "c3ec9d30d269b4455519621a3959c9fbc0ee6ae1"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 9,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 106,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "2077498481a5d3399d3bf1abd9ae2a47222d7446"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 117,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 132,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "2077498481a5d3399d3bf1abd9ae2a47222d7446"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 191,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "2077498481a5d3399d3bf1abd9ae2a47222d7446"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 236,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 301,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "2077498481a5d3399d3bf1abd9ae2a47222d7446"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 795,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 815,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 943,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 1019,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 1048,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControl.ts",
+        "line": 1057,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 197,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 210,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 241,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 253,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 269,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 340,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 366,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 386,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/control/sessionControlRollback.ts",
+        "line": 403,
+        "planId": "PLAN-20260617-COREAPI.P20",
+        "commit": "7c598c30fa8e501f98d271209d1702b0a26d10b4"
+      },
+      {
+        "file": "packages/agents/src/api/event-schema.ts",
+        "line": 2,
+        "planId": "PLAN-20260617-COREAPI.P04",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/event-types.ts",
+        "line": 2,
+        "planId": "PLAN-20260617-COREAPI.P04",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/eventAdapter.ts",
+        "line": 7,
+        "planId": "PLAN-20260617-COREAPI.P14",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/api/eventAdapter.ts",
+        "line": 236,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P19",
+        "commit": "f43536cdd2459cbde44663f9721c59fa3612f26e"
+      },
+      {
+        "file": "packages/agents/src/api/eventAdapter.ts",
+        "line": 265,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P19",
+        "commit": "b4052a098b1215f2287c153bc8f4e5fd9452fd1e"
+      },
+      {
+        "file": "packages/agents/src/core/MessageStreamOrchestrator.ts",
+        "line": 204,
+        "planId": "PLAN-20260806-ISSUE3048.P08",
+        "commit": "1af23ee9bf9d825bd96aef2dfe54fdb5cf1c9c96"
+      },
+      {
+        "file": "packages/agents/src/core/MessageStreamOrchestrator.ts",
+        "line": 437,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P15",
+        "commit": "3aee3d95c0d02f5e1390e91a918011a41a29242d"
+      },
+      {
+        "file": "packages/agents/src/core/StreamProcessor.ts",
+        "line": 28,
+        "planId": "PLAN-20260608-ISSUE1586.P15",
+        "commit": "85da6b377bde9a56ff00c04d1ba18cedd2d21b77"
+      },
+      {
+        "file": "packages/agents/src/core/StreamProcessor.ts",
+        "line": 558,
+        "planId": "PLAN-20260617-COREAPI.P15",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/agents/src/core/StreamProcessor.ts",
+        "line": 719,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P07",
+        "commit": "205b0e5d3425ef756f610e866c5ac3a21c0c7b3f"
+      },
+      {
+        "file": "packages/agents/src/core/StreamProcessor.ts",
+        "line": 808,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P07",
+        "commit": "205b0e5d3425ef756f610e866c5ac3a21c0c7b3f"
+      },
+      {
+        "file": "packages/agents/src/core/TurnProcessor.ts",
+        "line": 117,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P08",
+        "commit": "205b0e5d3425ef756f610e866c5ac3a21c0c7b3f"
+      },
+      {
+        "file": "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+        "line": 16,
+        "planId": "PLAN-20251028-STATELESS6.P07",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+        "line": 277,
+        "planId": "PLAN-20251028-STATELESS6.P07",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+        "line": 286,
+        "planId": "PLAN-20251028-STATELESS6.P07",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+        "line": 326,
+        "planId": "PLAN-20251028-STATELESS6.P07",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+        "line": 368,
+        "planId": "PLAN-20251028-STATELESS6.P07",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+        "line": 428,
+        "planId": "PLAN-20251028-STATELESS6.P07",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+        "line": 436,
+        "planId": "PLAN-20251028-STATELESS6.P07",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/agents/src/core/chatSession.ts",
+        "line": 66,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P27",
+        "commit": "9507c4710ab5bf9b12e13e64b1db3b66eb26a9cd"
+      },
+      {
+        "file": "packages/agents/src/core/chatSession.ts",
+        "line": 97,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P27",
+        "commit": "9507c4710ab5bf9b12e13e64b1db3b66eb26a9cd"
+      },
+      {
+        "file": "packages/agents/src/core/chatSession.ts",
+        "line": 208,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P13",
+        "commit": "b1c1eb0b6c84f8aea17ff3678586b143ae20a01b"
+      },
+      {
+        "file": "packages/agents/src/core/hookToolRestrictions.ts",
+        "line": 10,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P11",
+        "commit": "aed9b68fa9c9b14cc479091fbb8269a34902adf4"
+      },
+      {
+        "file": "packages/agents/src/core/hookToolRestrictions.ts",
+        "line": 34,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P11",
+        "commit": "aed9b68fa9c9b14cc479091fbb8269a34902adf4"
+      },
+      {
+        "file": "packages/agents/src/core/hookToolRestrictions.ts",
+        "line": 70,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P07/P11",
+        "commit": "aed9b68fa9c9b14cc479091fbb8269a34902adf4"
+      },
+      {
+        "file": "packages/agents/src/core/hookToolRestrictions.ts",
+        "line": 96,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P11",
+        "commit": "aed9b68fa9c9b14cc479091fbb8269a34902adf4"
+      },
+      {
+        "file": "packages/agents/src/core/hookToolRestrictions.ts",
+        "line": 109,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P11",
+        "commit": "aed9b68fa9c9b14cc479091fbb8269a34902adf4"
+      },
+      {
+        "file": "packages/agents/src/core/hookToolRestrictions.ts",
+        "line": 123,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P11",
+        "commit": "aed9b68fa9c9b14cc479091fbb8269a34902adf4"
+      },
+      {
+        "file": "packages/agents/src/core/hookToolRestrictions.ts",
+        "line": 146,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P11",
+        "commit": "aed9b68fa9c9b14cc479091fbb8269a34902adf4"
+      },
+      {
+        "file": "packages/agents/src/core/hookWireAdapter.ts",
+        "line": 8,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P07",
+        "commit": "205b0e5d3425ef756f610e866c5ac3a21c0c7b3f"
+      },
+      {
+        "file": "packages/agents/src/core/hookWireAdapter.ts",
+        "line": 9,
+        "planId": "PLAN-20260914-HOOKWIREV2",
+        "commit": "4f09796173c308d30b00c1ea9109d57ab8731c36"
+      },
+      {
+        "file": "packages/agents/src/core/hookWireAdapter.ts",
+        "line": 60,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P07",
+        "commit": "205b0e5d3425ef756f610e866c5ac3a21c0c7b3f"
+      },
+      {
+        "file": "packages/agents/src/core/hookWireAdapter.ts",
+        "line": 86,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P13",
+        "commit": "b1c1eb0b6c84f8aea17ff3678586b143ae20a01b"
+      },
+      {
+        "file": "packages/agents/src/core/hookWireAdapter.ts",
+        "line": 128,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P13",
+        "commit": "b1c1eb0b6c84f8aea17ff3678586b143ae20a01b"
+      },
+      {
+        "file": "packages/agents/src/core/hooks-caller-application.test.ts",
+        "line": 15,
+        "planId": "PLAN-20260216-HOOKSYSTEMREWRITE.P21",
+        "commit": "d860795c0988dc863d523ce75ee9d287a594a779"
+      },
+      {
+        "file": "packages/agents/src/core/streamAfterModelHook.ts",
+        "line": 45,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P13",
+        "commit": "6c4a1a1f0948244d7ba9651d5fcdc518942ecbcb"
+      },
+      {
+        "file": "packages/agents/src/core/turnLogging.ts",
+        "line": 62,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P13",
+        "commit": "b1c1eb0b6c84f8aea17ff3678586b143ae20a01b"
+      },
+      {
+        "file": "packages/agents/src/core/turnLogging.ts",
+        "line": 72,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P13",
+        "commit": "b1c1eb0b6c84f8aea17ff3678586b143ae20a01b"
+      },
+      {
+        "file": "packages/agents/src/core/turnLogging.ts",
+        "line": 102,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P13",
+        "commit": "b1c1eb0b6c84f8aea17ff3678586b143ae20a01b"
+      },
+      {
+        "file": "packages/agents/src/core/turnLogging.ts",
+        "line": 103,
+        "planId": "PLAN-20260707-AGENTNEUTRAL.P19",
+        "commit": "f43536cdd2459cbde44663f9721c59fa3612f26e"
+      },
+      {
+        "file": "packages/cli/src/cli.tsx",
+        "line": 42,
+        "planId": "PLAN-20260603-ISSUE1584.P12",
+        "commit": "e3e41b498edd933341011faccffcc3d44e1917af"
+      },
+      {
+        "file": "packages/core/src/core/clientContract.ts",
+        "line": 31,
+        "planId": "PLAN-20260610-ISSUE1592.P01",
+        "commit": "acb4a26a6a12ec8ca4cb42ddee7e132f37f6c85b"
+      },
+      {
+        "file": "packages/core/src/core/clientContract.ts",
+        "line": 299,
+        "planId": "PLAN-20260610-ISSUE1592.P01",
+        "commit": "acb4a26a6a12ec8ca4cb42ddee7e132f37f6c85b"
+      },
+      {
+        "file": "packages/core/src/core/turn.ts",
+        "line": 10,
+        "planId": "PLAN-20260610-ISSUE1592.P03",
+        "commit": "a404d5d8fa459412151abcc6135ca868c1fb4b42"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 70,
+        "planId": "PLAN-20260130-ASYNCTASK.P09",
+        "commit": "edbbc310661baf6ec876e1585f062b6db089366b"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 188,
+        "planId": "PLAN-20260608-ISSUE1586.P15",
+        "commit": "85da6b377bde9a56ff00c04d1ba18cedd2d21b77"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 208,
+        "planId": "PLAN-20260608-ISSUE1586.P15",
+        "commit": "85da6b377bde9a56ff00c04d1ba18cedd2d21b77"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 215,
+        "planId": "PLAN-20260608-ISSUE1586.P15",
+        "commit": "85da6b377bde9a56ff00c04d1ba18cedd2d21b77"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 233,
+        "planId": "PLAN-20260608-ISSUE1586.P15",
+        "commit": "85da6b377bde9a56ff00c04d1ba18cedd2d21b77"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 543,
+        "planId": "PLAN-20260702-LLMTYPES.P04",
+        "commit": "274e9e9f023ae0792f91b8dbf7ff49accb19995e"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 555,
+        "planId": "PLAN-20260603-ISSUE1584.P11",
+        "commit": "e3e41b498edd933341011faccffcc3d44e1917af"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 589,
+        "planId": "PLAN-20251027-STATELESS5.P06",
+        "commit": "edbbc310661baf6ec876e1585f062b6db089366b"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 608,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "edbbc310661baf6ec876e1585f062b6db089366b"
+      },
+      {
+        "file": "packages/core/src/index.ts",
+        "line": 711,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P03",
+        "commit": "edbbc310661baf6ec876e1585f062b6db089366b"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 110,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 374,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 515,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 531,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 543,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 555,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 580,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 603,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/RecordingIntegration.ts",
+        "line": 630,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P14",
+        "commit": "e5cb79a8b4d1e6747b69687461d01f3daab2a264"
+      },
+      {
+        "file": "packages/core/src/recording/ReplayEngine.ts",
+        "line": 18,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P08",
+        "commit": "1abefc1d14a2b287775c1a76a4ce579efb204813"
+      },
+      {
+        "file": "packages/core/src/recording/ReplayEngine.ts",
+        "line": 842,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P08",
+        "commit": "1abefc1d14a2b287775c1a76a4ce579efb204813"
+      },
+      {
+        "file": "packages/core/src/recording/ReplayEngine.ts",
+        "line": 895,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P08",
+        "commit": "870d8f220222b2bd99b433c06c82d4b25db0abdc"
+      },
+      {
+        "file": "packages/core/src/recording/ReplayEngine.ts",
+        "line": 1014,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P08",
+        "commit": "1abefc1d14a2b287775c1a76a4ce579efb204813"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 18,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 102,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 164,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 202,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 224,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 378,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 398,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 416,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 503,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 533,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 544,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 555,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 587,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 608,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 719,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 915,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 931,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 945,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 956,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/SessionRecordingService.ts",
+        "line": 970,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P05",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/recording/types.ts",
+        "line": 18,
+        "planId": "PLAN-20260211-SESSIONRECORDING.P03",
+        "commit": "bf52702e34a8ee176aed5481f3f0101cf4b2dfb1"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 20,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 59,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 61,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 63,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 65,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 67,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 71,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 73,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 77,
+        "planId": "PLAN-20260211-COMPRESSION.P12",
+        "commit": "2a0cd9ddfef6d29f9de17754e8f1e67832ef7cd6"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 79,
+        "planId": "PLAN-20260211-COMPRESSION.P12",
+        "commit": "2a0cd9ddfef6d29f9de17754e8f1e67832ef7cd6"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 82,
+        "planId": "PLAN-20260211-HIGHDENSITY.P15",
+        "commit": "4312970ddaa0113bab8d9fd64694d938fd55d2de"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 110,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 122,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 137,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 149,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 165,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 191,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 212,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 254,
+        "planId": "PLAN-20260211-COMPRESSION.P12",
+        "commit": "2a0cd9ddfef6d29f9de17754e8f1e67832ef7cd6"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 256,
+        "planId": "PLAN-20260211-COMPRESSION.P12",
+        "commit": "2a0cd9ddfef6d29f9de17754e8f1e67832ef7cd6"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 259,
+        "planId": "PLAN-20260211-HIGHDENSITY.P15",
+        "commit": "4312970ddaa0113bab8d9fd64694d938fd55d2de"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 291,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/AgentRuntimeContext.ts",
+        "line": 338,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+        "line": 9,
+        "planId": "PLAN-20251028-STATELESS6.P06",
+        "commit": "c9895f44076c8fae5709769fe1d862d6c69f7146"
+      },
+      {
+        "file": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+        "line": 28,
+        "planId": "PLAN-20260211-COMPRESSION.P12",
+        "commit": "2a0cd9ddfef6d29f9de17754e8f1e67832ef7cd6"
+      },
+      {
+        "file": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+        "line": 38,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "44dd67c86ac53d2ba821f9486a500612f13447c8"
+      },
+      {
+        "file": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+        "line": 268,
+        "planId": "PLAN-20260211-COMPRESSION.P12",
+        "commit": "2a0cd9ddfef6d29f9de17754e8f1e67832ef7cd6"
+      },
+      {
+        "file": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+        "line": 280,
+        "planId": "PLAN-20260211-COMPRESSION.P12",
+        "commit": "2a0cd9ddfef6d29f9de17754e8f1e67832ef7cd6"
+      },
+      {
+        "file": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+        "line": 298,
+        "planId": "PLAN-20260211-HIGHDENSITY.P15",
+        "commit": "794c53ad1dbd8076b18101fb6ddb30e6f8f7dbec"
+      },
+      {
+        "file": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+        "line": 308,
+        "planId": "PLAN-20260211-HIGHDENSITY.P15",
+        "commit": "4312970ddaa0113bab8d9fd64694d938fd55d2de"
+      },
+      {
+        "file": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+        "line": 361,
+        "planId": "PLAN-20251202-THINKING.P03b",
+        "commit": "794c53ad1dbd8076b18101fb6ddb30e6f8f7dbec"
+      },
+      {
+        "file": "packages/core/src/services/history/HistoryService.ts",
+        "line": 324,
+        "planId": "PLAN-20260211-HIGHDENSITY.P08",
+        "commit": "104acfbe01cb305588ea5b70e357a18e50388579"
+      },
+      {
+        "file": "packages/core/src/services/history/HistoryService.ts",
+        "line": 335,
+        "planId": "PLAN-20260211-HIGHDENSITY.P08",
+        "commit": "104acfbe01cb305588ea5b70e357a18e50388579"
+      },
+      {
+        "file": "packages/core/src/services/history/HistoryServiceCore.ts",
+        "line": 32,
+        "planId": "PLAN-20260603-ISSUE1584.P05",
+        "commit": "293093b5f55d3cf4441074a340f19848c12fec8a"
+      },
+      {
+        "file": "packages/core/src/services/history/HistoryServiceCore.ts",
+        "line": 215,
+        "planId": "PLAN-20260603-ISSUE1584.P05",
+        "commit": "293093b5f55d3cf4441074a340f19848c12fec8a"
+      },
+      {
+        "file": "packages/core/src/services/history/HistoryServiceCore.ts",
+        "line": 243,
+        "planId": "PLAN-20260603-ISSUE1584.P05",
+        "commit": "293093b5f55d3cf4441074a340f19848c12fec8a"
+      },
+      {
+        "file": "packages/core/src/services/history/HistoryServiceCore.ts",
+        "line": 267,
+        "planId": "PLAN-20260603-ISSUE1584.P05",
+        "commit": "293093b5f55d3cf4441074a340f19848c12fec8a"
+      },
+      {
+        "file": "packages/core/src/services/history/HistoryServiceCore.ts",
+        "line": 1031,
+        "planId": "PLAN-20260211-HIGHDENSITY.P08",
+        "commit": "293093b5f55d3cf4441074a340f19848c12fec8a"
+      },
+      {
+        "file": "packages/mcp/src/client/mcp-client-manager.ts",
+        "line": 471,
+        "planId": "PLAN-20260617-COREAPI.P22",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/mcp/src/client/mcp-client-manager.ts",
+        "line": 557,
+        "planId": "PLAN-20260617-COREAPI.P22",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/mcp/src/client/mcp-client-manager.ts",
+        "line": 891,
+        "planId": "PLAN-20260617-COREAPI.P22",
+        "commit": "fbd20c170ca9ad59e1af2400d7d84745b2b8f260"
+      },
+      {
+        "file": "packages/providers/src/auth/oauth-manager.ts",
+        "line": 74,
+        "planId": "PLAN-20260608-ISSUE1586.P12",
+        "commit": "85da6b377bde9a56ff00c04d1ba18cedd2d21b77"
+      },
+      {
+        "file": "packages/providers/src/auth/oauth-manager.ts",
+        "line": 86,
+        "planId": "PLAN-20260608-ISSUE1586.P12",
+        "commit": "85da6b377bde9a56ff00c04d1ba18cedd2d21b77"
+      },
+      {
+        "file": "packages/providers/src/auth/oauth-manager.ts",
+        "line": 202,
+        "planId": "PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P06",
+        "commit": "e6e8f1bfa138c1ce7fcbfc0a21ae8328b784714c"
+      },
+      {
+        "file": "packages/providers/src/auth/oauth-manager.ts",
+        "line": 354,
+        "planId": "PLAN-20250823-AUTHFIXES.P14",
+        "commit": "96a42dafb715915f12839ee46161d2fb72e2bbfb"
+      },
+      {
+        "file": "packages/providers/src/auth/oauth-manager.ts",
+        "line": 372,
+        "planId": "PLAN-20250823-AUTHFIXES.P14",
+        "commit": "96a42dafb715915f12839ee46161d2fb72e2bbfb"
+      },
+      {
+        "file": "packages/providers/src/auth/oauth-manager.ts",
+        "line": 386,
+        "planId": "PLAN-20250823-AUTHFIXES.P14",
+        "commit": "96a42dafb715915f12839ee46161d2fb72e2bbfb"
+      },
+      {
+        "file": "packages/providers/src/auth/oauth-manager.ts",
+        "line": 1006,
+        "planId": "PLAN-20260608-ISSUE1586.P12",
+        "commit": "85da6b377bde9a56ff00c04d1ba18cedd2d21b77"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-issue4001.test.ts",
+        "line": 25,
+        "planId": "project-plans/issue4001.md",
+        "commit": "b3cebcc58ddd3265538b2acfb6f68e4952255345"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 19,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 220,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 238,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 265,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 352,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 370,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 399,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 432,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 445,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 458,
+        "planId": "PLAN-20260731-GHBROKER.P17",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 492,
+        "planId": "PLAN-20260731-GHBROKER.P19",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 526,
+        "planId": "PLAN-20260731-GHBROKER.P19",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 548,
+        "planId": "PLAN-20260731-GHBROKER.P19",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 581,
+        "planId": "PLAN-20260731-GHBROKER.P19",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/proxy/__tests__/github-broker-security.test.ts",
+        "line": 602,
+        "planId": "PLAN-20260731-GHBROKER.P19",
+        "commit": "9169c2948c920c705b5e3f513d4951587baf4a41"
+      },
+      {
+        "file": "packages/providers/src/auth/token-access-coordinator.ts",
+        "line": 738,
+        "planId": "PLAN-20260827-ISSUE2562.P04",
+        "commit": "83cfce566f64aebb3515b36db35104a10218ea71"
+      },
+      {
+        "file": "packages/providers/src/composition/providerManagerInstance.ts",
+        "line": 8,
+        "planId": "PLAN-20260603-ISSUE1584.P12",
+        "commit": "e3e41b498edd933341011faccffcc3d44e1917af"
+      },
+      {
+        "file": "packages/settings/src/profiles/types.ts",
+        "line": 2,
+        "planId": "PLAN-20260608-ISSUE1588.P05",
+        "commit": "065db2db7dc9776d556522606fc84f7df8e98857"
+      },
+      {
+        "file": "packages/settings/src/settings/settingsRegistry.ts",
+        "line": 2,
+        "planId": "PLAN-20260608-ISSUE1588.P05",
+        "commit": "065db2db7dc9776d556522606fc84f7df8e98857"
+      },
+      {
+        "file": "packages/storage/src/conversation/ConversationFileWriter.test.ts",
+        "line": 13,
+        "planId": "PLAN-20260609-ISSUE1590.P04b",
+        "commit": "d2effd463b32d4c5c9dd98408c04c2c0f1ef6747"
+      },
+      {
+        "file": "packages/telemetry/src/telemetry/sessionMetricsAggregator.ts",
+        "line": 179,
+        "planId": "PLAN-20260825-SHELLMEM.P02",
+        "commit": "e0ab0cc618a472b3472105919ec60aa948a67290"
+      }
+    ]
+  },
+  "b": {
+    "directory": "packages/agents/src/core",
+    "all": {
+      "top": [
+        {
+          "file": "packages/agents/src/core/__tests__/subagentOrchestrator-runtime.test.ts",
+          "name": "<anonymous>",
+          "startLine": 63,
+          "lines": 843
+        },
+        {
+          "file": "packages/agents/src/core/chatSession.media-history.test.ts",
+          "name": "<anonymous>",
+          "startLine": 49,
+          "lines": 825
+        },
+        {
+          "file": "packages/agents/src/core/subagent.runNonInteractive-term.test.ts",
+          "name": "<anonymous>",
+          "startLine": 114,
+          "lines": 815
+        },
+        {
+          "file": "packages/agents/src/core/chatSession.runtime.history.test.ts",
+          "name": "<anonymous>",
+          "startLine": 44,
+          "lines": 783
+        },
+        {
+          "file": "packages/agents/src/core/TokenUsageLogger.integration.test.ts",
+          "name": "<anonymous>",
+          "startLine": 164,
+          "lines": 783
+        },
+        {
+          "file": "packages/agents/src/core/profile/__tests__/profileController.lifecycle.test.ts",
+          "name": "<anonymous>",
+          "startLine": 96,
+          "lines": 763
+        },
+        {
+          "file": "packages/agents/src/core/chatSession.issue2150.test.ts",
+          "name": "<anonymous>",
+          "startLine": 73,
+          "lines": 753
+        },
+        {
+          "file": "packages/agents/src/core/profile/__tests__/profileController.serialization.test.ts",
+          "name": "<anonymous>",
+          "startLine": 73,
+          "lines": 748
+        },
+        {
+          "file": "packages/agents/src/core/turn.preRequestTimeout.test.ts",
+          "name": "<anonymous>",
+          "startLine": 142,
+          "lines": 744
+        },
+        {
+          "file": "packages/agents/src/core/client.sendMessageStream-overflow.test.ts",
+          "name": "<anonymous>",
+          "startLine": 212,
+          "lines": 740
+        }
+      ],
+      "tiedAtCutoff": [
+        {
+          "file": "packages/agents/src/core/client.sendMessageStream-overflow.test.ts",
+          "name": "<anonymous>",
+          "startLine": 212,
+          "lines": 740
+        },
+        {
+          "file": "packages/agents/src/core/toolExecutorUnification.integration.test.ts",
+          "name": "<anonymous>",
+          "startLine": 154,
+          "lines": 740
+        }
+      ]
+    },
+    "excludingTests": {
+      "top": [
+        {
+          "file": "packages/agents/src/core/chatSession.ts",
+          "name": "constructor",
+          "startLine": 268,
+          "lines": 99
+        },
+        {
+          "file": "packages/agents/src/core/coreToolScheduler.ts",
+          "name": "attemptExecutionOfScheduledCalls",
+          "startLine": 706,
+          "lines": 99
+        },
+        {
+          "file": "packages/agents/src/core/boundaryRecovery.ts",
+          "name": "recoverPendingBoundary",
+          "startLine": 313,
+          "lines": 97
+        },
+        {
+          "file": "packages/agents/src/core/client.ts",
+          "name": "restoreHistory",
+          "startLine": 661,
+          "lines": 95
+        },
+        {
+          "file": "packages/agents/src/core/MessageStreamTerminalHandler.ts",
+          "name": "handleErrorEvent",
+          "startLine": 365,
+          "lines": 89
+        },
+        {
+          "file": "packages/agents/src/core/turn.ts",
+          "name": "acquireFirstStreamEvent",
+          "startLine": 744,
+          "lines": 89
+        },
+        {
+          "file": "packages/agents/src/core/turn.ts",
+          "name": "run",
+          "startLine": 620,
+          "lines": 87
+        },
+        {
+          "file": "packages/agents/src/core/MessageStreamOrchestrator.ts",
+          "name": "_processStreamIteration",
+          "startLine": 542,
+          "lines": 86
+        },
+        {
+          "file": "packages/agents/src/core/clientLlmUtilities.ts",
+          "name": "generateJson",
+          "startLine": 63,
+          "lines": 85
+        },
+        {
+          "file": "packages/agents/src/core/subagentNonInteractive.ts",
+          "name": "readStreamToCompletion",
+          "startLine": 316,
+          "lines": 85
+        }
+      ],
+      "tiedAtCutoff": [
+        {
+          "file": "packages/agents/src/core/clientLlmUtilities.ts",
+          "name": "generateJson",
+          "startLine": 63,
+          "lines": 85
+        },
+        {
+          "file": "packages/agents/src/core/subagentNonInteractive.ts",
+          "name": "readStreamToCompletion",
+          "startLine": 316,
+          "lines": 85
+        },
+        {
+          "file": "packages/agents/src/core/subagentToolProcessing.ts",
+          "name": "processFunctionCalls",
+          "startLine": 609,
+          "lines": 85
+        },
+        {
+          "file": "packages/agents/src/core/tokenUsageRequestShape.ts",
+          "name": "computeRequestShape",
+          "startLine": 476,
+          "lines": 85
+        }
+      ]
+    },
+    "namedIncludingTests": {
+      "top": [
+        {
+          "file": "packages/agents/src/core/chatSession.media-history.test.ts",
+          "name": "createPurgeChat",
+          "startLine": 339,
+          "lines": 169
+        },
+        {
+          "file": "packages/agents/src/core/MessageStreamOrchestrator.todoPause.test.ts",
+          "name": "buildOrchestrator",
+          "startLine": 122,
+          "lines": 161
+        },
+        {
+          "file": "packages/agents/src/core/MessageStreamOrchestrator.contextOverflow.test.ts",
+          "name": "buildOrchestrator",
+          "startLine": 95,
+          "lines": 159
+        },
+        {
+          "file": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+          "name": "createFixture",
+          "startLine": 177,
+          "lines": 154
+        },
+        {
+          "file": "packages/agents/src/core/chat-session-empty-tools.test.ts",
+          "name": "send",
+          "startLine": 95,
+          "lines": 145
+        },
+        {
+          "file": "packages/agents/src/core/MessageStreamOrchestrator.modelinfo.test.ts",
+          "name": "buildOrchestrator",
+          "startLine": 119,
+          "lines": 145
+        },
+        {
+          "file": "packages/agents/src/core/subagentRuntimeSetup.assembler.test.ts",
+          "name": "buildSubagentFixture",
+          "startLine": 105,
+          "lines": 144
+        },
+        {
+          "file": "packages/agents/src/core/chatSession.systemPromptAssembly.test.ts",
+          "name": "buildFixture",
+          "startLine": 75,
+          "lines": 139
+        },
+        {
+          "file": "packages/agents/src/core/subagent.runInteractive-term.test.ts",
+          "name": "observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall",
+          "startLine": 287,
+          "lines": 139
+        },
+        {
+          "file": "packages/agents/src/core/coreToolScheduler.cancellation.test.ts",
+          "name": "observeCompleteAllToolsWhenFirstToolIsCancelledMidBatch",
+          "startLine": 80,
+          "lines": 130
+        }
+      ],
+      "tiedAtCutoff": [
+        {
+          "file": "packages/agents/src/core/coreToolScheduler.cancellation.test.ts",
+          "name": "observeCompleteAllToolsWhenFirstToolIsCancelledMidBatch",
+          "startLine": 80,
+          "lines": 130
+        }
+      ]
+    },
+    "sameRankingAtRef": true
+  }
+}

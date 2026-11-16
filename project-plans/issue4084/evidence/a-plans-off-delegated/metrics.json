@@ -1,0 +1,49 @@
+{
+  "run": "a-plans-off-delegated",
+  "commit": "29ca150326d20d22d3f73220c497c217bfba09b4",
+  "sessionId": "a00549ee-cdab-4d11-9675-940f6c7d8c1f",
+  "harnessWallSeconds": 306,
+  "turnSeconds": 214.018,
+  "parent": {
+    "requests": 3,
+    "failedAttempts": [],
+    "inputTokens": 78271,
+    "cachedTokens": 46080,
+    "outputTokens": 2764,
+    "lastRequestInputTokens": 31914,
+    "maxRequestInputTokens": 31914,
+    "toolResultTokens": 8896,
+    "toolCalls": 2,
+    "toolCallsByName": {
+      "list_subagents": 1,
+      "task": 1
+    }
+  },
+  "children": {
+    "deepthinker": {
+      "requests": 5,
+      "failedAttempts": [],
+      "inputTokens": 177598,
+      "cachedTokens": 133888,
+      "outputTokens": 6487,
+      "lastRequestInputTokens": 47254,
+      "maxRequestInputTokens": 47254,
+      "toolResultTokens": 20303,
+      "toolCalls": 4,
+      "toolCallsByName": {
+        "run_shell_command": 3,
+        "self_emitvalue": 1
+      }
+    }
+  },
+  "directToolCalls": 2,
+  "directToolCallsByName": {
+    "list_subagents": 1,
+    "task": 1
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

@@ -356,6 +356,7 @@
     "openai": "^5.10.1",
     "path-scurry": "^2.0.0",
     "picomatch": "4.0.4",
+    "quickjs-emscripten": "0.32.0",
     "react": "^19.2.0",
     "read-package-up": "^11.0.0",
     "semver": "^7.7.2",

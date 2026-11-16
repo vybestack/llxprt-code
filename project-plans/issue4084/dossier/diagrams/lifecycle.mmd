@@ -1,0 +1,72 @@
+sequenceDiagram
+ autonumber
+ participant Provider
+ participant Parse as processAnthropicStream
+ participant Turn
+ participant AgentLoop as AgenticLoop
+ participant Owner as TurnToolExecutionOwner
+ participant Scheduler as CoreToolScheduler
+ participant Dispatcher as ToolDispatcher
+ participant Confirm as ConfirmationCoordinator
+ participant Bus as MessageBus and policy owners
+ participant UI as Approval handler
+ participant Executor as ToolExecutor
+ participant Tool as ToolInvocation
+ participant Aggregate as ResultAggregator
+ participant History as ConversationManager and HistoryService
+ Provider->>Parse: streamed tool name and input fragments
+ Parse->>Parse: bound bytes, completeToolCall, coerce args
+ Parse-->>Turn: IContent tool_call
+ Turn->>Turn: emitFunctionCallRequests, normalize name and ID
+ Turn-->>AgentLoop: ToolCallRequest event
+ AgentLoop->>Owner: begin, acquire callbacks, scheduleAndAwait
+ Owner->>Owner: record admitted call IDs
+ Owner->>Scheduler: session lease schedule with combined signal
+ Scheduler->>Dispatcher: resolveAndValidate
+ Dispatcher->>Tool: schema validation and build
+ Dispatcher-->>Scheduler: validating call or structured error
+ Scheduler->>Confirm: tryFastApprove then evaluateAndRoute
+ Confirm->>Bus: evaluatePolicyDecision
+ Bus->>Bus: session rules + workspace trust + PolicyEngine.evaluate
+ alt ALLOW
+ Bus-->>Confirm: ALLOW
+ Confirm->>Scheduler: scheduled
+ else DENY
+ Bus-->>Confirm: DENY
+ Confirm->>Scheduler: POLICY_VIOLATION and rejection
+ else ASK
+ Bus-->>Confirm: ASK
+ Confirm->>Tool: shouldConfirmExecute(signal)
+ alt no detail or existing bypass applies
+ Confirm->>Scheduler: scheduled under current behavior
+ else actual confirmation needed
+ Confirm->>Bus: confirmation request with correlation and call IDs
+ Bus->>Owner: owned request subscription
+ Owner->>UI: show actual tool and arguments
+ UI-->>Owner: approval, edit, or cancellation
+ Owner->>Bus: respondToConfirmation
+ Bus-->>Confirm: correlated decision
+ Confirm->>Scheduler: update args/status, start or cancel
+ end
+ end
+ opt call scheduled
+ Scheduler->>Scheduler: attemptExecution, same-path ordering
+ Scheduler->>Executor: launchToolExecution
+ Executor->>Executor: BeforeTool, optional input rebuild
+ Note over Confirm,Executor: Current input hook runs after policy, proposal moves preparation before policy
+ Executor->>Tool: execute(signal, liveOutput, terminal, PID)
+ Tool-->>Executor: ToolResult
+ Executor->>Executor: AfterTool and output modifications
+ Executor-->>Scheduler: post-hook ToolResult
+ Scheduler->>Aggregate: bufferResult, publishBufferedResults
+ Aggregate->>Aggregate: ordered publishResult, model conversion and token limits
+ Aggregate-->>Scheduler: setSuccess or setError
+ end
+ Scheduler->>Scheduler: checkAndNotifyCompletion, telemetry
+ Scheduler-->>AgentLoop: completion callback
+ AgentLoop->>AgentLoop: buildNextMessage, cancellation and todo_pause handling
+ AgentLoop->>History: bound recordCompletedToolHistory / recordHistory
+ History->>History: HistoryService.addBatch, recording publication
+ AgentLoop->>Provider: paired tool response blocks on continuation
+ Note over AgentLoop,History: ChatSession also has eager completion recording with response-ID deduplication
+

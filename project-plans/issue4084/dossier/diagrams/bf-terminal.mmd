@@ -1,0 +1,19 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["CoreToolScheduler._schedule"]:::caller
+L1["CoreToolScheduler.setStatusInternal"]:::caller
+L2["CoreToolScheduler.cancelAll"]:::caller
+C["CoreToolScheduler.checkAndNotifyCompletion<br/>packages/agents/src/core/coreToolScheduler.ts"]:::center
+R0["Remove confirmation signals"]:::callee
+R1["logToolCall"]:::callee
+R2["ToolCallEvent construction"]:::callee
+R3["Completion callback"]:::callee
+L0 --> C
+L1 --> C
+L2 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3

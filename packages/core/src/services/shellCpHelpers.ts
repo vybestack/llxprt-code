@@ -216,6 +216,8 @@ export function buildCpExitResult(
   const rawMetadata = rawResult?.metadata;
 
   let combinedOutput = '';
+  // child_process keeps the streams apart; no data at all means both empty.
+  let streams = { stdout: '', stderr: '' };
   if (rawResult !== undefined) {
     const stdout = stripAnsiIfPresent(rawResult.stdoutText);
     const retainedStderr = rawResult.stderrText;
@@ -225,6 +227,7 @@ export function buildCpExitResult(
     const stderr = stripAnsiIfPresent(decodedStderr);
     const sourceOutput = combineOutputSections(stdout, stderr);
     const decodedClixml = decodedStderr !== retainedStderr;
+    streams = { stdout, stderr };
 
     if (rawResult.metadata.truncated && !decodedClixml) {
       combinedOutput = stripAnsiIfPresent(rawResult.text);
@@ -239,6 +242,7 @@ export function buildCpExitResult(
   return {
     rawOutput: finalBuffer,
     output: combinedOutput.trim(),
+    streams,
     outputTruncation: rawMetadata?.truncated === true ? rawMetadata : undefined,
     exitCode: code,
     signal: signal ? os.constants.signals[signal] : null,

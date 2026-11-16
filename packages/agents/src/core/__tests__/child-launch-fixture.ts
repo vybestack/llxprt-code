@@ -30,7 +30,11 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { buildAgentClientFactory } from '../../api/agentBootstrap.js';
+import { readCodeModeLimits } from '../../code-mode/code-mode-settings.js';
 import { ChildAgentAssembly } from '../../api/child-agent-assembly.js';
+
+/** Registry defaults: what a caller without code mode settings allows. */
+const DEFAULT_CALLER_CODE_MODE_LIMITS = readCodeModeLimits(() => undefined);
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { SubAgentScope } from '../subagent.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
@@ -107,6 +111,7 @@ export function createTestChildOrchestrator(
           authority: options.credentialAuthority,
           createChildSettings: options.createChildSettings,
           foregroundConfig: options.foregroundConfig,
+          readCallerCodeModeLimits: () => DEFAULT_CALLER_CODE_MODE_LIMITS,
         },
         {
           runtimeLoader: options.runtimeLoader ?? loadAgentRuntime,

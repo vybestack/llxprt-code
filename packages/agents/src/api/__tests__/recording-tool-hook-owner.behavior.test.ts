@@ -249,9 +249,9 @@ describe('borrowed facade tool hook owner routing', () => {
               input.session_id,
             ]),
           ).toStrictEqual([
-            [HookEventName.BeforeTool, '', a.getRuntimeId()],
-            [HookEventName.AfterTool, '', a.getRuntimeId()],
+            [HookEventName.BeforeTool, aPath, a.getRuntimeId()],
             [HookEventName.BeforeTool, bPath, b.getRuntimeId()],
+            [HookEventName.AfterTool, '', a.getRuntimeId()],
             [HookEventName.AfterTool, bPath, b.getRuntimeId()],
             [HookEventName.BeforeTool, resumedPath, a.getRuntimeId()],
             [HookEventName.AfterTool, resumedPath, a.getRuntimeId()],

@@ -1,0 +1,15 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["AgenticLoop.runTurn"]:::caller
+C["AgenticLoop.buildNextMessage<br/>packages/agents/src/core/agenticLoop/AgenticLoop.ts"]:::center
+R0["Classify completions"]:::callee
+R1["recordToolHistory (terminal callback)"]:::callee
+R2["hasSuccessfulTodoPause"]:::callee
+R3["buildToolResponses"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3

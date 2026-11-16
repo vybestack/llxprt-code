@@ -1,3 +1,4 @@
+import { readCodeModeSettings } from '../code-mode/code-mode-settings.js';
 import type {
   ContentGenerator,
   RuntimeContentGeneratorFactory,
@@ -199,6 +200,8 @@ export interface SessionClientConstruction {
   readonly authority: CredentialAuthority;
   /** Defaults to the production client factory when a caller observes none. */
   readonly clientFactory: AgentClientFactory | undefined;
+  /** Default for an unset `code-mode` setting (`AgentConfig.codeMode`). */
+  readonly codeMode?: boolean;
 }
 
 export async function acquireSessionClient(
@@ -228,6 +231,13 @@ export async function acquireSessionClient(
       authority: construction.authority,
       borrowedBus: messageBus,
       requestInteractiveAuth: (prompt) => oauth.requestInteractiveAuth(prompt),
+      // Read from the store like the task schema policy, so a publication
+      // that races session teardown sees the same settings, not a closed owner.
+      readCodeMode: () =>
+        readCodeModeSettings(
+          (key) => settings.settings.get(key),
+          construction.codeMode === true,
+        ),
     },
   );
   try {

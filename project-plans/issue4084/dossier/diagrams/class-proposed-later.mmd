@@ -1,0 +1,19 @@
+classDiagram
+ direction LR
+ class WorkspaceExecutionArbiter {
+  -activePaths Map
+  -exclusiveLane Promise
+  +acquire(paths, opaqueMutation, signal) Promise
+  +release(lease)
+ }
+ class CoreToolScheduler {
+  +schedule(request, signal, hookOwner) Promise
+  -launchToolExecution()
+ }
+ class CodeModeRunOwner {
+  +run(request, context, signal) Promise
+  +close() Promise
+ }
+ CoreToolScheduler ..> WorkspaceExecutionArbiter : all owners borrow one workspace arbiter
+ CodeModeRunOwner ..> CoreToolScheduler : children acquire mutation leases
+

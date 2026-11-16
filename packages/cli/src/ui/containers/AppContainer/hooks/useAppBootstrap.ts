@@ -30,7 +30,10 @@ import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
-import type { SessionRecordingEvent } from '@vybestack/llxprt-code-agents';
+import type {
+  SessionRecordingEvent,
+  ToolScriptRunView,
+} from '@vybestack/llxprt-code-agents';
 import type { UseSessionInitializationParams } from './useSessionInitialization.js';
 import type { MemoryTelemetryController } from '../../../hooks/memoryTrend/memoryTelemetry.js';
 
@@ -68,6 +71,7 @@ export interface AppBootstrapProps {
   historyMaxBytes?: number;
   hasSeenIdeIntegrationNudge?: boolean;
   resumedHistory?: IContent[];
+  resumedToolScriptRuns?: readonly ToolScriptRunView[];
   version: string;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
   memoryController?: MemoryTelemetryController;
@@ -122,7 +126,12 @@ function useInitializationBindings(
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { resumedHistory, historyMaxItems, historyMaxBytes } = props;
+  const {
+    resumedHistory,
+    resumedToolScriptRuns,
+    historyMaxItems,
+    historyMaxBytes,
+  } = props;
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
@@ -176,6 +185,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     addItem,
     loadHistory,
     resumedHistory,
+    resumedToolScriptRuns,
   });
   // Store mirrors: the context summary renders from the settings store.
   useEffect(() => {

@@ -1,0 +1,168 @@
+{
+  "description": "Issue #4084 nested approval in the CLI (not yolo): the script's shell call waits for the ordinary confirmation, labelled with its script; approving once completes the run.",
+  "tmux": {
+    "cols": 140,
+    "rows": 100,
+    "historyLimit": 50000,
+    "scrollbackLines": 8000,
+    "initialWaitMs": 8000
+  },
+  "yolo": false,
+  "startCommand": [
+    "bun",
+    "scripts/start.ts",
+    "--profile-load",
+    "lunahigh",
+    "--set",
+    "code-mode=on"
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "capture",
+      "label": "ready"
+    },
+    {
+      "type": "line",
+      "text": "Call execute_tool_script exactly once and no other tool. Use purpose \"issue4084 nested approval probe\", tools [\"glob\", \"run_shell_command\"], and this exact source: const readme = await tools[\"glob\"]({ pattern: \"README.md\" }); const shell = await tools[\"run_shell_command\"]({ command: \"printf issue4084-nested-approval-ok\" }); return { readmeFound: readme.ok, stdout: shell.ok ? shell.value.stdout.trim() : null };  After the tool returns, reply with the stdout value only.",
+      "postTypeMs": 1500
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "prompt-submitted"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "from script: issue4084 nested approval probe",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Allow once",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "printf issue4084-nested-approval-ok"
+    },
+    {
+      "type": "capture",
+      "label": "nested-approval-prompt"
+    },
+    {
+      "type": "approveTool",
+      "confirmation": {
+        "contains": "Allow once"
+      },
+      "choice": "once",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "Allow once",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "capture",
+      "label": "after-approve"
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Purpose: issue4084 nested approval probe",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Status: completed",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "expect",
+      "scope": "scrollback",
+      "contains": "Tool calls: 2 (2 ok)"
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "issue4084-nested-approval-ok",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "after-script"
+    },
+    {
+      "type": "line",
+      "text": "/stats",
+      "postTypeMs": 800
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Session Stats",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "stats"
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter", "Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 60000
+    }
+  ]
+}

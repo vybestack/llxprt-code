@@ -124,6 +124,7 @@ export function appContainerTestAgentProps(
       deleteCheckpoint: unavailableOperation,
       deleteSession: unavailableOperation,
       resume: unavailableOperation,
+      getToolScriptRuns: unavailableOperation,
       flushRecording: async () => {},
     },
     readRawBrowserCatalog: unavailableOperation,

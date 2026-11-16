@@ -1,0 +1,10 @@
+{
+  "index": 13,
+  "step": {
+    "type": "waitFor",
+    "scope": "scrollback",
+    "contains": "Session Stats",
+    "timeoutMs": 30000
+  },
+  "error": "Timed out waiting for step 13 (contains \"Session Stats\") in scrollback after 30000ms"
+}

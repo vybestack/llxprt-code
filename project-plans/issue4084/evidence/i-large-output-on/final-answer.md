@@ -1,0 +1,1 @@
+There are 443 `.ts` files under `packages/agents/src/core`. `execute_tool_script` hit its 16,384-byte serialized-result limit before it could return them all in one object. I can return the contents in smaller chunks instead.

@@ -1,0 +1,31 @@
+{
+  "run": "a-plans-on",
+  "commit": "e2ceba83d92514e998fa3c5f374633b728f40c97",
+  "sessionId": "53bf3a75-08bb-4e78-bf2a-4d9480c8f85f",
+  "harnessWallSeconds": 124,
+  "turnSeconds": 82.814,
+  "parent": {
+    "requests": 4,
+    "failedAttempts": [],
+    "inputTokens": 127438,
+    "cachedTokens": 85888,
+    "outputTokens": 3519,
+    "lastRequestInputTokens": 40898,
+    "maxRequestInputTokens": 40898,
+    "toolResultTokens": 15821,
+    "toolCalls": 3,
+    "toolCallsByName": {
+      "run_shell_command": 3
+    }
+  },
+  "children": {},
+  "directToolCalls": 3,
+  "directToolCallsByName": {
+    "run_shell_command": 3
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

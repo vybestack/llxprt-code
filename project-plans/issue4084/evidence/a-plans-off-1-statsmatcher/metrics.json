@@ -1,0 +1,31 @@
+{
+  "run": "a-plans-off-1-statsmatcher",
+  "commit": "29ca150326d20d22d3f73220c497c217bfba09b4",
+  "sessionId": "cd242111-4151-48ac-b851-24eff0906242",
+  "harnessWallSeconds": 180,
+  "turnSeconds": 103.091,
+  "parent": {
+    "requests": 4,
+    "failedAttempts": [],
+    "inputTokens": 145151,
+    "cachedTokens": 101760,
+    "outputTokens": 4203,
+    "lastRequestInputTokens": 42858,
+    "maxRequestInputTokens": 42858,
+    "toolResultTokens": 17684,
+    "toolCalls": 3,
+    "toolCallsByName": {
+      "run_shell_command": 3
+    }
+  },
+  "children": {},
+  "directToolCalls": 3,
+  "directToolCallsByName": {
+    "run_shell_command": 3
+  },
+  "nestedToolCalls": 0,
+  "nestedToolCallsByName": {},
+  "scriptRuns": [],
+  "sessionEvents": [],
+  "humanMessages": 1
+}

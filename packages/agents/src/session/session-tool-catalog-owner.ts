@@ -20,6 +20,16 @@ import type { ChildToolDisplay } from './childToolDisplay.js';
 import type { TaskLaunchOwner } from './task-launch-owner.js';
 import type { ShellJobOwner } from './shell-job-owner.js';
 import { ShellTool } from '@vybestack/llxprt-code-tools';
+import { ExecuteToolScriptTool } from '../code-mode/execute-tool-script.js';
+import { DiscoverToolApiTool } from '../code-mode/discover-tool-api.js';
+import {
+  advertisedDeclarations,
+  selectCodeModeSurface,
+} from '../code-mode/code-mode-surface.js';
+import {
+  readCodeModeSettings,
+  type CodeModeSettings,
+} from '../code-mode/code-mode-settings.js';
 
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
@@ -102,6 +112,11 @@ export class SessionToolCatalogOwner {
   private configuration: readonly ConfigurationEntry[] = [];
   private sessionApproval: McpApprovalPolicy | undefined;
   private sessionBus: CoreMessageBusAdapter | undefined;
+  /** The current code mode settings of this session (issue #4084). */
+  readCodeMode(): CodeModeSettings {
+    return this.features.readCodeMode();
+  }
+
   listToolInfos(): readonly ToolInfo[] {
     const registry = this.selection;
     const allTools = registry.getAllTools().map((t) =>
@@ -118,7 +133,9 @@ export class SessionToolCatalogOwner {
     return Object.freeze(buildToolInfos(allTools, enabledNames));
   }
   getToolHandle(name: string): AgentToolHandle | undefined {
-    const tool = this.acquireChildTools().getTool(name);
+    const tool = selectCodeModeSurface(this.acquireChildTools(), () =>
+      this.readCodeMode(),
+    ).getTool(name);
     return tool === undefined ? undefined : wrapToolHandle(tool);
   }
   private childTools: ToolSelection | undefined;
@@ -132,13 +149,18 @@ export class SessionToolCatalogOwner {
     if (this.childTools !== undefined)
       throw new Error('Child execution ownership is already bound');
     this.childTools = bindChildToolRegistry(
-      this.selection,
+      this.admitted,
       display,
       tasks,
       shell,
     );
   }
 
+  /**
+   * The child-bound selection with both code mode tools present whatever this
+   * session's own `code-mode` setting says: a subagent applies its own code
+   * mode settings to it (issue #4084).
+   */
   acquireChildTools(): ToolSelection {
     this.admission.assertOpen();
     if (this.childTools === undefined)
@@ -146,7 +168,8 @@ export class SessionToolCatalogOwner {
     return this.childTools;
   }
 
-  readonly selection: ToolSelection = {
+  /** Every admitted tool, the code mode tools included. */
+  private readonly admitted: ToolSelection = {
     getTool: (name, context) => {
       const tool = this.resolve(name, context);
       return tool === undefined ? undefined : this.bind(tool);
@@ -161,6 +184,15 @@ export class SessionToolCatalogOwner {
     getFunctionDeclarationsFiltered: (names) => this.declarations(names),
   };
 
+  /**
+   * The session's selection: the admitted tools seen through the code mode
+   * surface, read live, so `/set code-mode` applies to the next lookup and
+   * the next declaration publication.
+   */
+  readonly selection: ToolSelection = selectCodeModeSurface(this.admitted, () =>
+    this.readCodeMode(),
+  );
+
   constructor(
     private readonly config: Config,
     private readonly readTaskSchemaPolicy: () => RegistryPolicy,
@@ -169,6 +201,9 @@ export class SessionToolCatalogOwner {
       input: RequestInfo | URL,
       init?: RequestInit,
     ) => Promise<Response>,
+    private readonly features: {
+      readonly readCodeMode: () => CodeModeSettings;
+    } = { readCodeMode: () => readCodeModeSettings(() => undefined, false) },
   ) {}
 
   private shellExecution: IShellToolHost['executeShellCommand'] | undefined;
@@ -254,6 +289,7 @@ export class SessionToolCatalogOwner {
       requestFetch: this.requestFetch,
     }).then(({ registry, allPotentialTools }) => {
       this.bindHostShell(registry, workspace.paths, session.summarize);
+      this.bindCodeMode(registry);
       this.publishRegistry(
         registry,
         allPotentialTools,
@@ -288,6 +324,19 @@ export class SessionToolCatalogOwner {
         bus,
       ),
     );
+  }
+
+  /**
+   * Code mode (issue #4084): both tools are always constructed; the surface
+   * view hides them while the session's `code-mode` setting is off, so a
+   * disabled session neither lists, advertises nor runs them.
+   */
+  private bindCodeMode(registry: ToolRegistry): void {
+    const bus = this.sessionBus;
+    if (bus === undefined)
+      throw new Error('Code mode requires its session bus');
+    registry.registerTool(new ExecuteToolScriptTool(bus));
+    registry.registerTool(new DiscoverToolApiTool(bus));
   }
 
   private publishRegistry(
@@ -372,6 +421,9 @@ export class SessionToolCatalogOwner {
     workspace: ReturnType<ToolSelection['getFunctionDeclarations']>,
   ) => ReturnType<ToolSelection['getFunctionDeclarations']> {
     const { builtins } = this.catalogs();
+    // Captured with the catalog: the publication shows the surface in force
+    // when it was accepted, and a later change republishes on its own.
+    const codeMode = this.readCodeMode();
     return (workspace) => {
       const declarations = new Map(
         builtins.getFunctionDeclarations().map((entry) => [entry.name, entry]),
@@ -383,7 +435,10 @@ export class SessionToolCatalogOwner {
           );
         declarations.set(entry.name, entry);
       }
-      return structuredClone([...declarations.values()])
+      return advertisedDeclarations(
+        structuredClone([...declarations.values()]),
+        codeMode,
+      )
         .filter(
           (entry) => entry.name !== undefined && this.available(entry.name),
         )

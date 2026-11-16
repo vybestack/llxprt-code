@@ -1,0 +1,15 @@
+flowchart LR
+classDef center fill:#164e63,color:#fff,stroke:#083344,stroke-width:3px;
+classDef caller fill:#eef2ff,color:#172554,stroke:#818cf8;
+classDef callee fill:#f0fdf4,color:#14532d,stroke:#86efac;
+L0["DiscoveredMCPToolInvocation.execute"]:::caller
+C["McpCallableTool.callTool<br/>packages/mcp/src/client/mcp-callable-tool.ts"]:::center
+R0["Authorization callback (before and after)"]:::callee
+R1["SDK client.callTool"]:::callee
+R2["measureOwnEnumerableJsonBytes"]:::callee
+R3["Response wrapping"]:::callee
+L0 --> C
+C --> R0
+C --> R1
+C --> R2
+C --> R3
