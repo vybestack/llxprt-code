@@ -9,6 +9,8 @@ import {
   describeRefusalRecovered,
   describeRefusalRetry,
   describeRefusalStop,
+  describeDroppedLiteralsReview,
+  describeDroppedLiteralStopDetail,
   describeReviewDisallowed,
   describeReviewRewrite,
   describeReviewStart,
@@ -30,7 +32,11 @@ import type {
   RefusalRecovery,
   ResolvedRefusalDecision,
 } from './refusalTypes.js';
-import type { RefusalReviewer, ReviewOutcome } from './reviewTypes.js';
+import type {
+  RefusalReviewer,
+  ReviewOutcome,
+  ReviewRequest,
+} from './reviewTypes.js';
 
 /** Logical requests whose budgets are remembered before the oldest is dropped. */
 const MAX_TRACKED_REQUESTS = 64;
@@ -40,6 +46,7 @@ interface RequestBudget {
   readonly policy: RefusalPolicy;
   /** Identical retries used in the current round; a rewrite starts a new one. */
   retriesUsed: number;
+  /** Review rounds used. */
   rewritesUsed: number;
   /** Refused attempts so far, whatever followed each. */
   refusals: number;
@@ -138,14 +145,15 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
   /**
    * Hands the refused request to the reviewer. The caller is told who is being
    * asked before the answer is awaited. A rewrite starts a fresh retry round
-   * for the rewritten request; every other outcome ends the request with the
-   * reviewer's own explanation.
+   * for the rewritten request. A dropped-literal rejection can spend a review
+   * round and chain another review with exact-copy feedback.
    */
   private async review(
     reviewer: RefusalReviewer,
     attempt: RefusalAttempt,
     budget: RequestBudget,
     context: RefusalContext,
+    keepLiterals?: ReviewRequest['keepLiterals'],
   ): Promise<RefusalDecision> {
     await recordRefusalInJournal(context.execution, attempt, 'review');
     const started = await reviewer.begin({
@@ -156,9 +164,10 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
       pending: context.pending,
       modelParameters: context.modelParameters,
       signal: context.signal,
+      ...(keepLiterals !== undefined && { keepLiterals }),
     });
-    const resolve = async (): Promise<ResolvedRefusalDecision> =>
-      this.afterReview(await started.run(), budget, attempt);
+    const resolve = async (): Promise<RefusalDecision> =>
+      this.afterReview(await started.run(), reviewer, attempt, budget, context);
     if (started.reviewer === undefined) return resolve();
     return {
       action: 'review',
@@ -173,11 +182,22 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
     };
   }
 
-  private afterReview(
+  private async afterReview(
     outcome: ReviewOutcome,
-    budget: RequestBudget,
+    reviewer: RefusalReviewer,
     attempt: RefusalAttempt,
-  ): ResolvedRefusalDecision {
+    budget: RequestBudget,
+    context: RefusalContext,
+  ): Promise<RefusalDecision> {
+    if (outcome.kind === 'dropped-literals') {
+      return this.afterDroppedLiterals(
+        outcome,
+        reviewer,
+        attempt,
+        budget,
+        context,
+      );
+    }
     if (outcome.kind === 'rewritten') {
       budget.rewritesUsed += 1;
       budget.retriesUsed = 0;
@@ -224,6 +244,59 @@ export class RefusalRecoveryCoordinator implements RefusalRecovery {
           reason: outcome.reason,
           reviewer: outcome.reviewer?.model,
           detail: outcome.detail,
+        }),
+        {
+          category: attempt.stopDetails?.category,
+          explanation: attempt.stopDetails?.explanation,
+        },
+      ),
+    };
+  }
+
+  private async afterDroppedLiterals(
+    outcome: Extract<ReviewOutcome, { kind: 'dropped-literals' }>,
+    reviewer: RefusalReviewer,
+    attempt: RefusalAttempt,
+    budget: RequestBudget,
+    context: RefusalContext,
+  ): Promise<RefusalDecision> {
+    budget.rewritesUsed += 1;
+    if (
+      budget.policy.rewrite &&
+      budget.rewritesUsed < budget.policy.maxRewrites
+    ) {
+      const next = await this.review(
+        reviewer,
+        attempt,
+        budget,
+        context,
+        outcome.dropped,
+      );
+      return next.action === 'review'
+        ? {
+            ...next,
+            notice: appendRefusalDiagnostics(
+              describeDroppedLiteralsReview({
+                reviewer: outcome.reviewer.model,
+                dropped: outcome.dropped,
+                reviewNumber: budget.rewritesUsed + 1,
+                reviews: budget.policy.maxRewrites,
+              }),
+              {
+                category: attempt.stopDetails?.category,
+                explanation: attempt.stopDetails?.explanation,
+              },
+            ),
+          }
+        : next;
+    }
+    return {
+      action: 'stop',
+      notice: appendRefusalDiagnostics(
+        describeReviewStopped({
+          reason: 'invalid-reply',
+          reviewer: outcome.reviewer.model,
+          detail: describeDroppedLiteralStopDetail(outcome.dropped),
         }),
         {
           category: attempt.stopDetails?.category,

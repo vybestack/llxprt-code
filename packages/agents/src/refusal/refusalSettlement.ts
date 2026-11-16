@@ -11,8 +11,8 @@ import { recordRefusalInJournal } from './refusalJournal.js';
 import type {
   ModelRefusalSignal,
   RefusalAttempt,
+  RefusalDecision,
   RefusalRecovery,
-  ResolvedRefusalDecision,
 } from './refusalTypes.js';
 import type { PendingTurnContents } from './reviewTypes.js';
 import type { PendingEdit } from './reviewWindow.js';
@@ -109,8 +109,27 @@ async function settleResolved(
   deps: RefusalSettlementDeps,
   refused: RefusalAttempt,
   promptId: string,
-  decision: ResolvedRefusalDecision,
+  decision: RefusalDecision,
 ): Promise<RefusalSettlement> {
+  if (decision.action === 'review') {
+    return {
+      action: 'review',
+      notice: decision.notice,
+      complete: async () => {
+        try {
+          return await settleResolved(
+            deps,
+            refused,
+            promptId,
+            await decision.complete(),
+          );
+        } catch (error: unknown) {
+          deps.usageLogger?.finalizePrompt(promptId);
+          throw error;
+        }
+      },
+    };
+  }
   await recordRefusalInJournal(
     deps.execution,
     refused,

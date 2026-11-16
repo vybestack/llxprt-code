@@ -21,7 +21,11 @@ import {
   type ReviewCallResult,
 } from './reviewCall.js';
 import { reviewBudgetShortfall, reviewerContextLimit } from './reviewBudget.js';
-import { buildReviewData, REFUSAL_REVIEW_PROMPT } from './reviewPrompt.js';
+import {
+  buildKeepLiteralsFeedback,
+  buildReviewData,
+  REFUSAL_REVIEW_PROMPT,
+} from './reviewPrompt.js';
 import type { ReviewProfileSetting } from './reviewProfile.js';
 import type {
   RefusalReviewer,
@@ -73,12 +77,15 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function reviewContents(data: string): IContent[] {
+function reviewContents(data: string, feedback?: string): IContent[] {
   return [
     {
       speaker: 'human',
       blocks: [
         { type: 'text', text: REFUSAL_REVIEW_PROMPT },
+        ...(feedback === undefined
+          ? []
+          : [{ type: 'text' as const, text: feedback }]),
         { type: 'text', text: data },
       ],
     },
@@ -154,7 +161,16 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
       history.getAll(),
       request.pending?.userContents,
     );
-    const data = buildReviewData(window, request.attempt, request.retriesTried);
+    const data = buildReviewData(
+      window,
+      request.attempt,
+      request.retriesTried,
+      request.keepLiterals,
+    );
+    const feedback =
+      request.keepLiterals === undefined
+        ? undefined
+        : buildKeepLiteralsFeedback(request.keepLiterals);
     const shortfall = reviewBudgetShortfall(
       data,
       reviewerContextLimit({
@@ -162,6 +178,7 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
         profileLimit: resolved.invocation?.getEphemeral('context-limit'),
         providerLimit: resolved.provider.getContextLimit?.(),
       }),
+      feedback,
     );
     if (shortfall !== undefined) {
       return this.stopped(
@@ -173,7 +190,13 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
     }
     let call: ReviewCallResult;
     try {
-      call = await this.call(request, resolved, data, modelParameters);
+      call = await this.call(
+        request,
+        resolved,
+        data,
+        modelParameters,
+        feedback,
+      );
     } catch (error: unknown) {
       this.rethrowIfAborted(request, error);
       return this.stopped(
@@ -183,11 +206,34 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
         messageOf(error),
       );
     }
+    return this.applyCallResult(request, history, window, reviewer, call);
+  }
+
+  private async applyCallResult(
+    request: ReviewRequest,
+    history: HistoryService,
+    window: ReviewWindow,
+    reviewer: ReviewerIdentity,
+    call: ReviewCallResult,
+  ): Promise<ReviewRun> {
     if (isRefusalFinishReason(call.finishReason)) {
       return this.stopped('reviewer-refused', 'refused', reviewer, '', call);
     }
     const parsed = parseReviewReply(call.text, window);
     if (!parsed.ok) {
+      if (parsed.dropped !== undefined) {
+        return {
+          outcome: {
+            kind: 'dropped-literals',
+            reviewer,
+            detail: parsed.reason,
+            dropped: parsed.dropped,
+          },
+          verdict: 'invalid',
+          reviewer,
+          call,
+        };
+      }
       return this.stopped(
         'invalid-reply',
         'invalid',
@@ -198,9 +244,12 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
     }
     const { decision } = parsed;
     if (decision.kind === 'disallowed') {
-      const { explanation } = decision;
       return {
-        outcome: { kind: 'disallowed', reviewer, explanation },
+        outcome: {
+          kind: 'disallowed',
+          reviewer,
+          explanation: decision.explanation,
+        },
         verdict: 'disallowed',
         reviewer,
         call,
@@ -279,9 +328,10 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
     resolved: CompressionProviderResult,
     data: string,
     modelParameters: AdmittedModelParameters | undefined,
+    feedback: string | undefined,
   ): Promise<ReviewCallResult> {
     const options = await buildCompressionChatOptions({
-      contents: reviewContents(data),
+      contents: reviewContents(data, feedback),
       providerRuntime: resolved.runtime,
       resolvedConfig: resolved.config,
       fallbackConfig: this.deps.config(),
