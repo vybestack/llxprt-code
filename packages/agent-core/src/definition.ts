@@ -5,6 +5,8 @@
  */
 import { z } from 'zod';
 import { DefinitionError } from './errors.js';
+import { normalizePolicyRegex } from './policy-regex.js';
+import { validatePolicySourceStacks } from './policy-source-stack.js';
 import {
   cloneDataDescriptors,
   hasSafeDescriptors,
@@ -13,14 +15,12 @@ import {
 } from './plain-data.js';
 import type {
   AgentDefinition,
-  ContentPart,
   DefinitionProblem,
   JsonValue,
-  ModelRecovery,
+  PolicyDocument,
+  PolicyMatch,
+  PolicyRule,
   PreparedCall,
-  TranscriptEntry,
-  Usage,
-  UsageReport,
 } from './types.js';
 
 function normalizeCredentialParameterKey(key: string): string {
@@ -48,7 +48,7 @@ const CREDENTIAL_URL_PARAMETER_KEYS = new Set(
   ].map(normalizeCredentialParameterKey),
 );
 
-function hasCredentialUrlParts(endpoint: string): boolean {
+export function hasCredentialUrlParts(endpoint: string): boolean {
   let candidate = endpoint
     .replaceAll('\t', '')
     .replaceAll('\n', '')
@@ -79,31 +79,114 @@ function hasCredentialUrlParts(endpoint: string): boolean {
   );
 }
 
-const nonEmpty = z.string().min(1);
+export const jsonValueSchema: z.ZodType<JsonValue> =
+  z.custom<JsonValue>(isJsonValue);
+export const nonEmpty = z.string().min(1);
 const id = nonEmpty;
-const modelRefSchema = z
+export const modelRefSchema = z
   .object({ provider: nonEmpty, model: nonEmpty })
   .strict();
-const instructionSchema = z
+export const instructionSchema = z
   .object({ id, source: nonEmpty, text: z.string() })
   .strict();
-const effectSchema = z.enum(['read', 'write', 'execute', 'network', 'spawn']);
-const argMatcherSchema = z.union([
-  z.object({ arg: nonEmpty, pathUnder: nonEmpty }).strict(),
-  z.object({ arg: nonEmpty, commandPrefix: z.array(nonEmpty) }).strict(),
+export const effectSchema = z.enum([
+  'read',
+  'write',
+  'execute',
+  'network',
+  'spawn',
+]);
+const policyRegexInputSchema = z.union([
   z
     .object({
-      arg: nonEmpty,
-      equals: z.union([z.string(), z.number(), z.boolean()]),
+      path: z.enum([
+        'directory-argsPattern',
+        'single-file-argsPattern',
+        'directory-commandRegex',
+        'single-file-commandRegex',
+        'utils-commandRegex',
+        'directory-commandPrefix',
+        'single-file-commandPrefix',
+        'utils-commandPrefix',
+        'dynamic-commandPrefix',
+      ]),
+      text: z.string(),
     })
     .strict(),
-  z.object({ arg: nonEmpty, urlHost: z.array(nonEmpty).min(1) }).strict(),
+  z
+    .object({
+      path: z.enum(['utils-argsPattern', 'direct']),
+      source: z.string(),
+      flags: z.string(),
+    })
+    .strict(),
 ]);
-const policyMatchSchema = z
+const policyRegexSchema = z
   .object({
-    tools: z.array(nonEmpty).optional(),
-    effects: z.array(effectSchema).optional(),
-    args: z.array(argMatcherSchema).optional(),
+    flavor: z.literal('ecmascript'),
+    source: z.string(),
+    flags: z.string(),
+    input: policyRegexInputSchema,
+  })
+  .strict();
+const policyMatchSchema: z.ZodType<PolicyMatch> = z.lazy(() =>
+  z
+    .object({
+      tools: z.array(nonEmpty).optional(),
+      sourceTool: z
+        .object({ exact: nonEmpty.optional(), prefix: nonEmpty.optional() })
+        .strict()
+        .superRefine((source, context) => {
+          if ((source.exact === undefined) === (source.prefix === undefined))
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [],
+              message:
+                'Exactly one source tool exact or prefix selector is required.',
+            });
+        })
+        .optional(),
+      effects: z.array(effectSchema).optional(),
+      modes: z.array(z.enum(['default', 'autoEdit', 'yolo'])).optional(),
+      args: z
+        .array(
+          z.union([
+            z.object({ arg: nonEmpty, pathUnder: nonEmpty }).strict(),
+            z
+              .object({ arg: nonEmpty, commandPrefix: z.array(nonEmpty) })
+              .strict(),
+            z
+              .object({
+                arg: nonEmpty,
+                equals: z.union([z.string(), z.number().finite(), z.boolean()]),
+              })
+              .strict(),
+            z
+              .object({ arg: nonEmpty, urlHost: z.array(nonEmpty).min(1) })
+              .strict(),
+            z.object({ serializedArgs: policyRegexSchema }).strict(),
+          ]),
+        )
+        .optional(),
+      unless: z.array(policyMatchSchema).optional(),
+    })
+    .strict(),
+);
+export const provenanceSchema = z
+  .object({
+    source: z.enum([
+      'default',
+      'user',
+      'admin',
+      'settings',
+      'confirmed',
+      'host',
+    ]),
+    sourceId: nonEmpty,
+    ruleIndex: z.number().int().nonnegative(),
+    tier: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+    sourcePriority: z.number().finite().optional(),
+    expansionIndex: z.number().int().nonnegative(),
   })
   .strict();
 const policyRuleSchema = z
@@ -111,30 +194,46 @@ const policyRuleSchema = z
     id,
     match: policyMatchSchema,
     outcome: z.enum(['allow', 'deny', 'ask']),
+    priority: z.number().finite(),
+    order: z.number().int().nonnegative(),
+    allowRedirection: z.boolean().optional(),
+    provenance: provenanceSchema,
     reason: z.string().optional(),
   })
   .strict();
-const policyLayerSchema = z
+export const policyLayerSchema = z
   .object({ name: nonEmpty, rules: z.array(policyRuleSchema) })
   .strict();
-const authorityRuleSchema = policyRuleSchema.extend({
+export const restrictionRuleSchema = policyRuleSchema.extend({
   outcome: z.enum(['deny', 'ask']),
 });
+export const policySourceStackSchema = z
+  .object({
+    id: nonEmpty,
+    restrictions: z.array(restrictionRuleSchema),
+    preferences: z.array(policyLayerSchema),
+  })
+  .strict();
 const policySchema = z
   .object({
-    authority: z.array(authorityRuleSchema),
+    authority: z.array(restrictionRuleSchema),
     preferences: z.array(policyLayerSchema),
+    sourceStacks: z.array(policySourceStackSchema),
+    approvalMode: z.enum(['default', 'autoEdit', 'yolo']),
     fallback: z.enum(['allow', 'deny', 'ask']),
   })
   .strict();
-const modelParametersSchema = z
+export const modelParametersSchema = z
   .object({
     temperature: z.number().finite().min(0).max(2).optional(),
+    topP: z.number().finite().min(0).max(1).optional(),
+    responseJsonSchema: z.record(jsonValueSchema).optional(),
     maxOutputTokens: z.number().int().positive().optional(),
     reasoning: z
       .object({
         effort: z.enum(['low', 'medium', 'high']).optional(),
         budgetTokens: z.number().int().positive().optional(),
+        includeInOutput: z.boolean().optional(),
       })
       .strict()
       .optional(),
@@ -146,7 +245,7 @@ const modelParametersSchema = z
 const modelChoiceSchema = z
   .object({ ref: modelRefSchema, parameters: modelParametersSchema })
   .strict();
-const modelSelectionSchema = z
+export const modelSelectionSchema = z
   .object({
     primary: modelChoiceSchema,
     fallbacks: z.array(modelChoiceSchema),
@@ -165,7 +264,7 @@ const modelSelectionSchema = z
     ),
   })
   .strict();
-const limitsSchema = z
+export const limitsSchema = z
   .object({
     maxStepsPerTurn: z.number().int().positive(),
     turnTokenBudget: z.number().int().positive().optional(),
@@ -238,274 +337,8 @@ export const AgentDefinitionSchema = z
   })
   .strict();
 
-const jsonValueSchema: z.ZodType<JsonValue> = z.custom<JsonValue>(isJsonValue);
-const replayScopeSchema = z
-  .object({
-    provider: nonEmpty,
-    model: nonEmpty,
-    endpoint: nonEmpty,
-    principal: nonEmpty,
-    connection: nonEmpty.optional(),
-  })
-  .strict()
-  .superRefine((scope, context) => {
-    if (hasCredentialUrlParts(scope.endpoint)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['endpoint'],
-        message:
-          'Replay endpoint URLs must not contain user information or credential parameters.',
-      });
-    }
-  });
-const usageFields: ReadonlyArray<keyof Usage> = [
-  'inputTokens',
-  'outputTokens',
-  'reasoningTokens',
-  'cacheReadInputTokens',
-  'cacheWriteInputTokens',
-];
-const usageSchema = z
-  .object({
-    inputTokens: z.number().int().nonnegative(),
-    outputTokens: z.number().int().nonnegative(),
-    reasoningTokens: z.number().int().nonnegative(),
-    cacheReadInputTokens: z.number().int().nonnegative(),
-    cacheWriteInputTokens: z.number().int().nonnegative(),
-  })
-  .strict()
-  .superRefine((usage, context) => {
-    if (
-      usage.cacheReadInputTokens > usage.inputTokens ||
-      usage.cacheWriteInputTokens > usage.inputTokens ||
-      usage.cacheReadInputTokens + usage.cacheWriteInputTokens >
-        usage.inputTokens
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [],
-        message:
-          'Cache input counters are non-overlapping subsets of input tokens.',
-      });
-    }
-  });
-export const UsageReportSchema = z
-  .object({
-    totals: z
-      .object({
-        inputTokens: z.number().int().nonnegative().optional(),
-        outputTokens: z.number().int().nonnegative().optional(),
-        reasoningTokens: z.number().int().nonnegative().optional(),
-        cacheReadInputTokens: z.number().int().nonnegative().optional(),
-        cacheWriteInputTokens: z.number().int().nonnegative().optional(),
-      })
-      .strict(),
-    complete: z.boolean(),
-  })
-  .strict()
-  .superRefine((report, context) => {
-    if (
-      report.complete &&
-      usageFields.some((field) => report.totals[field] === undefined)
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['totals'],
-        message: 'A complete usage report must include every usage counter.',
-      });
-    }
-    const input = report.totals.inputTokens;
-    if (input !== undefined) {
-      const cacheRead = report.totals.cacheReadInputTokens ?? 0;
-      const cacheWrite = report.totals.cacheWriteInputTokens ?? 0;
-      if (
-        cacheRead > input ||
-        cacheWrite > input ||
-        cacheRead + cacheWrite > input
-      ) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['totals'],
-          message:
-            'Cache input counters are non-overlapping subsets of input tokens.',
-        });
-      }
-    }
-  });
-const providerReplaySchema = z
-  .object({
-    id: nonEmpty,
-    scope: replayScopeSchema,
-    format: nonEmpty,
-    target: z.union([
-      z.object({ kind: z.literal('entry') }).strict(),
-      z.object({ kind: z.literal('part'), id: nonEmpty }).strict(),
-    ]),
-    data: jsonValueSchema,
-  })
-  .strict();
-const contentSchema: z.ZodType<ContentPart> = z.lazy(() =>
-  z.union([
-    z.object({ kind: z.literal('text'), text: z.string() }).strict(),
-    z
-      .object({
-        kind: z.literal('image'),
-        mediaType: nonEmpty,
-        data: z.union([
-          z.instanceof(Uint8Array),
-          z.object({ ref: nonEmpty }).strict(),
-        ]),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal('audio'),
-        mediaType: nonEmpty,
-        data: z.union([
-          z.instanceof(Uint8Array),
-          z.object({ ref: nonEmpty }).strict(),
-        ]),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal('file'),
-        name: nonEmpty,
-        mediaType: nonEmpty,
-        text: z.string().optional(),
-        ref: nonEmpty.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal('resource'),
-        uri: nonEmpty,
-        title: z.string().optional(),
-        parts: z.array(contentSchema),
-      })
-      .strict(),
-  ]),
-);
-const toolErrorSchema = z
-  .object({
-    kind: z.enum([
-      'invalid-args',
-      'failed',
-      'aborted',
-      'revoked',
-      'unavailable',
-    ]),
-    message: z.string(),
-  })
-  .strict();
-const toolResultSchema = z
-  .object({
-    parts: z.array(contentSchema),
-    truncated: z
-      .object({
-        originalBytes: z.number().int().nonnegative(),
-        kept: z.enum(['head', 'tail', 'head-and-tail']),
-      })
-      .strict()
-      .optional(),
-    raw: nonEmpty.optional(),
-  })
-  .strict();
-const toolOutcomeSchema = z.union([
-  z.object({ status: z.literal('ok'), result: toolResultSchema }).strict(),
-  z
-    .object({
-      status: z.literal('error'),
-      error: toolErrorSchema,
-      result: toolResultSchema.optional(),
-    })
-    .strict(),
-  z.object({ status: z.literal('stale') }).strict(),
-]);
-const transcriptPartSchema = z.union([
-  z.object({ id: nonEmpty, content: contentSchema }).strict(),
-  z.object({ id: nonEmpty, thinking: z.string() }).strict(),
-  z
-    .object({
-      id: nonEmpty,
-      call: z
-        .object({ id: nonEmpty, tool: nonEmpty, args: jsonValueSchema })
-        .strict(),
-    })
-    .strict(),
-  z
-    .object({
-      id: nonEmpty,
-      result: z.object({ call: nonEmpty, outcome: toolOutcomeSchema }).strict(),
-    })
-    .strict(),
-]);
-export const TranscriptEntrySchema = z
-  .object({
-    id: nonEmpty,
-    role: z.enum(['user', 'model', 'tool']),
-    parts: z.array(transcriptPartSchema),
-    replay: z.array(providerReplaySchema).optional(),
-  })
-  .strict()
-  .superRefine((entry, context) => {
-    if (
-      entry.role !== 'model' &&
-      entry.replay !== undefined &&
-      entry.replay.length > 0
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['replay'],
-        message: 'Replay envelopes may appear only on model entries.',
-      });
-    }
-    const partIds = new Set<string>();
-    entry.parts.forEach((part, index) => {
-      if (partIds.has(part.id)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['parts', index, 'id'],
-          message: `Transcript part id ${part.id} is duplicated.`,
-        });
-      }
-      partIds.add(part.id);
-      if ('call' in part && part.id !== part.call.id) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['parts', index, 'id'],
-          message: 'A tool-call transcript part id must equal its call id.',
-        });
-      }
-    });
-    const replayIds = new Set<string>();
-    for (const [index, replay] of (entry.replay ?? []).entries()) {
-      if (replayIds.has(replay.id)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['replay', index, 'id'],
-          message: `Replay envelope id ${replay.id} is duplicated in this entry.`,
-        });
-      }
-      replayIds.add(replay.id);
-      if (replay.target.kind === 'part' && !partIds.has(replay.target.id)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['replay', index, 'target', 'id'],
-          message: `Replay target ${replay.target.id} does not identify a part in this entry.`,
-        });
-      }
-    }
-  });
-export const ModelRecoverySchema = z
-  .object({
-    scope: replayScopeSchema,
-    invalidates: z.array(
-      z.object({ entry: nonEmpty, replay: nonEmpty }).strict(),
-    ),
-    format: nonEmpty,
-    data: jsonValueSchema,
-  })
+const shellPolicySegmentSchema = z
+  .object({ text: nonEmpty, hasRedirection: z.boolean() })
   .strict();
 const shellSegmentSchema = z
   .object({
@@ -527,12 +360,20 @@ const shellSegmentSchema = z
   .strict();
 const preparedShellSchema = z.union([
   z
-    .object({ parsed: z.literal(false), command: nonEmpty, error: nonEmpty })
+    .object({
+      parsed: z.literal(false),
+      rawCommand: nonEmpty,
+      hasRedirection: z.boolean(),
+      policySplit: z.array(shellPolicySegmentSchema),
+      error: nonEmpty,
+    })
     .strict(),
   z
     .object({
       parsed: z.literal(true),
-      command: nonEmpty,
+      rawCommand: nonEmpty,
+      hasRedirection: z.boolean(),
+      policySplit: z.array(shellPolicySegmentSchema),
       segments: z.array(shellSegmentSchema).min(1),
     })
     .strict(),
@@ -564,6 +405,137 @@ function problemsFrom(error: z.ZodError): DefinitionProblem[] {
   }));
 }
 
+function validatePolicyRegexes(policy: PolicyDocument): void {
+  const problems: DefinitionProblem[] = [];
+  const visitMatch = (
+    match: PolicyMatch,
+    rule: PolicyRule,
+    path: ReadonlyArray<string | number>,
+  ): void => {
+    for (const [index, matcher] of (match.args ?? []).entries()) {
+      if (!('serializedArgs' in matcher)) continue;
+      const regex = matcher.serializedArgs;
+      try {
+        const normalized = normalizePolicyRegex(regex.input);
+        if (
+          normalized.source !== regex.source ||
+          normalized.flags !== regex.flags
+        )
+          throw new Error(
+            `Effective source or flags differ from evidence at ${regex.input.path}.`,
+          );
+      } catch (error) {
+        problems.push({
+          code: 'invalid-policy-regex',
+          path: [...path, 'args', index, 'serializedArgs'],
+          message: `sourceId=${rule.provenance.sourceId} ruleIndex=${rule.provenance.ruleIndex} field=serializedArgs: ${error instanceof Error ? error.message : 'Native RegExp construction failed.'}`,
+        });
+      }
+    }
+    for (const [index, exception] of (match.unless ?? []).entries())
+      visitMatch(exception, rule, [...path, 'unless', index]);
+  };
+  const collect = (
+    rules: readonly PolicyRule[],
+    path: ReadonlyArray<string | number>,
+  ): void =>
+    rules.forEach((rule, index) =>
+      visitMatch(rule.match, rule, [...path, index, 'match']),
+    );
+  collect(policy.authority, ['policy', 'authority']);
+  policy.preferences.forEach((layer, index) =>
+    collect(layer.rules, ['policy', 'preferences', index, 'rules']),
+  );
+  policy.sourceStacks.forEach((stack, index) => {
+    collect(stack.restrictions, [
+      'policy',
+      'sourceStacks',
+      index,
+      'restrictions',
+    ]);
+    stack.preferences.forEach((layer, layerIndex) =>
+      collect(layer.rules, [
+        'policy',
+        'sourceStacks',
+        index,
+        'preferences',
+        layerIndex,
+        'rules',
+      ]),
+    );
+  });
+  if (problems.length > 0) throw new DefinitionError(problems);
+}
+
+export function validatePolicyContract(policy: PolicyDocument): void {
+  const problems: DefinitionProblem[] = [];
+  for (const validate of [
+    () => validatePolicyRegexes(policy),
+    () => validatePolicySourceStacks(policy.sourceStacks),
+  ]) {
+    try {
+      validate();
+    } catch (error) {
+      if (!(error instanceof DefinitionError)) throw error;
+      problems.push(...error.problems);
+    }
+  }
+  if (problems.length > 0) throw new DefinitionError(problems);
+}
+
+export function validateEmbeddedPolicyDocuments(
+  documents: ReadonlyArray<{
+    readonly value: unknown;
+    readonly path: ReadonlyArray<string | number>;
+  }>,
+): DefinitionProblem[] {
+  const problems: DefinitionProblem[] = [];
+  for (const document of documents) {
+    const parsed = policySchema.safeParse(document.value);
+    if (!parsed.success) continue;
+    try {
+      validatePolicyContract(parsed.data);
+    } catch (error) {
+      if (!(error instanceof DefinitionError)) throw error;
+      problems.push(
+        ...error.problems.map((problem) => ({
+          ...problem,
+          path: [
+            ...document.path,
+            ...(problem.path[0] === 'policy'
+              ? problem.path.slice(1)
+              : problem.path),
+          ],
+        })),
+      );
+    }
+  }
+  return problems;
+}
+
+function embeddedPolicies(value: unknown): ReadonlyArray<{
+  readonly value: unknown;
+  readonly path: ReadonlyArray<string | number>;
+}> {
+  if (!isStringRecord(value)) return [];
+  const documents: Array<{
+    readonly value: unknown;
+    readonly path: ReadonlyArray<string | number>;
+  }> = [];
+  if (Object.hasOwn(value, 'policy'))
+    documents.push({ value: value.policy, path: ['policy'] });
+  if (Array.isArray(value.subagents)) {
+    for (const [index, subagent] of value.subagents.entries()) {
+      if (isStringRecord(subagent) && Object.hasOwn(subagent, 'policy'))
+        documents.push({
+          value: subagent.policy,
+          path: ['subagents', index, 'policy'],
+        });
+    }
+  }
+  return documents;
+}
+
 export function validateDefinition(value: unknown): AgentDefinition {
   const plainData = isPlainData(value, new Set(), true);
   if (!plainData) {
@@ -576,92 +548,62 @@ export function validateDefinition(value: unknown): AgentDefinition {
       },
     ]);
   }
-  const result = AgentDefinitionSchema.safeParse(cloneDataDescriptors(value));
+  const cloned = cloneDataDescriptors(value);
+  const result = AgentDefinitionSchema.safeParse(cloned);
   const problems = result.success ? [] : problemsFrom(result.error);
+  problems.push(...validateEmbeddedPolicyDocuments(embeddedPolicies(cloned)));
   if (problems.length > 0) throw new DefinitionError(problems);
   if (!result.success)
     throw new Error('Definition parsing failed without diagnostics.');
   return result.data;
 }
 
-function parse<T>(schema: z.ZodType<T>, value: unknown, label: string): T {
-  if (!hasSafeDescriptors(value)) {
-    throw new DefinitionError([
-      {
-        code: 'invalid-plain-data',
-        path: [],
-        message: `${label}: values must use plain data descriptors.`,
-      },
-    ]);
-  }
+export function assertSafeDefinitionValue(value: unknown, label: string): void {
+  if (hasSafeDescriptors(value)) return;
+  throw new DefinitionError([
+    {
+      code: 'invalid-plain-data',
+      path: [],
+      message: `${label}: values must use plain data descriptors.`,
+    },
+  ]);
+}
+
+export function labelledDefinitionProblems(
+  error: z.ZodError,
+  label: string,
+): DefinitionProblem[] {
+  return problemsFrom(error).map((problem) => ({
+    ...problem,
+    message: `${label}: ${problem.message}`,
+  }));
+}
+
+export function parseDefinitionValue<T>(
+  schema: z.ZodType<T>,
+  value: unknown,
+  label: string,
+): T {
+  assertSafeDefinitionValue(value, label);
   const result = schema.safeParse(value);
   if (!result.success)
-    throw new DefinitionError(
-      problemsFrom(result.error).map((problem) => ({
-        ...problem,
-        message: `${label}: ${problem.message}`,
-      })),
-    );
+    throw new DefinitionError(labelledDefinitionProblems(result.error, label));
   return result.data;
 }
 
-export function validateTranscriptEntry(value: unknown): TranscriptEntry {
-  return parse(TranscriptEntrySchema, value, 'Invalid transcript entry');
-}
-
-export function validateUsageReport(value: unknown): UsageReport {
-  return parse(UsageReportSchema, value, 'Invalid usage report');
-}
-
-export function validateModelRecovery(value: unknown): ModelRecovery {
-  return parse(ModelRecoverySchema, value, 'Invalid model recovery');
-}
-
 export function validateJsonValue(value: unknown): JsonValue {
-  return parse(jsonValueSchema, value, 'Invalid JSON value');
-}
-
-export function validateUsage(value: unknown): Usage {
-  return parse(usageSchema, value, 'Invalid usage');
-}
-
-export function mergeUsageReports(
-  previousValue: unknown,
-  nextValue: unknown,
-): UsageReport {
-  const previous = validateUsageReport(previousValue);
-  const next = validateUsageReport(nextValue);
-  for (const field of usageFields) {
-    const before = previous.totals[field];
-    const after = next.totals[field];
-    if (before !== undefined && after !== undefined && after < before) {
-      throw new DefinitionError([
-        {
-          code: 'usage-decreased',
-          path: ['totals', field],
-          message: `Cumulative usage counter ${field} decreased from ${before} to ${after}.`,
-        },
-      ]);
-    }
-  }
-  const totals: { -readonly [Field in keyof Usage]?: Usage[Field] } = {
-    ...previous.totals,
-  };
-  for (const field of usageFields) {
-    const value = next.totals[field];
-    if (value !== undefined) totals[field] = value;
-  }
-  return validateUsageReport({
-    totals,
-    complete: previous.complete || next.complete,
-  });
+  return parseDefinitionValue(jsonValueSchema, value, 'Invalid JSON value');
 }
 
 export function validateAdapterFormat(
   format: unknown,
   supportedFormats: readonly string[],
 ): string {
-  const parsedFormat = parse(nonEmpty, format, 'Invalid adapter format');
+  const parsedFormat = parseDefinitionValue(
+    nonEmpty,
+    format,
+    'Invalid adapter format',
+  );
   if (!supportedFormats.includes(parsedFormat)) {
     throw new DefinitionError([
       {
@@ -682,7 +624,11 @@ export function validatePreparedCall(
   value: unknown,
   shellCommandArg?: string,
 ): PreparedCall {
-  const prepared = parse(preparedCallSchema, value, 'Invalid prepared call');
+  const prepared = parseDefinitionValue(
+    preparedCallSchema,
+    value,
+    'Invalid prepared call',
+  );
   if (shellCommandArg !== undefined) {
     if (!prepared.shell) {
       throw new DefinitionError([
@@ -707,7 +653,7 @@ export function validatePreparedCall(
       ]);
     }
     const command = prepared.args[shellCommandArg];
-    if (typeof command !== 'string' || command !== prepared.shell.command) {
+    if (typeof command !== 'string' || command !== prepared.shell.rawCommand) {
       throw new DefinitionError([
         {
           code: 'shell-command-mismatch',
