@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ChatSessionConfig } from './chatSession.js';
 import type { ToolSelectionHookResult } from './streamRequestHelpers.js';
@@ -11,12 +12,16 @@ import type { ToolSelectionHookResult } from './streamRequestHelpers.js';
 /**
  * A provider-ready request as it left the BeforeModel hook and the context
  * enforcement: the contents the provider is sent, the tool selection and the
- * system prompt of that moment (issue #4036).
+ * system prompt of that moment (issue #4036). `options` is what the provider
+ * was handed, once it was: model parameters, invocation settings and metadata
+ * included, so an identical resend does not rebuild them from live settings
+ * (issue #4093).
  */
 export interface ProviderReadyRequest {
   readonly contents: IContent[];
   readonly toolSelection: ToolSelectionHookResult;
   readonly systemInstruction: ChatSessionConfig['systemInstruction'];
+  readonly options?: RuntimeGenerateChatOptions;
 }
 
 /**
@@ -47,6 +52,11 @@ export class SendRequestState {
 
   keep(request: ProviderReadyRequest): void {
     this.kept = request;
+  }
+
+  /** Records what the provider was handed for the request kept so far. */
+  keepOptions(options: RuntimeGenerateChatOptions): void {
+    if (this.kept !== undefined) this.kept = { ...this.kept, options };
   }
 
   /** The next attempt resends the kept request unchanged. */

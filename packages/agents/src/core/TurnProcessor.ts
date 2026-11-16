@@ -46,7 +46,10 @@ import { SendRequestState } from './sendRequestState.js';
 import type { StreamProcessor } from './StreamProcessor.js';
 import { withReportedUsage } from './streamRequestHelpers.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
-import { canonicalizeToolName } from './toolGovernance.js';
+import {
+  applyToolSelectionHook,
+  type ToolSelectionHookResult,
+} from './turnToolSelection.js';
 import {
   applyRetryTemperature,
   chunkHasVisibleOutput,
@@ -109,11 +112,6 @@ import {
 type SemanticMediaPurgeFactory = () => Promise<
   SemanticMediaPurgeAttempt | undefined
 >;
-
-interface ToolSelectionHookResult {
-  tools: ToolDeclaration[] | undefined;
-  allowedFunctionNames: string[] | undefined;
-}
 
 /**
  * Wraps a neutral ModelStreamChunk into a CHUNK StreamEvent.
@@ -270,8 +268,11 @@ export class TurnProcessor {
       this.historyService,
       this._normalizeUserContent(params),
       prompt_id,
+      params.logicalSend?.turnId,
     );
     this.currentTurnId = prepared.turnId;
+    if (params.logicalSend !== undefined)
+      params.logicalSend.turnId = prepared.turnId;
 
     let semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
     try {
@@ -348,7 +349,8 @@ export class TurnProcessor {
       // rewritten turn is then what is resent and finally committed.
       let turn = prepared;
       let attemptPurge = semanticMediaPurge;
-      const sendState = new SendRequestState();
+      const sendState =
+        requestParams.logicalSend?.state ?? new SendRequestState();
       let retrying = true;
       while (
         retrying &&
@@ -364,7 +366,9 @@ export class TurnProcessor {
         );
         lastError = outcome.error;
         turn = turnForNextAttempt(turn, outcome);
-        keepRequestForNextAttempt(sendState, outcome);
+        // An abandoned attempt must not decide what its replacement resends.
+        if (requestParams.config?.abortSignal?.aborted !== true)
+          keepRequestForNextAttempt(sendState, outcome);
         if (rewroteCommittedHistory(outcome)) {
           // The next request is built from the rewritten history.
           attemptPurge?.retire();
@@ -631,8 +635,9 @@ export class TurnProcessor {
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<ModelOutput> {
     const requestTools = this._selectRequestTools(requestParams);
-    const toolSelection = await this._applyToolSelectionHook(
+    const toolSelection = await applyToolSelectionHook(
       requestTools,
+      this.ports.state.model,
       requestParams.hookOwner ?? requestParams.recordingExecution?.hookOwner,
     );
     const runtimeContext = this.providerRuntimeBuilder(
@@ -872,42 +877,6 @@ export class TurnProcessor {
   ): ToolDeclaration[] | undefined {
     const tools = this._selectRequestTools(params);
     return Array.isArray(tools) ? tools : undefined;
-  }
-
-  private async _applyToolSelectionHook(
-    tools: AgentClientGenerateConfig['tools'],
-    hookOwner?: NonNullable<
-      SendMessageParams['recordingExecution']
-    >['hookOwner'],
-  ): Promise<ToolSelectionHookResult> {
-    const toolsFromConfig = Array.isArray(tools) ? tools : [];
-    if (hookOwner?.beforeToolSelection === undefined)
-      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    const toolSelectionResult = await hookOwner.beforeToolSelection(
-      {
-        model: this.ports.state.model,
-        contents: [],
-        tools: toolsFromConfig,
-      },
-      hookOwner.signal,
-    );
-    const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
-      tools: toolsFromConfig,
-    });
-    const toolChoice = modifiedConfig?.toolChoice;
-    if (toolChoice?.mode === 'none') {
-      return { tools: [], allowedFunctionNames: [] };
-    }
-    const allowedFunctions = toolChoice?.allowedToolNames;
-    if (!Array.isArray(allowedFunctions)) {
-      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    }
-
-    const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
-    const filteredTools = toolsFromConfig.filter((decl) =>
-      allowedNames.has(canonicalizeToolName(decl.name)),
-    );
-    return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
   }
 
   /**

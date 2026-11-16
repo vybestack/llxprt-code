@@ -41,6 +41,7 @@ import {
   type StreamEvent,
 } from './chatSession.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
+import { LogicalSend } from './logicalSend.js';
 import { openResponseStreamIterator } from './turnResponseStream.js';
 import {
   TurnDebugResponses,
@@ -162,6 +163,8 @@ export class Turn {
   readonly pendingToolCalls: ToolCallRequestInfo[];
   private readonly debugResponses = new TurnDebugResponses();
   finishReason: CanonicalFinishReason | undefined;
+  /** The request `run` is sending, shared by the attempts it makes. */
+  private logicalSend: LogicalSend | undefined;
   private logger: DebugLogger;
 
   constructor(
@@ -625,9 +628,14 @@ export class Turn {
     signal: AbortSignal,
     modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<ServerAgentStreamEvent> {
+    const logicalSend = new LogicalSend();
+    this.logicalSend = logicalSend;
+    let attempts = 0;
     return retryOnStreamTimeout({
       attempt: (idleFlag) => {
         this.pendingToolCalls.length = 0;
+        // Every attempt after the first sends the same request again.
+        if (attempts++ > 0) logicalSend.state.resendIdentically();
         return this.runAttempt(req, signal, idleFlag, modelParameters);
       },
       policy: resolveTimeoutRetryPolicy(this.chat.getStreamTimeoutPolicy()),
@@ -768,8 +776,8 @@ export class Turn {
     iterator: AsyncIterator<StreamEvent>;
     firstResult: IteratorResult<StreamEvent>;
   }> {
-    if (!watchdog.isActive) {
-      const iterator = await openResponseStreamIterator(
+    const open = () =>
+      openResponseStreamIterator(
         this.chat,
         this.prompt_id,
         this.recordingExecution,
@@ -779,7 +787,10 @@ export class Turn {
         onStreamLiveness,
         modelParameters,
         this.hookOwner,
+        this.logicalSend,
       );
+    if (!watchdog.isActive) {
+      const iterator = await open();
       try {
         const outcome = await raceReadWithAbort(iterator.next(), signal);
         if (outcome.aborted) {
@@ -795,17 +806,7 @@ export class Turn {
       }
     }
 
-    const acquisitionPromise = openResponseStreamIterator(
-      this.chat,
-      this.prompt_id,
-      this.recordingExecution,
-      req,
-      timeoutSignal,
-      onProviderError,
-      onStreamLiveness,
-      modelParameters,
-      this.hookOwner,
-    );
+    const acquisitionPromise = open();
     const acquisition = beginWatchdogBoundedAcquisition(acquisitionPromise);
 
     try {

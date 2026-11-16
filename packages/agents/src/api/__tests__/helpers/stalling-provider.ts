@@ -19,8 +19,15 @@ export interface ScriptedRequest {
   readonly tools?: unknown;
   readonly systemInstruction?: unknown;
   readonly metadata?: Readonly<Record<string, unknown>>;
-  readonly invocation?: { readonly signal?: AbortSignal };
-  readonly modelParameters?: unknown;
+  readonly invocation?: {
+    readonly signal?: AbortSignal;
+    readonly ephemerals?: unknown;
+    readonly modelBehavior?: unknown;
+    readonly modelParams?: unknown;
+    readonly customHeaders?: unknown;
+    readonly providerDefaults?: unknown;
+  };
+  readonly promptEnvelopeTransportToken?: unknown;
   readonly resolved?: {
     readonly model?: string;
     readonly temperature?: number;
@@ -78,30 +85,41 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
+/**
+ * The request data a resend must repeat exactly, as JSON fixed when the
+ * request arrived. Per-attempt plumbing (signals, observers, timestamps,
+ * lifecycle recorders, the one-shot transport token) is deliberately not part
+ * of it.
+ */
 function requestData(request: ScriptedRequest): unknown {
-  const seen = new WeakSet<object>();
+  const metadata = request.metadata ?? {};
+  const invocation = request.invocation;
   return JSON.parse(
-    JSON.stringify(
-      {
-        contents: request.contents,
-        tools: request.tools,
-        systemInstruction: request.systemInstruction,
+    JSON.stringify({
+      contents: request.contents,
+      tools: request.tools,
+      systemInstruction: request.systemInstruction,
+      resolved: {
         model: request.resolved?.model,
         temperature: request.resolved?.temperature,
         maxTokens: request.resolved?.maxTokens,
         streaming: request.resolved?.streaming,
-        metadata: request.metadata,
-        modelParameters: request.modelParameters,
-        invocation: request.invocation,
       },
-      (_key, value: unknown) => {
-        if (typeof value === 'object' && value !== null) {
-          if (seen.has(value)) return undefined;
-          seen.add(value);
-        }
-        return typeof value === 'bigint' ? value.toString() : value;
+      metadata: {
+        logicalRequestId: metadata['__logicalRequestId'],
+        conversationLogEmptyTools: metadata['conversationLogEmptyTools'],
+        historyLength: metadata['historyLength'],
+        provider: metadata['_provider'],
+        runtimeId: metadata['_runtimeId'],
       },
-    ),
+      invocation: {
+        ephemerals: invocation?.ephemerals,
+        modelBehavior: invocation?.modelBehavior,
+        modelParams: invocation?.modelParams,
+        customHeaders: invocation?.customHeaders,
+        providerDefaults: invocation?.providerDefaults,
+      },
+    }),
   );
 }
 

@@ -122,3 +122,32 @@ export async function within<T>(
     clearTimeout(timer);
   }
 }
+
+/** A history whose image is due for a semantic media purge. */
+export async function seedImageHistory(agent: Agent): Promise<void> {
+  await agent.setHistory([
+    {
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: 'what is in this picture' },
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'image/png',
+          data: PNG_BASE64,
+          caption: 'a single pixel',
+        },
+      ],
+    },
+    { speaker: 'ai', blocks: [{ type: 'text', text: 'one pixel' }] },
+  ]);
+}
+
+/** Media blocks left in the agent's history. */
+export function imageBlocks(
+  history: Awaited<ReturnType<Agent['getHistory']>>,
+): number {
+  return history
+    .flatMap((message) => message.blocks)
+    .filter((block) => block.type === 'media').length;
+}

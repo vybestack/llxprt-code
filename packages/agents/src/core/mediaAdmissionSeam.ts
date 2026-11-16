@@ -115,8 +115,8 @@ export async function prepareAdmittedUserTurn(
   historyService: TurnIdentityHistory,
   contents: IContent[],
   promptId: string,
+  turnId: string = historyService.generateTurnKey(),
 ): Promise<PreparedUserTurn> {
-  const turnId = historyService.generateTurnKey();
   const mediaAdmission = runtimeContext.mediaAdmission;
   const admitted = await admitContentsAtMediaSeam(
     runtimeContext,

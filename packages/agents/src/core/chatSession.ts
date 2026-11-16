@@ -55,6 +55,7 @@ import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-co
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { installHistoryDensityTracking } from './chatHistoryDensity.js';
+import type { LogicalSend } from './logicalSend.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import { createTokenUsageLogger } from './TokenUsageLogger.js';
 
@@ -105,6 +106,8 @@ export interface SendMessageParams {
   config?: ChatSessionConfig;
   hookOwner?: AgentChatRecordingExecution['hookOwner'];
   recordingExecution?: AgentChatRecordingExecution;
+  /** The logical request this send is an attempt of, when a turn resends it. */
+  logicalSend?: LogicalSend;
 }
 
 // Decomposed modules

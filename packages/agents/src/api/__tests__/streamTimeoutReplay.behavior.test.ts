@@ -37,6 +37,8 @@ import {
 } from './helpers/refusal-endpoint.js';
 import {
   collectStream,
+  imageBlocks,
+  seedImageHistory,
   withStallingAgent,
   within,
 } from './helpers/stalling-agent.js';
@@ -67,9 +69,12 @@ if (event === 'BeforeModel') {
 }
 `;
 
-async function hookCounts(
-  directory: string,
-): Promise<{ beforeModel: number; beforeToolSelection: number }> {
+interface HookCounts {
+  readonly beforeModel: number;
+  readonly beforeToolSelection: number;
+}
+
+async function hookCounts(directory: string): Promise<HookCounts> {
   return {
     beforeModel: await hookRuns(directory, 'BeforeModel'),
     beforeToolSelection: await hookRuns(directory, 'BeforeToolSelection'),
@@ -152,7 +157,7 @@ describe('timeout replay (issue #4093)', () => {
 
     it('resends exactly the request that timed out and runs the hooks once for it', async () => {
       let directoryOfAgent = '';
-      let hooksWhenOriginalArrived: unknown;
+      let hooksWhenOriginalArrived: HookCounts | undefined;
       const endpoint = await startScriptedEndpoint(async (_request, index) => {
         if (index === 0) {
           hooksWhenOriginalArrived = await hookCounts(directoryOfAgent);
@@ -197,7 +202,10 @@ describe('timeout replay (issue #4093)', () => {
           }).toStrictEqual({
             done: ['stop'],
             requestsAfterFirst: 2,
-            hooksAfterFirst: hooksWhenOriginalArrived,
+            hooksAfterFirst: hooksWhenOriginalArrived ?? {
+              beforeModel: -1,
+              beforeToolSelection: -1,
+            },
             resent: JSON.stringify(original),
             laterSeesCurrentSettings: 0.9,
           });
@@ -248,6 +256,7 @@ describe('timeout replay (issue #4093)', () => {
 
   describe('request the provider receives on a resend after a stream timeout (issue #4093)', () => {
     const credentials = useOwnedCredentials();
+    const timeout = { 'stream-first-response-timeout-ms': 1000 };
 
     it('carries the original request data with fresh cancellation signals', async () => {
       const provider = createStallingProvider('stall-replay');
@@ -260,12 +269,14 @@ describe('timeout replay (issue #4093)', () => {
       const cleanup = await withStallingAgent(
         credentials().authority,
         provider,
-        { settings: { 'stream-first-response-timeout-ms': 1000 } },
+        { settings: timeout },
         async (agent) => {
+          agent.setModelParam('temperature', 0.3);
           await within(
             DEADLINE_MS,
             'resend of the timed-out request',
             collectStream(agent, 'initial caller input', {
+              // The settings move while the resend waits out its backoff.
               onEvent: (event) => {
                 if (
                   event.type === 'notice' &&
@@ -279,19 +290,56 @@ describe('timeout replay (issue #4093)', () => {
 
           expect({
             requests: provider.attempts.length,
+            temperature: resent.request.resolved?.temperature,
             data: JSON.stringify(resent.data),
             freshSignals: resent.signals.every(
               (signal) => !original.signals.includes(signal),
             ),
+            freshTransportToken:
+              resent.request.promptEnvelopeTransportToken !==
+              original.request.promptEnvelopeTransportToken,
             resentSignalsLive: resent.abortedOnArrival,
             originalTimedOut: original.signals.map((signal) => signal.aborted),
           }).toStrictEqual({
             requests: 2,
+            temperature: 0.3,
             data: JSON.stringify(original.data),
             freshSignals: true,
+            freshTransportToken: true,
             resentSignalsLive: resent.signals.map(() => false),
             originalTimedOut: original.signals.map(() => true),
           });
+        },
+      );
+      expect(cleanup).toStrictEqual([]);
+    });
+
+    it('does not publish the purge the abandoned attempt prepared', async () => {
+      const provider = createStallingProvider('stall-purge-frontier');
+      provider.onAttempt = (attempt) => {
+        if (attempt.index === 1) {
+          attempt.emit('resent answer');
+          attempt.finish();
+        }
+      };
+      const cleanup = await withStallingAgent(
+        credentials().authority,
+        provider,
+        { settings: { ...timeout, 'media.semantic-purge': 'remove' } },
+        async (agent) => {
+          await seedImageHistory(agent);
+
+          await within(
+            DEADLINE_MS,
+            'resend of the timed-out request',
+            collectStream(agent, 'describe it again'),
+          );
+          const history = await agent.getHistory();
+
+          expect({
+            requests: provider.attempts.length,
+            images: imageBlocks(history),
+          }).toStrictEqual({ requests: 2, images: 1 });
         },
       );
       expect(cleanup).toStrictEqual([]);

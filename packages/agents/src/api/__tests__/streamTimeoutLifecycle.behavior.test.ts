@@ -22,7 +22,7 @@ import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import {
   collectStream,
-  PNG_BASE64,
+  seedImageHistory,
   withStallingAgent,
   within,
 } from './helpers/stalling-agent.js';
@@ -65,25 +65,6 @@ function answerWith(
   };
 }
 
-async function seedImage(agent: Agent): Promise<void> {
-  await agent.setHistory([
-    {
-      speaker: 'human',
-      blocks: [
-        { type: 'text', text: 'what is in this picture' },
-        {
-          type: 'media',
-          encoding: 'base64',
-          mimeType: 'image/png',
-          data: PNG_BASE64,
-          caption: 'a single pixel',
-        },
-      ],
-    },
-    { speaker: 'ai', blocks: [{ type: 'text', text: 'one pixel' }] },
-  ]);
-}
-
 describe('stream attempts that ignore cancellation (issue #4093)', () => {
   useRecordingPrompts();
   const credentials = useOwnedCredentials();
@@ -109,7 +90,7 @@ describe('stream attempts that ignore cancellation (issue #4093)', () => {
             provider,
             { settings: { ...timeout, ...PURGE } },
             async (agent) => {
-              await seedImage(agent);
+              await seedImageHistory(agent);
 
               const first = await within(
                 DEADLINE_MS,

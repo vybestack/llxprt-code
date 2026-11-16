@@ -7,7 +7,6 @@ import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtim
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
   ModelOutput,
   ModelStreamChunk,
@@ -77,6 +76,7 @@ import {
 } from './mediaAdmissionSeam.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { createCancellableStream } from './cancellableStream.js';
+import { replayOptions, snapshotSentOptions } from './requestReplay.js';
 import { buildStreamChatOptions } from './streamChatOptions.js';
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import {
@@ -241,35 +241,15 @@ export class StreamProcessor {
       sendState,
     );
 
-    return this._createCancellableStream(
-      streamResponse,
-      historyUserContent,
-      prepared,
-      semanticMediaPurge,
-      turnId,
-      params.recordingExecution?.historyOrigin,
-      params.config?.abortSignal,
-    );
-  }
-
-  private _createCancellableStream(
-    streamResponse: AsyncGenerator<ModelStreamChunk>,
-    userContent: IContent | IContent[],
-    prepared: PreparedUserTurn | undefined,
-    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-    turnId: string,
-    origin?: object,
-    attemptSignal?: AbortSignal,
-  ): AsyncGenerator<ModelStreamChunk> {
     return createCancellableStream(streamResponse, () =>
       this.processStreamResponse(
         streamResponse,
-        userContent,
+        historyUserContent,
         semanticMediaPurge,
         turnId,
         prepared,
-        origin,
-        attemptSignal,
+        params.recordingExecution?.historyOrigin,
+        params.config?.abortSignal,
       ),
     );
   }
@@ -300,7 +280,13 @@ export class StreamProcessor {
       );
       const kept = sendState?.replayable();
       if (kept !== undefined) {
-        return this._resendKeptRequest(provider, kept, params, promptId);
+        return this._resendKeptRequest(
+          provider,
+          kept,
+          params,
+          promptId,
+          sendState,
+        );
       }
       return this._buildAndSendStreamRequest(
         params,
@@ -324,9 +310,10 @@ export class StreamProcessor {
 
   private _selectHookRequestTools(
     params: SendMessageParams,
-  ): ReturnType<StreamProcessor['_applyToolSelectionHook']> {
-    return this._applyToolSelectionHook(
-      this._selectRequestTools(params),
+  ): Promise<ToolSelectionHookResult> {
+    return applyToolSelectionHook(
+      selectRequestTools(params, this.generationConfig.tools),
+      this.ports.state.model,
       params.hookOwner ?? params.recordingExecution?.hookOwner,
     );
   }
@@ -414,6 +401,8 @@ export class StreamProcessor {
         promptId,
         toolSelection.allowedFunctionNames,
         streamPreparation.prepared,
+        undefined,
+        sendState,
       );
       return withCompressionCallbackCleanup(
         stream,
@@ -453,6 +442,7 @@ export class StreamProcessor {
     kept: ProviderReadyRequest,
     params: SendMessageParams,
     promptId: string,
+    sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     assertAdmittedRoute(params.modelParameters?.route);
     const { requestPayload, runtimeContext } = this._prepareRequestPayload(
@@ -477,6 +467,7 @@ export class StreamProcessor {
         kept.toolSelection.allowedFunctionNames,
         undefined,
         { ...this.generationConfig, systemInstruction: kept.systemInstruction },
+        sendState,
       );
       return withCompressionCallbackCleanup(
         stream,
@@ -521,6 +512,42 @@ export class StreamProcessor {
     return { requestPayload, baseRuntimeContext, runtimeContext };
   }
 
+  /**
+   * The options this attempt sends: built from the live request for a first
+   * send, or the options of the kept request bound to this attempt's own
+   * signal and observers for an identical resend (issue #4093).
+   */
+  private _chatOptionsForSend(
+    provider: IProvider,
+    requestPayload: PreparedRequest['requestPayload'],
+    runtimeContext: ProviderRequestCollaborators,
+    params: SendMessageParams,
+    promptId: string,
+    generation: ChatSessionConfig,
+    sendState: SendRequestState | undefined,
+  ): ReturnType<typeof buildStreamChatOptions> {
+    const keptOptions = sendState?.replayable()?.options;
+    if (keptOptions !== undefined) {
+      return replayOptions(keptOptions, {
+        signal: params.config?.abortSignal,
+        onProviderError: params.config?.onProviderError,
+        onStreamLiveness: params.config?.onStreamLiveness,
+        requestContext: params.config?.providerRequestContext,
+        rawTokenDeltaSink: this.currentRawTokenDeltaBridge?.notify,
+      });
+    }
+    return buildStreamChatOptions(
+      this.ports.prepareProviderInvocation,
+      provider.name,
+      promptId,
+      requestPayload,
+      runtimeContext.metadata,
+      params,
+      generation,
+      this.currentRawTokenDeltaBridge,
+    );
+  }
+
   // @plan:PLAN-20260617-COREAPI.P15
   // @requirement:REQ-001
   private async _sendProviderRequest(
@@ -532,18 +559,18 @@ export class StreamProcessor {
     hookRestrictedAllowedTools: string[] | undefined,
     preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
     generation: ChatSessionConfig = this.generationConfig,
+    sendState?: SendRequestState,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
     try {
-      const chatOptions = buildStreamChatOptions(
-        this.ports.prepareProviderInvocation,
-        provider.name,
-        promptId,
+      const chatOptions = this._chatOptionsForSend(
+        provider,
         requestPayload,
-        runtimeContext.metadata,
+        runtimeContext,
         params,
+        promptId,
         generation,
-        this.currentRawTokenDeltaBridge,
+        sendState,
       );
       const prepared =
         preparedAtEnforcement ??
@@ -552,6 +579,7 @@ export class StreamProcessor {
           chatOptions,
           this.ports.promptEstimator,
         ));
+      sendState?.keepOptions(snapshotSentOptions(prepared.options));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
       recordSendSeamTelemetry({
         usageLogger: this.compressionHandler.tokenUsageLogger,
@@ -562,7 +590,10 @@ export class StreamProcessor {
         requestContents: requestPayload.contents,
         tools: requestPayload.tools,
         systemInstruction: generation.systemInstruction,
-        turnId: this.turnIdByPromptId.get(promptId) ?? null,
+        turnId:
+          params.logicalSend?.turnId ??
+          this.turnIdByPromptId.get(promptId) ??
+          null,
       });
 
       assertAdmittedRoute(params.modelParameters?.route);
@@ -635,26 +666,10 @@ export class StreamProcessor {
 
     return prependAsyncGenerator(firstChunk.value, convertedStream);
   }
-  private _selectRequestTools(
-    params: SendMessageParams,
-  ): AgentClientGenerateConfig['tools'] {
-    return selectRequestTools(params, this.generationConfig.tools);
-  }
-
-  private async _applyToolSelectionHook(
-    tools: AgentClientGenerateConfig['tools'],
-    owner?: HookExecutionOwner,
-  ): Promise<ToolSelectionHookResult> {
-    return applyToolSelectionHook(tools, this.ports.state.model, owner);
-  }
-
   private _buildRequestContents(
     userContent: IContent | IContent[],
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): {
-    contents: IContent[];
-    pending: IContent[];
-  } {
+  ): ReturnType<typeof buildRequestContentsResult> {
     return buildRequestContentsResult(
       userContent,
       this.historyService,
