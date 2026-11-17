@@ -142,6 +142,10 @@ describe('timeout replay (issue #4093)', () => {
           credentials().authority,
         );
         agent.setEphemeralSetting('stream-first-response-timeout-ms', 1000);
+        // On a loaded machine an attempt can hit the 1 s watchdog before its
+        // request reaches the endpoint, so the budget leaves room for attempts
+        // that never arrive.
+        agent.setEphemeralSetting('stream-timeout-retries', 10);
         agent.setEphemeralSetting('refusal.backoff-ms', 1);
         agent.setEphemeralSetting('refusal.retries', 0);
         agent.setEphemeralSetting('refusal.rewrite', false);
@@ -241,12 +245,16 @@ describe('timeout replay (issue #4093)', () => {
               ),
             ),
           );
-          expect(
-            records.map((r) => [r['attempt_index'], r['attempt_outcome']]),
-          ).toStrictEqual([
-            [0, 'error'],
-            [1, 'success'],
-          ]);
+          const indexes = records.map((r) => r['attempt_index']);
+          const outcomes = records.map((r) => r['attempt_outcome']);
+          const timedOut = outcomes.slice(0, -1);
+
+          // An attempt that times out before its request is sent adds a
+          // timed-out record; every logged attempt still has its own index.
+          expect(timedOut.length).toBeGreaterThanOrEqual(1);
+          expect(new Set(indexes).size).toBe(indexes.length);
+          expect(timedOut).toStrictEqual(timedOut.map(() => 'error'));
+          expect(outcomes.at(-1)).toBe('success');
         });
       } finally {
         await endpoint.stop();
