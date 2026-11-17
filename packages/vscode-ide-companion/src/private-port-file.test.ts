@@ -196,7 +196,7 @@ describe('private port file helpers', () => {
         gate.release();
         await drained;
 
-        expect(settled).toEqual(['one', 'two', 'three']);
+        expect(settled).toStrictEqual(['one', 'two', 'three']);
         expect(await fs.readFile(file, 'utf8')).toBe('three');
         await Promise.all(writes);
       });
@@ -218,7 +218,7 @@ describe('private port file helpers', () => {
         gate.fail(new Error('disk full'));
         await drained;
 
-        expect(outcomes).toEqual(['first failed', 'second failed']);
+        expect(outcomes).toStrictEqual(['first failed', 'second failed']);
         await Promise.all([first, second]);
       });
 

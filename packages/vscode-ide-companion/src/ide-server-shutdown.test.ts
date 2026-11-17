@@ -176,13 +176,13 @@ function createContext(onEnvironmentCleared: () => void): TestContext {
       delete: () => undefined,
       clear: onEnvironmentCleared,
       getScoped: () => environmentVariableCollection,
-      [Symbol.iterator]: function* () {
+      *[Symbol.iterator]() {
         yield* [];
       },
     };
   const createMemento = (): vscode.Memento => ({
     keys: () => [],
-    get: <T>() => undefined,
+    get: () => undefined,
     update: async () => undefined,
   });
   const extensionUri = vscode.Uri.file('/test/extension');
