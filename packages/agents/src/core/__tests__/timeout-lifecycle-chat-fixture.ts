@@ -53,10 +53,21 @@ export interface TimeoutLifecycleChat {
 export interface TimeoutLifecycleOptions {
   readonly semanticMediaPurge?: 'off' | 'remove' | 'summary';
   readonly streamTimeoutPolicy: Readonly<Record<string, number>>;
+  /**
+   * Makes the provider project its prompt envelope, so every send goes through
+   * the estimate step and carries a transport token.
+   */
+  readonly projectPromptEnvelope?: NonNullable<
+    IProvider['projectPromptEnvelope']
+  >;
 }
 
-function scriptedProvider(script: ProviderState): IProvider {
+function scriptedProvider(
+  script: ProviderState,
+  projectPromptEnvelope: TimeoutLifecycleOptions['projectPromptEnvelope'],
+): IProvider {
   return {
+    ...(projectPromptEnvelope === undefined ? {} : { projectPromptEnvelope }),
     name: 'timeout-lifecycle-provider',
     getDefaultModel: () => 'timeout-lifecycle-model',
     getModels: () => Promise.resolve([]),
@@ -118,6 +129,7 @@ function createRuntime(
       }),
     ),
     tools: createToolRegistryViewFromRegistry(),
+    promptEstimator: setup.tokenizerFactory,
     providerRuntime: { ...setup.runtime },
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
@@ -143,7 +155,7 @@ export function createTimeoutLifecycleChat(
     quotaBytes: 1024 * 1024,
   });
   const { runtime, config, invocationOwner } = createRuntime(
-    scriptedProvider(script),
+    scriptedProvider(script, options.projectPromptEnvelope),
     history,
     store,
     options,

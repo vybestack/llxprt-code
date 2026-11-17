@@ -46,7 +46,7 @@ import {
 } from './streamRefusalAuditBoundary.js';
 import { processAfterModelHook } from './streamAfterModelHook.js';
 import { RefusalDumpPairing } from './refusalDumpPairing.js';
-import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
+import { prepareAtSendSeam, releaseUnsent } from './promptEnvelopeSendSeam.js';
 import { prepareStreamEnvelope } from './streamEnvelopePreparation.js';
 import {
   applyToolSelectionHook,
@@ -374,7 +374,8 @@ export class StreamProcessor {
     );
 
     provider = this._bindProviderMediaAndFiles(provider);
-
+    // The projection this attempt holds until it hands it on to be sent.
+    let unsent: Awaited<ReturnType<typeof prepareAtSendSeam>> | undefined;
     try {
       const { contents: finalContents, ...pendingRegion } =
         await this._fireBeforeModel(
@@ -407,6 +408,7 @@ export class StreamProcessor {
         this.ports.promptEstimator,
       );
 
+      unsent = streamPreparation.prepared;
       // What a resend replays is what was sent: an attempt abandoned while it
       // was prepared leaves nothing behind for the attempt that replaced it.
       params.config?.abortSignal?.throwIfAborted();
@@ -421,7 +423,7 @@ export class StreamProcessor {
         toolSelection,
         systemInstruction: this.generationConfig.systemInstruction,
       });
-
+      unsent = undefined;
       const stream = await this._sendProviderRequest(
         provider,
         { ...requestPayload, contents: streamPreparation.contents },
@@ -436,6 +438,7 @@ export class StreamProcessor {
       return this._withCompressionCleanup(stream, provider, params);
     } catch (error) {
       this.compressionHandler.clearProviderCompressionCallback(provider);
+      await releaseUnsent(unsent, error);
       throw error;
     }
   }
@@ -606,6 +609,8 @@ export class StreamProcessor {
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
     let dispatching = false;
+    // The projection this attempt holds until the provider is called with it.
+    let unsent = preparedAtEnforcement;
     try {
       const chatOptions = this._chatOptionsForSend(
         provider,
@@ -624,6 +629,7 @@ export class StreamProcessor {
           chatOptions,
           this.ports.promptEstimator,
         ));
+      unsent = prepared;
       assertAdmittedRoute(params.modelParameters?.route);
       // The dispatch boundary: an attempt abandoned while it was prepared (a
       // slow hook, a purge lease) publishes nothing and sends nothing when it
@@ -672,6 +678,7 @@ export class StreamProcessor {
       // An attempt that never dispatched did not set the estimate, so it must
       // not clear the one belonging to the attempt that replaced it.
       if (dispatching) this.currentPromptEnvelopeEstimate = null;
+      else await releaseUnsent(unsent, error);
       throw error;
     }
   }
