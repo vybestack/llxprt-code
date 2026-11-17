@@ -869,7 +869,7 @@ export class StreamProcessor {
         );
         attemptSignal?.throwIfAborted();
         admissions.push(...admitted.admissions);
-        accumulator.add({ ...chunk, content: admitted.historyContent });
+        accumulator.add(admitted.historyChunk);
         yield { ...chunk, content: admitted.filteredContent };
       }
       attemptSignal?.throwIfAborted();

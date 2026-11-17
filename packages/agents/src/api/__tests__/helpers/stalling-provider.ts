@@ -54,6 +54,8 @@ export interface StallingAttempt {
   readonly abortedOnArrival: readonly boolean[];
   /** Streams a text chunk. */
   emit(text: string): void;
+  /** Streams a chunk the way a provider sends it, metadata included. */
+  emitContent(content: IContent): void;
   /** Ends the stream, as a late EOF when the agent has already moved on. */
   finish(): void;
   /** Settles when the provider has delivered EOF to its consumer. */
@@ -137,7 +139,7 @@ export class AttemptScript implements StallingAttempt {
   readonly signals: readonly AbortSignal[];
   readonly abortedOnArrival: readonly boolean[];
   readonly ended: Promise<void>;
-  private readonly queued: string[] = [];
+  private readonly queued: IContent[] = [];
   private finished = false;
   private wake: (() => void) | undefined;
   private readonly endedGate = deferred<void>();
@@ -153,7 +155,11 @@ export class AttemptScript implements StallingAttempt {
   }
 
   emit(text: string): void {
-    this.queued.push(text);
+    this.emitContent({ speaker: 'ai', blocks: [{ type: 'text', text }] });
+  }
+
+  emitContent(content: IContent): void {
+    this.queued.push(content);
     this.wake?.();
   }
 
@@ -166,7 +172,7 @@ export class AttemptScript implements StallingAttempt {
     for (;;) {
       const next = this.queued.shift();
       if (next !== undefined) {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: next }] };
+        yield next;
       } else if (this.finished) {
         break;
       } else {
