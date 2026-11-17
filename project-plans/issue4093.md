@@ -65,10 +65,10 @@ Design. The watchdogs live in `Turn`, above the chat session, so the retry lives
   attempt at the moment of the abort (`attempt_outcome: error`, `retry_reason: stream-timeout`, prompt tokens from usage or 0), so the
   record is written before the resend; logging from the abandoned attempt's catch block lost a race with the
   successful attempt that consumes the pending entry.
-- Cancelling: the wait is `delay(ms, signal)`; an abort ends the turn with `UserCancelled`.
-- Partial output: the orchestrator already discards on `Retry`; the stream finalizer never commits an aborted stream.
-- Unchanged: subagents (`subagentNonInteractive`) and `DirectMessageProcessor` keep their own idle handling.
-- Budget scope: per `Turn.run` call. Continuations under one prompt id each get a fresh budget; each is still bounded.
+- Cancellation review: `Turn.handleRunError` checks the parent/user signal before interpreting the attempt's watchdog flag. Watchdog aborts become `StreamIdleTimeout` through the per-attempt `IdleFlag`; parent aborts become `UserCancelled`. The backoff uses `delay(ms, signal)`, so cancellation during the wait ends the turn without another request.
+- Partial-output review: the retry wrapper withholds intermediate timeout events and emits `Retry` before notice/backoff; the orchestrator discards that attempt's uncommitted response, and the cooperative HTTP-provider tests commit only the successful answer. Noncooperative-provider behavior requires the separate lifecycle remediation below. After retry exhaustion, only the final timeout reaches the orchestrator.
+- Scope review: interactive subagent turns also use `Turn.run` and receive the same per-call retry budget. `subagentNonInteractive` and `DirectMessageProcessor` direct generation retain their existing timeout handling; this change does not add retries to those separate paths.
+- Request and attempt review: each retry closes over the original `TurnRequest` and model parameters. The behavior test compares the complete captured wire-request objects across attempts, while token records distinguish attempt 0 failure and attempt 1 success. Budget is per `Turn.run`; continuations under one prompt id each get a fresh, independently bounded budget. A retry resends the provider request, so a timed-out request may still have incurred provider-side work or billing before the connection stalled.
 
 Tests (all through the public `agent.stream()` against a local HTTP endpoint that stalls; the first-response
 watchdog is armed at 1 s):
@@ -87,6 +87,73 @@ Red then green: the behavior file was run before any production change (8 of 10 
 history and retries-0 assertions that hold without a resend). The settings unit test and the retry-loop unit test were
 written after the code (disclosed deviation).
 
+## Retry behavior review
+
+- Parent/user cancellation wins over a watchdog result in `Turn.handleRunError`; cancellation while waiting for a resend
+  yields `UserCancelled` and never starts another attempt. The integration tests cover cancellation during a stalled
+  stream and during backoff. They do not force an exact simultaneous abort/watchdog race; precedence is determined by
+  whether the parent signal is aborted when the error is handled.
+- A watchdog abort is mapped to `StreamIdleTimeout`, then retained until retries are exhausted. Each timeout retry
+  emits `Retry`, so the orchestrator drops that attempt's partial output. UI-visible partial text can have appeared
+  before the retry signal; only completed output is committed to history. The behavior tests check this history
+  boundary.
+- The retry passes the same `TurnRequest` into each `runAttempt`. The wire test now compares the entire captured
+  request object, covering model, messages, and all other serialized request fields.
+- Token records verify attempt indexes 0 and 1 and outcomes `error` then `success` across a timeout and recovery.
+- Interactive subagent turns use `Turn.run`, so they share the timeout retry behavior. Noninteractive subagent runs
+  and `DirectMessageProcessor` direct-generation handling are separate paths and were not changed or claimed as covered
+  by this retry behavior. Each `Turn.run` has its own bounded budget, including continuations.
+- A resent provider request can still incur provider-side work or billing if the provider processed it before its
+  response stalled. The cooperative-provider tests keep abandoned output out of local history. The independent review below found gaps for providers that ignore cancellation; a retry cannot undo remote provider work.
+
+## Independent review and remediation
+
+Review of committed `c0b5fda0a4` identified three gaps that the cooperative HTTP tests do not establish. Each is fixed
+on this branch (`b1f4aff2cf`, `ef0612fd54`), test first.
+
+1. Blocked resend. A provider stream that ignores the abort kept its semantic-media-purge lease, its user media
+   admission and the send queue, so the replacement never reached the provider. `releaseWhenAttemptAborted`
+   (`turnMediaAdmissionLifecycle.ts`, called from `TurnProcessor.sendMessageStream`) releases all three when the
+   attempt's signal aborts, without waiting for the provider iterator. `SemanticMediaPurgeAttempt.retire()` during an
+   in-flight purge commit rolls the commit back once it settles. `releaseIfUncommitted` is idempotent and
+   `transferToHistory` has a `transferring` state.
+2. Late EOF. A late chunk or EOF from the abandoned attempt could finalize partial output after the replacement
+   started. `StreamProcessor` passes the attempt signal to `processStreamResponse`, `_convertIContentStream` and the
+   finalizer, and throws before sending a request prepared late, on each chunk, at EOF, before purge completion and
+   inside the history publication hook, so the batch is rolled back through the existing history machinery.
+3. Rebuilt request. Reopening the chat send reran the preparation hooks and rebuilt the request. `Turn.run` now creates
+   one `LogicalSend` (`logicalSend.ts`) holding the `SendRequestState` and the turn id. A resend uses `replayOptions`
+   (`requestReplay.ts`): the options the provider was handed, bound to the new attempt's signal, observers, raw-token
+   sink and request context, with `prepareAtSendSeam` run again for a new one-shot transport token. Hooks, system
+   prompt and live settings are not read again.
+
+Deviations from the remediation design: `providerRequestContext` is not shared across attempts (sharing it made the
+replacement look already committed), and no abort signal was added to `HistoryBatchOptions`.
+
+Known remaining window: an abort that lands between the last check and the history assignment publishes the batch and
+then rolls it back, so history observers see an add followed by a rollback.
+
+Regression tests and their results against `c0b5fda0a4` source:
+
+| Test file | Before the fix | After |
+| --- | --- | --- |
+| `core/turn.timeout-lifecycle.behavior.test.ts` (real `Turn`, `ChatSession`, `HistoryService`; provider ignores every signal) | 0 of 6 pass | 6 of 6 |
+| `api/__tests__/streamTimeoutReplay.behavior.test.ts` (real hook subprocesses that answer differently each run) | 1 of 4 pass | 4 of 4 |
+| `api/__tests__/streamTimeoutLifecycle.behavior.test.ts` (agent level) | 4 of 4 pass | 4 of 4 |
+
+The agent-level file mostly characterises: registered providers go through `guardStream`, which already races a stream
+against the abort, so an abort-ignoring stream cannot be reproduced there. The `Turn`-level file is the reproducing
+test.
+
+Integration findings on this branch:
+
+- The remediation commits removed `_applyToolSelectionHook` from `TurnProcessor` and `StreamProcessor`.
+  `toolSelectionHook.allowedFunctionNames.test.ts` calls that method on all three processors and failed 20 of 30 tests
+  in the remediation worktree. Both methods are restored as thin wrappers over the shared helpers.
+- `origin/main` gained refusal diagnostics (#4116, #4118) in the same `StreamProcessor` code. The merge keeps both:
+  main's dump attempt context, refusal audit fingerprint and extracted helpers, and this branch's attempt signal and
+  kept-request replay.
+
 ## Verification
 
 Commands run in the issue4093 worktree after merging `origin/main`:
@@ -95,10 +162,10 @@ Commands run in the issue4093 worktree after merging `origin/main`:
 | --- | --- |
 | `bun test --timeout 120000 packages/agents/src/api/__tests__/streamTimeoutRetry.behavior.test.ts` | Passed: 13 tests, 0 failures, 30 expectations. |
 | `npm run format` | Passed (exit 0). |
-| `npm run lint` | Failed (exit 1): existing max-lines violation in `packages/core/src/session/session-settings-owner.ts` at line 876; file has 801 lines against the 800-line limit. This file is outside the follow-up changes. |
+| `npm run lint` | Failed (exit 1): branch max-lines violation in `packages/core/src/session/session-settings-owner.ts` at line 876; file has 801 lines against the 800-line limit. Policy readers have since been extracted without changing rule limits; focused tests and targeted ESLint pass, with the complete lint rerun still running. |
 | `npm run check:runtime-boundary` | Failed (exit 1). Runtime-state scan completed but reported widened/stale `runtime-service-bundle` baseline entries for `packages/core/src/runtime/AgentRuntimeLoader.ts`. The service-shape scan was `blocked-by-compiler` and ambient-delegation results were `provisional-compiler-errors`; diagnostics include missing `@ai-sdk/google` and `@ai-sdk/google-vertex` modules and incompatible `google-auth-library` `Headers` types in the Google Gemini plugin. |
 | `npm run typecheck` | Passed (exit 0). |
 | `npm run build` | Passed (exit 0), including the compiled lazy-MCP registry coherence check. |
 | `bun scripts/check-test-file-coverage.ts` | Passed: zero uncovered and zero doubly-executed test files. |
 
-The stalled-stream cancellation regression is covered by the behavior test in this verification run. The lint and runtime-boundary failures are recorded as repository/toolchain findings; neither is caused by the follow-up test or documentation changes.
+The stalled-stream cancellation regression is covered by the behavior test in this verification run. The table preserves the initial verification results. The final remediation run is still active, including runtime-boundary after a successful build; these checks are not yet claimed green. The API-surface declaration guard timed out at both its default and extended deadlines under concurrent load and must be rerun after contention subsides.
