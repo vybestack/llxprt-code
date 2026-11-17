@@ -278,6 +278,7 @@ export class StreamProcessor {
         promptId,
         sentAttemptIndex,
         params.config?.abortSignal,
+        sendState,
       ),
     );
   }
@@ -847,6 +848,7 @@ export class StreamProcessor {
     promptId = 'unknown',
     attemptIndex = 0,
     attemptSignal?: AbortSignal,
+    sendState?: SendRequestState,
   ): AsyncGenerator<ModelStreamChunk> {
     const includeThoughts = this.ports.ephemerals.reasoning.includeInContext();
     const turnId = capturedTurnId ?? this.historyService.generateTurnKey();
@@ -892,6 +894,7 @@ export class StreamProcessor {
         preparedUserTurn,
         mediaAdmissions: admissions,
         attemptSignal,
+        sendState,
       });
       this.refusalStreamAudit.commit(
         this.historyService.getAll(),

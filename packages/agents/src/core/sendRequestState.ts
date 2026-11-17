@@ -37,6 +37,7 @@ export class SendRequestState {
   private kept: ProviderReadyRequest | undefined;
   private replay = false;
   private started = 0;
+  private answerInHistory = false;
 
   /** Marks the start of an attempt; true when an earlier one ran in this send. */
   begin(): boolean {
@@ -62,6 +63,25 @@ export class SendRequestState {
   /** The next attempt resends the kept request unchanged. */
   resendIdentically(): void {
     this.replay = true;
+  }
+
+  /**
+   * The attempt's answer was published to history. From here a timeout must
+   * not send the request again: the answer is already there, and a second
+   * one would sit next to it.
+   */
+  markAnswerPublished(): void {
+    this.answerInHistory = true;
+  }
+
+  /** The publication was undone, so the request is unanswered again. */
+  markAnswerRevoked(): void {
+    this.answerInHistory = false;
+  }
+
+  /** Whether an attempt of this send has its answer in history. */
+  hasAnswerInHistory(): boolean {
+    return this.answerInHistory;
   }
 
   /** The next attempt builds its request afresh. */

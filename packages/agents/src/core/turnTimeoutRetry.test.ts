@@ -157,6 +157,25 @@ describe('retryOnStreamTimeout (issue #4093)', () => {
     expect(events).toStrictEqual([TIMEOUT_EVENT]);
   });
 
+  it('ends with the timeout, resending nothing, when the answer is already in history', async () => {
+    let attempts = 0;
+    const events = await collect(
+      retryOnStreamTimeout({
+        attempt: (flag) => {
+          attempts += 1;
+          return script([CONTENT_EVENT, TIMEOUT_EVENT], flag);
+        },
+        policy: { retries: 2, backoffMs: 15_000 },
+        answerCommitted: () => true,
+        signal: new AbortController().signal,
+        wait: () => Promise.reject(new Error('must not wait')),
+      }),
+    );
+
+    expect(attempts).toBe(1);
+    expect(events).toStrictEqual([CONTENT_EVENT, TIMEOUT_EVENT]);
+  });
+
   it('reports a cancel during the wait as UserCancelled and resends nothing', async () => {
     const controller = new AbortController();
     let attempts = 0;

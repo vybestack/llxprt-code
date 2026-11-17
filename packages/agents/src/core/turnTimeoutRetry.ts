@@ -100,6 +100,11 @@ export interface TimeoutRetryDeps {
     idleFlag: IdleFlag,
   ) => AsyncGenerator<ServerAgentStreamEvent>;
   readonly policy: TimeoutRetryPolicy;
+  /**
+   * True once an attempt's answer is in history. Such an attempt is not sent
+   * again, whatever the budget: a resend would add a second answer.
+   */
+  readonly answerCommitted?: () => boolean;
   readonly signal: AbortSignal;
   /** Abortable wait; rejects as soon as the signal aborts. */
   readonly wait?: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -125,6 +130,10 @@ export async function* retryOnStreamTimeout(
       else yield event;
     }
     if (timeoutEvent === undefined) return;
+    if (deps.answerCommitted?.() === true) {
+      yield timeoutEvent;
+      return;
+    }
     if (timeouts > retries) {
       if (timeouts > 1) yield stopNotice(timeouts);
       yield timeoutEvent;

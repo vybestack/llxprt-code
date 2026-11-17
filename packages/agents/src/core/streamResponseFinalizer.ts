@@ -19,6 +19,7 @@ import type {
 import type { ConversationManager } from './ConversationManager.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import type { PreparedUserTurn } from './mediaAdmissionSeam.js';
+import type { SendRequestState } from './sendRequestState.js';
 import {
   analyzeBlocksOutcome,
   extractResponseTextFromBlocks,
@@ -40,6 +41,11 @@ interface FinalizeStreamResponseOptions {
    * fenced out before they reach history.
    */
   readonly attemptSignal?: AbortSignal;
+  /**
+   * Told when the answer reaches history, so a timeout that lands during the
+   * cleanup after the commit does not make the turn send the request again.
+   */
+  readonly sendState?: SendRequestState;
   readonly logger: DebugLogger;
   readonly conversationManager: ConversationManager;
   readonly historyService: HistoryService;
@@ -77,6 +83,7 @@ async function settlePublishedStreamAdmissions(
   // Last point at which an abandoned attempt can still be rolled back: an
   // error here undoes the publication, anything later is a completed send.
   options.attemptSignal?.throwIfAborted();
+  options.sendState?.markAnswerPublished();
   const failures: unknown[] = [];
   try {
     await options.preparedUserTurn?.transferToHistory();
@@ -120,6 +127,12 @@ async function commitFinalizedStreamHistory(
       () => settlePublishedStreamAdmissions(options),
       options.origin,
     );
+  } catch (error: unknown) {
+    // An abandoned attempt has been replaced; whatever it failed with late is
+    // no business of the send's current answer.
+    if (options.attemptSignal?.aborted !== true)
+      options.sendState?.markAnswerRevoked();
+    throw error;
   } finally {
     clearMatchedEagerToolResponseCallIds(
       preparedHistoryUserInput.filteredResults,

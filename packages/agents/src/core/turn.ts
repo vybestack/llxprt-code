@@ -643,6 +643,7 @@ export class Turn {
         return this.runAttempt(req, signal, idleFlag, modelParameters);
       },
       policy: resolveTimeoutRetryPolicy(this.chat.getStreamTimeoutPolicy()),
+      answerCommitted: () => logicalSend.state.hasAnswerInHistory(),
       signal,
     });
   }
