@@ -241,10 +241,15 @@ export class Config extends ConfigBase {
 
   getShellExecutionConfig(): ShellExecutionConfig {
     const ephemeralSettings = this.initialSettings;
+    // Once a live reader is bound it is the only source: the construction
+    // snapshot is older, so a value the session has since cleared must fall
+    // back to the default instead of coming back from the snapshot.
+    const configured =
+      this.liveSettingsReader === undefined
+        ? ephemeralSettings['shell-inactivity-timeout-seconds']
+        : this.liveSettingsReader()['shell-inactivity-timeout-seconds'];
     const inactivitySeconds = Number(
-      this.liveSettingsReader?.()['shell-inactivity-timeout-seconds'] ??
-        ephemeralSettings['shell-inactivity-timeout-seconds'] ??
-        getSettingSpec('shell-inactivity-timeout-seconds')?.default,
+      configured ?? getSettingSpec('shell-inactivity-timeout-seconds')?.default,
     );
 
     const rawLimit = ephemeralSettings['shell-output-retention-max-bytes'];

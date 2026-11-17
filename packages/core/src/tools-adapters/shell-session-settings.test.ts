@@ -109,9 +109,9 @@ describe('shell session acquisition policy', () => {
       debugMode: false,
       initialSettings: { 'shell-inactivity-timeout-seconds': 60 },
     });
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(60000);
     let live: Record<string, unknown> = {};
     config.bindLiveSettingsReader(() => live);
-    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(60000);
 
     live = { 'shell-inactivity-timeout-seconds': 900 };
     expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(900000);
@@ -120,5 +120,34 @@ describe('shell session acquisition policy', () => {
     expect(
       config.getShellExecutionConfig().inactivityTimeoutMs,
     ).toBeUndefined();
+  });
+
+  it('returns to the default, not to the startup value, when a profile load clears the setting', () => {
+    const settings = new SettingsService();
+    const owner = new SessionSettingsOwner(settings);
+    owner.writeUserParameter('shell-inactivity-timeout-seconds', 900);
+    const config = new Config({
+      model: 'shell-model',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      sessionId: 'shell-inactivity-cleared',
+      debugMode: false,
+      initialSettings: settings.getAllGlobalSettings(),
+    });
+    config.bindLiveSettingsReader(() => settings.getAllGlobalSettings());
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(900000);
+
+    owner.writeUserParameter('shell-inactivity-timeout-seconds', undefined);
+
+    const toolHost = new CoreShellToolHostAdapter(
+      config,
+      new WorkspaceFilesystemOwner({
+        targetDir: config.getTargetDir(),
+        isTrusted: () => true,
+      }).paths,
+      () => owner.readToolExecutionPolicy(),
+    );
+    expect(toolHost.getShellExecutionConfig().inactivityTimeoutMs).toBe(300000);
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(300000);
   });
 });
