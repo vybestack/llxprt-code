@@ -406,6 +406,9 @@ export class StreamProcessor {
         this.ports.promptEstimator,
       );
 
+      // What a resend replays is what was sent: an attempt abandoned while it
+      // was prepared leaves nothing behind for the attempt that replaced it.
+      params.config?.abortSignal?.throwIfAborted();
       logOutgoingRequest(
         this.turnTelemetryPorts(),
         { ...requestPayload, contents: streamPreparation.contents },
@@ -429,24 +432,32 @@ export class StreamProcessor {
         sendState,
         dumpAttemptContext,
       );
-      return withCompressionCallbackCleanup(
-        stream,
-        provider,
-        this.compressionHandler,
-        params.config?.abortSignal,
-      );
+      return this._withCompressionCleanup(stream, provider, params);
     } catch (error) {
       this.compressionHandler.clearProviderCompressionCallback(provider);
       throw error;
     }
   }
-  private _fireBeforeModel(
+  private _withCompressionCleanup(
+    stream: AsyncGenerator<ModelStreamChunk>,
+    provider: IProvider,
+    params: SendMessageParams,
+  ): AsyncGenerator<ModelStreamChunk> {
+    return withCompressionCallbackCleanup(
+      stream,
+      provider,
+      this.compressionHandler,
+      params.config?.abortSignal,
+    );
+  }
+
+  private async _fireBeforeModel(
     params: SendMessageParams,
     requestContents: IContent[],
     pendingUserIContents: IContent[],
     toolSelection: ToolSelectionHookResult,
   ): ReturnType<typeof fireBeforeModelHook> {
-    return fireBeforeModelHook({
+    const fired = await fireBeforeModelHook({
       owner: params.hookOwner ?? params.recordingExecution?.hookOwner,
       requestContents,
       pendingUserIContents,
@@ -455,6 +466,10 @@ export class StreamProcessor {
       model: this.ports.state.model,
       log: (msg) => this.logger.debug(() => msg),
     });
+    // An attempt abandoned while its hook ran must not go on to enforce the
+    // context limit for a request that will not be sent.
+    params.config?.abortSignal?.throwIfAborted();
+    return fired;
   }
 
   /**
@@ -495,12 +510,7 @@ export class StreamProcessor {
         this.refusalDumpPairing.createAttempt(promptId),
         { ...this.generationConfig, systemInstruction: kept.systemInstruction },
       );
-      return withCompressionCallbackCleanup(
-        stream,
-        bound,
-        this.compressionHandler,
-        params.config?.abortSignal,
-      );
+      return this._withCompressionCleanup(stream, bound, params);
     } catch (error) {
       this.compressionHandler.clearProviderCompressionCallback(bound);
       throw error;
@@ -594,6 +604,7 @@ export class StreamProcessor {
     generation: ChatSessionConfig = this.generationConfig,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
+    let dispatching = false;
     try {
       const chatOptions = this._chatOptionsForSend(
         provider,
@@ -612,25 +623,21 @@ export class StreamProcessor {
           chatOptions,
           this.ports.promptEstimator,
         ));
+      assertAdmittedRoute(params.modelParameters?.route);
+      // The dispatch boundary: an attempt abandoned while it was prepared (a
+      // slow hook, a purge lease) publishes nothing and sends nothing when it
+      // resumes. Everything below, up to the provider call, is synchronous.
+      params.config?.abortSignal?.throwIfAborted();
+      dispatching = true;
       sendState?.keepOptions(snapshotSentOptions(prepared.options));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      this.currentContextFingerprint = captureSendBoundaryAudit(
-        this.refusalStreamAudit,
-        this.compressionHandler,
-        this.ports,
-        this.historyService,
+      this.currentContextFingerprint = this._captureSendAudit(
         prepared,
         requestPayload,
         generation,
         promptId,
-        params.logicalSend?.turnId ??
-          this.turnIdByPromptId.get(promptId) ??
-          null,
+        params,
       );
-      assertAdmittedRoute(params.modelParameters?.route);
-      // An attempt abandoned while its request was still being prepared (a
-      // slow hook, a purge lease) must not send anything when it resumes.
-      params.config?.abortSignal?.throwIfAborted();
       const streamResponse = provider.generateChatCompletion({
         ...prepared.options,
         requestDiagnostics: this.ports.requestDiagnostics,
@@ -661,9 +668,31 @@ export class StreamProcessor {
         Date.now() - startTime,
         error,
       );
-      this.currentPromptEnvelopeEstimate = null;
+      // An attempt that never dispatched did not set the estimate, so it must
+      // not clear the one belonging to the attempt that replaced it.
+      if (dispatching) this.currentPromptEnvelopeEstimate = null;
       throw error;
     }
+  }
+
+  private _captureSendAudit(
+    prepared: Awaited<ReturnType<typeof prepareAtSendSeam>>,
+    requestPayload: PreparedRequest['requestPayload'],
+    generation: ChatSessionConfig,
+    promptId: string,
+    params: SendMessageParams,
+  ): RefusalContextFingerprint | undefined {
+    return captureSendBoundaryAudit(
+      this.refusalStreamAudit,
+      this.compressionHandler,
+      this.ports,
+      this.historyService,
+      prepared,
+      requestPayload,
+      generation,
+      promptId,
+      params.logicalSend?.turnId ?? this.turnIdByPromptId.get(promptId) ?? null,
+    );
   }
 
   private async _applyToolSelectionHook(
@@ -740,7 +769,7 @@ export class StreamProcessor {
         // Data from an abandoned attempt is neither processed nor published.
         attemptSignal?.throwIfAborted();
         timing?.recordChunk(iContent);
-        this._trackPromptTokens(iContent);
+        trackPromptTokens(iContent, this.compressionHandler, this.logger);
         const chunk = toModelStreamChunk(iContent);
         if (hookRestrictedAllowedTools !== undefined) {
           chunk.hookRestrictions = {
@@ -796,10 +825,6 @@ export class StreamProcessor {
       timing?.measure(),
       finish,
     );
-  }
-
-  private _trackPromptTokens(iContent: IContent): void {
-    trackPromptTokens(iContent, this.compressionHandler, this.logger);
   }
 
   /**
