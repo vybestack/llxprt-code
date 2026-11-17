@@ -146,6 +146,7 @@ describe('dumpContext separate request/response files', () => {
       );
       expect(respResult.responseFilename).toMatch(/-response\.json$/);
       expect(respResult.responseFilename).toContain(reqResult.baseId);
+      expect(respResult.retained).toBe(true);
 
       const respFilepath = path.join(DUMP_DIR, respResult.responseFilename);
       createdFiles.push(respFilepath);
@@ -175,6 +176,65 @@ describe('dumpContext separate request/response files', () => {
       expect(content.response.body.error).toBe('Rate limit exceeded');
       expect(content.relatedRequestFile).toBe(`${baseId}-request.json`);
     });
+
+    it('marks a response without its linked request as not retained', async () => {
+      const baseId = generateDumpBaseId('openai');
+      const result = await dumpResponseContext(
+        baseId,
+        { status: 200, body: { choices: [] } },
+        'openai',
+      );
+      createdFiles.push(path.join(DUMP_DIR, result.responseFilename));
+
+      expect(result.retained).toBe(false);
+    });
+  });
+
+  it('keeps an in-flight request while another published pair triggers pruning', async () => {
+    const limits = { maxBytes: 1, maxAgeDays: 14 };
+    const correlation = {
+      promptId: 'interleaved-prompt',
+      attemptIndex: 0,
+      runtimeId: 'interleaved-runtime',
+      retentionLimits: limits,
+    };
+    const active = await dumpRequestContext(
+      { url: 'http://local/active', method: 'POST', body: {} },
+      'openai',
+      undefined,
+      undefined,
+      {},
+      correlation,
+      true,
+    );
+    const published = await dumpRequestContext(
+      { url: 'http://local/published', method: 'POST', body: {} },
+      'openai',
+      undefined,
+      undefined,
+      {},
+      { ...correlation, attemptIndex: 1 },
+      true,
+    );
+    await dumpResponseContext(
+      published.baseId,
+      { status: 200, body: {} },
+      'openai',
+      {},
+      { ...correlation, attemptIndex: 1 },
+    );
+
+    expect(
+      await fs.readFile(path.join(DUMP_DIR, active.requestFilename), 'utf8'),
+    ).toContain('active');
+
+    await dumpResponseContext(
+      active.baseId,
+      { status: 200, body: {} },
+      'openai',
+      {},
+      correlation,
+    );
   });
 
   describe('request and response files are related by base id', () => {

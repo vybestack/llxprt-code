@@ -111,6 +111,7 @@ interface EmitFinishReasonOptions {
   traceId: string | undefined;
   cumulativeOutcome: ResponseOutcome;
   stopReason: string | undefined;
+  stopDetails: ModelStreamChunk['stopDetails'];
 }
 
 // Re-export types that consumers need from this module
@@ -192,6 +193,7 @@ export class Turn {
       traceId,
       cumulativeOutcome: outcome,
       stopReason,
+      stopDetails,
     } = opts;
     this.logger.debug(() => `[stream:turn] emitting Finished event`, {
       finishReason,
@@ -220,6 +222,7 @@ export class Turn {
         ...(stopReason !== undefined && stopReason !== ''
           ? { stopReason }
           : {}),
+        ...(stopDetails === undefined ? {} : { stopDetails }),
       },
     };
   }
@@ -317,6 +320,7 @@ export class Turn {
         traceId,
         cumulativeOutcome,
         stopReason: chunk.rawStopReason,
+        stopDetails: chunk.stopDetails,
       });
       return;
     }

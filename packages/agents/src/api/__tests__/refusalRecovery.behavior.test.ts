@@ -252,7 +252,7 @@ describe('refusal that survives every retry (issue #4036)', () => {
 });
 
 describe('refusal.retries 0 (issue #4036)', () => {
-  it('behaves like phase 1: one request, a terminal refusal and no notice', async () => {
+  it('stops after one request and emits a terminal refusal notice', async () => {
     const run = await runScriptedPrompt(
       [emptyRefusalReply(), stopReply(UNREQUESTED)],
       [PROMPT],
@@ -262,7 +262,9 @@ describe('refusal.retries 0 (issue #4036)', () => {
     expect(run.requests).toHaveLength(1);
     expect(run.waits).toStrictEqual([]);
     expect(doneReasons(run)).toStrictEqual(['refusal']);
-    expect(notices(run)).toStrictEqual([]);
+    expect(notices(run)).toStrictEqual([
+      'Model scripted-model refused 1 times (0 retries with no wait). Stopping.',
+    ]);
     expect(journalActions(run)).toStrictEqual(['stop']);
   });
 

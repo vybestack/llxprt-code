@@ -47,7 +47,7 @@ import {
   getErrorFallbackModel,
   type ApiErrorRuntimeInfo,
 } from '../../../utils/apiErrorFormatting.js';
-import { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
+import { formatRefusalNotice } from '../../../utils/refusalNotice.js';
 
 // ─── Re-exported constant ────────────────────────────────────────────────────
 
@@ -250,7 +250,7 @@ export function buildFinishReasonMessage(
     case 'safety':
       return resolveSafetyMessage(rawStopReason);
     case 'refusal':
-      return REFUSAL_NOTICE_MESSAGE;
+      return formatRefusalNotice();
     case 'error':
       return resolveErrorMessage(rawStopReason);
     case 'stop':
@@ -315,11 +315,12 @@ function resolveOtherMessage(
  */
 export function buildRefusalNoticeMessage(
   stopReason: string | undefined,
+  details?: {
+    readonly category: string | null;
+    readonly explanation: string | null;
+  },
 ): string | undefined {
-  if (stopReason === 'refusal') {
-    return REFUSAL_NOTICE_MESSAGE;
-  }
-  return undefined;
+  return stopReason === 'refusal' ? formatRefusalNotice(details) : undefined;
 }
 
 /**

@@ -31,6 +31,7 @@ export interface AttemptTelemetryMeta {
   hasUsage: boolean;
   /** Monotonic timestamp (ms) when the attempt started */
   startMs?: number;
+  refusalCategory?: string | null;
 }
 
 /** Emit API response telemetry for local /stats tracking and SDK export. */
@@ -80,6 +81,7 @@ export function emitMetricsTelemetry(
       event as ApiResponseEvent & { usage_metadata_present?: boolean }
     ).usage_metadata_present = attemptMeta.hasUsage;
   }
+  event.refusal_category = attemptMeta?.refusalCategory;
   event.provider_owned = true;
   config.recordApiResponse(event);
 }
@@ -160,6 +162,7 @@ export function emitResponseTelemetry(
   if (!success && error != null) {
     apiResponseEvent.error = String(error);
   }
+  apiResponseEvent.refusal_category = attemptMeta?.refusalCategory;
   apiResponseEvent.provider_owned = true;
   config.recordApiResponse(apiResponseEvent);
 }

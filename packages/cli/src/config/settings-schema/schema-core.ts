@@ -316,6 +316,54 @@ export const CORE_SETTINGS_SCHEMA = {
     },
   },
 
+  dumpcontext: {
+    type: 'enum',
+    label: 'Context Dump Mode',
+    category: 'Diagnostics',
+    requiresRestart: true,
+    default: 'off',
+    description:
+      'Default context dump mode for new sessions. Dumps can contain prompt content and are stored in the LLxprt cache directory.',
+    showInDialog: true,
+    options: [
+      { value: 'off', label: 'Off' },
+      { value: 'error', label: 'Refusals and errors' },
+      { value: 'on', label: 'All requests' },
+    ],
+  },
+  dumpRetention: {
+    type: 'object',
+    label: 'Diagnostic Dump Retention',
+    category: 'Diagnostics',
+    requiresRestart: true,
+    default: { maxBytes: 2_147_483_648, maxAgeDays: 14 },
+    description:
+      'Retention limits for provider request and response dumps. Files contain prompt content and are written with owner-only permissions.',
+    showInDialog: true,
+    properties: {
+      maxBytes: {
+        type: 'number',
+        label: 'Maximum Dump Size (Bytes)',
+        category: 'Diagnostics',
+        requiresRestart: true,
+        default: 2_147_483_648,
+        minimum: 1,
+        multipleOf: 1,
+        description: 'Maximum total size of managed dump files.',
+        showInDialog: true,
+      },
+      maxAgeDays: {
+        type: 'number',
+        label: 'Maximum Dump Age (Days)',
+        category: 'Diagnostics',
+        requiresRestart: true,
+        default: 14,
+        minimum: Number.MIN_VALUE,
+        description: 'Maximum age of managed dump files in days.',
+        showInDialog: true,
+      },
+    },
+  },
   sessionRetention: {
     type: 'object',
     label: 'Session Retention',

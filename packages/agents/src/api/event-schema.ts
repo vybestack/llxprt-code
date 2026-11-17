@@ -52,6 +52,14 @@ export const FinishedValueSchema = z.object({
   // @issue:2329 — the raw provider stop reason (e.g. 'refusal') so consumers
   // can surface a refusal-specific notice distinct from a normal completion.
   stopReason: z.string().optional(),
+  stopDetails: z
+    .object({
+      type: z.string(),
+      category: z.string().nullable(),
+      explanation: z.string().nullable(),
+      recommendedModel: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const AgentStopInfoSchema = z.object({

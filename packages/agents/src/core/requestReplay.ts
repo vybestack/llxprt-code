@@ -5,11 +5,18 @@
  */
 
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { RAW_TOKEN_DELTA_SINK_KEY } from '@vybestack/llxprt-code-providers';
+import {
+  DUMP_ATTEMPT_CONTEXT_KEY,
+  RAW_TOKEN_DELTA_SINK_KEY,
+  REFUSAL_AUDIT_TIMING_KEY,
+  type DumpAttemptContext,
+  type RefusalAuditTiming,
+} from '@vybestack/llxprt-code-providers';
 
 /**
  * What belongs to one attempt, not to the request: its cancellation signal,
- * the observers watching it and the sink for its raw token deltas.
+ * the observers watching it, the sink for its raw token deltas and the
+ * context its request and response dumps are labelled with.
  */
 export interface AttemptPlumbing {
   readonly signal: AbortSignal | undefined;
@@ -17,6 +24,7 @@ export interface AttemptPlumbing {
   readonly onStreamLiveness: RuntimeGenerateChatOptions['onStreamLiveness'];
   readonly requestContext: Record<string, unknown> | undefined;
   readonly rawTokenDeltaSink: unknown;
+  readonly dumpAttemptContext: DumpAttemptContext;
 }
 
 /**
@@ -45,6 +53,8 @@ export function replayOptions(
   kept: RuntimeGenerateChatOptions,
   attempt: AttemptPlumbing,
 ): RuntimeGenerateChatOptions {
+  // Timing is measured per attempt, so the resend starts its own.
+  const refusalAuditTiming: RefusalAuditTiming = { firstByteAt: null };
   return {
     ...kept,
     contents: [...kept.contents],
@@ -59,6 +69,8 @@ export function replayOptions(
       abortSignal: attempt.signal,
       _retryRequestContext: attempt.requestContext,
       [RAW_TOKEN_DELTA_SINK_KEY]: attempt.rawTokenDeltaSink,
+      [REFUSAL_AUDIT_TIMING_KEY]: refusalAuditTiming,
+      [DUMP_ATTEMPT_CONTEXT_KEY]: attempt.dumpAttemptContext,
     },
   };
 }

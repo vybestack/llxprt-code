@@ -31,10 +31,16 @@ export enum ToolCallDecision {
 }
 
 function areModelMetricsEqual(a: ModelMetrics, b: ModelMetrics): boolean {
-  if (
+  const apiCountsChanged =
     a.api.totalRequests !== b.api.totalRequests ||
     a.api.totalErrors !== b.api.totalErrors ||
-    a.api.totalRefusals !== b.api.totalRefusals ||
+    a.api.totalRefusals !== b.api.totalRefusals;
+  const refusalCategoriesChanged =
+    JSON.stringify(a.api.refusalsByCategory ?? []) !==
+    JSON.stringify(b.api.refusalsByCategory ?? []);
+  if (
+    apiCountsChanged ||
+    refusalCategoriesChanged ||
     a.api.totalLatencyMs !== b.api.totalLatencyMs
   ) {
     return false;

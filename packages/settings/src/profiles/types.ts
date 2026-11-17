@@ -155,7 +155,6 @@ export interface ProfileEphemeralSettings {
   toolCallLoopThreshold?: number;
   contentLoopThreshold?: number;
   dumpcontext?: 'now' | 'status' | 'on' | 'error' | 'off';
-  dumponerror?: 'enabled' | 'disabled';
   emojifilter?: 'allowed' | 'auto' | 'warn' | 'error';
   'reasoning.enabled'?: boolean;
   'reasoning.effort'?: ReasoningEffort;

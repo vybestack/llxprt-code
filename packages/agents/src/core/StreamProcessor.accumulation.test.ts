@@ -21,6 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -90,6 +91,8 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       compressionHandler: createMockCompressionHandler(),
       conversationManager: createMockConversationManager(),
       historyService: createMockHistoryService(),
+      refusalStreamAudit: new RefusalStreamAudit(),
+      refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });
@@ -255,6 +258,8 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       compressionHandler: createMockCompressionHandler(),
       conversationManager: createMockConversationManager(),
       historyService: createMockHistoryService(),
+      refusalStreamAudit: new RefusalStreamAudit(),
+      refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });
@@ -276,7 +281,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
     }
 
     expect(finalizeMock).toHaveBeenCalledTimes(1);
-    const thirdArg = finalizeMock.mock.calls[0]?.[2];
-    expect(thirdArg).toBe(true);
+    const finalizeOptions = finalizeMock.mock.calls[0]?.[1];
+    expect(finalizeOptions).toMatchObject({ includeThoughts: true });
   });
 });

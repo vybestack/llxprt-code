@@ -260,6 +260,26 @@ export function calculateWaitTime(
   return { shouldWait: false, waitMs: 0, reason: 'No throttling needed' };
 }
 
+export async function applyRateLimitThrottling(
+  info: AnthropicRateLimitInfo,
+  ephemerals: Record<string, unknown>,
+  logger: { debug: (fn: () => string) => void },
+  signal: AbortSignal | undefined,
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void>,
+): Promise<void> {
+  const decision = calculateWaitTime(info, {
+    throttleEnabled:
+      (ephemerals['rate-limit-throttle'] as string | undefined) ?? 'on',
+    thresholdPercentage:
+      (ephemerals['rate-limit-throttle-threshold'] as number | undefined) ?? 5,
+    maxWaitMs:
+      (ephemerals['rate-limit-max-wait'] as number | undefined) ?? 60000,
+  });
+  if (!decision.shouldWait) return;
+  logger.debug(() => decision.reason);
+  await sleep(decision.waitMs, signal);
+}
+
 /**
  * Get retry configuration from ephemeral settings
  */

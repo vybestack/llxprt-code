@@ -87,7 +87,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected alwaysAllowedCommands: Set<string> = new Set();
   // #1995 slice 2 — session-owned background shell jobs
   protected readonly checkpointing!: boolean;
-  protected readonly dumpOnError!: boolean;
   protected readonly proxy: string | undefined;
   protected readonly cwd!: string;
   protected readonly bugCommand: BugCommandSettings | undefined;
@@ -385,9 +384,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   }
   getCheckpointingEnabled(): boolean {
     return this.checkpointing;
-  }
-  getDumpOnError(): boolean {
-    return this.dumpOnError;
   }
   getProxy(): string | undefined {
     return this.proxy;

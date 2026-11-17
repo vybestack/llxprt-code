@@ -113,6 +113,11 @@ export const SerializedTokenUsageTurnRecordSchema = z.object({
   // --- #4036 terminal finish reasons of the attempt (canonical and raw) ---
   finish_reason: z.string().optional(),
   raw_stop_reason: z.string().optional(),
+  refusal_category: z.string().nullable().optional(),
+  refusal_explanation: z.string().nullable().optional(),
+  recommended_model: z.string().optional(),
+  request_id: z.string().nullable().optional(),
+  dump_base_id: z.string().optional(),
   // --- AC-5 tool attribution ---
   tool_calls: z.array(ToolCallEntrySchema).optional(),
   new_tool_result_count: z.number().optional(),
@@ -389,6 +394,11 @@ export interface TokenUsageActualInput {
   // #4036 terminal finish reasons of the attempt
   finishReason?: string;
   rawStopReason?: string;
+  refusalCategory?: string | null;
+  refusalExplanation?: string | null;
+  recommendedModel?: string;
+  requestId?: string | null;
+  dumpBaseId?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -108,7 +108,6 @@ export interface ConfigConstructorTarget {
 
   // Feature flags and runtime settings
   checkpointing: boolean;
-  dumpOnError: boolean;
   proxy: string | undefined;
   cwd: string;
   bugCommand: BugCommandSettings | undefined;
@@ -424,7 +423,6 @@ function applyBasicRuntimeFlags(
   params: ConfigParameters,
 ): void {
   config.checkpointing = params.checkpointing ?? false;
-  config.dumpOnError = params.dumpOnError ?? false;
   config.proxy = params.proxy;
   config.cwd = params.cwd;
   config.bugCommand = params.bugCommand;

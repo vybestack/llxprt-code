@@ -6,29 +6,64 @@
 
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+} from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
+import { isolateStorageRoots } from '@vybestack/llxprt-code-storage/testing';
 import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 
 const PROMPT_TOKENS = 120;
 
+export function isolateRefusalStorage(root: string): () => void {
+  if (process.env.LLXPRT_TEST_STORAGE_ISOLATED !== '1') isolateStorageRoots();
+  const previous = process.env.LLXPRT_LOG_HOME;
+  const logHome = join(root, 'log');
+  mkdirSync(logHome, { recursive: true });
+  process.env.LLXPRT_LOG_HOME = logHome;
+  return () => {
+    if (previous === undefined) delete process.env.LLXPRT_LOG_HOME;
+    else process.env.LLXPRT_LOG_HOME = previous;
+  };
+}
+
 /** What the local OpenAI-compatible endpoint answers to one request. */
-export type EndpointReply =
+export type EndpointReply = {
+  readonly requestId?: string | null;
+} & (
   | { readonly kind: 'http-error'; readonly status: number }
   /** Accepts the request and never answers, until the client hangs up. */
   | { readonly kind: 'stall' }
   /** Streams some text, then goes silent without ending the response. */
   | { readonly kind: 'stall-after-text'; readonly text: string }
+  | { readonly kind: 'stream-error'; readonly text: string }
   | {
       readonly kind: 'finish';
       readonly finishReason: string;
       readonly text?: string;
       readonly outputTokens: number;
+      readonly stopDetails?: {
+        readonly type: string;
+        readonly category: string | null;
+        readonly explanation: string | null;
+        readonly recommendedModel?: string;
+      };
+      readonly includeUsage?: boolean;
+      readonly thinking?: string;
+      readonly partialToolCall?: {
+        readonly id: string;
+        readonly name: string;
+        readonly input: string;
+      };
     }
   | {
       readonly kind: 'todo-write';
@@ -40,7 +75,8 @@ export type EndpointReply =
       readonly kind: 'tool-call';
       readonly name: string;
       readonly args: Readonly<Record<string, unknown>>;
-    };
+    }
+);
 
 /** The endpoint rejects the request with this HTTP status. */
 export function httpErrorReply(status: number): EndpointReply {
@@ -150,7 +186,9 @@ function renderToolCall(
 function renderReply(
   reply: Exclude<
     EndpointReply,
-    { kind: 'http-error' } | { kind: 'stall' } | { kind: 'stall-after-text' }
+    {
+      kind: 'http-error' | 'stall' | 'stall-after-text' | 'stream-error';
+    }
   >,
 ): string {
   if (reply.kind === 'tool-call') {
@@ -173,6 +211,31 @@ function renderReply(
     usageChunk(reply.outputTokens) +
     'data: [DONE]\n\n'
   );
+}
+
+function renderJsonReply(reply: EndpointReply): string {
+  if (reply.kind !== 'finish')
+    throw new Error('JSON test replies must be finish replies');
+  return JSON.stringify({
+    id: 'scripted',
+    object: 'chat.completion',
+    model: 'scripted-model',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: reply.text ?? null,
+        },
+        finish_reason: reply.finishReason,
+      },
+    ],
+    usage: {
+      prompt_tokens: PROMPT_TOKENS,
+      completion_tokens: reply.outputTokens,
+      total_tokens: PROMPT_TOKENS + reply.outputTokens,
+    },
+  });
 }
 
 /** Notes a client that hangs up before the reply ended, by request index. */
@@ -257,8 +320,16 @@ export async function startScriptedEndpoint(
         );
         return;
       }
-      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
-      response.end(renderReply(reply));
+      const streaming = body['stream'] !== false;
+      response.writeHead(200, {
+        'Content-Type': streaming ? 'text/event-stream' : 'application/json',
+      });
+      if (reply.kind === 'stream-error') {
+        response.write(chunk({ role: 'assistant', content: reply.text }, null));
+        response.destroy();
+        return;
+      }
+      response.end(streaming ? renderReply(reply) : renderJsonReply(reply));
     })().catch((error: unknown) =>
       response.destroy(error instanceof Error ? error : undefined),
     );
@@ -288,6 +359,7 @@ export interface ScriptedRun {
   readonly waits: readonly number[];
   readonly stats: ReturnType<Agent['getStats']>;
   readonly requests: readonly WireRequest[];
+  readonly compressionRequests: readonly WireRequest[];
   readonly historyBefore: Awaited<ReturnType<Agent['getHistory']>>;
   readonly historyAfter: Awaited<ReturnType<Agent['getHistory']>>;
   readonly tokenRecords: ReadonlyArray<Record<string, unknown>>;
@@ -334,8 +406,15 @@ export function isBackoffNotice(event: AgentEvent): boolean {
 }
 
 export interface ScriptedRunOptions {
+  /** Model name used by a dedicated compression profile endpoint. */
+  readonly compressionModel?: string;
+  /** Compresses the live session immediately before this zero-based prompt. */
+  readonly compressBeforePromptIndex?: number;
   /** Which wire protocol the local endpoint speaks. Default: openai. */
   readonly protocol?: 'openai' | 'anthropic';
+  readonly directGeneration?: boolean;
+  readonly promptId?: string;
+  readonly allowStreamError?: boolean;
   /**
    * Ephemeral settings applied before the first prompt. Refusal retries and
    * review are off unless a test turns them on (`undefined` restores the
@@ -363,6 +442,66 @@ export interface ScriptedRunOptions {
  * endpoint received, history before and after, the token-usage log and the
  * journal.
  */
+async function startCompressionProfile(
+  profileManager: ProfileManager,
+  sessionId: string,
+  model: string,
+): Promise<{ endpoint: ScriptedEndpoint; profileName: string }> {
+  const profileName = `refusal-audit-${sessionId}`;
+  const endpoint = await startScriptedEndpoint([
+    stopReply('compressed summary'),
+  ]);
+  await profileManager.saveProfile(profileName, {
+    version: 1,
+    provider: 'openai',
+    model,
+    modelParams: {},
+    ephemeralSettings: {
+      'base-url': endpoint.url,
+      'auth-key': 'local-test-key',
+    },
+  });
+  return { endpoint, profileName };
+}
+
+async function runPrompts(
+  agent: Agent,
+  prompts: readonly string[],
+  options: ScriptedRunOptions,
+): Promise<AgentEvent[]> {
+  const events: AgentEvent[] = [];
+  for (const [promptIndex, prompt] of prompts.entries()) {
+    if (promptIndex === options.compressBeforePromptIndex) {
+      await agent.compress({ promptId: `refusal-audit-${promptIndex}` });
+    }
+    if (options.directGeneration === true) {
+      await agent.generate(prompt, { promptId: options.promptId });
+      continue;
+    }
+    try {
+      for await (const event of agent.stream(
+        prompt,
+        options.signal === undefined ? undefined : { signal: options.signal },
+      )) {
+        events.push(event);
+        await options.onEvent?.(event, agent);
+      }
+    } catch (error) {
+      if (options.allowStreamError !== true) throw error;
+    }
+  }
+  return events;
+}
+
+async function startForegroundEndpoint(
+  replies: readonly EndpointReply[],
+  anthropic: boolean,
+): Promise<ScriptedEndpoint> {
+  return anthropic
+    ? startAnthropicEndpoint(replies)
+    : startScriptedEndpoint(replies);
+}
+
 export async function runScriptedPrompt(
   replies: readonly EndpointReply[],
   prompts: readonly string[] = ['please summarise the work'],
@@ -371,11 +510,20 @@ export async function runScriptedPrompt(
   const workingDir = realpathSync(
     mkdtempSync(join(tmpdir(), 'llxprt-refusal-')),
   );
+  const restoreStorage = isolateRefusalStorage(workingDir);
   const sessionId = `refusal-${randomUUID()}`;
+  const profileManager = new ProfileManager();
   const anthropic = options.protocol === 'anthropic';
-  const endpoint = anthropic
-    ? await startAnthropicEndpoint(replies)
-    : await startScriptedEndpoint(replies);
+  const endpoint = await startForegroundEndpoint(replies, anthropic);
+  const compressionProfile =
+    options.compressionModel === undefined
+      ? undefined
+      : await startCompressionProfile(
+          profileManager,
+          sessionId,
+          options.compressionModel,
+        );
+  const compressionEndpoint = compressionProfile?.endpoint;
   let agent: Agent | undefined;
   try {
     agent = await createAgent({
@@ -394,18 +542,15 @@ export async function runScriptedPrompt(
       agent.setEphemeralSetting(key, value);
     for (const [key, value] of Object.entries(options.modelParams ?? {}))
       agent.setModelParam(key, value);
+    if (compressionProfile !== undefined) {
+      agent.setEphemeralSetting(
+        'compression.profile',
+        compressionProfile.profileName,
+      );
+    }
     const historyBefore = await agent.getHistory();
     await agent.session.setRecording({ enabled: true });
-    const events: AgentEvent[] = [];
-    for (const prompt of prompts) {
-      for await (const event of agent.stream(
-        prompt,
-        options.signal === undefined ? undefined : { signal: options.signal },
-      )) {
-        events.push(event);
-        await options.onEvent?.(event, agent);
-      }
-    }
+    const events = await runPrompts(agent, prompts, options);
     await options.inspect?.(agent);
     const historyAfter = await agent.getHistory();
     const journalPath = agent.session.getRecording().path ?? '';
@@ -417,6 +562,7 @@ export async function runScriptedPrompt(
       waits: requestedWaits(journalRecords),
       stats: agent.getStats(),
       requests: [...endpoint.requests()],
+      compressionRequests: [...(compressionEndpoint?.requests() ?? [])],
       historyBefore,
       historyAfter,
       tokenRecords: readJsonl(
@@ -426,7 +572,12 @@ export async function runScriptedPrompt(
     };
   } finally {
     await agent?.dispose();
+    if (compressionProfile !== undefined) {
+      await profileManager.deleteProfile(compressionProfile.profileName);
+    }
     await endpoint.stop();
+    await compressionEndpoint?.stop();
+    restoreStorage();
     rmSync(workingDir, { recursive: true, force: true });
   }
 }

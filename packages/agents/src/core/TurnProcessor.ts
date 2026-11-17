@@ -432,6 +432,7 @@ export class TurnProcessor {
       attempt.requestAttempt,
       () => attemptUsage,
     );
+    let attemptRequestId: string | null | undefined;
     try {
       const currentParams = applyRetryTemperature(
         params,
@@ -448,6 +449,7 @@ export class TurnProcessor {
       for await (const chunk of stream) {
         hasYieldedChunk ||= chunkHasVisibleOutput(chunk);
         attemptUsage = chunk.usage ?? attemptUsage;
+        if (chunk.requestId !== undefined) attemptRequestId = chunk.requestId;
         yield wrapChunk(chunk);
       }
       const recovered = this.refusalRecovery.recovered(prompt_id);
@@ -482,6 +484,7 @@ export class TurnProcessor {
           hasYieldedChunk,
           attemptUsage,
           this.compressionHandler.lastPromptTokenCount,
+          attemptRequestId,
         );
         return { error, action: 'retry' };
       }
@@ -635,9 +638,8 @@ export class TurnProcessor {
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<ModelOutput> {
     const requestTools = this._selectRequestTools(requestParams);
-    const toolSelection = await applyToolSelectionHook(
+    const toolSelection = await this._applyToolSelectionHook(
       requestTools,
-      this.ports.state.model,
       requestParams.hookOwner ?? requestParams.recordingExecution?.hookOwner,
     );
     const runtimeContext = this.providerRuntimeBuilder(
@@ -870,6 +872,15 @@ export class TurnProcessor {
     params: SendMessageParams,
   ): AgentClientGenerateConfig['tools'] {
     return params.config?.tools ?? this.generationConfig.tools;
+  }
+
+  private _applyToolSelectionHook(
+    tools: AgentClientGenerateConfig['tools'],
+    hookOwner?: NonNullable<
+      SendMessageParams['recordingExecution']
+    >['hookOwner'],
+  ): Promise<ToolSelectionHookResult> {
+    return applyToolSelectionHook(tools, this.ports.state.model, hookOwner);
   }
 
   private _normalizeRequestTools(

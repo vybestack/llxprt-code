@@ -32,8 +32,86 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIterator.js';
+import type { PreparedRequest } from './streamRequestHelpers.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { RawTokenDeltaBridge } from './streamTelemetryLogger.js';
+import type { DumpAttemptContext } from '@vybestack/llxprt-code-providers';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+
+export function createDumpIdChunk(baseId: string): ModelStreamChunk {
+  return toModelStreamChunk({
+    speaker: 'ai',
+    blocks: [],
+    metadata: { dumpBaseId: baseId },
+  });
+}
+
+export async function consumeFirstChunkAndReturn(
+  streamResponse: AsyncIterable<IContent>,
+  requestPayload: PreparedRequest['requestPayload'],
+  promptId: string,
+  startTime: number,
+  attemptIndex: number,
+  hookRestrictedAllowedTools: string[] | undefined,
+  rawTokenDeltaBridge: RawTokenDeltaBridge | null,
+  owner: HookExecutionOwner | undefined,
+  dumpAttemptContext: DumpAttemptContext,
+  attemptSignal: AbortSignal | undefined,
+  convertStream: (
+    stream: AsyncIterable<IContent>,
+    payload: PreparedRequest['requestPayload'],
+    telemetry: { promptId: string; startTime: number; attemptIndex?: number },
+    allowedTools: string[] | undefined,
+    tokenDeltaBridge: RawTokenDeltaBridge | null,
+    hookOwner: HookExecutionOwner | undefined,
+    dumpAttemptContext: DumpAttemptContext,
+    attemptSignal: AbortSignal | undefined,
+  ) => AsyncGenerator<ModelStreamChunk>,
+): Promise<AsyncGenerator<ModelStreamChunk>> {
+  const convertedStream = convertStream(
+    streamResponse,
+    requestPayload,
+    { promptId, startTime, attemptIndex },
+    hookRestrictedAllowedTools,
+    rawTokenDeltaBridge,
+    owner,
+    dumpAttemptContext,
+    attemptSignal,
+  );
+  const firstChunk = await convertedStream.next();
+  if (firstChunk.done === true) {
+    throw new EmptyStreamError(
+      'Model stream ended immediately with no content.',
+    );
+  }
+  return prependAsyncGenerator(firstChunk.value, convertedStream);
+}
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
+export function stripProviderAttemptDiagnostics(content: IContent): IContent {
+  const metadata = content.metadata;
+  if (metadata === undefined) return content;
+  const {
+    stopDetails: _stopDetails,
+    requestId: _requestId,
+    dumpBaseId: _dumpBaseId,
+    refusalAuditToolInputs: _refusalAuditToolInputs,
+    firstByteToRefusalMs: _firstByteToRefusalMs,
+    ...historyMetadata
+  } = metadata;
+  const hasLegacyDiagnostics =
+    _stopDetails !== undefined ||
+    _requestId !== undefined ||
+    _dumpBaseId !== undefined;
+  const hasRefusalDiagnostics =
+    _refusalAuditToolInputs !== undefined ||
+    _firstByteToRefusalMs !== undefined;
+  if (!hasLegacyDiagnostics && !hasRefusalDiagnostics) return content;
+  return { ...content, metadata: historyMetadata };
+}
+
 export function isMissingFinishReason(
   finishReason: string | null | undefined | '',
 ): boolean {

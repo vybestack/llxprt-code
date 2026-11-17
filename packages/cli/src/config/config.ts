@@ -92,6 +92,7 @@ export interface ConfigBuildPreflight extends PostConfigPreflight {
 /** Values `loadCliConfig` reads once while it builds the Config. */
 export interface CliConfigLoadInput {
   readonly settings: Settings;
+  readonly userSettings?: Pick<Settings, 'dumpcontext' | 'dumpRetention'>;
   readonly extensions: LlxprtExtension[];
   readonly extensionEnablementManager: ExtensionEnablementManager;
   readonly sessionId: string;
@@ -345,6 +346,7 @@ export async function loadCliConfig(
       bootstrapArgs,
       argv,
       settings,
+      userSettings: input.userSettings,
       profileSettingsWithTools: pieces.profileSettingsWithTools,
       profileLoadResult: profileResult,
       providerModelResult: pieces.providerModel,

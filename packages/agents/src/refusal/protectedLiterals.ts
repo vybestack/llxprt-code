@@ -11,6 +11,7 @@
 interface LiteralPattern {
   readonly pattern: RegExp;
   readonly key?: (match: string) => string;
+  readonly accept?: (match: string) => boolean;
   /**
    * Trailing characters that are sentence punctuation for this kind of fact.
    * A "!" or "?" can end a URL ("/run!" and "/run" are different resources),
@@ -44,11 +45,23 @@ const LITERAL_PATTERNS: readonly LiteralPattern[] = [
   { pattern: /`[^`\n]+`/g },
   // URLs.
   { pattern: /\bhttps?:\/\/[^\s)>\]"'`]+/g, trailing: '.,;:' },
-  // Windows paths, then POSIX-style paths. A path never starts inside a
-  // longer one, so the tail of "vendor/src/a.ts" is not a path of its own.
+  // Windows paths and POSIX paths. Relative POSIX candidates must have a
+  // path-like segment, three segments, a trailing slash or an @-scoped start.
+  // Boundaries keep the tail of "vendor/src/a.ts" from matching separately.
   { pattern: /\b[A-Za-z]:\\(?:[\w .-]+\\)*[\w.-]+/g },
   { pattern: /(?<![\w.@+/-])(?:~|\.{1,2})?(?:\/[\w.@+-]+)+\/?/g },
-  { pattern: /(?<![\w.@+/-])[\w.@+-]+(?:\/[\w.@+-]+)+\/?/g },
+  {
+    pattern: /(?<![\w.@+/-])[\w.@+-]+(?:\/[\w.@+-]+)+\/?/g,
+    accept: (match) => {
+      const segments = match.split('/').filter(Boolean);
+      return (
+        segments.some((segment) => segment.includes('.')) ||
+        segments.length >= 3 ||
+        match.endsWith('/') ||
+        segments[0]?.startsWith('@') === true
+      );
+    },
+  },
   // Hex hashes: seven or more hex digits that include a digit, so words such
   // as "defaced" are not mistaken for one.
   { pattern: /\b(?=[0-9a-f]*\d)[0-9a-f]{7,64}\b/gi },
@@ -68,6 +81,21 @@ const LITERAL_PATTERNS: readonly LiteralPattern[] = [
   // dotted.identifiers whose first segment is a real name (not "e.g").
   { pattern: /\b[A-Za-z_]\w+(?:\.[A-Za-z_]\w*)+/g },
 ];
+function addLiteralToken(
+  found: Map<string, string>,
+  match: string,
+  key: LiteralPattern['key'],
+  trailing: string | undefined,
+  accept: LiteralPattern['accept'],
+): void {
+  const literal = trimTrailingPunctuation(
+    match,
+    trailing ?? SENTENCE_PUNCTUATION,
+  );
+  if (literal === '' || (accept !== undefined && !accept(literal))) return;
+  const token = key === undefined ? literal : key(literal);
+  if (!found.has(token)) found.set(token, literal);
+}
 
 function trimTrailingPunctuation(literal: string, trailing: string): string {
   let end = literal.length;
@@ -78,15 +106,9 @@ function trimTrailingPunctuation(literal: string, trailing: string): string {
 /** Protected literals of `text`: compared token, shown text, once per token. */
 function literalTokens(text: string): Map<string, string> {
   const found = new Map<string, string>();
-  for (const { pattern, key, trailing } of LITERAL_PATTERNS) {
+  for (const { pattern, key, trailing, accept } of LITERAL_PATTERNS) {
     for (const match of text.matchAll(pattern)) {
-      const literal = trimTrailingPunctuation(
-        match[0],
-        trailing ?? SENTENCE_PUNCTUATION,
-      );
-      if (literal === '') continue;
-      const token = key === undefined ? literal : key(literal);
-      if (!found.has(token)) found.set(token, literal);
+      addLiteralToken(found, match[0], key, trailing, accept);
     }
   }
   return found;

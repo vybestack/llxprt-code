@@ -43,6 +43,11 @@ export interface ActualTokenUsageInput {
   retryReason?: string;
   finishReason?: string;
   rawStopReason?: string;
+  refusalCategory?: string | null;
+  refusalExplanation?: string | null;
+  recommendedModel?: string;
+  requestId?: string | null;
+  dumpBaseId?: string;
 }
 
 interface ActualTokenUsageRecorder {
@@ -64,6 +69,11 @@ export function usageStatsToActualInput(
     attemptOutcome: TokenUsageAttemptOutcome;
     finishReason?: string;
     rawStopReason?: string;
+    refusalCategory?: string | null;
+    refusalExplanation?: string | null;
+    recommendedModel?: string;
+    requestId?: string | null;
+    dumpBaseId?: string;
   },
 ): ActualTokenUsageInput {
   const base: ActualTokenUsageInput = {
@@ -88,6 +98,17 @@ export function usageStatsToActualInput(
     ...(attempt.rawStopReason !== undefined && {
       rawStopReason: attempt.rawStopReason,
     }),
+    ...(attempt.refusalCategory !== undefined && {
+      refusalCategory: attempt.refusalCategory,
+    }),
+    ...(attempt.refusalExplanation !== undefined && {
+      refusalExplanation: attempt.refusalExplanation,
+    }),
+    ...(attempt.recommendedModel !== undefined && {
+      recommendedModel: attempt.recommendedModel,
+    }),
+    ...(attempt.requestId !== undefined && { requestId: attempt.requestId }),
+    ...(attempt.dumpBaseId !== undefined && { dumpBaseId: attempt.dumpBaseId }),
   };
 }
 
@@ -114,6 +135,10 @@ export async function syncAndRecordTurnUsage(input: {
   promptId?: string;
   finishReason?: string;
   rawStopReason?: string;
+  refusalCategory?: string | null;
+  refusalExplanation?: string | null;
+  recommendedModel?: string;
+  requestId?: string | null;
 }): Promise<void> {
   const { history, usage, lastPromptTokenCount } = input;
   await history.waitForTokenUpdates();
@@ -151,7 +176,14 @@ export function buildSuccessfulTurnUsage(
   usage: UsageStats | undefined,
   lastPromptTokenCount: number | null,
   attemptIndex: number,
-  finish: { finishReason?: string; rawStopReason?: string } = {},
+  finish: {
+    finishReason?: string;
+    rawStopReason?: string;
+    refusalCategory?: string | null;
+    refusalExplanation?: string | null;
+    recommendedModel?: string;
+    requestId?: string | null;
+  } = {},
 ): ActualTokenUsageInput | undefined {
   const attempt = {
     attemptIndex,
@@ -233,6 +265,17 @@ export async function recordActualTokenUsage(
       ...(usage.rawStopReason !== undefined && {
         rawStopReason: usage.rawStopReason,
       }),
+      ...(usage.refusalCategory !== undefined && {
+        refusalCategory: usage.refusalCategory,
+      }),
+      ...(usage.refusalExplanation !== undefined && {
+        refusalExplanation: usage.refusalExplanation,
+      }),
+      ...(usage.recommendedModel !== undefined && {
+        recommendedModel: usage.recommendedModel,
+      }),
+      ...(usage.requestId !== undefined && { requestId: usage.requestId }),
+      ...(usage.dumpBaseId !== undefined && { dumpBaseId: usage.dumpBaseId }),
     };
 
     await usageLogger.recordActual(promptId, actual);
@@ -257,6 +300,7 @@ export async function recordAbandonedStreamAttempt(
   hasYieldedChunk: boolean,
   attemptUsage: UsageStats | undefined,
   fallbackTokens: number | null,
+  requestId?: string | null,
 ): Promise<void> {
   const promptTokens =
     attemptUsage?.promptTokens ?? fallbackTokens ?? undefined;
@@ -268,6 +312,7 @@ export async function recordAbandonedStreamAttempt(
     promptTokens,
     attemptIndex: attempt,
     attemptOutcome: hasYieldedChunk ? 'abandoned' : 'error',
+    ...(requestId === undefined ? {} : { requestId }),
   });
 }
 

@@ -430,7 +430,7 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     ).rejects.toThrow(/context limit/i);
 
     expect(handler['compressionFailureCount']).toBe(4);
-    expect(handler['compressionSummary']).toBeUndefined();
+    expect(handler['auditState'].summary).toBeUndefined();
     expect(handler['lastSuccessfulCompressionTime']).toBeNull();
     expect(handler.isCompressionInCooldown()).toBe(true);
     expect(handler.wasRecentlyCompressed()).toBe(false);
@@ -463,7 +463,7 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     ).rejects.toThrow(/context limit/i);
 
     expect(handler['compressionFailureCount']).toBe(4);
-    expect(handler['compressionSummary']).toBeUndefined();
+    expect(handler['auditState'].summary).toBeUndefined();
     expect(handler['lastSuccessfulCompressionTime']).toBeNull();
     expect(handler.isCompressionInCooldown()).toBe(true);
     expect(handler.wasRecentlyCompressed()).toBe(false);
@@ -483,7 +483,7 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     await handler.enforceContextWindow(0, 'pending-successful-commit');
 
     expect(handler['compressionFailureCount']).toBe(0);
-    expect(handler['compressionSummary']).toBe(snapshot);
+    expect(handler['auditState'].summary).toBe(snapshot);
     expect(handler['lastSuccessfulCompressionTime']).not.toBeNull();
     expect(handler.isCompressionInCooldown()).toBe(false);
     expect(handler.wasRecentlyCompressed()).toBe(true);
@@ -516,7 +516,7 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     );
 
     expect(handler['compressionFailureCount']).toBe(0);
-    expect(handler['compressionSummary']).toBe(snapshot);
+    expect(handler['auditState'].summary).toBe(snapshot);
     expect(handler['lastSuccessfulCompressionTime']).not.toBeNull();
     expect(handler.isCompressionInCooldown()).toBe(false);
     expect(handler.wasRecentlyCompressed()).toBe(true);
