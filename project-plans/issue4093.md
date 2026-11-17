@@ -124,8 +124,10 @@ on this branch (`b1f4aff2cf`, `ef0612fd54`), test first.
 3. Rebuilt request. Reopening the chat send reran the preparation hooks and rebuilt the request. `Turn.run` now creates
    one `LogicalSend` (`logicalSend.ts`) holding the `SendRequestState` and the turn id. A resend uses `replayOptions`
    (`requestReplay.ts`): the options the provider was handed, bound to the new attempt's signal, observers, raw-token
-   sink and request context, with `prepareAtSendSeam` run again for a new one-shot transport token. Hooks, system
-   prompt and live settings are not read again.
+   sink and request context, with `prepareAtSendSeam` run again for a new one-shot transport token. Hooks and live
+   settings are not read again. System prompt assembly still runs at the start of every send
+   (`ChatSession._withResolvedSystemPrompt`); the kept system prompt is the one transmitted. This holds for direct
+   routes: a load-balancer route selects a member on every request.
 
 Deviations from the remediation design: `providerRequestContext` is not shared across attempts (sharing it made the
 replacement look already committed), and no abort signal was added to `HistoryBatchOptions`.
@@ -153,6 +155,52 @@ Integration findings on this branch:
 - `origin/main` gained refusal diagnostics (#4116, #4118) in the same `StreamProcessor` code. The merge keeps both:
   main's dump attempt context, refusal audit fingerprint and extracted helpers, and this branch's attempt signal and
   kept-request replay.
+
+## Second review and remediation
+
+A second review of `863dba0ea4` (after the merge of `origin/main`) read the source only and ran no tests. It reported
+2 HIGH, 7 MEDIUM and 1 LOW findings. Six were reproduced with a failing test and fixed, each in its own commit:
+
+| Commit | Finding | What the failing test showed |
+| --- | --- | --- |
+| `9993a05874` | An attempt abandoned while its `BeforeModel` hook ran resumed later and wrote its unsent request over the kept one, so the next resend replayed a request that never reached the provider. | The resend carried `hook pass 1` (the abandoned request) in place of `hook pass 2`. |
+| `eebb64da0d` | The idle watchdog stays armed through history finalization. A slow cleanup after the commit ended the attempt with a timeout and the turn resent. | 2 provider requests; the user message and the answer each in history twice. |
+| `90edfb0291` | `admitRefusalAuditChunk` (added on main in #4118) returned only the admitted content, so the chunk's original AFC history reached history. | An inline image in a streamed AFC history was stored as `base64`, expected `reference`. |
+| `63c55dcb44` | `Config.getShellExecutionConfig` fell back from an unset live value to the startup snapshot. | With 900 at startup and the setting cleared by a profile, `!` commands used 900 s where the agent's shell tool used 300 s. |
+| `a717c1d471` | The attempt signal was checked between admitting a chunk's media and registering the admission for release. | An attempt aborted as its output image was reserved left 1 reservation owner; 1 of 2 objects could be reclaimed. |
+| `f01f9721cc` | An attempt abandoned before the provider call never released its prompt-envelope projection. | A first attempt and a resend, each timed out inside its estimate, released their projection 0 times. |
+
+After `eebb64da0d` a timeout that lands once the answer is in history ends the turn with the timeout event and does
+not resend; the answer stays in history once.
+
+`5bebb2d0ce` replaces the relaxed replay assertions from `a09b99b789`. The cause stated in that earlier commit was not
+measured. A diagnostic over 14 runs measured it: with a 1 s first-response watchdog, the first attempt's own preparation
+(two hook subprocesses, then prompt estimation and context enforcement) took 0.76 to 1.4 s at load 40 to 50, so in 6 of
+14 runs the watchdog fired after dispatch and before the request reached the endpoint. The scenario now arms the idle
+guard, which starts at the first streamed text, uses the default budget of 2 retries and asserts exactly: two requests
+for the first prompt, one run of each hook, attempts 0 (`error`, `stream-timeout`) and 1 (`success`). That scenario no
+longer covers the first-response guard; `streamTimeoutRetry.behavior.test.ts` does.
+
+`retry_reason` is written only at the `debug` level of the token-usage log. The default `summary` record of a
+timed-out attempt has `attempt_outcome: error` without it.
+
+Known follow-ups. Each was found by reading the code and has no reproducing test:
+
+- Load-balancer profiles: every request selects a member (`LoadBalancingProvider.selectNextSubProfile`), so a resend
+  can reach a different member, model and re-rendered system prompt. The identical-resend guarantee covers direct
+  routes.
+- An idle watchdog shorter than `refusal.backoff-ms` can fire during a refusal backoff, because the watchdog is rearmed
+  only by provider liveness and model chunks. On main that ends the turn with an idle timeout; on this branch it also
+  spends a timeout retry and resends the refused request. Both stream watchdogs are off by default.
+- A reviewer rewrite of the pending turn followed by a stream timeout: the kept wire request carries the rewrite, but
+  the outer retry starts from the original turn, so the turn committed to history is the original. The content-retry
+  counter restarts on an outer retry as well.
+- An abandoned attempt's failure path calls `clearProviderCompressionCallback`, which may detach the callback of the
+  attempt that replaced it.
+- `snapshotSentOptions` copies the outer arrays and the metadata record; nested content blocks and tool schemas stay
+  shared with the first attempt.
+- The fix in `9993a05874` is tested for the hook window. The same fence before `keepOptions` on the replay path and
+  after context enforcement has no test of its own.
 
 ## Verification
 
