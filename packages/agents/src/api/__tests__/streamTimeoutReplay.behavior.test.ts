@@ -30,7 +30,7 @@ import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import {
   readJsonl,
   startScriptedEndpoint,
-  stallReply,
+  stallAfterTextReply,
   stopReply,
   turnRecords,
   type ScriptedEndpoint,
@@ -141,11 +141,13 @@ describe('timeout replay (issue #4093)', () => {
           },
           credentials().authority,
         );
-        agent.setEphemeralSetting('stream-first-response-timeout-ms', 1000);
-        // On a loaded machine an attempt can hit the 1 s watchdog before its
-        // request reaches the endpoint, so the budget leaves room for attempts
-        // that never arrive.
-        agent.setEphemeralSetting('stream-timeout-retries', 10);
+        // The idle guard starts with the first streamed text, after the hooks
+        // and the context enforcement have run, so how long those take on a
+        // loaded machine cannot time the first attempt out before it is sent.
+        // The first-response guard (off by default) would count that time.
+        agent.setEphemeralSetting('stream-idle-timeout-ms', 1000);
+        // The summary level of the token log leaves out the retry reason.
+        agent.setEphemeralSetting('token-usage-log', 'debug');
         agent.setEphemeralSetting('refusal.backoff-ms', 1);
         agent.setEphemeralSetting('refusal.retries', 0);
         agent.setEphemeralSetting('refusal.rewrite', false);
@@ -165,7 +167,7 @@ describe('timeout replay (issue #4093)', () => {
       const endpoint = await startScriptedEndpoint(async (_request, index) => {
         if (index === 0) {
           hooksWhenOriginalArrived = await hookCounts(directoryOfAgent);
-          return stallReply();
+          return stallAfterTextReply('half an ans');
         }
         return stopReply(index === 1 ? 'recovered' : 'later');
       });
@@ -195,21 +197,25 @@ describe('timeout replay (issue #4093)', () => {
           );
           const [original, resent, later] = endpoint.requests();
 
+          const oneRunEach: HookCounts = {
+            beforeModel: 1,
+            beforeToolSelection: 1,
+          };
+
           expect({
             done: first.flatMap((event) =>
               event.type === 'done' ? [event.reason] : [],
             ),
             requestsAfterFirst,
+            hooksWhenOriginalArrived,
             hooksAfterFirst,
             resent: JSON.stringify(resent),
             laterSeesCurrentSettings: later.temperature,
           }).toStrictEqual({
             done: ['stop'],
             requestsAfterFirst: 2,
-            hooksAfterFirst: hooksWhenOriginalArrived ?? {
-              beforeModel: -1,
-              beforeToolSelection: -1,
-            },
+            hooksWhenOriginalArrived: oneRunEach,
+            hooksAfterFirst: oneRunEach,
             resent: JSON.stringify(original),
             laterSeesCurrentSettings: 0.9,
           });
@@ -224,9 +230,9 @@ describe('timeout replay (issue #4093)', () => {
       }
     });
 
-    it('logs the timed-out attempt and the resend under unique attempt indexes', async () => {
+    it('logs the timed-out attempt and the resend under attempt indexes 0 and 1', async () => {
       const endpoint = await startScriptedEndpoint([
-        stallReply(),
+        stallAfterTextReply('half an ans'),
         stopReply('recovered'),
       ]);
       try {
@@ -245,16 +251,16 @@ describe('timeout replay (issue #4093)', () => {
               ),
             ),
           );
-          const indexes = records.map((r) => r['attempt_index']);
-          const outcomes = records.map((r) => r['attempt_outcome']);
-          const timedOut = outcomes.slice(0, -1);
-
-          // An attempt that times out before its request is sent adds a
-          // timed-out record; every logged attempt still has its own index.
-          expect(timedOut.length).toBeGreaterThanOrEqual(1);
-          expect(new Set(indexes).size).toBe(indexes.length);
-          expect(timedOut).toStrictEqual(timedOut.map(() => 'error'));
-          expect(outcomes.at(-1)).toBe('success');
+          expect(
+            records.map((r) => [
+              r['attempt_index'],
+              r['attempt_outcome'],
+              r['retry_reason'],
+            ]),
+          ).toStrictEqual([
+            [0, 'error', 'stream-timeout'],
+            [1, 'success', undefined],
+          ]);
         });
       } finally {
         await endpoint.stop();
