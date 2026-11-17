@@ -60,8 +60,7 @@ describe('request that stalls once and then answers (issue #4093)', () => {
     const run = await recovered();
 
     expect(run.requests).toHaveLength(2);
-    expect(run.requests[1].messages).toStrictEqual(run.requests[0].messages);
-    expect(run.requests[1].model).toBe(run.requests[0].model);
+    expect(run.requests[1]).toStrictEqual(run.requests[0]);
   });
 
   it('tells the host to discard the timed-out attempt and why it is retrying', async () => {
