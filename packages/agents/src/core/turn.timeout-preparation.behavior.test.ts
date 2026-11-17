@@ -13,6 +13,7 @@
  */
 
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import {
   afterEach,
   beforeEach,
@@ -144,14 +145,21 @@ describe('a timeout while the request is still being prepared (issue #4093)', ()
     await rm(directory, { recursive: true, force: true });
   });
 
-  function open(): TimeoutLifecycleChat {
+  function open(
+    projectPromptEnvelope?: NonNullable<IProvider['projectPromptEnvelope']>,
+  ): TimeoutLifecycleChat {
     setup = createTimeoutLifecycleChat(
       directory,
       new ProviderFileLifecycle({
         maxFiles: 100,
         maxBytes: 512 * 1024 * 1024,
       }),
-      { streamTimeoutPolicy: FIRST_RESPONSE },
+      {
+        streamTimeoutPolicy: FIRST_RESPONSE,
+        ...(projectPromptEnvelope === undefined
+          ? {}
+          : { projectPromptEnvelope }),
+      },
     );
     return setup;
   }
@@ -173,6 +181,67 @@ describe('a timeout while the request is still being prepared (issue #4093)', ()
     const events = await within(
       DEADLINE_MS,
       'resend after the preparation timed out',
+      runTurn(chat, hook.owner, 'prompt-1', 'please summarise'),
+    );
+    const [onWire, resent] = chat.provider.attempts;
+
+    expect({
+      requests: chat.provider.attempts.length,
+      failures: failures(events),
+      onWireHookPass: JSON.stringify(onWire.data).includes('hook pass 2'),
+      resentIsWhatWentOut: JSON.stringify(resent.data),
+      abandonedHookPassSent: JSON.stringify(resent.data).includes(
+        'hook pass 1',
+      ),
+      ai: aiTexts(chat),
+    }).toStrictEqual({
+      requests: 2,
+      failures: [],
+      onWireHookPass: true,
+      resentIsWhatWentOut: JSON.stringify(onWire.data),
+      abandonedHookPassSent: false,
+      ai: ['resent answer'],
+    });
+  });
+
+  it('resends the request that went out when an abandoned attempt finishes its prompt estimate late', async () => {
+    const estimate = gate();
+    let projections = 0;
+    // Every request is projected; estimating the first projection waits at
+    // `estimate` without looking at any signal.
+    const chat = open((options) => {
+      const held = projections === 0;
+      projections += 1;
+      return Promise.resolve({
+        model: 'timeout-lifecycle-model',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        finalizedProjection: options.contents,
+        legacyEstimate: async () => {
+          if (held) await estimate.open;
+          return options.contents.length;
+        },
+      });
+    });
+    const hookRuns = gate();
+    hookRuns.release();
+    const hook = changingHook(hookRuns);
+    chat.provider.onAttempt = (attempt) => {
+      if (attempt.index === 1) {
+        attempt.emit('resent answer');
+        attempt.finish();
+      }
+    };
+    // The abandoned attempt finishes its estimate only once its replacement
+    // is on the wire and waiting for an answer.
+    void chat.provider.attemptAt(0).then(() => estimate.release());
+
+    const events = await within(
+      DEADLINE_MS,
+      'resend after the estimate timed out',
       runTurn(chat, hook.owner, 'prompt-1', 'please summarise'),
     );
     const [onWire, resent] = chat.provider.attempts;
