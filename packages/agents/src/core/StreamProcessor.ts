@@ -867,8 +867,10 @@ export class StreamProcessor {
           },
           turnId,
         );
-        attemptSignal?.throwIfAborted();
         admissions.push(...admitted.admissions);
+        // Checked only once the admission is registered, so that what was
+        // admitted while the attempt was being abandoned is still released.
+        attemptSignal?.throwIfAborted();
         accumulator.add(admitted.historyChunk);
         yield { ...chunk, content: admitted.filteredContent };
       }
