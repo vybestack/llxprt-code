@@ -80,6 +80,22 @@ describe('compression summaries are stored without a scratchpad (issue #4128)', 
       expect(summary).toBe(SNAPSHOT);
     });
 
+    it(`${strategyName}: keeps only the real snapshot from a reply whose scratchpad names the snapshot tag`, async () => {
+      const { summary } = await compressWithReplies(strategyName, [
+        '<scratchpad>I will now write the <state_snapshot> carefully.</scratchpad>\n<state_snapshot>REAL</state_snapshot>',
+      ]);
+
+      expect(summary).toBe('<state_snapshot>REAL</state_snapshot>');
+    });
+
+    it(`${strategyName}: keeps only the real snapshot from a reply whose unterminated scratchpad names the snapshot tag`, async () => {
+      const { summary } = await compressWithReplies(strategyName, [
+        '<scratchpad>I will now write the <state_snapshot> carefully.\n<state_snapshot>REAL</state_snapshot>',
+      ]);
+
+      expect(summary).toBe('<state_snapshot>REAL</state_snapshot>');
+    });
+
     it(`${strategyName}: treats a reply that is only a scratchpad as an empty summary`, async () => {
       const replies = ['<scratchpad>reasoning that never finished'];
 

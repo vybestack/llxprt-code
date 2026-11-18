@@ -19,8 +19,8 @@ import type { ContentBlock, IContent } from './IContent.js';
 
 const COMPLETE_SCRATCHPAD = /<scratchpad\b[^>]*>[\s\S]*?<\/scratchpad>/gi;
 const SCRATCHPAD_OPEN = /<scratchpad\b[^>]*>/i;
-const STATE_SNAPSHOT_OPEN = '<state_snapshot>';
 const STATE_SNAPSHOT_CLOSE = '</state_snapshot>';
+const STATE_SNAPSHOT_OPEN = /<state_snapshot>/gi;
 
 interface SnapshotSplit {
   readonly before: string;
@@ -44,16 +44,15 @@ export function stripScratchpadSections(text: string): string {
 }
 
 /**
- * The element spans the first `<state_snapshot>` to the last
- * `</state_snapshot>`, or to the end of the text when it never closes.
+ * The element spans from its opening tag (see `findSnapshotStart`) to the
+ * last `</state_snapshot>`, or to the end of the text when it never closes.
  */
 function splitAroundSnapshot(text: string): SnapshotSplit {
-  const lower = text.toLowerCase();
-  const start = lower.indexOf(STATE_SNAPSHOT_OPEN);
+  const start = findSnapshotStart(text);
   if (start === -1) {
     return { before: text, element: '', after: '' };
   }
-  const lastClose = lower.lastIndexOf(STATE_SNAPSHOT_CLOSE);
+  const lastClose = text.toLowerCase().lastIndexOf(STATE_SNAPSHOT_CLOSE);
   const end =
     lastClose < start ? text.length : lastClose + STATE_SNAPSHOT_CLOSE.length;
   return {
@@ -61,6 +60,40 @@ function splitAroundSnapshot(text: string): SnapshotSplit {
     element: text.slice(start, end),
     after: text.slice(end),
   };
+}
+
+/**
+ * A summarizer may name the tag while it reasons, so the element opens at the
+ * first `<state_snapshot>` outside every complete scratchpad. When an
+ * unterminated scratchpad precedes that tag, its reasoning runs on until the
+ * real element, so a tag at the start of a line is preferred.
+ */
+function findSnapshotStart(text: string): number {
+  const scratchpads = [...text.matchAll(COMPLETE_SCRATCHPAD)].map((match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+  const openings = [...text.matchAll(STATE_SNAPSHOT_OPEN)].map(
+    (match) => match.index,
+  );
+  const first = openings.find((index) =>
+    scratchpads.every(({ start, end }) => index < start || index >= end),
+  );
+  if (first === undefined) {
+    return -1;
+  }
+  const precedingText = text.slice(0, first).replace(COMPLETE_SCRATCHPAD, '');
+  if (!SCRATCHPAD_OPEN.test(precedingText)) {
+    return first;
+  }
+  return (
+    openings.find((index) => index >= first && startsLine(text, index)) ?? first
+  );
+}
+
+function startsLine(text: string, index: number): boolean {
+  const lineStart = text.lastIndexOf('\n', index - 1) + 1;
+  return text.slice(lineStart, index).trim() === '';
 }
 
 function stripSegment(segment: string, snapshotFollows: boolean): string {
@@ -72,12 +105,14 @@ function stripSegment(segment: string, snapshotFollows: boolean): string {
   return snapshotFollows ? '' : withoutBlocks.slice(0, unterminated.index);
 }
 
-const LEGACY_SUMMARY_START = /^\s*<scratchpad\b/i;
+const LEGACY_SUMMARY_SHAPE =
+  /^\s*<scratchpad\b[^>]*>[\s\S]*<state_snapshot>[\s\S]*<\/state_snapshot>\s*$/i;
 
 /**
  * Compression summaries carry `isSummary` and the snapshot reason tag.
  * Summaries recorded before the tags existed (#2768) are recognized by shape:
- * a human entry that opens with a scratchpad and holds a `<state_snapshot>`.
+ * a human entry whose whole text is a scratchpad followed by a closed
+ * `<state_snapshot>` element.
  */
 export function isCompressionSummary(content: IContent): boolean {
   return (
@@ -91,10 +126,7 @@ function hasLegacySummaryShape(content: IContent): boolean {
   return (
     content.speaker === 'human' &&
     content.blocks.some(
-      (block) =>
-        block.type === 'text' &&
-        LEGACY_SUMMARY_START.test(block.text) &&
-        block.text.includes(STATE_SNAPSHOT_OPEN),
+      (block) => block.type === 'text' && LEGACY_SUMMARY_SHAPE.test(block.text),
     )
   );
 }

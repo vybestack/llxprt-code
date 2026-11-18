@@ -11,6 +11,11 @@ import { stripScratchpadSections } from './compressionSummaryScratchpad.js';
 
 const SNAPSHOT =
   '<state_snapshot><overall_goal>Ship #4128</overall_goal></state_snapshot>';
+const REAL_SNAPSHOT = '<state_snapshot>REAL</state_snapshot>';
+const SCRATCHPAD_NAMING_SNAPSHOT =
+  '<scratchpad>I will now write the <state_snapshot> carefully.</scratchpad>';
+const UNTERMINATED_SCRATCHPAD_NAMING_SNAPSHOT =
+  '<scratchpad>I will now write the <state_snapshot> carefully.';
 
 function textOf(content: IContent | undefined): string {
   return (content?.blocks ?? [])
@@ -105,6 +110,28 @@ describe('stripScratchpadSections', () => {
 
     expect(stripScratchpadSections(text)).toBe(text);
   });
+
+  it('finds the snapshot after a scratchpad block that names the snapshot tag', () => {
+    expect(
+      stripScratchpadSections(
+        `${SCRATCHPAD_NAMING_SNAPSHOT}\n${REAL_SNAPSHOT}`,
+      ),
+    ).toBe(REAL_SNAPSHOT);
+  });
+
+  it('finds the snapshot on its own line after an unterminated scratchpad that names the snapshot tag', () => {
+    expect(
+      stripScratchpadSections(
+        `${UNTERMINATED_SCRATCHPAD_NAMING_SNAPSHOT}\n${REAL_SNAPSHOT}`,
+      ),
+    ).toBe(REAL_SNAPSHOT);
+  });
+
+  it('falls back to the first snapshot tag after an unterminated scratchpad when none starts a line', () => {
+    expect(stripScratchpadSections(`<scratchpad>notes ${REAL_SNAPSHOT}`)).toBe(
+      REAL_SNAPSHOT,
+    );
+  });
 });
 
 describe('provider requests recover summaries that carry a scratchpad', () => {
@@ -140,6 +167,20 @@ describe('provider requests recover summaries that carry a scratchpad', () => {
     const [summary] = service.getCuratedForProvider();
 
     expect(textOf(summary)).toBe(SNAPSHOT);
+  });
+
+  it('sends only the real snapshot of a summary whose scratchpad names the snapshot tag', () => {
+    const service = serviceWith({
+      ...legacySummary,
+      blocks: [
+        {
+          type: 'text',
+          text: `${SCRATCHPAD_NAMING_SNAPSHOT}\n${REAL_SNAPSHOT}`,
+        },
+      ],
+    });
+
+    expect(textOf(service.getCuratedForProvider()[0])).toBe(REAL_SNAPSHOT);
   });
 
   it('recovers summaries tagged only by the isSummary flag', () => {
@@ -192,6 +233,17 @@ ${SNAPSHOT}`,
 
   it('never alters an untagged user message that opens with a scratchpad but has no snapshot', () => {
     const userText = '<scratchpad>is this tag allowed?</scratchpad> asking';
+    const service = serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
+  });
+
+  it('never alters an untagged user message that opens with a scratchpad and mentions the snapshot tag', () => {
+    const userText =
+      '<scratchpad> tags caused refusals; does the fix keep <state_snapshot> intact?';
     const service = serviceWith({
       speaker: 'human',
       blocks: [{ type: 'text', text: userText }],
