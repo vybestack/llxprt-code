@@ -708,15 +708,14 @@ export function wireCleanupHandlers(
       } finally {
         bridgeCleanedUp = true;
         process.off('exit', runBridgeCleanup);
-        process.off('SIGINT', runBridgeCleanup);
-        process.off('SIGTERM', runBridgeCleanup);
         sandboxProcess.off('close', runBridgeCleanup);
         setCredentialProxyBridgeCleanup(undefined);
       }
     };
+    // No SIGINT/SIGTERM registration: the signal forwarder keeps the host
+    // alive until the child closes, and a child that handles the signal and
+    // keeps running still needs the bridge. The close handler releases it.
     process.on('exit', runBridgeCleanup);
-    process.on('SIGINT', runBridgeCleanup);
-    process.on('SIGTERM', runBridgeCleanup);
     sandboxProcess.on('close', runBridgeCleanup);
   }
 }

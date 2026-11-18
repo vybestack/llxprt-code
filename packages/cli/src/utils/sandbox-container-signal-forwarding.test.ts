@@ -58,6 +58,20 @@ const DOCKER_STUB = [
   'esac',
 ].join('\n');
 
+/**
+ * A sandboxed child that handles the stop signal without exiting at once. It
+ * reports whether the credential bridge had already been cleaned up when it
+ * finished handling the signal, which is the last moment it can still use it.
+ */
+const BRIDGE_WATCHING_STUB = handlingStub(
+  [
+    'sleep 0.5;',
+    'if [ -e "$STUB_DIR/bridge-cleaned" ]; then',
+    'echo cleaned > "$STUB_DIR/bridge-at-exit";',
+    'else echo in-use > "$STUB_DIR/bridge-at-exit"; fi;',
+  ].join(' '),
+);
+
 // The stand-ins are POSIX shell scripts and Windows cannot deliver these
 // signals to a process as signals.
 describe('container sandbox hop signal handling', () => {
@@ -141,6 +155,28 @@ describe('container sandbox hop signal handling', () => {
         },
         TEST_TIMEOUT_MS,
       );
+    });
+
+    describe('with a credential bridge', () => {
+      for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+        it(
+          `keeps the bridge available until the sandboxed child exits after ${signal}`,
+          async () => {
+            const { host, finished } = await harness.startHost({
+              stubs: { 'sandbox-child': BRIDGE_WATCHING_STUB },
+              env: { HOST_WITH_BRIDGE: '1' },
+            });
+
+            host.kill(signal);
+            const result = await finished;
+
+            expect(harness.readText('bridge-at-exit')).toBe('in-use');
+            expect(result.exitCode).toBe(HANDLED_EXIT_STATUS);
+            expect(fs.existsSync(harness.file('bridge-cleaned'))).toBe(true);
+          },
+          TEST_TIMEOUT_MS,
+        );
+      }
     });
   });
 });

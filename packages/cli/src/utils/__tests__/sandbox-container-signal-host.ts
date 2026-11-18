@@ -8,12 +8,15 @@
  * Host process for sandbox-container-signal-forwarding.test.ts. It wires the
  * container launch path's signal and cleanup handling around a stand-in
  * sandbox child, in the order executeContainerSandbox uses: proxy sidecar
- * first, then the child, the signal forwarder and the proxy close handler. Docker itself is
- * a stand-in `docker` on PATH, so the real startProxyContainer and
- * wireProxyContainerCloseHandler run unchanged.
+ * first, then the child, the signal forwarder, the proxy close handler and
+ * the cleanup handlers. Docker itself is a stand-in `docker` on PATH, so the
+ * real startProxyContainer, wireProxyContainerCloseHandler and
+ * wireCleanupHandlers run unchanged.
  *
- * HOST_WITH_PROXY_SIDECAR=1 starts the proxy sidecar. The host writes `ready`
- * into STUB_DIR once everything is wired, and exits with the child's status.
+ * HOST_WITH_PROXY_SIDECAR=1 starts the proxy sidecar. HOST_WITH_BRIDGE=1
+ * hands wireCleanupHandlers a credential bridge cleanup that records, in
+ * `bridge-cleaned`, that it ran. The host writes `ready` into STUB_DIR once
+ * everything is wired, and exits with the child's status.
  */
 
 import { spawn } from 'node:child_process';
@@ -21,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   startProxyContainer,
+  wireCleanupHandlers,
   wireProxyContainerCloseHandler,
 } from '../sandbox-containers.js';
 import { normalizeExitCode } from '../sandbox-seatbelt.js';
@@ -52,6 +56,21 @@ const sandboxProcess = spawn(path.join(stubDir, 'sandbox-child'), [], {
 });
 forwardSignalsToSandboxProcess(sandboxProcess);
 wireProxyContainerCloseHandler(proxyContainer, sandboxProcess);
+
+const bridgeCleanup =
+  process.env['HOST_WITH_BRIDGE'] === '1'
+    ? () => {
+        fs.writeFileSync(path.join(stubDir, 'bridge-cleaned'), '');
+      }
+    : undefined;
+wireCleanupHandlers(
+  sandboxProcess,
+  undefined,
+  { tunnelProcess: undefined, cleanup: undefined, entrypointPrefix: undefined },
+  undefined,
+  bridgeCleanup,
+  () => {},
+);
 
 const exitCode = await new Promise<number>((resolve) => {
   sandboxProcess.on('close', (code, signal) => {
