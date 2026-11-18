@@ -20,6 +20,9 @@ export const COMPRESSION_PROMPT_FILES = {
   triggerWithPriorSnapshot: 'compression/trigger-with-prior-snapshot.md',
   verificationRequest: 'compression/verification-request.md',
   verificationFollowUp: 'compression/verification-follow-up.md',
+  activeTodos: 'compression/active-todos.md',
+  transcriptPath: 'compression/transcript-path.md',
+  largeLastPrompt: 'compression/large-last-prompt.md',
 } as const;
 
 export type CompressionPromptFile =
@@ -52,4 +55,26 @@ export function loadCompressionPromptFile(
     throw new PromptResolutionError(relativePath, 'prompt file is empty');
   }
   return text;
+}
+
+/**
+ * Load a compression prompt file that carries runtime data and replace its
+ * `{{placeholder}}` with `value`. The value is inserted literally. A file
+ * without the placeholder would silently drop the data, so it is rejected.
+ */
+export function fillCompressionPromptFile(
+  source: CompressionPromptSource,
+  relativePath: CompressionPromptFile,
+  placeholder: string,
+  value: string,
+): string {
+  const template = loadCompressionPromptFile(source, relativePath);
+  const token = `{{${placeholder}}}`;
+  if (!template.includes(token)) {
+    throw new PromptResolutionError(
+      relativePath,
+      `prompt file must contain ${token}`,
+    );
+  }
+  return template.split(token).join(value);
 }

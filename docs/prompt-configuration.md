@@ -31,7 +31,10 @@ The same hierarchy applies to `env/` and `tools/` subdirectories.
 │   ├── trigger.md                      # Final turn asking for the <state_snapshot>
 │   ├── trigger-with-prior-snapshot.md  # Final turn when an earlier snapshot is compressed
 │   ├── verification-request.md         # Opens the optional verification pass
-│   └── verification-follow-up.md       # Closes the optional verification pass
+│   ├── verification-follow-up.md       # Closes the optional verification pass
+│   ├── active-todos.md                 # Active todo list turn; must keep {{ACTIVE_TODOS}}
+│   ├── transcript-path.md              # Session journal turn; must keep {{TRANSCRIPT_PATH}}
+│   └── large-last-prompt.md            # Oversized last user prompt; must keep {{LAST_USER_PROMPT}}
 ├── env/
 │   ├── git-repository.md               # Added when in a Git repo
 │   ├── sandbox.md                      # Added when sandboxed (container)

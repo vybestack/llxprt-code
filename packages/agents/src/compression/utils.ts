@@ -50,9 +50,11 @@ import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/run
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   COMPRESSION_PROMPT_FILES,
+  fillCompressionPromptFile,
   loadCompressionPromptFile,
   type CompressionPromptSource,
 } from '@vybestack/llxprt-code-core/core/compression/compressionPromptFiles.js';
+import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
 import {
   stripScratchpadFromCompressionSummaries,
   stripScratchpadSections,
@@ -251,6 +253,62 @@ export function buildTriggerInstruction(
     hasPriorSnapshot
       ? COMPRESSION_PROMPT_FILES.triggerWithPriorSnapshot
       : COMPRESSION_PROMPT_FILES.trigger,
+  );
+}
+
+/**
+ * Request turns that hand the summarizer runtime context: the active
+ * task list and the session journal path, each from its prompt file.
+ *
+ * @plan PLAN-20260211-HIGHDENSITY.P23
+ * @requirement REQ-HD-011.3, REQ-HD-012.2
+ */
+export function buildContextInjections(
+  context: Pick<
+    CompressionContext,
+    | 'promptResolver'
+    | 'promptBaseDir'
+    | 'promptContext'
+    | 'activeTodos'
+    | 'transcriptPath'
+  >,
+): IContent[] {
+  const injections: IContent[] = [];
+  if (context.activeTodos && context.activeTodos.trim().length > 0) {
+    injections.push(
+      humanText(
+        fillCompressionPromptFile(
+          context,
+          COMPRESSION_PROMPT_FILES.activeTodos,
+          'ACTIVE_TODOS',
+          context.activeTodos,
+        ),
+      ),
+    );
+  }
+  if (context.transcriptPath) {
+    injections.push(
+      humanText(buildTranscriptPathNotice(context, context.transcriptPath)),
+    );
+  }
+  return injections;
+}
+
+/**
+ * Request turn that carries a last user prompt too long to keep literally,
+ * asking the summarizer to preserve it faithfully.
+ */
+export function buildLargeLastPromptInjection(
+  source: CompressionPromptSource,
+  promptText: string,
+): IContent {
+  return humanText(
+    fillCompressionPromptFile(
+      source,
+      COMPRESSION_PROMPT_FILES.largeLastPrompt,
+      'LAST_USER_PROMPT',
+      promptText,
+    ),
   );
 }
 

@@ -51,6 +51,8 @@ import {
   aggregateTextFromBlocks,
   findForwardValidSplitPoint,
   buildTriggerInstruction,
+  buildContextInjections,
+  buildLargeLastPromptInjection,
   buildSecurityPreamble,
   runVerificationPass,
   sanitizeHistoryForCompression,
@@ -62,7 +64,6 @@ import {
 } from '@vybestack/llxprt-code-core/core/compression/compressionPromptFiles.js';
 import { stripScratchpadSections } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
-import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
@@ -129,7 +130,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       toCompress: adjustedCompress,
       toKeepBottom: adjustedBottom,
       lastUserPromptContext,
-      largeLastPromptInjection,
+      largeLastPrompt,
     } = this.preserveLastUserPrompt(toKeepTop, toCompress, toKeepBottom);
     toCompress = adjustedCompress;
     toKeepBottom = adjustedBottom;
@@ -151,7 +152,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const compressionRequest = this.buildCompressionRequest(
       context,
       toCompress,
-      largeLastPromptInjection,
+      largeLastPrompt,
     );
 
     const { finalSummary, capturedUsage } = await this.compressAndVerify(
@@ -186,7 +187,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
   private buildCompressionRequest(
     context: CompressionContext,
     toCompress: IContent[],
-    largeLastPromptInjection: IContent[],
+    largeLastPrompt: string | undefined,
   ): IContent[] {
     const prompt = loadCompressionPromptFile(
       context,
@@ -197,8 +198,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
       buildSecurityPreamble(context),
       { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
       ...sanitizeHistoryForCompression(toCompress),
-      ...this.buildContextInjections(context),
-      ...largeLastPromptInjection,
+      ...buildContextInjections(context),
+      ...(largeLastPrompt === undefined
+        ? []
+        : [buildLargeLastPromptInjection(context, largeLastPrompt)]),
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: triggerInstruction }],
@@ -537,7 +540,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     toCompress: IContent[];
     toKeepBottom: IContent[];
     lastUserPromptContext: string | undefined;
-    largeLastPromptInjection: IContent[];
+    largeLastPrompt: string | undefined;
   } {
     const fullHistory = [...toKeepTop, ...toCompress, ...toKeepBottom];
     const lastHumanIndex = this.findLastHumanMessageIndex(fullHistory);
@@ -547,7 +550,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
         toCompress: [...toCompress],
         toKeepBottom: [...toKeepBottom],
         lastUserPromptContext: undefined,
-        largeLastPromptInjection: [],
+        largeLastPrompt: undefined,
       };
     }
 
@@ -567,7 +570,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
         toCompress: [...toCompress],
         toKeepBottom: [...toKeepBottom],
         lastUserPromptContext: context || undefined,
-        largeLastPromptInjection: [],
+        largeLastPrompt: undefined,
       };
     }
 
@@ -587,7 +590,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
         toCompress: [...remainingCompress],
         toKeepBottom: [...movedMessages, ...toKeepBottom],
         lastUserPromptContext: context || undefined,
-        largeLastPromptInjection: [],
+        largeLastPrompt: undefined,
       };
     }
 
@@ -595,22 +598,11 @@ export class MiddleOutStrategy implements CompressionStrategy {
       messageText.length > LAST_PROMPT_CONTEXT_MAX_LENGTH
         ? messageText.slice(0, LAST_PROMPT_CONTEXT_MAX_LENGTH) + '...'
         : messageText;
-    const injection: IContent = {
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'text',
-          text: `IMPORTANT — The user's most recent message (summarized because it was too long to preserve literally). Summarize this user request faithfully and completely, preserving their exact intent, problems described, and any specific instructions:
-
-${messageText}`,
-        },
-      ],
-    };
     return {
       toCompress: [...toCompress],
       toKeepBottom: [...toKeepBottom],
       lastUserPromptContext: context || undefined,
-      largeLastPromptInjection: [injection],
+      largeLastPrompt: messageText,
     };
   }
 
@@ -702,42 +694,5 @@ ${messageText}`,
         middleCompressed: split?.middleCompressed ?? 0,
       },
     };
-  }
-
-  /**
-   * @plan PLAN-20260211-HIGHDENSITY.P23
-   * @requirement REQ-HD-011.3, REQ-HD-012.2
-   * @pseudocode prompts-todos.md lines 251-276
-   */
-  private buildContextInjections(context: CompressionContext): IContent[] {
-    const injections: IContent[] = [];
-
-    if (context.activeTodos && context.activeTodos.trim().length > 0) {
-      injections.push({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: `The following are the current active todo/task items. When summarizing, preserve context about why each task exists and what has been tried:
-
-${context.activeTodos}`,
-          },
-        ],
-      });
-    }
-
-    if (context.transcriptPath) {
-      injections.push({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: buildTranscriptPathNotice(context.transcriptPath),
-          },
-        ],
-      });
-    }
-
-    return injections;
   }
 }

@@ -143,7 +143,10 @@ describe('PromptInstaller retired defaults (issue #4128)', () => {
     );
 
     expect([...result.installed].sort()).toStrictEqual([
+      'compression/active-todos.md',
+      'compression/large-last-prompt.md',
       'compression/security-preamble.md',
+      'compression/transcript-path.md',
       'compression/trigger-with-prior-snapshot.md',
       'compression/trigger.md',
       'compression/verification-follow-up.md',

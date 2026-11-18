@@ -398,6 +398,15 @@ export const CORE_DEFAULTS: Record<string, string> = {
   'compression/verification-follow-up.md': loadMarkdownFile(
     'compression/verification-follow-up.md',
   ),
+  'compression/active-todos.md': loadMarkdownFile(
+    'compression/active-todos.md',
+  ),
+  'compression/transcript-path.md': loadMarkdownFile(
+    'compression/transcript-path.md',
+  ),
+  'compression/large-last-prompt.md': loadMarkdownFile(
+    'compression/large-last-prompt.md',
+  ),
 
   'subagent-delegation.md': loadMarkdownFile('subagent-delegation.md'),
 

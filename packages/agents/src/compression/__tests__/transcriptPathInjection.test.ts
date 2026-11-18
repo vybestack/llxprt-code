@@ -21,7 +21,8 @@ import type {
   CompressionProviderResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
+import { buildTranscriptPathNotice as buildNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
+import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
 import {
@@ -36,6 +37,18 @@ const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
 
 const JOURNAL_PATH = '/tmp/llxprt-chats/session-2026-08-22-abcd1234.jsonl';
+
+/** The notice built from the shipped prompt file, as no override is installed. */
+function buildTranscriptPathNotice(transcriptPath: string): string {
+  return buildNotice(
+    {
+      promptResolver: new PromptResolver(),
+      promptBaseDir: '',
+      promptContext: {},
+    },
+    transcriptPath,
+  );
+}
 
 /**
  * The notice text that precedes the path, derived from the builder rather than
