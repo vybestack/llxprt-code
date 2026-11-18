@@ -95,6 +95,13 @@ export const DEFAULT_DISPOSITION_STUB = [
   'exec sleep 600',
 ].join('\n');
 
+/**
+ * How long a process that has been signalled gets to exit after its host is
+ * gone. The signal is already delivered by then, so this only covers
+ * scheduling on a loaded machine.
+ */
+export const SIGNALLED_EXIT_TIMEOUT_MS = 60_000;
+
 export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -111,8 +118,9 @@ export function isAlive(pid: number): boolean {
 export async function waitUntil(
   condition: () => boolean,
   description: string,
+  timeoutMs = LAUNCH_TIMEOUT_MS,
 ): Promise<void> {
-  const deadline = Date.now() + LAUNCH_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
   while (!condition()) {
     if (Date.now() > deadline) {
       throw new Error(`Timed out waiting for ${description}`);

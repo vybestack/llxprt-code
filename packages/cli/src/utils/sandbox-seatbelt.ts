@@ -349,12 +349,11 @@ export function wireSeatbeltProxyCloseHandler(
     if (sandboxExited || isProxyStopRequested()) {
       return;
     }
-    const sandboxPid = sandboxProcess.pid;
-    if (sandboxPid !== undefined && sandboxPid !== 0) {
-      signalSeatbeltProcessGroup(sandboxPid);
-    }
+    // The sandbox child is not detached, so there is no process group with its
+    // id to signal; address the child itself.
+    sandboxProcess.kill('SIGTERM');
     // Avoid throwing inside an event callback (uncaught async throw).
-    // Log the failure and terminate the process group so the sandbox exits.
+    // Log the failure and terminate the sandbox so it does not outlive the host.
     debugLogger.error(
       `Proxy command '${proxyCommand}' exited with code ${code}, signal ${signal}`,
     );

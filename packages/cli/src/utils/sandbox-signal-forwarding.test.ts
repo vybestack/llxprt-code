@@ -13,7 +13,6 @@ import {
   expect,
   it,
 } from 'bun:test';
-import fs from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -22,10 +21,12 @@ import {
   FORWARDED_SIGNALS,
   HANDLED_EXIT_STATUS,
   SIGNAL_NUMBERS,
+  SIGNALLED_EXIT_TIMEOUT_MS,
   SandboxHostHarness,
   TEST_TIMEOUT_MS,
   handlingStub,
   isAlive,
+  waitUntil,
 } from './__tests__/sandbox-host-harness.js';
 
 /**
@@ -197,15 +198,20 @@ describe('sandbox hop signal forwarding', () => {
       }
 
       it(
-        'still terminates the host when the proxy dies while the sandboxed child is running',
+        'still terminates the host and stops the sandboxed child when the proxy dies while it is running',
         async () => {
-          const { finished } = await startProxiedHost(HANDLING_STUB);
+          const { childPid, finished } = await startProxiedHost(HANDLING_STUB);
 
           process.kill(harness.readPid('proxy.pid'), 'SIGKILL');
           const result = await finished;
 
           expect(result.exitCode).toBe(1);
-          expect(fs.existsSync(harness.file('received'))).toBe(false);
+          // Observed before teardown, which would hide a surviving child.
+          await waitUntil(
+            () => !isAlive(childPid),
+            'the sandboxed child to be stopped',
+            SIGNALLED_EXIT_TIMEOUT_MS,
+          );
         },
         TEST_TIMEOUT_MS,
       );

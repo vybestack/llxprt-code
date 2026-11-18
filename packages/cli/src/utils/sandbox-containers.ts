@@ -657,10 +657,10 @@ export function wireProxyContainerCloseHandler(
     // handling the same signal. The host keeps waiting for that child and
     // exits with its status; only a sidecar that dies unasked is fatal.
     if (proxyContainer.isStopRequested()) return;
-    const sandboxPid = sandboxProcess.pid;
-    if (sandboxPid !== undefined && sandboxPid !== 0) {
-      process.kill(-sandboxPid, 'SIGTERM');
-    }
+    // The sandbox child is not detached, so there is no process group with its
+    // id to signal; address the child itself. A group kill threw ESRCH here
+    // and left the child running.
+    sandboxProcess.kill('SIGTERM');
     throw new FatalSandboxError(
       `Proxy container command '${proxyContainer.command}' exited with code ${code}, signal ${signal}`,
     );

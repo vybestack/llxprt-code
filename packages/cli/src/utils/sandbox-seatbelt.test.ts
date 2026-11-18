@@ -766,6 +766,7 @@ describe('wireSeatbeltProxyCloseHandler', () => {
     const proxyProcess = new EventEmitter() as unknown as ChildProcess;
     const sandboxProcess = new EventEmitter() as unknown as ChildProcess;
     Object.defineProperty(sandboxProcess, 'pid', { value: 0 });
+    Object.defineProperty(sandboxProcess, 'kill', { value: () => true });
     return { proxyProcess, sandboxProcess };
   }
 

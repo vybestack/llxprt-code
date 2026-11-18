@@ -19,10 +19,12 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import {
   HANDLED_EXIT_STATUS,
+  SIGNALLED_EXIT_TIMEOUT_MS,
   SandboxHostHarness,
   TEST_TIMEOUT_MS,
   handlingStub,
   isAlive,
+  waitUntil,
 } from './__tests__/sandbox-host-harness.js';
 
 /**
@@ -143,15 +145,21 @@ describe('container sandbox hop signal handling', () => {
       }
 
       it(
-        'still terminates the host when the sidecar exits while the sandboxed child is running',
+        'still terminates the host and stops the sandboxed child when the sidecar exits while it is running',
         async () => {
-          const { finished } = await startHostWithSidecar(handlingStub());
+          const { childPid, finished } =
+            await startHostWithSidecar(handlingStub());
 
           process.kill(harness.readPid('proxy.pid'), 'SIGKILL');
           const result = await finished;
 
           expect(result.exitCode).toBe(1);
-          expect(fs.existsSync(harness.file('received'))).toBe(false);
+          // Observed before teardown, which would hide a surviving child.
+          await waitUntil(
+            () => !isAlive(childPid),
+            'the sandboxed child to be stopped',
+            SIGNALLED_EXIT_TIMEOUT_MS,
+          );
         },
         TEST_TIMEOUT_MS,
       );
