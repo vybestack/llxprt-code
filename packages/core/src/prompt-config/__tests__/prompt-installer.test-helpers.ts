@@ -9,6 +9,27 @@
  * test file under the eslint max-lines limit.
  */
 
+import { afterEach, beforeEach } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+/** Registers a fresh temp prompts directory per test; returns an accessor. */
+export function usePromptsDir(): () => string {
+  let dir: string | undefined;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'llxprt-prompts-'));
+  });
+  afterEach(() => {
+    if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+  return () => {
+    if (dir === undefined) throw new Error('prompts dir not initialised');
+    return dir;
+  };
+}
+
 const HEX_DIGITS = '0123456789abcdefABCDEF';
 
 function isDigit(ch: string): boolean {
