@@ -51,6 +51,60 @@ describe('stripScratchpadSections', () => {
     const text = `\n${SNAPSHOT}\n`;
     expect(stripScratchpadSections(text)).toBe(text);
   });
+
+  it('keeps a quoted scratchpad pair inside the snapshot verbatim', () => {
+    const snapshot =
+      '<state_snapshot>Removed the <scratchpad> request from compression.md. IMPORTANT-FACT-1. IMPORTANT-FACT-2. Strip </scratchpad> blocks.</state_snapshot>';
+
+    expect(
+      stripScratchpadSections(`<scratchpad>notes</scratchpad>\n${snapshot}`),
+    ).toBe(snapshot);
+  });
+
+  it('keeps a quoted opening scratchpad tag inside the snapshot verbatim', () => {
+    const snapshot =
+      '<state_snapshot>The old prompt asked for a private <scratchpad> first.</state_snapshot>';
+
+    expect(stripScratchpadSections(snapshot)).toBe(snapshot);
+  });
+
+  it('removes a scratchpad block after the snapshot element', () => {
+    expect(
+      stripScratchpadSections(
+        `${SNAPSHOT}\n<scratchpad>afterthought</scratchpad>`,
+      ),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('removes an unterminated scratchpad after the snapshot to the end', () => {
+    expect(
+      stripScratchpadSections(`${SNAPSHOT}\n<scratchpad>trailing notes`),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('drops everything before the snapshot when an unterminated scratchpad follows other text', () => {
+    expect(
+      stripScratchpadSections(`Let me think.\n<scratchpad>notes\n${SNAPSHOT}`),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('removes a scratchpad block whose opening tag carries attributes', () => {
+    expect(
+      stripScratchpadSections(`<scratchpad type="x">a</scratchpad>${SNAPSHOT}`),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('removes an unterminated scratchpad whose opening tag carries attributes', () => {
+    expect(
+      stripScratchpadSections(`<scratchpad mode="private">a\n${SNAPSHOT}`),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('leaves tags that only start with the word scratchpad alone', () => {
+    const text = `<scratchpads>list</scratchpads>${SNAPSHOT}`;
+
+    expect(stripScratchpadSections(text)).toBe(text);
+  });
 });
 
 describe('provider requests recover summaries that carry a scratchpad', () => {
@@ -105,6 +159,45 @@ describe('provider requests recover summaries that carry a scratchpad', () => {
     });
 
     expect(textOf(service.getCuratedForProvider()[0])).toBe(SNAPSHOT);
+  });
+
+  it('recovers an untagged summary recorded before summaries were tagged', () => {
+    const service = serviceWith(
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: `
+  <scratchpad>old reasoning</scratchpad>
+${SNAPSHOT}`,
+          },
+        ],
+      },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Got it.' }] },
+    );
+
+    expect(textOf(service.getCuratedForProvider()[0])).toBe(SNAPSHOT);
+  });
+
+  it('never alters an untagged user message that does not open with a scratchpad', () => {
+    const userText = `Compare this with the summary: <scratchpad>x</scratchpad>${SNAPSHOT}`;
+    const service = serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
+  });
+
+  it('never alters an untagged user message that opens with a scratchpad but has no snapshot', () => {
+    const userText = '<scratchpad>is this tag allowed?</scratchpad> asking';
+    const service = serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
   });
 
   it('leaves the stored history untouched', () => {
