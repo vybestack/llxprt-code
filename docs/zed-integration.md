@@ -201,6 +201,12 @@ The terminal is correlated to the originating tool call (by command and working 
 
 When the terminal capability is absent (or `false`), shell output is captured as text and emitted via the standard `content` content block — the same behavior as non-terminal ACP clients.
 
+## Shutdown
+
+The agent process stops itself when the connection ends. Closing the client's end of stdin (for example when the editor exits or crashes), `SIGTERM` and `SIGINT` all start the same sequence: running tool calls are aborted, sessions are released, and the process exits. Shell commands started by tool calls are terminated.
+
+Releasing the sessions and the final cleanup are each waited for at most 10 seconds. If either takes longer, the agent logs a warning and exits anyway. The exit status is 0 after stdin closes or `SIGTERM`, and 130 after `SIGINT`.
+
 ## Related
 
 - [Zed External Agents Documentation](https://zed.dev/docs/ai/external-agents)
