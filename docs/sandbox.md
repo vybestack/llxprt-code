@@ -471,6 +471,12 @@ The host never escalates to SIGKILL, so a CLI that ignores the signal keeps the
 session running. SIGKILL sent to the host ends the host at once and gives the
 CLI no chance to shut down; the sandboxed process can keep running.
 
+If the network proxy ends on its own while a session runs (the Seatbelt proxy
+command or the Docker or Podman proxy sidecar), the host sends SIGTERM to the
+sandboxed CLI and waits for it to exit. Seatbelt then exits with status 1.
+Docker and Podman release their volumes and report a sandbox error with exit
+status 44. This wait has no time limit either.
+
 ### Privilege hardening (container mode)
 
 Every Docker and Podman sandbox run is started with two privilege-hardening

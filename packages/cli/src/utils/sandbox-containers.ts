@@ -647,24 +647,48 @@ export async function startProxyContainer(
   };
 }
 
+/**
+ * What the proxy sidecar's close handler observed, read by the launch path
+ * after the sandbox child has closed.
+ */
+export interface ProxyContainerWatch {
+  /** Throws the fatal error for a sidecar that exited without being asked to. */
+  throwIfFailed(): void;
+}
+
+const NO_PROXY_CONTAINER_FAILURE: ProxyContainerWatch = {
+  throwIfFailed: () => {},
+};
+
+/**
+ * Ends the sandbox child when the proxy sidecar dies unasked, and records the
+ * failure for the launch path. The launch path raises it after the child has
+ * closed: a throw from this listener would end the host at once, before the
+ * child's close and before the release of the resources the launch owns.
+ */
 export function wireProxyContainerCloseHandler(
   proxyContainer: ProxyContainerHandle | undefined,
   sandboxProcess: ChildProcess,
-): void {
-  if (proxyContainer === undefined) return;
+): ProxyContainerWatch {
+  if (proxyContainer === undefined) return NO_PROXY_CONTAINER_FAILURE;
+  let failure: FatalSandboxError | undefined;
   proxyContainer.process.on('close', (code, signal) => {
     // An intended stop ends the sidecar while the sandboxed child is still
     // handling the same signal. The host keeps waiting for that child and
     // exits with its status; only a sidecar that dies unasked is fatal.
     if (proxyContainer.isStopRequested()) return;
-    // The sandbox child is not detached, so there is no process group with its
-    // id to signal; address the child itself. A group kill threw ESRCH here
-    // and left the child running.
-    sandboxProcess.kill('SIGTERM');
-    throw new FatalSandboxError(
+    failure = new FatalSandboxError(
       `Proxy container command '${proxyContainer.command}' exited with code ${code}, signal ${signal}`,
     );
+    // The sandbox child is not detached, so there is no process group with its
+    // id to signal; address the child itself.
+    sandboxProcess.kill('SIGTERM');
   });
+  return {
+    throwIfFailed: () => {
+      if (failure !== undefined) throw failure;
+    },
+  };
 }
 
 /** Wires all cleanup handlers into the sandbox process lifecycle. */

@@ -83,7 +83,7 @@ export async function runSeatbeltSandbox(
     await setupSeatbeltProxy();
   const sandboxProcess = spawnSeatbeltProcess(config, args, sandboxEnv);
   forwardSignalsToSandboxProcess(sandboxProcess);
-  wireSeatbeltProxyCloseHandler(
+  const proxyWatch = wireSeatbeltProxyCloseHandler(
     proxyProcess,
     sandboxProcess,
     proxyCommand,
@@ -112,6 +112,7 @@ export async function runSeatbeltSandbox(
 
   return waitForSeatbeltExit(
     sandboxProcess,
+    proxyWatch,
     stdinWasPaused,
     stdinHadRawMode,
     cliConfig,
@@ -317,21 +318,35 @@ function signalSeatbeltProcessGroup(pid: number): void {
   }
 }
 
+/** Exit status of a launch whose proxy died while the sandbox was running. */
+const PROXY_FAILURE_EXIT_STATUS = 1;
+
+/** What the proxy close handler observed, read once the sandbox has closed. */
+export interface SeatbeltProxyWatch {
+  /** True when the proxy exited without being asked to while the sandbox ran. */
+  hasFailed(): boolean;
+}
+
+const NO_PROXY_FAILURE: SeatbeltProxyWatch = { hasFailed: () => false };
+
 /**
  * Terminate the sandbox when its credential proxy dies unexpectedly.
  *
  * Exported for direct unit testing of the ordering contract: a proxy close is
  * fatal only while the sandbox is still running and the host did not ask for
- * the proxy to stop.
+ * the proxy to stop. The handler signals the sandbox and records the failure;
+ * the launch waits for the sandbox to close and then exits with status 1. Like
+ * a forwarded signal, this adds no SIGKILL escalation, so a sandbox that
+ * ignores SIGTERM keeps the host waiting.
  */
 export function wireSeatbeltProxyCloseHandler(
   proxyProcess: ChildProcess | undefined,
   sandboxProcess: ChildProcess,
   proxyCommand: string | undefined,
   isProxyStopRequested: () => boolean = () => false,
-): void {
+): SeatbeltProxyWatch {
   if (!proxyProcess || !proxyCommand) {
-    return;
+    return NO_PROXY_FAILURE;
   }
   // The proxy is a child of this process and closes as part of normal teardown
   // once the sandbox itself has exited. A close is therefore only a failure
@@ -341,6 +356,7 @@ export function wireSeatbeltProxyCloseHandler(
   // before the sandbox does; that is the shutdown, and the host keeps waiting
   // for the sandbox and exits with its status.
   let sandboxExited = false;
+  let failed = false;
   sandboxProcess.once('exit', () => {
     sandboxExited = true;
   });
@@ -349,16 +365,15 @@ export function wireSeatbeltProxyCloseHandler(
     if (sandboxExited || isProxyStopRequested()) {
       return;
     }
-    // The sandbox child is not detached, so there is no process group with its
-    // id to signal; address the child itself.
-    sandboxProcess.kill('SIGTERM');
-    // Avoid throwing inside an event callback (uncaught async throw).
-    // Log the failure and terminate the sandbox so it does not outlive the host.
+    failed = true;
     debugLogger.error(
       `Proxy command '${proxyCommand}' exited with code ${code}, signal ${signal}`,
     );
-    process.exit(1);
+    // The sandbox child is not detached, so there is no process group with its
+    // id to signal; address the child itself.
+    sandboxProcess.kill('SIGTERM');
   });
+  return { hasFailed: () => failed };
 }
 
 function spawnSeatbeltProcess(
@@ -374,6 +389,7 @@ function spawnSeatbeltProcess(
 
 async function waitForSeatbeltExit(
   sandboxProcess: ChildProcess,
+  proxyWatch: SeatbeltProxyWatch,
   stdinWasPaused: boolean,
   stdinHadRawMode: boolean,
   cliConfig?: Config,
@@ -396,7 +412,11 @@ async function waitForSeatbeltExit(
         );
         return;
       }
-      resolve(normalizeExitCode(code, signal));
+      resolve(
+        proxyWatch.hasFailed()
+          ? PROXY_FAILURE_EXIT_STATUS
+          : normalizeExitCode(code, signal),
+      );
     };
     sandboxProcess.on('close', (code, signal) => {
       if (!process.stdin.isTTY) {

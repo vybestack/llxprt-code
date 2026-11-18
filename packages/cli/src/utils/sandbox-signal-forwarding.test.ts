@@ -21,12 +21,10 @@ import {
   FORWARDED_SIGNALS,
   HANDLED_EXIT_STATUS,
   SIGNAL_NUMBERS,
-  SIGNALLED_EXIT_TIMEOUT_MS,
   SandboxHostHarness,
   TEST_TIMEOUT_MS,
   handlingStub,
   isAlive,
-  waitUntil,
 } from './__tests__/sandbox-host-harness.js';
 
 /**
@@ -198,20 +196,18 @@ describe('sandbox hop signal forwarding', () => {
       }
 
       it(
-        'still terminates the host and stops the sandboxed child when the proxy dies while it is running',
+        'stops the sandboxed child and exits 1 only after it has closed when the proxy dies while it is running',
         async () => {
-          const { childPid, finished } = await startProxiedHost(HANDLING_STUB);
+          const { childPid, finished } = await startProxiedHost(LINGERING_STUB);
 
           process.kill(harness.readPid('proxy.pid'), 'SIGKILL');
           const result = await finished;
 
+          expect(harness.readText('received')).toBe('TERM');
           expect(result.exitCode).toBe(1);
-          // Observed before teardown, which would hide a surviving child.
-          await waitUntil(
-            () => !isAlive(childPid),
-            'the sandboxed child to be stopped',
-            SIGNALLED_EXIT_TIMEOUT_MS,
-          );
+          // The host waited for the child, so it is already gone. Teardown
+          // would kill a survivor and hide a host that left early.
+          expect(isAlive(childPid)).toBe(false);
         },
         TEST_TIMEOUT_MS,
       );

@@ -95,13 +95,6 @@ export const DEFAULT_DISPOSITION_STUB = [
   'exec sleep 600',
 ].join('\n');
 
-/**
- * How long a process that has been signalled gets to exit after its host is
- * gone. The signal is already delivered by then, so this only covers
- * scheduling on a loaded machine.
- */
-export const SIGNALLED_EXIT_TIMEOUT_MS = 60_000;
-
 export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);

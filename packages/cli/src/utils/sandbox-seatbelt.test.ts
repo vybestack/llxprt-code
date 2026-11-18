@@ -766,8 +766,9 @@ describe('wireSeatbeltProxyCloseHandler', () => {
     const proxyProcess = new EventEmitter() as unknown as ChildProcess;
     const sandboxProcess = new EventEmitter() as unknown as ChildProcess;
     Object.defineProperty(sandboxProcess, 'pid', { value: 0 });
-    Object.defineProperty(sandboxProcess, 'kill', { value: () => true });
-    return { proxyProcess, sandboxProcess };
+    const kill = vi.fn(() => true);
+    Object.defineProperty(sandboxProcess, 'kill', { value: kill });
+    return { proxyProcess, sandboxProcess, kill };
   }
 
   it('does not terminate the CLI when the proxy closes after the sandbox exited', () => {
@@ -787,19 +788,40 @@ describe('wireSeatbeltProxyCloseHandler', () => {
     }
   });
 
-  it('terminates the CLI when the proxy dies while the sandbox is still running', () => {
-    const { proxyProcess, sandboxProcess } = makeEmitterPair();
+  it('signals the sandbox and records the failure, without exiting, when the proxy dies while the sandbox is still running', () => {
+    const { proxyProcess, sandboxProcess, kill } = makeEmitterPair();
     const exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((() => undefined) as never);
     try {
-      wireSeatbeltProxyCloseHandler(proxyProcess, sandboxProcess, 'proxy-cmd');
+      const watch = wireSeatbeltProxyCloseHandler(
+        proxyProcess,
+        sandboxProcess,
+        'proxy-cmd',
+      );
 
       (proxyProcess as unknown as EventEmitter).emit('close', 1, null);
 
-      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(kill).toHaveBeenCalledWith('SIGTERM');
+      expect(watch.hasFailed()).toBe(true);
+      expect(exitSpy).not.toHaveBeenCalled();
     } finally {
       exitSpy.mockRestore();
     }
+  });
+
+  it('does not record a failure when the host asked for the proxy to stop', () => {
+    const { proxyProcess, sandboxProcess, kill } = makeEmitterPair();
+    const watch = wireSeatbeltProxyCloseHandler(
+      proxyProcess,
+      sandboxProcess,
+      'proxy-cmd',
+      () => true,
+    );
+
+    (proxyProcess as unknown as EventEmitter).emit('close', 0, null);
+
+    expect(kill).not.toHaveBeenCalled();
+    expect(watch.hasFailed()).toBe(false);
   });
 });

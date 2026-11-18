@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -16,7 +16,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { PortForwardingResult, SshAgentResult } from './sandbox-ssh.js';
-import type { ContainerSandboxPrepared } from './sandbox-containers.js';
+import type {
+  ContainerSandboxPrepared,
+  ProxyContainerWatch,
+} from './sandbox-containers.js';
 import { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
 import {
   buildContainerRunArgs,
@@ -411,6 +414,37 @@ async function startCredentialProxyGuarded(
   return cpResult;
 }
 
+/**
+ * Waits for the sandbox child to close and returns its exit status. A sidecar
+ * failure is raised from here, after the child has closed and the volumes are
+ * released, so the cleanup that follows a normal exit also follows this one.
+ */
+export async function awaitSandboxExit(
+  sandboxProcess: ChildProcess,
+  proxyContainerWatch: ProxyContainerWatch,
+  releaseVolumes: () => void,
+): Promise<number> {
+  const exitCode = await new Promise<number>((resolve) => {
+    sandboxProcess.on('close', (code, signal) => {
+      const ec = normalizeExitCode(code, signal);
+      if (ec !== 0) {
+        debugLogger.log(
+          `Sandbox process exited with code: ${code}, signal: ${signal}`,
+        );
+      }
+      resolve(ec);
+    });
+  });
+
+  // Release volumes after every close listener and its queued I/O have
+  // completed. Docker Desktop can expose a nested destination until teardown
+  // finishes; an early release can leave an engine-created mountpoint behind.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  releaseVolumes();
+  proxyContainerWatch.throwIfFailed();
+  return exitCode;
+}
+
 /** Spawns container and proxy, wires cleanup, and waits for exit. */
 async function executeContainerSandbox(
   config: SandboxConfig,
@@ -463,7 +497,10 @@ async function executeContainerSandbox(
     sandboxProcess.kill('SIGTERM');
   });
   dependencyVolumeLifecycle.recordMainContainerName(containerName);
-  wireProxyContainerCloseHandler(proxyContainerProcess, sandboxProcess);
+  const proxyContainerWatch = wireProxyContainerCloseHandler(
+    proxyContainerProcess,
+    sandboxProcess,
+  );
   restoreStdinAfterSandbox(
     sandboxProcess,
     stdinWasPaused,
@@ -485,23 +522,11 @@ async function executeContainerSandbox(
   // from here the normal session lifecycle performs every release.
   lifecycle.transferToProcessHandlers();
 
-  const exitCode = await new Promise<number>((resolve) => {
-    sandboxProcess.on('close', (code, signal) => {
-      const ec = normalizeExitCode(code, signal);
-      if (ec !== 0) {
-        debugLogger.log(
-          `Sandbox process exited with code: ${code}, signal: ${signal}`,
-        );
-      }
-      resolve(ec);
-    });
-  });
-
-  // Release volumes after every close listener and its queued I/O have
-  // completed. Docker Desktop can expose a nested destination until teardown
-  // finishes; an early release can leave an engine-created mountpoint behind.
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  dependencyVolumeLifecycle.release();
+  const exitCode = await awaitSandboxExit(
+    sandboxProcess,
+    proxyContainerWatch,
+    () => dependencyVolumeLifecycle.release(),
+  );
 
   return { exitCode, portForwardingResult, credentialProxyBridgeCleanup };
 }

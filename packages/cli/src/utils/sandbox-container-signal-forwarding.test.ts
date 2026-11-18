@@ -13,18 +13,17 @@ import {
   expect,
   it,
 } from 'bun:test';
+import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import fs from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import {
   HANDLED_EXIT_STATUS,
-  SIGNALLED_EXIT_TIMEOUT_MS,
   SandboxHostHarness,
   TEST_TIMEOUT_MS,
   handlingStub,
   isAlive,
-  waitUntil,
 } from './__tests__/sandbox-host-harness.js';
 
 /**
@@ -145,21 +144,21 @@ describe('container sandbox hop signal handling', () => {
       }
 
       it(
-        'still terminates the host and stops the sandboxed child when the sidecar exits while it is running',
+        'stops the sandboxed child, releases the volumes and fails the launch after it has closed when the sidecar exits while it is running',
         async () => {
-          const { childPid, finished } =
-            await startHostWithSidecar(handlingStub());
+          const { childPid, finished } = await startHostWithSidecar(
+            handlingStub('sleep 0.5;'),
+          );
 
           process.kill(harness.readPid('proxy.pid'), 'SIGKILL');
           const result = await finished;
 
-          expect(result.exitCode).toBe(1);
-          // Observed before teardown, which would hide a surviving child.
-          await waitUntil(
-            () => !isAlive(childPid),
-            'the sandboxed child to be stopped',
-            SIGNALLED_EXIT_TIMEOUT_MS,
-          );
+          expect(harness.readText('received')).toBe('TERM');
+          expect(result.exitCode).toBe(new FatalSandboxError('').exitCode);
+          // The host waited for the child, so it is already gone. Teardown
+          // would kill a survivor and hide a host that left early.
+          expect(isAlive(childPid)).toBe(false);
+          expect(fs.existsSync(harness.file('volumes-released'))).toBe(true);
         },
         TEST_TIMEOUT_MS,
       );
