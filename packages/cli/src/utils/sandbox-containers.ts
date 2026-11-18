@@ -54,6 +54,12 @@ const execAsync = promisify(exec);
 export interface ProxyContainerHandle {
   process: ChildProcess;
   command: string;
+  /**
+   * True once this launcher began removing the sidecar on purpose (a host
+   * stop signal, process exit or a failed launch), so a close that follows is
+   * the stop taking effect and not the sidecar failing.
+   */
+  isStopRequested: () => boolean;
 }
 
 export interface ContainerSandboxPrepared {
@@ -634,7 +640,11 @@ export async function startProxyContainer(
   await execAsync(
     `${config.command} network connect ${SANDBOX_NETWORK_NAME} ${SANDBOX_PROXY_NAME}`,
   );
-  return { process: proxyProcess, command: proxyContainerCommand };
+  return {
+    process: proxyProcess,
+    command: proxyContainerCommand,
+    isStopRequested: () => proxyContainerStopped,
+  };
 }
 
 export function wireProxyContainerCloseHandler(
@@ -643,6 +653,10 @@ export function wireProxyContainerCloseHandler(
 ): void {
   if (proxyContainer === undefined) return;
   proxyContainer.process.on('close', (code, signal) => {
+    // An intended stop ends the sidecar while the sandboxed child is still
+    // handling the same signal. The host keeps waiting for that child and
+    // exits with its status; only a sidecar that dies unasked is fatal.
+    if (proxyContainer.isStopRequested()) return;
     const sandboxPid = sandboxProcess.pid;
     if (sandboxPid !== undefined && sandboxPid !== 0) {
       process.kill(-sandboxPid, 'SIGTERM');

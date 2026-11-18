@@ -79,10 +79,16 @@ export async function runSeatbeltSandbox(
     cliArgs,
     directories,
   );
-  const { sandboxEnv, proxyProcess, proxyCommand } = await setupSeatbeltProxy();
+  const { sandboxEnv, proxyProcess, proxyCommand, isProxyStopRequested } =
+    await setupSeatbeltProxy();
   const sandboxProcess = spawnSeatbeltProcess(config, args, sandboxEnv);
   forwardSignalsToSandboxProcess(sandboxProcess);
-  wireSeatbeltProxyCloseHandler(proxyProcess, sandboxProcess, proxyCommand);
+  wireSeatbeltProxyCloseHandler(
+    proxyProcess,
+    sandboxProcess,
+    proxyCommand,
+    isProxyStopRequested,
+  );
 
   // Restore parent stdin mode/state after the sandbox exits.
   const stdinWasPaused = process.stdin.isPaused();
@@ -221,6 +227,8 @@ interface SeatbeltProxySetup {
   sandboxEnv: NodeJS.ProcessEnv;
   proxyProcess?: ChildProcess;
   proxyCommand?: string;
+  /** True once the host began stopping the proxy on purpose. */
+  isProxyStopRequested?: () => boolean;
 }
 
 async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
@@ -255,11 +263,15 @@ async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
     shell: true,
     detached: true,
   });
+  let proxyStopRequested = false;
   const stopProxyHandler = () => {
+    proxyStopRequested = true;
     debugLogger.log('stopping proxy ...');
     const proxyPid = proxyProcess.pid;
     if (proxyPid !== undefined && proxyPid !== 0) {
-      process.kill(-proxyPid, 'SIGTERM');
+      // The signal handler stops the proxy and the exit handler stops it
+      // again; a group that is already gone must not throw out of either.
+      signalSeatbeltProcessGroup(proxyPid);
     }
   };
   process.on('exit', stopProxyHandler);
@@ -285,7 +297,12 @@ async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
       `Proxy command failed to become ready within ${SEATBELT_PROXY_READY_TIMEOUT_MS}ms: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  return { sandboxEnv, proxyProcess, proxyCommand };
+  return {
+    sandboxEnv,
+    proxyProcess,
+    proxyCommand,
+    isProxyStopRequested: () => proxyStopRequested,
+  };
 }
 
 function signalSeatbeltProcessGroup(pid: number): void {
@@ -304,12 +321,14 @@ function signalSeatbeltProcessGroup(pid: number): void {
  * Terminate the sandbox when its credential proxy dies unexpectedly.
  *
  * Exported for direct unit testing of the ordering contract: a proxy close is
- * fatal only while the sandbox is still running.
+ * fatal only while the sandbox is still running and the host did not ask for
+ * the proxy to stop.
  */
 export function wireSeatbeltProxyCloseHandler(
   proxyProcess: ChildProcess | undefined,
   sandboxProcess: ChildProcess,
   proxyCommand: string | undefined,
+  isProxyStopRequested: () => boolean = () => false,
 ): void {
   if (!proxyProcess || !proxyCommand) {
     return;
@@ -317,14 +336,17 @@ export function wireSeatbeltProxyCloseHandler(
   // The proxy is a child of this process and closes as part of normal teardown
   // once the sandbox itself has exited. A close is therefore only a failure
   // while the sandbox is still running; treating every close as fatal forces
-  // exit(1) at the end of an otherwise successful session.
+  // exit(1) at the end of an otherwise successful session. A host stop signal
+  // also stops the proxy while it relays the signal, so the proxy can close
+  // before the sandbox does; that is the shutdown, and the host keeps waiting
+  // for the sandbox and exits with its status.
   let sandboxExited = false;
   sandboxProcess.once('exit', () => {
     sandboxExited = true;
   });
 
   proxyProcess.on('close', (code, signal) => {
-    if (sandboxExited) {
+    if (sandboxExited || isProxyStopRequested()) {
       return;
     }
     const sandboxPid = sandboxProcess.pid;

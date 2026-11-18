@@ -4,7 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import fs from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_DISPOSITION_STUB,
@@ -31,6 +42,22 @@ const HOST_SCRIPT = fileURLToPath(
 );
 
 const HANDLING_STUB = handlingStub();
+
+/**
+ * Holds the stand-in open after it has recorded the signal, so anything the
+ * host does in response to the signal has time to happen first.
+ */
+const LINGERING_STUB = handlingStub('sleep 0.5;');
+
+/**
+ * The network proxy command: a long-lived process that publishes its pid.
+ * The launcher runs it through a shell in its own process group.
+ */
+const PROXY_COMMAND = [
+  'echo $$ > "$STUB_DIR/proxy.pid.tmp"',
+  'mv "$STUB_DIR/proxy.pid.tmp" "$STUB_DIR/proxy.pid"',
+  'exec sleep 600',
+].join('; ');
 
 // The stand-ins are POSIX shell scripts and Windows cannot deliver these
 // signals to a process as signals.
@@ -97,5 +124,75 @@ describe('sandbox hop signal forwarding', () => {
       },
       TEST_TIMEOUT_MS,
     );
+
+    describe('with a network proxy', () => {
+      let proxyEndpoint: http.Server;
+      let proxyEnv: Record<string, string>;
+
+      beforeAll(async () => {
+        proxyEndpoint = http.createServer((_request, response) => {
+          response.end('ready');
+        });
+        await new Promise<void>((resolve) => {
+          proxyEndpoint.listen(0, '127.0.0.1', resolve);
+        });
+        const { port } = proxyEndpoint.address() as AddressInfo;
+        proxyEnv = {
+          LLXPRT_SANDBOX_PROXY_COMMAND: PROXY_COMMAND,
+          HTTPS_PROXY: `http://127.0.0.1:${port}`,
+          NO_PROXY: '127.0.0.1',
+        };
+      }, TEST_TIMEOUT_MS);
+
+      afterAll(async () => {
+        await new Promise<void>((resolve) => {
+          proxyEndpoint.close(() => resolve());
+        });
+      });
+
+      const startProxiedHost = (stubSource: string) =>
+        harness.startHost(
+          { stubs: { 'sandbox-exec': stubSource }, env: proxyEnv },
+          ['proxy.pid'],
+        );
+
+      // The host stops the proxy on these two signals while it forwards them,
+      // so the proxy can close before the sandboxed child has finished
+      // handling the signal. That is an intended shutdown, not a proxy failure.
+      for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+        it(
+          `waits for the sandboxed child and exits with its status when ${signal} also stops the proxy`,
+          async () => {
+            const { host, childPid, finished } =
+              await startProxiedHost(LINGERING_STUB);
+
+            host.kill(signal);
+            const result = await finished;
+
+            expect(harness.readText('received')).toBe(
+              signal.slice('SIG'.length),
+            );
+            expect(result.exitCode).toBe(HANDLED_EXIT_STATUS);
+            expect(isAlive(childPid)).toBe(false);
+            expect(isAlive(harness.readPid('proxy.pid'))).toBe(false);
+          },
+          TEST_TIMEOUT_MS,
+        );
+      }
+
+      it(
+        'still terminates the host when the proxy dies while the sandboxed child is running',
+        async () => {
+          const { finished } = await startProxiedHost(HANDLING_STUB);
+
+          process.kill(harness.readPid('proxy.pid'), 'SIGKILL');
+          const result = await finished;
+
+          expect(result.exitCode).toBe(1);
+          expect(fs.existsSync(harness.file('received'))).toBe(false);
+        },
+        TEST_TIMEOUT_MS,
+      );
+    });
   });
 });
