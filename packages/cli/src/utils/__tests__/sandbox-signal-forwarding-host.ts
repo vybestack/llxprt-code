@@ -14,6 +14,8 @@
  * The stand-in is an executable named `sandbox-exec` that the test puts
  * first on PATH, the same way the other Seatbelt tests substitute the binary.
  * STUB_DIR names the directory the test and the stand-in share.
+ * HOST_SANDBOX_COMMAND replaces the launcher name, so a test can point the
+ * launch at an executable that does not exist.
  *
  * The host writes `ready` into STUB_DIR once the launch path has registered
  * its signal handlers. A signal that arrives earlier meets Node's default
@@ -45,7 +47,11 @@ const readiness = setInterval(() => {
   }
 }, 5);
 const exitCode = await runSeatbeltSandbox(
-  { command: 'sandbox-exec' as const, image: 'unused' },
+  {
+    command: (process.env['HOST_SANDBOX_COMMAND'] ??
+      'sandbox-exec') as 'sandbox-exec',
+    image: 'unused',
+  },
   [],
   undefined,
   ['llxprt', '--experimental-acp'],

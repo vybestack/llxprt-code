@@ -125,6 +125,22 @@ describe('sandbox hop signal forwarding', () => {
       TEST_TIMEOUT_MS,
     );
 
+    it(
+      'fails the launch with the spawn error when the sandbox launcher cannot be started',
+      async () => {
+        const missingLauncher = harness.file('no-such-launcher');
+
+        const result = await harness.runToExit({
+          env: { HOST_SANDBOX_COMMAND: missingLauncher },
+        });
+
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderr).toContain(missingLauncher);
+        expect(result.stderr).toContain('ENOENT');
+      },
+      TEST_TIMEOUT_MS,
+    );
+
     describe('with a network proxy', () => {
       let proxyEndpoint: http.Server;
       let proxyEnv: Record<string, string>;

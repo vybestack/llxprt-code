@@ -379,10 +379,29 @@ async function waitForSeatbeltExit(
   stdinHadRawMode: boolean,
   cliConfig?: Config,
 ): Promise<number> {
-  return new Promise<number>((resolve) => {
+  return new Promise<number>((resolve, reject) => {
+    // The signal forwarder listens for 'error' so it can release its handlers,
+    // and that listener also keeps Node from throwing the 'error' event. A
+    // launcher that never started has no exit status to return, so report why.
+    let spawnFailure: Error | undefined;
+    sandboxProcess.on('error', (error) => {
+      debugLogger.error('Sandbox process error:', error);
+      if (sandboxProcess.pid === undefined) spawnFailure = error;
+    });
+    const settle = (code: number | null, signal: NodeJS.Signals | null) => {
+      if (spawnFailure !== undefined) {
+        reject(
+          new FatalSandboxError(
+            `Failed to start the macOS Seatbelt sandbox: ${getErrorMessage(spawnFailure)}`,
+          ),
+        );
+        return;
+      }
+      resolve(normalizeExitCode(code, signal));
+    };
     sandboxProcess.on('close', (code, signal) => {
       if (!process.stdin.isTTY) {
-        resolve(normalizeExitCode(code, signal));
+        settle(code, signal);
         return;
       }
       if (!stdinWasPaused) {
@@ -401,7 +420,7 @@ async function waitForSeatbeltExit(
           }
         }
       }
-      resolve(normalizeExitCode(code, signal));
+      settle(code, signal);
     });
   });
 }
