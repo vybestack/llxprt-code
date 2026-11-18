@@ -60,7 +60,27 @@ tag gets an extra notice in `InstallResult.notices`.
 Tests (core, temp dirs): an old default copy without a manifest entry is upgraded; an edited copy
 with a scratchpad is kept and reported.
 
+## 5. Review follow-ups
+
+- Stripping touches only text outside the `<state_snapshot>` element (before the first opening
+  tag, after the last closing tag); a snapshot that quotes `<scratchpad>` is kept verbatim.
+  Opening tags may carry attributes (`<scratchpad\b[^>]*>`); an unterminated scratchpad before
+  the snapshot drops the whole preamble, one after it (or in text without a snapshot) runs to the
+  end.
+- Untagged summaries recorded before #2768 are recognized by shape: a human entry that opens
+  with `<scratchpad` and holds `<state_snapshot>`.
+- `compression.md` resolves through `loadCompressionPromptFile` like the other files, so the
+  fallback is the shipped default. `getCompressionPrompt()` and its TS template are deleted; the
+  enriched sections it alone had (REQ-HD-010) moved into `defaults/compression.md`. An existing
+  but unreadable prompt file fails fast.
+- Runtime-data turns come from prompt files with a literal placeholder:
+  `compression/active-todos.md` (`{{ACTIVE_TODOS}}`), `compression/transcript-path.md`
+  (`{{TRANSCRIPT_PATH}}`), `compression/large-last-prompt.md` (`{{LAST_USER_PROMPT}}`). An
+  override without its placeholder fails with `PromptResolutionError`. Shipped text unchanged.
+- The CLI session host drains the installer notices after the agent is constructed and records
+  them as startup warnings (TUI in interactive mode, stderr otherwise).
+
 ## Verification
 
 typecheck, lint, runtime-state boundary, format, build, full test suite (nohup, tmp/verify4128),
-smoke with `lunahigh`.
+smoke with the `opus` profile (also with a scratchpad `compression.md` to see the warning).
