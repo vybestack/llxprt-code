@@ -495,8 +495,8 @@ export async function initializePromptSystem(): Promise<void> {
 
 /**
  * Provides the system prompt for the history compression process.
- * This prompt instructs the model to act as a specialized state manager,
- * think in a scratchpad, and produce a structured XML summary.
+ * This prompt instructs the model to act as a specialized state manager
+ * and produce only a structured XML summary.
  */
 export function getCompressionPrompt(): string {
   return COMPRESSION_PROMPT_TEMPLATE.trim();
@@ -507,9 +507,9 @@ You are the component that summarizes internal chat history into a given structu
 
 When the conversation history grows too large, you will be invoked to compress the MIDDLE portion of the history into a structured XML snapshot, reducing it by approximately 50%. This snapshot will be combined with preserved messages from the top and bottom of the conversation. The agent will have access to the full context: summary + preserved top messages + preserved bottom messages.
 
-First, you will think through the middle portion of history in a private <scratchpad>. Review the user's overall goal, the agent's actions, tool outputs, file modifications, and any unresolved questions. Identify the most important information to preserve. Remember: user prompts and their exact phrasing are especially important to retain.
+Review the user's overall goal, the agent's actions, tool outputs, file modifications, and any unresolved questions. Identify the most important information to preserve. Remember: user prompts and their exact phrasing are especially important to retain.
 
-After your reasoning is complete, generate the final <state_snapshot> XML object. Be thorough but concise. Focus on preserving essential context while eliminating redundancy. Ensure the agent has sufficient information to continue work effectively.
+Respond with only the final <state_snapshot> XML object, with nothing before or after it. Be thorough but concise. Focus on preserving essential context while eliminating redundancy. Ensure the agent has sufficient information to continue work effectively.
 
 The structure MUST be as follows:
 

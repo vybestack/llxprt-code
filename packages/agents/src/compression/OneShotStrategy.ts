@@ -51,7 +51,7 @@ import {
   adjustForToolCallBoundary,
   aggregateTextFromBlocks,
   buildTriggerInstruction,
-  COMPRESSION_SECURITY_PREAMBLE,
+  buildSecurityPreamble,
   runVerificationPass,
   sanitizeHistoryForCompression,
 } from './utils.js';
@@ -174,9 +174,9 @@ export class OneShotStrategy implements CompressionStrategy {
     toCompress: IContent[],
   ): IContent[] {
     const prompt = this.resolvePrompt(context);
-    const triggerInstruction = buildTriggerInstruction(toCompress);
+    const triggerInstruction = buildTriggerInstruction(context, toCompress);
     return [
-      COMPRESSION_SECURITY_PREAMBLE,
+      buildSecurityPreamble(context),
       { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
       ...sanitizeHistoryForCompression(toCompress),
       ...this.buildContextInjections(context),

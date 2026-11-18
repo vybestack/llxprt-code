@@ -26,6 +26,12 @@ The same hierarchy applies to `env/` and `tools/` subdirectories.
 <config>/prompts/
 ├── core.md                              # Override the main system prompt
 ├── compression.md                       # Override compression instructions
+├── compression/
+│   ├── security-preamble.md            # First turn of every compression request
+│   ├── trigger.md                      # Final turn asking for the <state_snapshot>
+│   ├── trigger-with-prior-snapshot.md  # Final turn when an earlier snapshot is compressed
+│   ├── verification-request.md         # Opens the optional verification pass
+│   └── verification-follow-up.md       # Closes the optional verification pass
 ├── env/
 │   ├── git-repository.md               # Added when in a Git repo
 │   ├── sandbox.md                      # Added when sandboxed (container)

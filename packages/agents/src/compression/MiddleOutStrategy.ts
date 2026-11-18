@@ -53,7 +53,7 @@ import {
   aggregateTextFromBlocks,
   findForwardValidSplitPoint,
   buildTriggerInstruction,
-  COMPRESSION_SECURITY_PREAMBLE,
+  buildSecurityPreamble,
   runVerificationPass,
   sanitizeHistoryForCompression,
   mediaBlockToCompressionPlaceholder,
@@ -187,9 +187,9 @@ export class MiddleOutStrategy implements CompressionStrategy {
     largeLastPromptInjection: IContent[],
   ): IContent[] {
     const prompt = this.resolvePrompt(context);
-    const triggerInstruction = buildTriggerInstruction(toCompress);
+    const triggerInstruction = buildTriggerInstruction(context, toCompress);
     return [
-      COMPRESSION_SECURITY_PREAMBLE,
+      buildSecurityPreamble(context),
       { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
       ...sanitizeHistoryForCompression(toCompress),
       ...this.buildContextInjections(context),

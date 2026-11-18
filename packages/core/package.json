@@ -394,6 +394,10 @@
       "bun": "./src/core/clientContract.ts",
       "import": "./dist/src/core/clientContract.js"
     },
+    "./core/compression/compressionPromptFiles.js": {
+      "bun": "./src/core/compression/compressionPromptFiles.ts",
+      "import": "./dist/src/core/compression/compressionPromptFiles.js"
+    },
     "./core/compression/continuationDirective.js": {
       "bun": "./src/core/compression/continuationDirective.ts",
       "import": "./dist/src/core/compression/continuationDirective.js"

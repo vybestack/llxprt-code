@@ -385,6 +385,19 @@ export const CORE_DEFAULTS: Record<string, string> = {
   'core.md': loadMarkdownFile('core.md'),
 
   'compression.md': loadMarkdownFile('compression.md'),
+  'compression/security-preamble.md': loadMarkdownFile(
+    'compression/security-preamble.md',
+  ),
+  'compression/trigger.md': loadMarkdownFile('compression/trigger.md'),
+  'compression/trigger-with-prior-snapshot.md': loadMarkdownFile(
+    'compression/trigger-with-prior-snapshot.md',
+  ),
+  'compression/verification-request.md': loadMarkdownFile(
+    'compression/verification-request.md',
+  ),
+  'compression/verification-follow-up.md': loadMarkdownFile(
+    'compression/verification-follow-up.md',
+  ),
 
   'subagent-delegation.md': loadMarkdownFile('subagent-delegation.md'),
 
