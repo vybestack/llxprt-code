@@ -196,6 +196,10 @@
       "bun": "./src/services/image/imageOperationDispatch.ts",
       "import": "./dist/src/services/image/imageOperationDispatch.js"
     },
+    "./services/history/compressionSummaryScratchpad.js": {
+      "bun": "./src/services/history/compressionSummaryScratchpad.ts",
+      "import": "./dist/src/services/history/compressionSummaryScratchpad.js"
+    },
     "./services/history/ContentConverters.js": {
       "bun": "./src/services/history/ContentConverters.ts",
       "import": "./dist/src/services/history/ContentConverters.js"

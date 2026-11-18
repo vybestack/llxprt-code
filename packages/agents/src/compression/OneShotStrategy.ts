@@ -52,6 +52,7 @@ import {
   aggregateTextFromBlocks,
   buildTriggerInstruction,
   buildSecurityPreamble,
+  finalizeSummaryText,
   runVerificationPass,
   sanitizeHistoryForCompression,
 } from './utils.js';
@@ -130,7 +131,7 @@ export class OneShotStrategy implements CompressionStrategy {
     );
 
     const {
-      text: summary,
+      text: rawSummary,
       usage: capturedUsage,
       diagnostics,
     } = await this.callProvider(
@@ -143,6 +144,7 @@ export class OneShotStrategy implements CompressionStrategy {
       invocation,
     );
 
+    const summary = finalizeSummaryText(rawSummary);
     if (!summary.trim()) {
       throw new EmptySummaryError('one-shot', diagnostics);
     }

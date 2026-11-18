@@ -54,6 +54,7 @@ import {
   findForwardValidSplitPoint,
   buildTriggerInstruction,
   buildSecurityPreamble,
+  finalizeSummaryText,
   runVerificationPass,
   sanitizeHistoryForCompression,
   mediaBlockToCompressionPlaceholder,
@@ -416,7 +417,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     } = providerResult;
 
     const {
-      text: summary,
+      text: rawSummary,
       usage: capturedUsage,
       diagnostics,
     } = await this.callProvider(
@@ -429,6 +430,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       invocation,
     );
 
+    const summary = finalizeSummaryText(rawSummary);
     if (!summary.trim()) {
       throw new EmptySummaryError('middle-out', diagnostics);
     }

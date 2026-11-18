@@ -53,6 +53,10 @@ import {
   loadCompressionPromptFile,
   type CompressionPromptSource,
 } from '@vybestack/llxprt-code-core/core/compression/compressionPromptFiles.js';
+import {
+  stripScratchpadFromCompressionSummaries,
+  stripScratchpadSections,
+} from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
 /**
@@ -251,6 +255,14 @@ export function buildTriggerInstruction(
 }
 
 /**
+ * Finalize summarizer output before it becomes a summary: a scratchpad the
+ * model wrote anyway is removed so it can never reach history (#4128).
+ */
+export function finalizeSummaryText(text: string): string {
+  return stripScratchpadSections(text);
+}
+
+/**
  * Run an optional verification pass after initial compression.
  * Sends the initial summary back to the model and asks it to check for
  * omissions. Returns the improved summary if the model produces one,
@@ -316,7 +328,7 @@ export async function runVerificationPass(
       lastBlockWasNonText = result.lastBlockWasNonText;
     }
 
-    const trimmed = verifiedText.trim();
+    const trimmed = finalizeSummaryText(verifiedText).trim();
     // Use verified output only if non-empty and model produced an improved snapshot
     if (
       trimmed &&
@@ -375,7 +387,7 @@ export function mediaBlockToCompressionPlaceholder(media: MediaBlock): string {
 export function sanitizeHistoryForCompression(
   messages: readonly IContent[],
 ): IContent[] {
-  return messages.map((msg) => {
+  return stripScratchpadFromCompressionSummaries(messages).map((msg) => {
     const hasToolBlocks = msg.blocks.some(
       (b) => b.type === 'tool_call' || b.type === 'tool_response',
     );

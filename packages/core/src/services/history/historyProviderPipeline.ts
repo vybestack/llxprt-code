@@ -18,10 +18,12 @@ import type { IContent } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
 import { HistoryToolNormalization } from './historyToolNormalization.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
+import { stripScratchpadFromCompressionSummaries } from './compressionSummaryScratchpad.js';
 
 /**
  * Build a provider-ready content array from curated history and optional tail
  * contents. This runs the multi-step normalization pipeline:
+ *   0. Strip scratchpad sections from compression summaries (#4128).
  *   1. Split tool calls out of tool-speaker messages.
  *   2. Ensure every tool response has a matching tool call.
  *   3. Ensure every tool call has a matching tool response.
@@ -33,8 +35,9 @@ export function buildProviderContent(
   tailContents: IContent[],
   logger: DebugLogger,
 ): IContent[] {
-  const combined =
-    tailContents.length > 0 ? [...curated, ...tailContents] : curated;
+  const combined = stripScratchpadFromCompressionSummaries(
+    tailContents.length > 0 ? [...curated, ...tailContents] : curated,
+  );
 
   // Defensive: if a tool-speaker message accidentally contains tool_call
   // blocks (e.g., cancellation history recorded as a single "user" Content
