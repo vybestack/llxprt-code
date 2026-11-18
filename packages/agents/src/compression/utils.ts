@@ -255,14 +255,6 @@ export function buildTriggerInstruction(
 }
 
 /**
- * Finalize summarizer output before it becomes a summary: a scratchpad the
- * model wrote anyway is removed so it can never reach history (#4128).
- */
-export function finalizeSummaryText(text: string): string {
-  return stripScratchpadSections(text);
-}
-
-/**
  * Run an optional verification pass after initial compression.
  * Sends the initial summary back to the model and asks it to check for
  * omissions. Returns the improved summary if the model produces one,
@@ -328,7 +320,7 @@ export async function runVerificationPass(
       lastBlockWasNonText = result.lastBlockWasNonText;
     }
 
-    const trimmed = finalizeSummaryText(verifiedText).trim();
+    const trimmed = stripScratchpadSections(verifiedText).trim();
     // Use verified output only if non-empty and model produced an improved snapshot
     if (
       trimmed &&

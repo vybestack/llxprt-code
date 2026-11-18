@@ -11,7 +11,14 @@
  */
 
 import { afterEach, beforeEach } from 'bun:test';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -99,7 +106,12 @@ export function createStrategy(
 export function buildRecordingContext(
   provider: IProvider,
   history: IContent[],
-  options: { promptBaseDir?: string; verification?: boolean } = {},
+  options: {
+    promptBaseDir?: string;
+    verification?: boolean;
+    activeTodos?: string;
+    transcriptPath?: string;
+  } = {},
 ): CompressionContext {
   const base = buildContext({
     history,
@@ -132,6 +144,8 @@ export function buildRecordingContext(
         }
       : {}),
     compressionVerification: options.verification === true,
+    activeTodos: options.activeTodos,
+    transcriptPath: options.transcriptPath,
   };
 }
 
@@ -162,6 +176,11 @@ export function installShippedCompressionDefaults(promptsDir: string): void {
     join(promptsDir, 'compression'),
     { recursive: true },
   );
+}
+
+/** Text of a shipped default prompt file, read from the source tree. */
+export function readShippedDefault(relativePath: string): string {
+  return readFileSync(join(SHIPPED_DEFAULTS_DIR, relativePath), 'utf-8');
 }
 
 export function writePromptFile(

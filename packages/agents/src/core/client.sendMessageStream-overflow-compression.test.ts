@@ -53,7 +53,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
     Promise.resolve('Test system instruction'),
   ),
   getCoreSystemPrompt: vi.fn(() => 'Test system instruction'),
-  getCompressionPrompt: vi.fn(() => 'Test compression prompt'),
   initializePromptSystem: vi.fn(() => Promise.resolve(undefined)),
 }));
 

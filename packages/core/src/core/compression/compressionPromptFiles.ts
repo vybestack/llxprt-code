@@ -10,10 +10,11 @@ import { PromptResolutionError, type CompressionContext } from './types.js';
 
 /**
  * Prompt files, relative to the prompts directory, that hold the compression
- * request text besides `compression.md`. Users override any of them by
- * placing a file at the same relative path (issue #4128).
+ * request text. Users override any of them by placing a file at the same
+ * relative path (issue #4128).
  */
 export const COMPRESSION_PROMPT_FILES = {
+  instructions: 'compression.md',
   securityPreamble: 'compression/security-preamble.md',
   trigger: 'compression/trigger.md',
   triggerWithPriorSnapshot: 'compression/trigger-with-prior-snapshot.md',

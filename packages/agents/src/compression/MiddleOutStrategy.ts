@@ -24,7 +24,6 @@ import { bindCompressionProvider } from './utils.js';
  * ChatSession (getCompressionSplit, directCompressionCall, applyCompression).
  */
 
-import { readFileSync } from 'node:fs';
 import type {
   IContent,
   UsageStats,
@@ -45,7 +44,6 @@ import type {
 import {
   CompressionExecutionError,
   EmptySummaryError,
-  PromptResolutionError,
   isTransientCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -54,14 +52,17 @@ import {
   findForwardValidSplitPoint,
   buildTriggerInstruction,
   buildSecurityPreamble,
-  finalizeSummaryText,
   runVerificationPass,
   sanitizeHistoryForCompression,
   mediaBlockToCompressionPlaceholder,
 } from './utils.js';
+import {
+  COMPRESSION_PROMPT_FILES,
+  loadCompressionPromptFile,
+} from '@vybestack/llxprt-code-core/core/compression/compressionPromptFiles.js';
+import { stripScratchpadSections } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
 import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
-import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
@@ -187,7 +188,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
     toCompress: IContent[],
     largeLastPromptInjection: IContent[],
   ): IContent[] {
-    const prompt = this.resolvePrompt(context);
+    const prompt = loadCompressionPromptFile(
+      context,
+      COMPRESSION_PROMPT_FILES.instructions,
+    );
     const triggerInstruction = buildTriggerInstruction(context, toCompress);
     return [
       buildSecurityPreamble(context),
@@ -376,29 +380,6 @@ export class MiddleOutStrategy implements CompressionStrategy {
     return -1;
   }
 
-  private resolvePrompt(context: CompressionContext): string {
-    const resolved = context.promptResolver.resolveFile(
-      context.promptBaseDir,
-      'compression.md',
-      context.promptContext,
-    );
-
-    if (resolved.found && resolved.path) {
-      try {
-        return readFileSync(resolved.path, 'utf-8');
-      } catch {
-        // Fall through to hardcoded default
-      }
-    }
-
-    // Fall back to the hardcoded compression prompt
-    const fallback = getCompressionPrompt();
-    if (!fallback) {
-      throw new PromptResolutionError('compression.md');
-    }
-    return fallback;
-  }
-
   /**
    * Calls the provider, throws EmptySummaryError with diagnostics if the
    * summary is empty, then runs the optional verification pass.
@@ -430,7 +411,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       invocation,
     );
 
-    const summary = finalizeSummaryText(rawSummary);
+    const summary = stripScratchpadSections(rawSummary);
     if (!summary.trim()) {
       throw new EmptySummaryError('middle-out', diagnostics);
     }

@@ -23,7 +23,6 @@ import { bindCompressionProvider } from './utils.js';
  * above the preserved messages.
  */
 
-import { readFileSync } from 'node:fs';
 import type {
   IContent,
   UsageStats,
@@ -44,7 +43,6 @@ import type {
 import {
   CompressionExecutionError,
   EmptySummaryError,
-  PromptResolutionError,
   isTransientCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -52,11 +50,14 @@ import {
   aggregateTextFromBlocks,
   buildTriggerInstruction,
   buildSecurityPreamble,
-  finalizeSummaryText,
   runVerificationPass,
   sanitizeHistoryForCompression,
 } from './utils.js';
-import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
+import {
+  COMPRESSION_PROMPT_FILES,
+  loadCompressionPromptFile,
+} from '@vybestack/llxprt-code-core/core/compression/compressionPromptFiles.js';
+import { stripScratchpadSections } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
 import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
@@ -144,7 +145,7 @@ export class OneShotStrategy implements CompressionStrategy {
       invocation,
     );
 
-    const summary = finalizeSummaryText(rawSummary);
+    const summary = stripScratchpadSections(rawSummary);
     if (!summary.trim()) {
       throw new EmptySummaryError('one-shot', diagnostics);
     }
@@ -175,7 +176,10 @@ export class OneShotStrategy implements CompressionStrategy {
     context: CompressionContext,
     toCompress: IContent[],
   ): IContent[] {
-    const prompt = this.resolvePrompt(context);
+    const prompt = loadCompressionPromptFile(
+      context,
+      COMPRESSION_PROMPT_FILES.instructions,
+    );
     const triggerInstruction = buildTriggerInstruction(context, toCompress);
     return [
       buildSecurityPreamble(context),
@@ -302,28 +306,6 @@ export class OneShotStrategy implements CompressionStrategy {
       toCompress: history.slice(0, splitIndex),
       toKeep: history.slice(splitIndex),
     };
-  }
-
-  private resolvePrompt(context: CompressionContext): string {
-    const resolved = context.promptResolver.resolveFile(
-      context.promptBaseDir,
-      'compression.md',
-      context.promptContext,
-    );
-
-    if (resolved.found && resolved.path) {
-      try {
-        return readFileSync(resolved.path, 'utf-8');
-      } catch {
-        // Fall through to hardcoded default
-      }
-    }
-
-    const fallback = getCompressionPrompt();
-    if (!fallback) {
-      throw new PromptResolutionError('compression.md');
-    }
-    return fallback;
   }
 
   private bindProvider(

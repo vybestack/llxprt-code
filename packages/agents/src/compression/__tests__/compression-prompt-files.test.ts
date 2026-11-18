@@ -11,7 +11,9 @@
  * reasoning extraction).
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, test } from 'bun:test';
+import { chmodSync } from 'node:fs';
+import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PromptResolutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -19,6 +21,7 @@ import {
   createRecordingProvider,
   createStrategy,
   installShippedCompressionDefaults,
+  readShippedDefault,
   requestText,
   usePromptsDir,
   writePromptFile,
@@ -82,6 +85,19 @@ describe('compression requests with default prompts (issue #4128)', () => {
       for (const text of requests) {
         expect(text.toLowerCase()).not.toContain('scratchpad');
       }
+    });
+
+    it(`${strategyName}: without an installed compression.md the request carries the shipped default`, async () => {
+      const [compression] = await compressAndCapture(
+        strategyName,
+        generateHistory(20),
+      );
+
+      expect(compression).toContain(
+        `
+${readShippedDefault('compression.md').trim()}
+`,
+      );
     });
 
     it(`${strategyName}: default trigger asks for the state snapshot`, async () => {
@@ -165,6 +181,26 @@ describe('compression prompt file overrides (issue #4128)', () => {
       ).rejects.toBeInstanceOf(PromptResolutionError);
       expect(provider.requests).toHaveLength(0);
     });
+
+    {
+      const it =
+        process.platform === 'win32' || process.getuid?.() === 0
+          ? test.skip
+          : test;
+      it(`${strategyName}: an unreadable compression.md fails fast instead of falling back`, async () => {
+        writePromptFile(promptsDir(), 'compression.md', 'OVERRIDE main prompt');
+        chmodSync(join(promptsDir(), 'compression.md'), 0o000);
+        const provider = createRecordingProvider(SNAPSHOT);
+        const context = buildRecordingContext(provider, generateHistory(20), {
+          promptBaseDir: promptsDir(),
+        });
+
+        await expect(
+          createStrategy(strategyName).compress(context),
+        ).rejects.toMatchObject({ code: 'EACCES' });
+        expect(provider.requests).toHaveLength(0);
+      });
+    }
 
     it(`${strategyName}: overrides replace the verification messages`, async () => {
       writeOverrides(promptsDir());
