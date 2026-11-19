@@ -13,10 +13,10 @@ import { decodeFrameStart } from './frame.js';
 import { RECORD_KIND } from './recordKinds.js';
 import { decodeTrailerHeader } from './trailerRecord.js';
 
-/** Format 13 includes transcript references; freeze its actual durable bytes. */
+/** Format 14 (transcript references, dropped-media blocks); freeze its actual durable bytes. */
 function frozenAppendBytes(bytes: Buffer): Uint8Array {
   decodeJournalHeader(bytes.subarray(0, JOURNAL_HEADER_BYTES));
-  expect(bytes.readUInt32LE(8)).toBe(13);
+  expect(bytes.readUInt32LE(8)).toBe(14);
   let offset = JOURNAL_HEADER_BYTES;
   while (offset < bytes.length) {
     const frame = decodeFrameStart(bytes.subarray(offset), offset);
@@ -38,12 +38,12 @@ const cases = [
   {
     count: 4096,
     reads: 31066,
-    digest: '9eb2fc8d8d7c3c0186749c9df9c3a9e6fdc29ed96b942f923ebda23381915a15',
+    digest: 'b1da396651750dd1375f45a4a8da48bdce138599f5b739e1d0111d447bc65faa',
   },
   {
     count: 8192,
     reads: 68201,
-    digest: 'd86a915cae1043c18b09af00e32a5b92aaa3f187267957b321f996547fd9f1ac',
+    digest: '243b48e2d66aa6342a1a4eef263f6aff956d80824124ceee8f7727db42349bd6',
   },
 ];
 

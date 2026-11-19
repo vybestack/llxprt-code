@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 import type { IContent, ContentBlock } from './IContent.js';
+import { droppedMediaModelText } from './droppedMediaText.js';
 
 export const TOOL_OUTPUT_TRUNCATION_MARKER =
   '[Output truncated due to token limit]';
@@ -27,6 +28,8 @@ function serializeBlockForCounting(block: ContentBlock): string {
     }
     case 'code':
       return block.code;
+    case 'media_dropped':
+      return droppedMediaModelText(block);
     default: {
       // Exhaustive guard: every ContentBlock variant is handled above.
       const exhaustive: never = block;

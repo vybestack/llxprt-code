@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { REVIEW_INPUT_FRACTION } from './reviewBudget.js';
+import { describeDroppedMedia } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 
 export class ReviewWindowTooLarge extends Error {
   constructor() {
@@ -167,6 +168,8 @@ function describeContext(block: ContentBlock): string {
       return block.code;
     case 'tool_response':
       return JSON.stringify(block.result ?? null);
+    case 'media_dropped':
+      return describeDroppedMedia(block);
     default:
       return block.text;
   }

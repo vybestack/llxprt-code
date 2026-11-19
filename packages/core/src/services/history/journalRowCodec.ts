@@ -119,7 +119,10 @@ function hasSelfUnit(content: IContent): boolean {
   return (
     content.speaker !== 'tool' &&
     content.blocks.some(
-      (block) => block.type !== 'tool_response' && block.type !== 'media',
+      (block) =>
+        block.type !== 'tool_response' &&
+        block.type !== 'media' &&
+        block.type !== 'media_dropped',
     )
   );
 }

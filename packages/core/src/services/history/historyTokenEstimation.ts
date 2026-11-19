@@ -23,6 +23,7 @@ import type {
 } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
 import { hasTokenEstimationRows } from './compression-token-selection.js';
+import { droppedMediaModelText } from './droppedMediaText.js';
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
@@ -90,6 +91,8 @@ export function blockToTokenFallbackString(block: ContentBlock): string {
       return block.code;
     case 'media':
       return block.caption ?? '';
+    case 'media_dropped':
+      return droppedMediaModelText(block);
     default:
       return '';
   }
@@ -199,6 +202,8 @@ function blockToEstimationText(
       return block.code;
     case 'media':
       return block.caption ?? '';
+    case 'media_dropped':
+      return droppedMediaModelText(block);
     default:
       return '';
   }

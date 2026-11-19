@@ -17,6 +17,7 @@ import type { RuntimeTokenizer as ITokenizer } from '@vybestack/llxprt-code-core
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 
 const logger = new DebugLogger('llxprt:providers:load-balancer:estimator');
 /**
@@ -378,6 +379,8 @@ function estimateBlockCharacters(block: IContent['blocks'][number]): number {
       });
     case 'media':
       return estimateMediaCharacters(block);
+    case 'media_dropped':
+      return stringLength(droppedMediaModelText(block));
     default: {
       const exhaustive: never = block;
       return estimateUnsupportedBlockCharacters(

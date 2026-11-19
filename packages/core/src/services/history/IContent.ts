@@ -251,7 +251,8 @@ export type ContentBlock =
   | ToolResponseBlock
   | MediaBlock
   | ThinkingBlock
-  | CodeBlock;
+  | CodeBlock
+  | MediaDroppedBlock;
 
 /**
  * Regular text content
@@ -793,6 +794,36 @@ export function isMediaReferenceBlock(
   return providerFiles === undefined || hasValidProviderFiles(providerFiles);
 }
 
+/**
+ * An image whose bytes were dropped from history. It keeps where the image was
+ * read from, so the model or the user can read it again, and the identity of
+ * the dropped bytes. It holds no bytes and no blob reservation.
+ */
+export interface MediaDroppedBlock {
+  type: 'media_dropped';
+  readonly origin: MediaOrigin;
+  readonly mimeType: string;
+  readonly byteLength: number;
+  /** `sha256:<hex>` of the dropped bytes. */
+  readonly contentId: string;
+  /** ISO time the bytes were dropped. */
+  readonly droppedAt: string;
+}
+
+/** Validates a recorded dropped-media reference. */
+export function isMediaDroppedBlock(
+  value: unknown,
+): value is MediaDroppedBlock {
+  if (!isRecord(value) || value['type'] !== 'media_dropped') return false;
+  if (!isMediaOrigin(value['origin']) || !isMimeType(value['mimeType'])) {
+    return false;
+  }
+  if (!isPositiveInteger(value['byteLength'])) return false;
+  if (!isContentId(value['contentId'])) return false;
+  const droppedAt = value['droppedAt'];
+  return isNonEmptyString(droppedAt) && !Number.isNaN(Date.parse(droppedAt));
+}
+
 /** Rejects local references before a converter attempts inline transport. */
 export function requireInlineMediaBlock(block: MediaBlock): InlineMediaBlock {
   if (block.encoding !== 'reference') {
@@ -910,6 +941,9 @@ export const ContentValidation = {
 
         // For OpenAI/Codex, either thought OR encrypted content is valid
         return hasThought || hasEncrypted;
+      }
+      if (block.type === 'media_dropped') {
+        return isMediaDroppedBlock(block);
       }
       // CodeBlock - code is always a string on this type
       return Boolean(block.code) && block.code.trim().length > 0;

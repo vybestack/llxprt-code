@@ -51,7 +51,8 @@ function selfExists(types: readonly number[], speaker: number): boolean {
       types.some(
         (type) =>
           type !== ROW_BLOCK_TYPE.tool_response &&
-          type !== ROW_BLOCK_TYPE.media,
+          type !== ROW_BLOCK_TYPE.media &&
+          type !== ROW_BLOCK_TYPE.media_dropped,
       ))
   );
 }

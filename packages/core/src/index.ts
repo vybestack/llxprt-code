@@ -527,6 +527,7 @@ export * from './telemetry/uiTelemetry.js';
 export { sessionId } from './utils/session.js';
 // Export content interfaces
 export * from './services/history/IContent.js';
+export * from './services/history/droppedMediaText.js';
 export * from './services/history/semantic-media-purge.js';
 export type {
   HistoryBatchEvent,

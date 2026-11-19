@@ -57,7 +57,7 @@
  * therefore an expected state, not an error.
  */
 
-import type { ContentBlock, IContent } from './IContent.js';
+import type { ContentBlock, IContent, MediaDroppedBlock } from './IContent.js';
 
 /**
  * Assumed bytes per character. JSC stores a string as latin1 (1 byte/char)
@@ -228,6 +228,8 @@ export function estimateBlockBytesTracked(
       total += optionalStringBytes(block.error);
       total += estimateValueBytes(block.result, 1, seen);
       break;
+    case 'media_dropped':
+      return total + droppedMediaBytes(block, seen);
     default: {
       // Exhaustiveness guard: a new block type must be sized explicitly rather
       // than silently reported as zero.
@@ -240,6 +242,18 @@ export function estimateBlockBytesTracked(
     total += estimateValueBytes(block.providerMetadata, 1, seen);
   }
   return total;
+}
+
+function droppedMediaBytes(
+  block: MediaDroppedBlock,
+  seen: Set<object> | WeakSet<object>,
+): number {
+  return (
+    requiredStringBytes(block.mimeType) +
+    requiredStringBytes(block.contentId) +
+    requiredStringBytes(block.droppedAt) +
+    estimateValueBytes(block.origin, 1, seen)
+  );
 }
 
 /** Estimated retained bytes of one content block in isolation. */

@@ -11,6 +11,7 @@ import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-ty
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { serializeWireContentForEstimate } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { sourceTokenBlocks } from './source-token-blocks.js';
 import {
@@ -269,6 +270,8 @@ function estimateBlockTokens(content: IContent): number {
             return block.code;
           case 'media':
             return block.caption ?? '';
+          case 'media_dropped':
+            return droppedMediaModelText(block);
           default:
             return '';
         }

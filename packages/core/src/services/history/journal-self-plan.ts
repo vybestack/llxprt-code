@@ -41,7 +41,8 @@ export async function selfResponsePlan(
     (index) =>
       !hasResponses ||
       (part.ids.header.blocks[index].type !== ROW_BLOCK_TYPE.tool_response &&
-        part.ids.header.blocks[index].type !== ROW_BLOCK_TYPE.media),
+        part.ids.header.blocks[index].type !== ROW_BLOCK_TYPE.media &&
+        part.ids.header.blocks[index].type !== ROW_BLOCK_TYPE.media_dropped),
   );
   if (hasResponses && indices.length === 0) return undefined;
   const original = sourceIndices(part);

@@ -19,6 +19,7 @@ import {
 import type { ContentBlock, IContent } from './IContent.js';
 import {
   CHRONOLOGY,
+  MEDIA_DROPPED_FILE,
   MEDIA_REFERENCE,
   ROW_SHAPES,
 } from './__tests__/support/journalRowShapes.js';
@@ -576,6 +577,38 @@ describe('a stored row that disagrees with itself', () => {
     const content = { speaker: 'robot', blocks: [] } as unknown as IContent;
 
     expect(() => encodeContentRow(content, { owner: 0 })).toThrow(
+      JournalFormatError,
+    );
+  });
+});
+
+describe('dropped media', () => {
+  it('is stored as block type 6 with no bytes and reads back as the same reference', () => {
+    const content: IContent = {
+      speaker: 'human',
+      blocks: [MEDIA_DROPPED_FILE],
+    };
+    const draft = encodeContentRow(content, { owner: 0 });
+    expect(BLOCK_TYPE.media_dropped).toBe(6);
+    expect(draft.blocks.map((block) => block.type)).toStrictEqual([6]);
+    expect(draft.flags & ROW_FLAG.hasMedia).toBe(0);
+    expect(draft.flags & ROW_FLAG.hasImage).toBe(0);
+    const stored = new TextDecoder().decode(draft.blocks[0].bytes);
+    expect(JSON.parse(stored)).toStrictEqual(MEDIA_DROPPED_FILE);
+    expect(stored).not.toContain('"data"');
+    expect(roundTrip(content)).toStrictEqual(content);
+  });
+
+  it('refuses a stored block whose directory type disagrees with media_dropped', () => {
+    const draft = encodeContentRow(
+      { speaker: 'human', blocks: [MEDIA_DROPPED_FILE] },
+      { owner: 0 },
+    );
+    const mislabeled: RowDraft = {
+      ...draft,
+      blocks: [{ ...draft.blocks[0], type: BLOCK_TYPE.media }],
+    };
+    expect(() => decodeStoredRow(storedOf(mislabeled))).toThrow(
       JournalFormatError,
     );
   });

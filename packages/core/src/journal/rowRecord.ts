@@ -36,6 +36,7 @@ export const ROW_BLOCK_TYPE = {
   media: 3,
   thinking: 4,
   code: 5,
+  media_dropped: 6,
 } as const;
 
 /**

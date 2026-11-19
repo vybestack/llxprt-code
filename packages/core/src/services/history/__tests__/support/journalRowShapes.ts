@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { IContent, MediaReferenceBlock } from '../../IContent.js';
+import type {
+  IContent,
+  MediaDroppedBlock,
+  MediaReferenceBlock,
+} from '../../IContent.js';
 
 const CONTENT_ID = `sha256:${'a'.repeat(64)}`;
 
@@ -32,6 +36,20 @@ export const MEDIA_REFERENCE: MediaReferenceBlock = {
   normalizedBase64Length: 4,
   semanticMetadata: { source: 'clipboard' },
   caption: 'a caption',
+};
+
+/** An image whose bytes were dropped: where it was read from and what it was, no bytes. */
+export const MEDIA_DROPPED_FILE: MediaDroppedBlock = {
+  type: 'media_dropped',
+  origin: {
+    kind: 'file',
+    path: '/work/screens/login.png',
+    readAt: '2026-11-19T18:00:00.000Z',
+  },
+  mimeType: 'image/png',
+  byteLength: 122880,
+  contentId: CONTENT_ID,
+  droppedAt: '2026-11-19T18:30:00.000Z',
 };
 
 export const CHRONOLOGY = { seq: 7, userTurn: 2, step: 3, recordedAt: 1.9e12 };
@@ -227,5 +245,41 @@ export const ROW_SHAPES: ReadonlyArray<readonly [string, IContent]> = [
   [
     'empty metadata object',
     { speaker: 'human', blocks: [{ type: 'text', text: 'x' }], metadata: {} },
+  ],
+  ['dropped file image', { speaker: 'human', blocks: [MEDIA_DROPPED_FILE] }],
+  [
+    'dropped tool and pasted images beside a tool response',
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'call-shot',
+          toolName: 'screenshot',
+          result: { output: 'captured' },
+        },
+        {
+          type: 'media_dropped',
+          origin: {
+            kind: 'tool',
+            toolName: 'screenshot',
+            callId: 'call-shot',
+            readAt: '2026-11-19T18:01:00.000Z',
+          },
+          mimeType: 'image/jpeg',
+          byteLength: 2048,
+          contentId: `sha256:${'b'.repeat(64)}`,
+          droppedAt: '2026-11-19T18:31:00.000Z',
+        },
+        {
+          type: 'media_dropped',
+          origin: { kind: 'pasted', readAt: '2026-11-19T18:02:00.000Z' },
+          mimeType: 'image/png',
+          byteLength: 10,
+          contentId: `sha256:${'c'.repeat(64)}`,
+          droppedAt: '2026-11-19T18:32:00.000Z',
+        },
+      ],
+    },
   ],
 ];
