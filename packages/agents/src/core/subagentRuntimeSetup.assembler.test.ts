@@ -75,7 +75,6 @@ const mockGetCorePrompt = vi.fn(async (args: Record<string, unknown>) => {
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: mockGetCorePrompt,
-  getCompressionPrompt: vi.fn(() => 'COMPRESS'),
 }));
 
 describe('Subagent per-turn assembler (issue #3136)', () => {

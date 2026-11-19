@@ -32,6 +32,7 @@ import {
   type ExistingFileDecision,
   handleExistingFile,
   buildRemovalList,
+  existingFileNotices,
 } from './installer/conflict-resolution.js';
 import {
   expandPath as expandPathImpl,
@@ -266,7 +267,7 @@ export class PromptInstaller {
       if (result.skipped) skipped.push(result.path);
       if (result.error) errors.push(result.error);
       if (result.conflict) conflicts.push(result.conflict);
-      if (result.notice) notices.push(result.notice);
+      notices.push(...result.notices);
     }
 
     return { installed, skipped, errors, conflicts, notices };
@@ -284,7 +285,7 @@ export class PromptInstaller {
     skipped: boolean;
     error?: string;
     conflict?: PromptConflictSummary;
-    notice?: string;
+    notices: string[];
   }> {
     const fullPath = path.join(expandedBaseDir, relativePath);
     const fileDir = path.dirname(fullPath);
@@ -298,6 +299,7 @@ export class PromptInstaller {
           installed: false,
           skipped: false,
           error: `Failed to create directory ${fileDir}: ${error instanceof Error ? error.message : String(error)}`,
+          notices: [],
         };
       }
     }
@@ -316,7 +318,7 @@ export class PromptInstaller {
         installed: false,
         skipped: true,
         conflict: existing.conflict,
-        notice: existing.notice,
+        notices: existing.notices,
         error: existing.error,
       };
     }
@@ -333,6 +335,7 @@ export class PromptInstaller {
       installed: result.installed,
       skipped: result.skipped,
       error: result.error,
+      notices: [],
     };
   }
 
@@ -346,7 +349,7 @@ export class PromptInstaller {
   ): Promise<{
     skip: boolean;
     conflict?: PromptConflictSummary;
-    notice?: string;
+    notices: string[];
     error?: string;
   } | null> {
     if (!existsSync(fullPath) || options?.force === true) {
@@ -367,6 +370,7 @@ export class PromptInstaller {
     } catch (error) {
       return {
         skip: true,
+        notices: [],
         error: `Failed to evaluate ${relativePath}: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
@@ -381,18 +385,14 @@ export class PromptInstaller {
   ): {
     skip: boolean;
     conflict?: PromptConflictSummary;
-    notice?: string;
+    notices: string[];
     error?: string;
   } | null {
-    if (decision.action === 'same' || decision.action === 'resolved') {
-      return { skip: true };
-    }
-
-    if (decision.action === 'keep') {
+    if (decision.action !== 'overwrite') {
       return {
         skip: true,
-        conflict: decision.conflict,
-        notice: decision.notice ?? undefined,
+        conflict: decision.action === 'keep' ? decision.conflict : undefined,
+        notices: existingFileNotices(decision),
       };
     }
 

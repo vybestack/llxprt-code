@@ -157,6 +157,7 @@ import {
   type ValidatedNonInteractiveRun,
 } from './session/nonInteractiveSession.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
+import { recordPromptInstallerWarnings } from './promptInstallerWarnings.js';
 import { validateNonInteractiveAuth } from './validateNonInteractiveAuth.js';
 import {
   createNonInteractiveRun,
@@ -357,6 +358,7 @@ class ForegroundSessionHost {
       this.inputs.bootstrapSelection,
       warnings,
     );
+    await recordPromptInstallerWarnings(warnings);
     const input = this.inputs.config.getQuestion();
     await dispatchInteractiveOrNonInteractive(
       input,
