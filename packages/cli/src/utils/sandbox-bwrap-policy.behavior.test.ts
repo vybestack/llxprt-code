@@ -50,13 +50,15 @@ function directory(...segments: string[]): string {
   return target;
 }
 
-afterEach(() => {
+function removeScratchRoots(): void {
   for (const root of scratchRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
-});
+}
 
 describe('bwrap workspace overlap detection', () => {
+  afterEach(removeScratchRoots);
+
   it('rejects an include root whose name starts with two dots but lies inside the workspace', () => {
     const root = createRoot();
     const home = directory(root, 'home');
@@ -104,6 +106,8 @@ describe('bwrap workspace overlap detection', () => {
 });
 
 describe('bwrap workspace roots and the masked home', () => {
+  afterEach(removeScratchRoots);
+
   it('rejects a workspace that contains the home directory', () => {
     const root = createRoot();
     const home = directory(root, 'team', 'alice');
@@ -145,6 +149,8 @@ describe('bwrap workspace roots and the masked home', () => {
 });
 
 describe('bwrap runtime roots inside the workspace', () => {
+  afterEach(removeScratchRoots);
+
   it.skipIf(skipBwrap)(
     'keeps a runtime root read-only while the rest of the workspace stays writable',
     () => {
@@ -232,6 +238,8 @@ describe('bwrap runtime roots inside the workspace', () => {
 });
 
 describe('bwrap storage roots that need their own mask', () => {
+  afterEach(removeScratchRoots);
+
   it('masks the real directory behind a symbolic link that leaves the home directory', () => {
     const root = createRoot();
     const home = directory(root, 'home');

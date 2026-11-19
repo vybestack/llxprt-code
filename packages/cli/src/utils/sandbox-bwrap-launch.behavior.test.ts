@@ -61,11 +61,11 @@ interface HostRun {
 
 const fixtures: string[] = [];
 
-afterEach(() => {
+function removeFixtures(): void {
   for (const fixture of fixtures.splice(0)) {
     fs.rmSync(fixture, { recursive: true, force: true });
   }
-});
+}
 
 async function runHost(profile: Record<string, unknown>): Promise<HostRun> {
   fs.mkdirSync(scratchRoot, { recursive: true });
@@ -114,6 +114,8 @@ function payloadEnvironment(run: HostRun): Record<string, string> {
 }
 
 describe('bwrap launch with profile values', () => {
+  afterEach(removeFixtures);
+
   it.skipIf(skipBwrap)(
     'starts bwrap even when the profile sets PATH to a directory without it',
     async () => {

@@ -21,13 +21,15 @@ function binDirectory(executable: boolean): string {
   return dir;
 }
 
-afterEach(() => {
+function removeScratchDirectories(): void {
   for (const dir of scratch.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
-});
+}
 
 describe('bwrap executable lookup', () => {
+  afterEach(removeScratchDirectories);
+
   it.skipIf(process.platform === 'win32')(
     'returns the absolute path of the first executable bwrap on the search path',
     () => {
