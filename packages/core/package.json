@@ -200,6 +200,11 @@
       "bun": "./src/services/history/ContentConverters.ts",
       "import": "./dist/src/services/history/ContentConverters.js"
     },
+    "./services/history/droppedMediaText.js": {
+      "types": "./dist/src/services/history/droppedMediaText.d.ts",
+      "bun": "./src/services/history/droppedMediaText.ts",
+      "import": "./dist/src/services/history/droppedMediaText.js"
+    },
     "./services/history/HistoryService.js": {
       "bun": "./src/services/history/HistoryService.ts",
       "import": "./dist/src/services/history/HistoryService.js"

@@ -9,6 +9,7 @@ import { StreamJsonString, quotedChunks } from '../utils/streamJsonString.js';
 import {
   buildAnthropicToolResultContent,
   convertBlockToAnthropicPart,
+  isToolResultMedia,
   type AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
 import type { AnthropicMessageConversionOptions } from './AnthropicMessageConversionOptions.js';
@@ -55,7 +56,7 @@ async function hasMedia(
   range: Range,
 ): Promise<boolean> {
   for await (const block of chainBlocks(query, range))
-    if (block.type === 'media') return true;
+    if (isToolResultMedia(block)) return true;
   return false;
 }
 
@@ -96,7 +97,7 @@ async function* mediaBytes(
   options: AnthropicMessageConversionOptions,
 ): AsyncGenerator<string> {
   for await (const block of chainBlocks(query, range)) {
-    if (block.type !== 'media') continue;
+    if (!isToolResultMedia(block)) continue;
     const converted = buildAnthropicToolResultContent(
       '',
       [block],
@@ -118,7 +119,7 @@ export async function rawChainWireResults(
     Extract<AnthropicMessageBlock, { type: 'image' | 'document' | 'text' }>
   > = [];
   for await (const block of chainBlocks(query, range)) {
-    if (block.type !== 'media') continue;
+    if (!isToolResultMedia(block)) continue;
     const converted = buildAnthropicToolResultContent(
       '',
       [block],

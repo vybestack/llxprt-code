@@ -16,7 +16,6 @@
 
 import type {
   IContent,
-  TextBlock,
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -33,6 +32,11 @@ import {
   resolvePdfFilename,
   PDF_AGGREGATE_MAX_BYTES,
 } from '../utils/mediaUtils.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
+import {
+  droppedTextByResponse,
+  withDroppedText,
+} from '../utils/droppedMediaPlacement.js';
 import type {
   ResponsesContentPart,
   ResponsesInputItem,
@@ -181,8 +185,12 @@ function appendHumanInput(
   }
 
   const text = content.blocks
-    .filter((block): block is TextBlock => block.type === 'text')
-    .map((block) => block.text)
+    .flatMap((block) => {
+      if (block.type === 'text') return [block.text];
+      return block.type === 'media_dropped'
+        ? [droppedMediaModelText(block)]
+        : [];
+    })
     .join('\n');
   if (text) input.push({ role: 'user', content: text });
 }
@@ -284,6 +292,7 @@ function appendToolInput(
   );
 
   let emittedOutput = false;
+  const droppedText = droppedTextByResponse(content);
 
   for (const toolResponseBlock of content.blocks.filter(
     (block) => block.type === 'tool_response',
@@ -306,7 +315,11 @@ function appendToolInput(
     input.push({
       type: 'function_call_output',
       call_id: outputCallId,
-      output: getLimitedToolOutput(toolResponseBlock, context.outputLimits),
+      output: withDroppedText(
+        getLimitedToolOutput(toolResponseBlock, context.outputLimits),
+        droppedText,
+        toolResponseBlock,
+      ),
     });
     emittedOutput = true;
   }
@@ -400,6 +413,8 @@ function buildMediaAwareParts(
       parts.push({ type: 'input_text', text: block.text });
     } else if (block.type === 'media') {
       parts.push(convertMediaBlock(block, mediaPdfEnabled));
+    } else if (block.type === 'media_dropped') {
+      parts.push({ type: 'input_text', text: droppedMediaModelText(block) });
     }
   }
   return parts;

@@ -9,6 +9,7 @@ import {
   type ContentBlock,
   type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import { measuredAnthropicMedia } from './anthropic-measured-media.js';
 import {
   buildUnsupportedMediaPlaceholder,
@@ -100,6 +101,8 @@ export function convertHumanMessageWithMedia(
         type: 'text',
         text: `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`,
       });
+    } else if (block.type === 'media_dropped') {
+      parts.push({ type: 'text', text: droppedMediaModelText(block) });
     } else if (block.type === 'media') {
       const category = classifyMediaBlock(block);
       // #3693: zai's Anthropic-compatible endpoint rejects url-sourced

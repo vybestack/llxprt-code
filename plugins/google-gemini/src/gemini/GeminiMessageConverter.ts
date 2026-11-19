@@ -11,6 +11,7 @@ import {
   type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import { isGemini3Model } from './modelClassification.js';
 import { buildToolResponsePayload } from '@vybestack/llxprt-code-providers/utils/toolResponsePayload.js';
 
@@ -49,6 +50,8 @@ export function convertHumanBlocksToGeminiParts(
       parts.push({ text: block.text });
     } else if (block.type === 'media') {
       parts.push(...convertMediaBlockToGeminiParts(block));
+    } else if (block.type === 'media_dropped') {
+      parts.push({ text: droppedMediaModelText(block) });
     }
   }
   return parts;
@@ -93,13 +96,21 @@ export function convertToolContentToGeminiContents(
     toolResponseBlock,
     configForMessages,
   );
+  // A dropped image's reference joins the result text of the response it rode with.
+  const result = content.blocks.reduce(
+    (text, block) =>
+      block.type === 'media_dropped'
+        ? `${text}\n${droppedMediaModelText(block)}`
+        : text,
+    payload.result,
+  );
   const frPart: Part = {
     functionResponse: {
       id: toolResponseBlock.callId,
       name: toolResponseBlock.toolName,
       response: {
         status: payload.status,
-        result: payload.result,
+        result,
         error: payload.error,
         truncated: payload.truncated,
         originalLength: payload.originalLength,

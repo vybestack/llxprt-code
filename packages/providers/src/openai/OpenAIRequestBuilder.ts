@@ -28,6 +28,7 @@ import {
   type ToolResponseBlock,
   type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import {
   getToolIdStrategy,
   type ToolIdMapper,
@@ -49,6 +50,10 @@ import {
   buildToolResponsePayload,
   formatToolResponseText,
 } from '../utils/toolResponsePayload.js';
+import {
+  droppedTextByResponse,
+  withDroppedText,
+} from '../utils/droppedMediaPlacement.js';
 
 /**
  * Normalizes tool call arguments to a consistent JSON string format.
@@ -147,6 +152,9 @@ export function convertBlockToPart(
   if (block.type === 'text' && block.text) {
     return { type: 'text', text: block.text };
   }
+  if (block.type === 'media_dropped') {
+    return { type: 'text', text: droppedMediaModelText(block) };
+  }
   if (block.type !== 'media') {
     return null;
   }
@@ -211,8 +219,10 @@ export function processUserMessage(
     }
   } else {
     const text = content.blocks
-      .filter((b): b is TextBlock => b.type === 'text')
-      .map((b) => b.text)
+      .flatMap((b) => {
+        if (b.type === 'text') return [b.text];
+        return b.type === 'media_dropped' ? [droppedMediaModelText(b)] : [];
+      })
       .join('\n');
     if (text) {
       return {
@@ -327,8 +337,13 @@ export function processToolResponses(
     )
     .join('\n');
 
+  const droppedText = droppedTextByResponse(content);
   for (const tr of toolResponses) {
-    let toolContent = buildResponseContent(tr, config);
+    let toolContent = withDroppedText(
+      buildResponseContent(tr, config),
+      droppedText,
+      tr,
+    );
     if (mediaFallback) {
       toolContent = toolContent + '\n' + mediaFallback;
     }
