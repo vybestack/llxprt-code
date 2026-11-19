@@ -7,7 +7,10 @@
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { stripScratchpadSections } from './compressionSummaryScratchpad.js';
+import {
+  isCompressionSummary,
+  stripScratchpadSections,
+} from './compressionSummaryScratchpad.js';
 
 const SNAPSHOT =
   '<state_snapshot><overall_goal>Ship #4128</overall_goal></state_snapshot>';
@@ -131,6 +134,93 @@ describe('stripScratchpadSections', () => {
     expect(stripScratchpadSections(`<scratchpad>notes ${REAL_SNAPSHOT}`)).toBe(
       REAL_SNAPSHOT,
     );
+  });
+
+  it('keeps the snapshot boundary exact when the text holds characters whose lowercase form is longer', () => {
+    const snapshot = `<state_snapshot>${'İ'.repeat(20)}</state_snapshot>`;
+
+    expect(
+      stripScratchpadSections(`${snapshot}
+<scratchpad>reasoning`),
+    ).toBe(snapshot);
+  });
+});
+
+describe('scratchpad detection on many repeated tags', () => {
+  const REPEATS = 50_000;
+  const BOUND_MS = 500;
+
+  function timed<T>(run: () => T): { result: T; elapsedMs: number } {
+    const start = performance.now();
+    const result = run();
+    return { result, elapsedMs: performance.now() - start };
+  }
+
+  function humanText(text: string): IContent {
+    return { speaker: 'human', blocks: [{ type: 'text', text }] };
+  }
+
+  it('rejects an untagged message of repeated snapshot tags after a scratchpad quickly', () => {
+    const text = '<scratchpad>' + '<state_snapshot>'.repeat(REPEATS);
+
+    const { result, elapsedMs } = timed(() =>
+      isCompressionSummary(humanText(text)),
+    );
+
+    expect(result).toBe(false);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('recognizes an untagged legacy summary of repeated snapshot tags quickly', () => {
+    const text =
+      '<scratchpad>' + '<state_snapshot>'.repeat(REPEATS) + '</state_snapshot>';
+
+    const { result, elapsedMs } = timed(() =>
+      isCompressionSummary(humanText(text)),
+    );
+
+    expect(result).toBe(true);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('strips an unterminated scratchpad before repeated snapshot tags quickly', () => {
+    const snapshots = '<state_snapshot>'.repeat(REPEATS);
+
+    const { result, elapsedMs } = timed(() =>
+      stripScratchpadSections(`<scratchpad>${snapshots}`),
+    );
+
+    expect(result).toBe(snapshots);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('strips repeated unterminated scratchpad tags quickly', () => {
+    const { result, elapsedMs } = timed(() =>
+      stripScratchpadSections('<scratchpad>'.repeat(REPEATS)),
+    );
+
+    expect(result).toBe('');
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('leaves repeated scratchpad tag names without a closing bracket alone quickly', () => {
+    const text = '<scratchpad'.repeat(REPEATS);
+
+    const { result, elapsedMs } = timed(() => stripScratchpadSections(text));
+
+    expect(result).toBe(text);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('finds the real snapshot after repeated scratchpads that name the snapshot tag quickly', () => {
+    const text =
+      '<scratchpad><state_snapshot></scratchpad>'.repeat(REPEATS) +
+      REAL_SNAPSHOT;
+
+    const { result, elapsedMs } = timed(() => stripScratchpadSections(text));
+
+    expect(result).toBe(REAL_SNAPSHOT);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
   });
 });
 

@@ -17,10 +17,18 @@
 
 import type { ContentBlock, IContent } from './IContent.js';
 
-const COMPLETE_SCRATCHPAD = /<scratchpad\b[^>]*>[\s\S]*?<\/scratchpad>/gi;
-const SCRATCHPAD_OPEN = /<scratchpad\b[^>]*>/i;
+const SCRATCHPAD_TAG = '<scratchpad';
+const SCRATCHPAD_CLOSE = '</scratchpad>';
+const STATE_SNAPSHOT_OPEN = '<state_snapshot>';
 const STATE_SNAPSHOT_CLOSE = '</state_snapshot>';
-const STATE_SNAPSHOT_OPEN = /<state_snapshot>/gi;
+const ASCII_UPPERCASE = /[A-Z]+/g;
+const WORD_CHARACTER = /\w/;
+const WHITESPACE = /\s/;
+
+interface TextRange {
+  readonly start: number;
+  readonly end: number;
+}
 
 interface SnapshotSplit {
   readonly before: string;
@@ -44,15 +52,26 @@ export function stripScratchpadSections(text: string): string {
 }
 
 /**
+ * Tags match case-insensitively. Only ASCII letters are folded, as in a
+ * non-unicode `/i` regex, so every offset in the folded text is the same
+ * offset in the original. All tag searches below are index scans that run in
+ * linear time, because the text comes from a model or a user.
+ */
+function foldTagCase(text: string): string {
+  return text.replace(ASCII_UPPERCASE, (letters) => letters.toLowerCase());
+}
+
+/**
  * The element spans from its opening tag (see `findSnapshotStart`) to the
  * last `</state_snapshot>`, or to the end of the text when it never closes.
  */
 function splitAroundSnapshot(text: string): SnapshotSplit {
-  const start = findSnapshotStart(text);
+  const folded = foldTagCase(text);
+  const start = findSnapshotStart(folded);
   if (start === -1) {
     return { before: text, element: '', after: '' };
   }
-  const lastClose = text.toLowerCase().lastIndexOf(STATE_SNAPSHOT_CLOSE);
+  const lastClose = folded.lastIndexOf(STATE_SNAPSHOT_CLOSE);
   const end =
     lastClose < start ? text.length : lastClose + STATE_SNAPSHOT_CLOSE.length;
   return {
@@ -68,45 +87,125 @@ function splitAroundSnapshot(text: string): SnapshotSplit {
  * unterminated scratchpad precedes that tag, its reasoning runs on until the
  * real element, so a tag at the start of a line is preferred.
  */
-function findSnapshotStart(text: string): number {
-  const scratchpads = [...text.matchAll(COMPLETE_SCRATCHPAD)].map((match) => ({
-    start: match.index,
-    end: match.index + match[0].length,
-  }));
-  const openings = [...text.matchAll(STATE_SNAPSHOT_OPEN)].map(
-    (match) => match.index,
-  );
-  const first = openings.find((index) =>
-    scratchpads.every(({ start, end }) => index < start || index >= end),
-  );
+function findSnapshotStart(folded: string): number {
+  const openings = indexesOf(folded, STATE_SNAPSHOT_OPEN);
+  const first = firstOutside(openings, completeScratchpads(folded));
   if (first === undefined) {
     return -1;
   }
-  const precedingText = text.slice(0, first).replace(COMPLETE_SCRATCHPAD, '');
-  if (!SCRATCHPAD_OPEN.test(precedingText)) {
+  const precedingText = removeCompleteScratchpads(folded.slice(0, first));
+  if (findScratchpadOpen(precedingText, 0) === undefined) {
     return first;
   }
   return (
-    openings.find((index) => index >= first && startsLine(text, index)) ?? first
+    openings.find((index) => index >= first && startsLine(folded, index)) ??
+    first
   );
 }
 
+function indexesOf(folded: string, needle: string): number[] {
+  const indexes: number[] = [];
+  let index = folded.indexOf(needle);
+  while (index !== -1) {
+    indexes.push(index);
+    index = folded.indexOf(needle, index + needle.length);
+  }
+  return indexes;
+}
+
+/** `ranges` are sorted and disjoint, so one forward pass covers them all. */
+function firstOutside(
+  positions: readonly number[],
+  ranges: readonly TextRange[],
+): number | undefined {
+  let rangeIndex = 0;
+  for (const position of positions) {
+    while (rangeIndex < ranges.length && ranges[rangeIndex].end <= position) {
+      rangeIndex += 1;
+    }
+    if (rangeIndex === ranges.length || position < ranges[rangeIndex].start) {
+      return position;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Only whitespace may precede the tag on its line. The scan stops at the
+ * first other character, so scanning every tag stays linear overall.
+ */
 function startsLine(text: string, index: number): boolean {
-  const lineStart = text.lastIndexOf('\n', index - 1) + 1;
-  return text.slice(lineStart, index).trim() === '';
+  let cursor = index - 1;
+  while (
+    cursor >= 0 &&
+    text.charAt(cursor) !== '\n' &&
+    WHITESPACE.test(text.charAt(cursor))
+  ) {
+    cursor -= 1;
+  }
+  return cursor < 0 || text.charAt(cursor) === '\n';
 }
 
 function stripSegment(segment: string, snapshotFollows: boolean): string {
-  const withoutBlocks = segment.replace(COMPLETE_SCRATCHPAD, '');
-  const unterminated = SCRATCHPAD_OPEN.exec(withoutBlocks);
-  if (unterminated === null) {
+  const withoutBlocks = removeCompleteScratchpads(segment);
+  const unterminated = findScratchpadOpen(foldTagCase(withoutBlocks), 0);
+  if (unterminated === undefined) {
     return withoutBlocks;
   }
-  return snapshotFollows ? '' : withoutBlocks.slice(0, unterminated.index);
+  return snapshotFollows ? '' : withoutBlocks.slice(0, unterminated.start);
 }
 
-const LEGACY_SUMMARY_SHAPE =
-  /^\s*<scratchpad\b[^>]*>[\s\S]*<state_snapshot>[\s\S]*<\/state_snapshot>\s*$/i;
+function removeCompleteScratchpads(text: string): string {
+  const ranges = completeScratchpads(foldTagCase(text));
+  const keptStarts = [0, ...ranges.map((range) => range.end)];
+  const keptEnds = [...ranges.map((range) => range.start), text.length];
+  return keptStarts
+    .map((start, index) => text.slice(start, keptEnds[index]))
+    .join('');
+}
+
+/**
+ * Each `<scratchpad …>` opening tag paired with the first `</scratchpad>`
+ * after it. Once an opening tag has no closing tag after it, no later one
+ * can have one either.
+ */
+function completeScratchpads(folded: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  let opening = findScratchpadOpen(folded, 0);
+  while (opening !== undefined) {
+    const close = folded.indexOf(SCRATCHPAD_CLOSE, opening.end);
+    if (close === -1) {
+      return ranges;
+    }
+    const end = close + SCRATCHPAD_CLOSE.length;
+    ranges.push({ start: opening.start, end });
+    opening = findScratchpadOpen(folded, end);
+  }
+  return ranges;
+}
+
+/**
+ * The first `<scratchpad` at or after `from` that is not the start of a
+ * longer name, through the next `>`. When that tag never closes, no later
+ * tag can either.
+ */
+function findScratchpadOpen(
+  folded: string,
+  from: number,
+): TextRange | undefined {
+  let start = folded.indexOf(SCRATCHPAD_TAG, from);
+  while (
+    start !== -1 &&
+    WORD_CHARACTER.test(folded.charAt(start + SCRATCHPAD_TAG.length))
+  ) {
+    start = folded.indexOf(SCRATCHPAD_TAG, start + SCRATCHPAD_TAG.length);
+  }
+  if (start === -1) {
+    return undefined;
+  }
+  const close = folded.indexOf('>', start + SCRATCHPAD_TAG.length);
+  return close === -1 ? undefined : { start, end: close + 1 };
+}
 
 /**
  * Compression summaries carry `isSummary` and the snapshot reason tag.
@@ -126,8 +225,30 @@ function hasLegacySummaryShape(content: IContent): boolean {
   return (
     content.speaker === 'human' &&
     content.blocks.some(
-      (block) => block.type === 'text' && LEGACY_SUMMARY_SHAPE.test(block.text),
+      (block) => block.type === 'text' && isLegacySummaryText(block.text),
     )
+  );
+}
+
+/**
+ * After surrounding whitespace: an opening scratchpad tag first, a
+ * `<state_snapshot>` after it, and `</state_snapshot>` last.
+ */
+function isLegacySummaryText(text: string): boolean {
+  const folded = foldTagCase(text.trim());
+  const opening = findScratchpadOpen(folded, 0);
+  if (
+    opening === undefined ||
+    opening.start !== 0 ||
+    !folded.endsWith(STATE_SNAPSHOT_CLOSE)
+  ) {
+    return false;
+  }
+  const snapshot = folded.indexOf(STATE_SNAPSHOT_OPEN, opening.end);
+  return (
+    snapshot !== -1 &&
+    snapshot + STATE_SNAPSHOT_OPEN.length <=
+      folded.length - STATE_SNAPSHOT_CLOSE.length
   );
 }
 
