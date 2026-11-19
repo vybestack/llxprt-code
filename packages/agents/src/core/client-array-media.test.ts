@@ -24,7 +24,15 @@ function imageRows(): IContent[] {
     {
       speaker: 'human',
       blocks: [
-        { type: 'media', encoding: 'base64', mimeType: 'image/png', data: png },
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'image/png',
+          data: png,
+          // The oracle admits these rows separately; a fixed read time keeps
+          // both admissions byte-identical.
+          origin: { kind: 'pasted', readAt: '2026-11-19T00:00:00.000Z' },
+        },
       ],
       metadata: { chronology: { seq: 1, userTurn: 1, step: 0, recordedAt: 0 } },
     },

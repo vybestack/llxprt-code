@@ -5,6 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { isAbsolute } from 'node:path';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type {
@@ -12,6 +13,7 @@ import type {
   IContent,
   InlineMediaBlock,
   MediaBlock,
+  MediaOrigin,
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import { isMediaReferenceBlock } from '../services/history/IContent.js';
@@ -171,8 +173,41 @@ function modelVisibleMetadata(
 function copyModelVisibleMetadata(
   block: InlineMediaBlock,
   reference: MediaReferenceBlock,
+  origin: MediaOrigin,
 ): MediaReferenceBlock {
-  return Object.freeze({ ...reference, ...modelVisibleMetadata(block) });
+  return Object.freeze({
+    ...reference,
+    ...modelVisibleMetadata(block),
+    origin,
+  });
+}
+
+/**
+ * Where an inline image entered history. A caller-supplied origin wins; an
+ * absolute filename is the file it was read from; otherwise the row's tool
+ * response, the model, or the user (a pasted image) is the source.
+ */
+export function mediaOriginFor(
+  block: InlineMediaBlock,
+  content: IContent,
+  readAt: string,
+): MediaOrigin {
+  if (block.origin !== undefined) return block.origin;
+  if (block.filename !== undefined && isAbsolute(block.filename))
+    return { kind: 'file', path: block.filename, readAt };
+  const toolResponse = content.blocks.find(
+    (candidate) => candidate.type === 'tool_response',
+  );
+  if (toolResponse !== undefined)
+    return {
+      kind: 'tool',
+      toolName: toolResponse.toolName,
+      callId: toolResponse.callId,
+      readAt,
+    };
+  return content.speaker === 'ai'
+    ? { kind: 'model-output', readAt }
+    : { kind: 'pasted', readAt };
 }
 
 function ownerIdFor(
@@ -451,7 +486,13 @@ export class MediaAdmissionService {
       return { block, changed: false };
     }
     return {
-      block: await this.admitImage(block, context, mediaIndex, reservations),
+      block: await this.admitImage(
+        block,
+        mediaOriginFor(block, content, new Date().toISOString()),
+        context,
+        mediaIndex,
+        reservations,
+      ),
       changed: true,
     };
   }
@@ -527,6 +568,7 @@ export class MediaAdmissionService {
 
   private async admitImage(
     block: InlineMediaBlock,
+    origin: MediaOrigin,
     context: MediaAdmissionContext,
     mediaIndex: number,
     reservations: AdmissionReservation[],
@@ -542,7 +584,7 @@ export class MediaAdmissionService {
         block.originalData === undefined
           ? await this.admitIdentity(block, source, alreadyHeld)
           : await this.admitDerived(block, source);
-      const presented = copyModelVisibleMetadata(block, reference);
+      const presented = copyModelVisibleMetadata(block, reference, origin);
       if (!alreadyHeld) {
         const ownerId = ownerIdFor(context, mediaIndex, presented.contentId);
         await this.store.reserve(presented, ownerId);

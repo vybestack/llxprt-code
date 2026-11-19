@@ -167,7 +167,7 @@ describe('media-session-lifecycle', () => {
         }
       });
 
-      it('persists exact media semantics without ingestion paths or raw media', async () => {
+      it('persists exact media semantics and the source path without raw media', async () => {
         const store = new LocalMediaStore({
           rootDirectory: join(tempDirectory(), 'media-private'),
           quotaBytes: 1024,
@@ -183,7 +183,8 @@ describe('media-session-lifecycle', () => {
             token: 'provider-semantic-token-3199',
           },
         };
-        const media: InlineMediaBlock & { readonly sourcePath: string } = {
+        const readAt = '2026-11-19T18:00:00.000Z';
+        const media: InlineMediaBlock = {
           type: 'media',
           mimeType: 'image/png',
           encoding: 'base64',
@@ -191,7 +192,7 @@ describe('media-session-lifecycle', () => {
           filename,
           caption,
           providerMetadata,
-          sourcePath,
+          origin: { kind: 'file', path: sourcePath, readAt },
         };
         const admitted = await new MediaAdmissionService(store).admitContent(
           {
@@ -223,7 +224,9 @@ describe('media-session-lifecycle', () => {
           expect(serialized).toContain(JSON.stringify(caption));
           expect(serialized).toContain(JSON.stringify(filename));
           expect(serialized).toContain(JSON.stringify(providerMetadata));
-          expect(serialized).not.toContain(sourcePath);
+          expect(serialized).toContain(
+            JSON.stringify({ kind: 'file', path: sourcePath, readAt }),
+          );
           expect(serialized).not.toContain(PNG_BASE64);
         } finally {
           await recording.dispose();

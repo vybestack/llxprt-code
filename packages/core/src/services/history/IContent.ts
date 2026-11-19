@@ -332,7 +332,23 @@ interface MediaBlockBase {
   caption?: string;
   filename?: string;
   providerMetadata?: Record<string, unknown>;
+  /** Where the image entered history, kept so a dropped image can name its source. */
+  readonly origin?: MediaOrigin;
 }
+
+/** How an image entered history. A file origin names the path it was read from. */
+export type MediaOriginSource =
+  | { readonly kind: 'file'; readonly path: string }
+  | {
+      readonly kind: 'tool';
+      readonly toolName: string;
+      readonly callId: string;
+    }
+  | { readonly kind: 'pasted' }
+  | { readonly kind: 'model-output' };
+
+/** Source of an admitted image plus the ISO time it was read. */
+export type MediaOrigin = MediaOriginSource & { readonly readAt: string };
 
 /** Intrinsic media dimensions when admission could determine both values. */
 export interface MediaDimensions {
@@ -403,7 +419,8 @@ export interface MediaTransformation {
 
 /**
  * Long-lived local media identity. It records replay and accounting metadata
- * without retaining inline bytes or a machine-specific source path.
+ * without retaining inline bytes. `origin` names where the image was read from
+ * so a dropped image can point back at its source.
  */
 export interface MediaReferenceBlock extends MediaBlockBase {
   encoding: 'reference';
@@ -587,6 +604,33 @@ function hasValidTransformation(value: unknown): value is MediaTransformation {
 }
 
 /** Recognizes valid legacy inline and URL media restored from external data. */
+function hasOriginSourceFields(value: Record<string, unknown>): boolean {
+  switch (value['kind']) {
+    case 'file':
+      return isNonEmptyString(value['path']);
+    case 'tool':
+      return (
+        isNonEmptyString(value['toolName']) && isNonEmptyString(value['callId'])
+      );
+    case 'pasted':
+    case 'model-output':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Validates a recorded media origin: a known source kind and an ISO read time. */
+export function isMediaOrigin(value: unknown): value is MediaOrigin {
+  if (!isRecord(value) || !hasOriginSourceFields(value)) return false;
+  const readAt = value['readAt'];
+  return isNonEmptyString(readAt) && !Number.isNaN(Date.parse(readAt));
+}
+
+function isAbsentOrMediaOrigin(value: unknown): boolean {
+  return value === undefined || isMediaOrigin(value);
+}
+
 export function isInlineMediaBlock(value: unknown): value is InlineMediaBlock {
   if (!isRecord(value) || value['type'] !== 'media') {
     return false;
@@ -615,6 +659,7 @@ export function isInlineMediaBlock(value: unknown): value is InlineMediaBlock {
   if (providerFiles !== undefined && !hasValidProviderFiles(providerFiles)) {
     return false;
   }
+  if (!isAbsentOrMediaOrigin(value['origin'])) return false;
   const sourceContentId = value['sourceContentId'];
   if (sourceContentId !== undefined && !isContentId(sourceContentId))
     return false;
@@ -732,6 +777,7 @@ export function isMediaReferenceBlock(
   if (!isMediaSemanticMetadata(value['semanticMetadata'])) {
     return false;
   }
+  if (!isAbsentOrMediaOrigin(value['origin'])) return false;
   const dimensions = value['dimensions'];
   if (dimensions !== undefined && !hasValidDimensions(dimensions)) {
     return false;
