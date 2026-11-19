@@ -56,6 +56,7 @@ const PORT_METHODS = [
   'adoptMediaOwner',
   'removeTail',
   'reconcileMedia',
+  'dropMedia',
   'stageProfileReplacement',
   'mergeFrom',
   'optimizeDensity',

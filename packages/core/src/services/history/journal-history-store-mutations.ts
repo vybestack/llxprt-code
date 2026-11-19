@@ -45,6 +45,10 @@ import type * as StoreTypes from './journal-history-store-types.js';
 import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 import { openJournalSemanticPurge } from './journalSemanticPurge.js';
 import * as mediaMutations from './journalMediaMutations.js';
+import {
+  dropMediaOnJournal,
+  type HistoryDropMediaRequest,
+} from './journalMediaDrop.js';
 import { mergeOnJournal } from './journalMerge.js';
 import { optimizeDensityOnJournal } from './journalDensity.js';
 import { stageProfileReplacementOnJournal } from './journalProfileReplacement.js';
@@ -216,6 +220,11 @@ export abstract class JournalHistoryStoreMutations extends JournalHistoryStoreRe
   /** Makes the owner hold the media of the current rows, one streamed pass. */
   reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
     return mediaMutations.reconcileMediaOnJournal(this.operationStore, owner);
+  }
+
+  /** Drops the bytes of stored media in place, keeping a reference (design 4.6 purge group). */
+  dropMedia(request: HistoryDropMediaRequest): Promise<number> {
+    return dropMediaOnJournal(this.operationStore, request);
   }
 
   /** Appends the accepted rows of another history as one detached append. */

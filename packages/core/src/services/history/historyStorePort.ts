@@ -75,6 +75,7 @@ import type {
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import type { OpenReplaceTracker } from './historyReplaceOps.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
+import type { HistoryDropMediaRequest } from './journalMediaDrop.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import type {
   CompressionDetailPayload,
@@ -403,6 +404,11 @@ export interface HistoryStorePort {
   removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined>;
   /** Makes what `owner` holds equal to the media the current rows reference. */
   reconcileMedia(owner: HistoryMediaOwner): Promise<void>;
+  /**
+   * Replaces stored media blocks with `media_dropped` references in place and
+   * releases what no row references any more; resolves to the blocks dropped.
+   */
+  dropMedia(request: HistoryDropMediaRequest): Promise<number>;
   /**
    * Appends the accepted rows of `request.source` (a known speaker and at
    * least one block), in order, keeping their values and chronology markers.

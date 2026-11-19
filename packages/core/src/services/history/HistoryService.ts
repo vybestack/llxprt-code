@@ -45,6 +45,7 @@ import type {
   ResumeBoot,
   StagedProfileAdoption,
 } from './historyStorePort.js';
+import type { HistoryMediaDrop } from './journalMediaDrop.js';
 import { estimateTokenRange } from './estimate-token-range.js';
 import type { IContent } from './IContent.js';
 import { streamProviderContentSnapshot } from './provider-request-snapshot.js';
@@ -633,6 +634,25 @@ export class HistoryService extends HistoryServiceReads {
       removed = await this.popInternal();
     });
     return removed;
+  }
+
+  /**
+   * Drops the bytes of the named stored media blocks (Andrew's decision on
+   * #854: a dropped image becomes a reference to where it was read from).
+   * Runs in the mutation FIFO; only the affected rows are rewritten, and a
+   * blob is released once no row references it.
+   */
+  async dropMedia(
+    drops: readonly HistoryMediaDrop[],
+    droppedAt = new Date().toISOString(),
+  ): Promise<number> {
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      const [owner, ownership] = [this.mediaOwner, this.mutationOwnership];
+      const request = { drops, droppedAt, owner, ownership };
+      if ((await this.journal.dropMedia(request)) > 0)
+        await this.recalculateTokensInternal(this.activeTokenizationModel);
+    });
+    return drops.length;
   }
 
   private popInternal(): Promise<IContent | undefined> {
