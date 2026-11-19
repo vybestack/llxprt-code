@@ -62,6 +62,7 @@ import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '../services/history/IContent.js';
+import { tagRecordedCompressionSummary } from '../services/history/compressionSummaryScratchpad.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
 import { verifyHistoryMedia } from '../storage/media-reference-lifecycle.js';
@@ -247,7 +248,7 @@ function handleCompressed(
   const summary = payload.summary;
   const itemsCompressed = payload.itemsCompressed;
   if (isSpeakerContent(summary) && itemsCompressed !== undefined) {
-    acc.history = [summary];
+    acc.history = [tagRecordedCompressionSummary(summary)];
   } else {
     acc.malformedCount++;
     acc.warnings.push(

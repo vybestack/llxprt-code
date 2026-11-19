@@ -209,16 +209,36 @@ function findScratchpadOpen(
 
 /**
  * Compression summaries carry `isSummary` and the snapshot reason tag.
- * Summaries recorded before the tags existed (#2768) are recognized by shape:
- * a human entry whose whole text is a scratchpad followed by a closed
- * `<state_snapshot>` element.
+ * Summaries produced before the tags existed (#2768) were human entries
+ * whose only metadata was the summarizer's token usage, which no user
+ * message carries. Such an entry is recognized when its whole text is a
+ * scratchpad followed by a closed `<state_snapshot>` element.
  */
 export function isCompressionSummary(content: IContent): boolean {
   return (
-    content.metadata?.isSummary === true ||
-    content.metadata?.reason === 'compression-state-snapshot' ||
-    hasLegacySummaryShape(content)
+    hasSummaryTag(content) ||
+    (content.metadata?.usage !== undefined && hasLegacySummaryShape(content))
   );
+}
+
+function hasSummaryTag(content: IContent): boolean {
+  return (
+    content.metadata?.isSummary === true ||
+    content.metadata?.reason === 'compression-state-snapshot'
+  );
+}
+
+/**
+ * Tag the summary of a `compressed` journal record. Records written before
+ * #2768 hold an untagged summary, and only compression writes that record,
+ * so an entry there with the legacy summary shape is a summary even when
+ * the summarizer reported no usage. Any other entry is returned unchanged.
+ */
+export function tagRecordedCompressionSummary(summary: IContent): IContent {
+  if (hasSummaryTag(summary) || !hasLegacySummaryShape(summary)) {
+    return summary;
+  }
+  return { ...summary, metadata: { ...summary.metadata, isSummary: true } };
 }
 
 function hasLegacySummaryShape(content: IContent): boolean {

@@ -20,6 +20,20 @@ const SCRATCHPAD_NAMING_SNAPSHOT =
 const UNTERMINATED_SCRATCHPAD_NAMING_SNAPSHOT =
   '<scratchpad>I will now write the <state_snapshot> carefully.';
 
+/**
+ * A summary as compression produced it before summaries were tagged (#2768):
+ * a human entry whose only metadata is the summarizer's token usage.
+ */
+function untaggedSummary(text: string): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text }],
+    metadata: {
+      usage: { promptTokens: 9000, completionTokens: 600, totalTokens: 9600 },
+    },
+  };
+}
+
 function textOf(content: IContent | undefined): string {
   return (content?.blocks ?? [])
     .flatMap((block) => (block.type === 'text' ? [block.text] : []))
@@ -176,7 +190,7 @@ describe('scratchpad detection on many repeated tags', () => {
       '<scratchpad>' + '<state_snapshot>'.repeat(REPEATS) + '</state_snapshot>';
 
     const { result, elapsedMs } = timed(() =>
-      isCompressionSummary(humanText(text)),
+      isCompressionSummary(untaggedSummary(text)),
     );
 
     expect(result).toBe(true);
@@ -294,21 +308,24 @@ describe('provider requests recover summaries that carry a scratchpad', () => {
 
   it('recovers an untagged summary recorded before summaries were tagged', () => {
     const service = serviceWith(
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: `
-  <scratchpad>old reasoning</scratchpad>
-${SNAPSHOT}`,
-          },
-        ],
-      },
+      untaggedSummary(
+        `\n  <scratchpad>old reasoning</scratchpad>\n${SNAPSHOT}`,
+      ),
       { speaker: 'ai', blocks: [{ type: 'text', text: 'Got it.' }] },
     );
 
     expect(textOf(service.getCuratedForProvider()[0])).toBe(SNAPSHOT);
+  });
+
+  it('never alters a user message shaped like an untagged summary', () => {
+    const userText =
+      '<scratchpad>example notes</scratchpad><state_snapshot>example output</state_snapshot>';
+    const service = serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
   });
 
   it('never alters an untagged user message that does not open with a scratchpad', () => {
