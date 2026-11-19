@@ -25,13 +25,22 @@ function readNamespace(): string | undefined {
 
 const hostNamespace = readNamespace();
 
+/** Pid of a child that has already exited; the runtime exists on every platform. */
+function exitedChildPid(): number {
+  const { pid } = spawnSync(process.execPath, ['-e', '0']);
+  if (typeof pid !== 'number' || pid <= 0) {
+    throw new Error('Could not start a child process to obtain a dead pid.');
+  }
+  return pid;
+}
+
 function deadOwner(
   overrides: Partial<SandboxOwnerMetadata> = {},
 ): SandboxOwnerMetadata {
   return {
     version: 1,
     hostname: os.hostname(),
-    pid: spawnSync('/bin/true').pid,
+    pid: exitedChildPid(),
     startTimeMs: Date.now(),
     startTimeSource: 'observed',
     ...overrides,
