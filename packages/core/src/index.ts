@@ -678,6 +678,12 @@ export {
 
 // Explicit exports resolve star-export ambiguity between config.js and extensionLoader.js.
 export type { LlxprtExtension } from './config/configTypes.js';
+export type {
+  ContainerSandboxConfig,
+  SandboxConfig,
+  SandboxMountConfig,
+  SandboxProfileResourcesConfig,
+} from './config/configTypes.js';
 
 // Export the perf settings resolver for downstream phases (P06/P10/P12)
 export { resolvePerfSettings } from './config/configConstructor.js';

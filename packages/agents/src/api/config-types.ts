@@ -226,10 +226,22 @@ export interface AgentSkillDefinition {
   readonly source?: 'builtin' | 'extension' | 'user' | 'project';
 }
 
-export interface AgentSandboxConfig {
-  readonly command: 'docker' | 'podman' | 'sandbox-exec';
-  readonly image: string;
-}
+export type AgentSandboxConfig =
+  | {
+      readonly command: 'docker' | 'podman' | 'sandbox-exec';
+      readonly image: string;
+    }
+  | {
+      readonly command: 'bwrap';
+      readonly mounts?: ReadonlyArray<{
+        readonly from: string;
+        readonly to?: string;
+        readonly mode?: 'ro' | 'rw';
+      }>;
+      readonly env?: Readonly<Record<string, string>>;
+      readonly network?: 'on' | 'off' | 'proxied';
+      readonly sshAgent?: 'auto' | 'on' | 'off';
+    };
 
 export interface AgentLspServerConfig {
   readonly id: string;

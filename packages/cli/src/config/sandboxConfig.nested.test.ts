@@ -31,7 +31,8 @@ const defaultProfile = async () => ({
   sshAgent: 'on',
 });
 
-const loadSandboxProfileMock = vi.fn(defaultProfile);
+const loadSandboxProfileMock =
+  vi.fn<() => Promise<Record<string, unknown>>>(defaultProfile);
 
 void vi.mock('command-exists', () => ({
   default: {
@@ -42,6 +43,11 @@ void vi.mock('command-exists', () => ({
 void vi.mock('./sandboxProfiles.js', () => ({
   ensureDefaultSandboxProfiles: vi.fn(async () => undefined),
   loadSandboxProfile: loadSandboxProfileMock,
+}));
+
+const bwrapProbeMock = vi.fn();
+void vi.mock('../utils/sandbox-bwrap-capability.js', () => ({
+  probeBwrapCapability: bwrapProbeMock,
 }));
 
 const ORIGINAL_ENV = { ...process.env };
@@ -111,6 +117,18 @@ describe('nested SANDBOX detection (issue #2943)', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
+  it('suppresses a second hop when SANDBOX is bwrap', async () => {
+    const warnSpy = silenceWarn();
+    process.env.SANDBOX = 'bwrap';
+    const config = await loadSandboxConfig(makeSettings(undefined), {
+      sandbox: true,
+    });
+
+    expect(config).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(String(warnSpy.mock.calls[0]?.[0])).toContain('SANDBOX=bwrap');
+  });
+
   it('AC1: foreign SANDBOX="true" does not suppress LLXPRT_SANDBOX=true', async () => {
     const warnSpy = silenceWarn();
     process.env.SANDBOX = 'true';
@@ -130,6 +148,47 @@ describe('nested SANDBOX detection (issue #2943)', () => {
     expect(config).toBeDefined();
     expect(config?.command).toBe('docker');
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('loads an explicit bwrap profile without requiring a container image', async () => {
+    if (process.platform !== 'linux') return;
+    enginesAvailable('bwrap');
+    loadSandboxProfileMock.mockResolvedValueOnce({ engine: 'bwrap' });
+    const config = await loadSandboxConfig(makeSettings(undefined), {
+      sandboxProfileLoad: 'custom',
+    });
+
+    expect(config?.command).toBe('bwrap');
+    expect(config).not.toHaveProperty('image');
+  });
+
+  it('rejects resource limits for an explicit bwrap profile', async () => {
+    enginesAvailable('docker', 'bwrap');
+    loadSandboxProfileMock.mockResolvedValueOnce({
+      engine: 'bwrap',
+      resources: { cpus: 2 },
+    });
+    const error = await expectFatalSandbox(makeSettings(undefined), {
+      sandboxProfileLoad: 'custom',
+    });
+
+    expect(error.message).toContain('bwrap');
+    expect(error.message).toContain('resources.cpus');
+  });
+
+  it('rejects proxied networking for an explicit bwrap profile', async () => {
+    enginesAvailable('docker', 'bwrap');
+    loadSandboxProfileMock.mockResolvedValueOnce({
+      engine: 'bwrap',
+      network: 'proxied',
+    });
+    const error = await expectFatalSandbox(makeSettings(undefined), {
+      sandboxProfileLoad: 'custom',
+    });
+
+    expect(error.message).toContain('bwrap');
+    expect(error.message).toContain('network');
+    expect(error.message).toContain('proxied');
   });
 
   it('AC2: LLxprt-written SANDBOX="sandbox-exec" suppresses --sandbox with warning', async () => {
@@ -280,5 +339,53 @@ describe('nested SANDBOX detection (issue #2943)', () => {
       sandboxProfileLoad: 'missing',
     });
     expect(error.message).toContain('Failed to load sandbox profile');
+  });
+});
+
+describe('bwrap environment policy', () => {
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    delete process.env.SANDBOX;
+    delete process.env.LLXPRT_SANDBOX;
+    enginesAvailable('bwrap');
+    loadSandboxProfileMock.mockResolvedValue({ engine: 'bwrap' });
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  it('rejects legacy proxied network mode for bwrap before launch', async () => {
+    process.env.SANDBOX_NETWORK = 'proxied';
+
+    const error = await expectFatalSandbox(makeSettings(undefined), {
+      sandboxEngine: 'bwrap',
+    });
+
+    expect(error.message).toContain('bwrap');
+    expect(error.message).toContain('proxied');
+  });
+
+  it('rejects legacy proxied network mode supplied through LLXPRT_SANDBOX_NETWORK', async () => {
+    process.env.LLXPRT_SANDBOX_NETWORK = 'proxied';
+
+    const error = await expectFatalSandbox(makeSettings(undefined), {
+      sandboxEngine: 'bwrap',
+    });
+
+    expect(error.message).toContain('LLXPRT_SANDBOX_NETWORK');
+    expect(error.message).toContain('proxied');
+  });
+
+  it('rejects an inherited abstract D-Bus endpoint before bwrap launch', async () => {
+    process.env.DBUS_SESSION_BUS_ADDRESS = 'unix:abstract=/tmp/dbus-test';
+
+    const error = await expectFatalSandbox(makeSettings(undefined), {
+      sandboxEngine: 'bwrap',
+    });
+
+    expect(error.message).toContain('abstract D-Bus');
+    expect(error.message).toContain('network: "off"');
   });
 });

@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import type { SandboxConfig } from '@vybestack/llxprt-code-core';
 import {
   createKeyringTokenStore,
@@ -351,5 +353,36 @@ export async function setupCredentialProxy(
       sessionTmpdirCleanup,
       proxy,
     ),
+  };
+}
+
+export interface HostCredentialProxyLease {
+  readonly socketPath: string;
+  readonly capabilityToken: string;
+  readonly stop: () => Promise<void>;
+}
+
+export async function acquireHostCredentialProxy(
+  sessionDirectory: string,
+): Promise<HostCredentialProxyLease> {
+  const socketPath = path.join(sessionDirectory, 'credential-proxy.sock');
+  const sessionCleanup = (): void => {
+    fs.rmSync(sessionDirectory, { recursive: true, force: true });
+  };
+  const proxy = await startCredentialProxyForSandbox(
+    socketPath,
+    sessionCleanup,
+    () => undefined,
+  );
+  return {
+    socketPath: proxy.socketPath,
+    capabilityToken: proxy.capabilityToken,
+    stop: async () => {
+      try {
+        await proxy.stop();
+      } finally {
+        sessionCleanup();
+      }
+    },
   };
 }

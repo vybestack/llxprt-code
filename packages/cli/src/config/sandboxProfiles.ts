@@ -12,6 +12,7 @@ export type SandboxProfileEngine =
   | 'auto'
   | 'docker'
   | 'podman'
+  | 'bwrap'
   | 'sandbox-exec'
   | 'none';
 

@@ -99,11 +99,12 @@ Use for local/offline workflows.
 
 ### `engine`
 
-Type: `"auto" | "docker" | "podman" | "sandbox-exec" | "none"`
+Type: `"auto" | "docker" | "podman" | "bwrap" | "sandbox-exec" | "none"`
 
 - `auto`: picks available runtime
 - `docker`: force Docker
 - `podman`: force Podman
+- `bwrap`: Linux bubblewrap, running host tools in private user and PID namespaces
 - `sandbox-exec`: macOS Seatbelt
 - `none`: disable sandboxing
 
