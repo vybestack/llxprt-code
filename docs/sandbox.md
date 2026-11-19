@@ -876,7 +876,10 @@ on the host.
 The engine supports launches from a source checkout as well as the built CLI
 bundle. It grants the checkout's `packages` tree and root `node_modules`
 read-only so workspace package links resolve, while keeping the home directory
-masked.
+masked. Those trees stay read-only when the workspace is the checkout itself,
+and the rest of the workspace stays writable. The engine refuses a workspace or
+included directory that equals or contains the home directory, because binding
+it would expose the real home over its mask.
 
 Signals reach a bwrap session the way [Stopping a sandboxed
 session](#stopping-a-sandboxed-session) describes, with one difference: the
@@ -890,8 +893,9 @@ outlives the host.
 Each bwrap launch keeps its credential proxy socket in a private directory
 named `llxprt-bwrap-<random>` under the temp directory. A host that dies from
 SIGKILL, an out-of-memory kill or a crash cannot remove it, so the next bwrap
-launch removes the directories whose owning process no longer exists and leaves
-those of running sessions alone.
+launch removes the directories whose owning process no longer exists in the
+same PID namespace and leaves those of running sessions, and of owners it cannot
+check from its own namespace, alone.
 
 | Engine       | Platform     | Resource limits | Credential proxy | Network control              |
 | ------------ | ------------ | --------------- | ---------------- | ---------------------------- |
