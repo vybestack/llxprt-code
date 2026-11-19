@@ -27,6 +27,7 @@ import {
   isWithin,
   storageRootsRequiringMask,
 } from './sandbox-bwrap-policy.js';
+import { resolveBwrapExecutable } from './sandbox-bwrap-executable.js';
 import { acquireHostCredentialProxy } from './sandbox-credential-proxy.js';
 import { getPassthroughEnvVars } from './sandbox-env.js';
 import {
@@ -248,10 +249,49 @@ function childCommand(
   ];
 }
 
+/**
+ * NUL separates the arguments in the bwrap options stream, so a value that
+ * contains one would split into several arguments. The message names the
+ * source of the value, never the value, which can be a secret.
+ */
+function assertNoNul(values: Iterable<string>, source: string): void {
+  for (const value of values) {
+    if (value.includes('\0')) {
+      throw new FatalSandboxError(
+        `A ${source} contains a NUL character, which cannot be passed to bwrap.`,
+      );
+    }
+  }
+}
+
+function assertLaunchValuesHaveNoNul(
+  plan: BwrapLaunchPlan,
+  cliArgs: readonly string[],
+): void {
+  assertNoNul(plan.mountArgs, 'bwrap mount option');
+  for (const [name, value] of Object.entries(plan.childEnv)) {
+    assertNoNul([name], 'sandbox environment variable name');
+    assertNoNul(
+      value === undefined ? [] : [value],
+      `sandbox environment value for '${name}'`,
+    );
+  }
+  assertNoNul(
+    [
+      plan.runtimeContext.runtime,
+      plan.runtimeContext.cliEntry,
+      ...plan.runtimeContext.runtimeArgs,
+      ...cliArgs,
+    ],
+    'sandbox command argument',
+  );
+}
+
 function serializeOptions(
   options: readonly string[],
   socketPath: string,
 ): Buffer {
+  assertNoNul(options, 'bwrap option');
   const values = [
     ...options,
     '--setenv',
@@ -277,8 +317,8 @@ function isReadablePipe(
 }
 
 function launchBwrap(
+  executable: string,
   args: readonly string[],
-  environment: NodeJS.ProcessEnv,
   token: string,
   context: RuntimeContext,
   cliArgs: readonly string[],
@@ -287,7 +327,7 @@ function launchBwrap(
 ): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const child = spawn(
-      'bwrap',
+      executable,
       [
         '--args',
         '3',
@@ -297,7 +337,9 @@ function launchBwrap(
         ...childCommand(context, cliArgs),
       ],
       {
-        env: environment,
+        // The payload environment reaches the sandbox through --setenv; the
+        // host-side launcher needs none of it.
+        env: {},
         stdio: ['inherit', 'inherit', 'inherit', 'pipe', 'pipe', 'pipe'],
         shell: false,
       },
@@ -511,6 +553,11 @@ export async function runBwrapSandbox(
     );
   }
   const plan = prepareBwrapLaunchPlan(config, nodeArgs, directories);
+  assertLaunchValuesHaveNoNul(plan, cliArgs);
+  const executable = resolveBwrapExecutable();
+  if (executable === undefined) {
+    throw new FatalSandboxError('The bwrap executable was not found on PATH.');
+  }
   reapStaleBwrapSessionDirs();
   const sessionDir = createBwrapSessionDir();
   let proxy: CredentialProxy | undefined;
@@ -520,8 +567,8 @@ export async function runBwrapSandbox(
     proxy = await acquireHostCredentialProxy(sessionDir);
     const options = buildBwrapLaunchOptions(plan, proxy);
     exitCode = await launchBwrap(
+      executable,
       options,
-      plan.childEnv,
       proxy.capabilityToken,
       plan.runtimeContext,
       cliArgs,

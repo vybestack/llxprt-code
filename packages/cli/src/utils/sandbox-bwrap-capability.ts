@@ -6,6 +6,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { resolveBwrapExecutable } from './sandbox-bwrap-executable.js';
 
 const BWRAP_PROBE_TIMEOUT_MS = 1500;
 
@@ -16,8 +17,15 @@ export function probeBwrapCapability(): void {
     );
   }
 
+  const executable = resolveBwrapExecutable();
+  if (executable === undefined) {
+    throw new FatalSandboxError(
+      'The bwrap executable was not found on PATH. Install bubblewrap or choose an available container engine.',
+    );
+  }
+
   const result = spawnSync(
-    'bwrap',
+    executable,
     [
       '--unshare-user',
       '--unshare-pid',
