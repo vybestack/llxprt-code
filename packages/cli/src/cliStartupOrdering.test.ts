@@ -63,6 +63,16 @@ const loadedProviderContributions = buildProviderContributionRegistry([]);
 const cliOAuthSettings = Object.freeze({ source: 'cli-adapter' });
 const zedIntegrationCalls: ZedIntegrationCall[] = [];
 
+/**
+ * Stand-in for the sandbox relaunch. The real hop starts the child CLI inside
+ * the sandbox with inherited stdio and exits this process when the child
+ * exits; the default here returns, as the real hop does when no sandbox is
+ * configured.
+ */
+type SandboxHopCall = { hasPipedInput: boolean; initialAuthFailed: boolean };
+const sandboxHopCalls: SandboxHopCall[] = [];
+let sandboxHop: (options: SandboxHopCall) => Promise<void> = async () => {};
+
 function setupCommonMainMocks(
   callOrder: string[],
   config: Config,
@@ -138,7 +148,11 @@ function setupCommonMainMocks(
     },
   }));
   void mock.module('./cliSandbox.js', () => ({
-    maybeHopIntoSandbox: async () => {},
+    maybeHopIntoSandbox: async (options: SandboxHopCall) => {
+      callOrder.push('sandbox-hop');
+      sandboxHopCalls.push(options);
+      await sandboxHop(options);
+    },
   }));
   void mock.module('./config/cliArgParser.js', () => ({
     parseArguments: async () => ({ prompt: 'hello' }),
@@ -309,6 +323,8 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   beforeEach(() => {
     callOrder.length = 0;
     zedIntegrationCalls.length = 0;
+    sandboxHopCalls.length = 0;
+    sandboxHop = async () => {};
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -391,6 +407,44 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     expect(callOrder).not.toContain('guard');
     expect(callOrder).not.toContain('activation');
     expect(callOrder).not.toContain('agent-construction');
+  });
+
+  it('ACP/Zed: with a sandbox configured, the CLI relaunches into the sandbox and ACP runs only there', async () => {
+    const config = makeConfig(false, false, true);
+    vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+    // The relaunched child served the ACP session and exited; the hop then
+    // ends this process with the child's exit code.
+    sandboxHop = async () => {
+      process.exit(0);
+    };
+
+    await expect(runMainWithConfig(config)).rejects.toThrow('process.exit(0)');
+
+    expect(sandboxHopCalls).toHaveLength(1);
+    // stdin carries the ACP JSON-RPC stream; the hop must pass it through to
+    // the child, never read it as a prompt.
+    expect(sandboxHopCalls[0].hasPipedInput).toBe(false);
+    // Authentication is resolved per ACP session inside the sandbox.
+    expect(sandboxHopCalls[0].initialAuthFailed).toBe(false);
+    expect(zedIntegrationCalls).toHaveLength(0);
+    expect(callOrder).not.toContain('acp-activated');
+  });
+
+  it('ACP/Zed: without a sandbox, ACP starts in this process after the hop check', async () => {
+    const config = makeConfig(false, false, true);
+    vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('unexpected process.exit');
+    });
+
+    await runMainWithConfig(config);
+
+    expect(callOrder.indexOf('sandbox-hop')).toBeGreaterThanOrEqual(0);
+    expect(callOrder.indexOf('sandbox-hop')).toBeLessThan(
+      callOrder.indexOf('acp-activated'),
+    );
+    expect(zedIntegrationCalls).toHaveLength(1);
   });
 
   it('ACP/Zed: the host injects its own exit cleanup into the ACP client', async () => {
