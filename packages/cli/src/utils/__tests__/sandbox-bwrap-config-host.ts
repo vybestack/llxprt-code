@@ -7,7 +7,8 @@
 /**
  * Host process for sandbox-bwrap-launch.behavior.test.ts. It runs the
  * production bwrap launch function with the profile named by
- * SANDBOX_CONFIG_JSON and records the outcome in the working directory:
+ * the JSON file named by SANDBOX_CONFIG_FILE (a file, because one environment
+ * string cannot carry a profile large enough to fill the options pipe) and records the outcome in the working directory:
  * `exit-code` after a launch, `launch-error` when the launch is refused. The
  * sandbox runs the script named by SANDBOX_PAYLOAD in place of the CLI entry
  * point.
@@ -18,7 +19,7 @@ import { runBwrapSandbox } from '../sandbox-bwrap.js';
 
 process.argv[1] = process.env['SANDBOX_PAYLOAD'] ?? '';
 const profile: Record<string, unknown> = JSON.parse(
-  process.env['SANDBOX_CONFIG_JSON'] ?? '{}',
+  fs.readFileSync(process.env['SANDBOX_CONFIG_FILE'] ?? '', 'utf8'),
 );
 try {
   const exitCode = await runBwrapSandbox(

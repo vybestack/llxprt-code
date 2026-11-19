@@ -134,10 +134,11 @@ function planBwrapWorkspaces(
 }
 
 function sanitizedPath(sourcePath: string | undefined): string {
+  const home = os.homedir();
   const entries = (sourcePath ?? '')
     .split(path.delimiter)
     .filter(
-      (entry) => path.isAbsolute(entry) && !entry.startsWith(os.homedir()),
+      (entry) => path.isAbsolute(entry) && !isWithin(home, path.resolve(entry)),
     );
   return entries.length > 0
     ? entries.join(path.delimiter)
@@ -364,6 +365,10 @@ function launchBwrap(
       child,
       createBwrapSignalDelivery(child, infoPipe, signalOptions),
     );
+    // bwrap can exit before it reads these pipes, which makes the write fail
+    // with EPIPE; the child's own 'close' event reports the outcome.
+    optionsPipe.on('error', () => {});
+    capabilityPipe.on('error', () => {});
     optionsPipe.end(serializeOptions(args, socketPath));
     capabilityPipe.end(`${token}\n`);
     child.once('error', reject);

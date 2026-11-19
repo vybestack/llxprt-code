@@ -57,6 +57,8 @@ interface HostRun {
   readonly workspace: string;
   readonly tmp: string;
   readonly status: number | null;
+  /** Everything the host process wrote to stdout and stderr. */
+  readonly output: string;
 }
 
 const fixtures: string[] = [];
@@ -67,7 +69,15 @@ function removeFixtures(): void {
   }
 }
 
-async function runHost(profile: Record<string, unknown>): Promise<HostRun> {
+interface HostEnvironment {
+  /** Builds the host's environment overrides from the scratch fixture. */
+  readonly extraEnv?: (fixture: string) => Record<string, string>;
+}
+
+async function runHost(
+  profile: Record<string, unknown>,
+  options: HostEnvironment = {},
+): Promise<HostRun> {
   fs.mkdirSync(scratchRoot, { recursive: true });
   const fixture = fs.mkdtempSync(path.join(scratchRoot, 'launch-'));
   fixtures.push(fixture);
@@ -80,6 +90,8 @@ async function runHost(profile: Record<string, unknown>): Promise<HostRun> {
   }
   const payload = path.join(entryDir, 'payload.cjs');
   fs.writeFileSync(payload, PAYLOAD_SOURCE);
+  const profileFile = path.join(fixture, 'profile.json');
+  fs.writeFileSync(profileFile, JSON.stringify(profile));
   const log = fs.openSync(path.join(fixture, 'host.log'), 'w');
   const host = spawn(process.execPath, [HOST_SCRIPT], {
     cwd: workspace,
@@ -89,7 +101,8 @@ async function runHost(profile: Record<string, unknown>): Promise<HostRun> {
       HOME: home,
       TMPDIR: tmp,
       SANDBOX_PAYLOAD: payload,
-      SANDBOX_CONFIG_JSON: JSON.stringify(profile),
+      SANDBOX_CONFIG_FILE: profileFile,
+      ...options.extraEnv?.(fixture),
     },
   });
   fs.closeSync(log);
@@ -98,7 +111,8 @@ async function runHost(profile: Record<string, unknown>): Promise<HostRun> {
     host.once('exit', (code) => resolve(code));
   });
   clearTimeout(timer);
-  return { workspace, tmp, status };
+  const output = fs.readFileSync(path.join(fixture, 'host.log'), 'utf8');
+  return { workspace, tmp, status, output };
 }
 
 function payloadEnvironment(run: HostRun): Record<string, string> {
@@ -166,6 +180,74 @@ describe('bwrap launch with profile values', () => {
       expect(
         fs.readFileSync(path.join(run.workspace, 'launch-error'), 'utf8'),
       ).toMatch(/NUL/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it.skipIf(skipBwrap)(
+    'keeps a PATH entry that only shares a prefix with the home directory',
+    async () => {
+      const run = await runHost(
+        {},
+        {
+          extraEnv: (fixture) => ({
+            PATH: [
+              path.join(fixture, 'home-tools', 'bin'),
+              path.join(fixture, 'home', 'bin'),
+              process.env.PATH ?? '',
+            ].join(path.delimiter),
+          }),
+        },
+      );
+
+      expect(run.status).toBe(0);
+      const entries = payloadEnvironment(run).PATH.split(path.delimiter);
+      expect(entries).toContain(
+        path.join(path.dirname(run.workspace), 'home-tools', 'bin'),
+      );
+      expect(entries).not.toContain(
+        path.join(path.dirname(run.workspace), 'home', 'bin'),
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it.skipIf(skipBwrap)(
+    'reports the exit status of a bwrap that closes its option pipes without reading a large options stream',
+    async () => {
+      const run = await runHost(
+        { env: { LARGE_VALUE: 'x'.repeat(4 * 1024 * 1024) } },
+        {
+          extraEnv: (fixture) => {
+            const standIn = path.join(fixture, 'stand-in');
+            fs.mkdirSync(standIn, { recursive: true });
+            fs.writeFileSync(
+              path.join(standIn, 'bwrap'),
+              [
+                '#!/bin/sh',
+                '# Close the pipes unread, then outlive the failed writes.',
+                'exec 3<&- 5<&-',
+                'sleep 1',
+                'exit 3',
+                '',
+              ].join('\n'),
+              { mode: 0o755 },
+            );
+            return {
+              PATH: [standIn, process.env.PATH ?? ''].join(path.delimiter),
+            };
+          },
+        },
+      );
+
+      expect(fs.readFileSync(path.join(run.workspace, 'exit-code'), 'utf8')).toBe(
+        '3',
+      );
+      expect(run.status).toBe(3);
+      expect(run.output).not.toContain('EPIPE');
+      expect(
+        fs.readdirSync(run.tmp).filter((name) => name.startsWith('llxprt-')),
+      ).toStrictEqual([]);
     },
     TEST_TIMEOUT_MS,
   );
