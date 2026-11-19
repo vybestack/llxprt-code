@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -124,30 +124,74 @@ describe('real bwrap workspace policy', () => {
 
   it.skipIf(skipBwrap)(
     'launches the source-checkout CLI entry through the production bwrap launcher',
-    () => {
+    async () => {
       const fixture = createFixture();
-      const result = spawnSync(
+      const home = path.join(fixture.root, 'home');
+      const tmp = path.join(fixture.root, 'tmp');
+      fs.mkdirSync(home);
+      fs.mkdirSync(tmp);
+      // ACP mode hops into the sandbox before any provider is needed. The
+      // outer process starts the sandbox; the inner CLI is the one that
+      // answers, and it reports that SANDBOX=bwrap made it skip a second hop.
+      const child = spawn(
         process.execPath,
         [
           fileURLToPath(new URL('../../index.ts', import.meta.url)),
           '--sandbox',
           '--sandbox-engine',
           'bwrap',
-          '--version',
+          '--experimental-acp',
         ],
         {
           cwd: fixture.workspace,
-          encoding: 'utf8',
-          timeout: 30_000,
-          env: { ...process.env, LLXPRT_REQUIRE_BWRAP_TESTS: 'true' },
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: { ...process.env, HOME: home, TMPDIR: tmp },
         },
       );
+      let stdout = '';
+      let stderr = '';
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      const answered = new Promise<void>((resolve) => {
+        child.stdout.on('data', (chunk: string) => {
+          stdout += chunk;
+          if (stdout.includes('\n')) resolve();
+        });
+      });
+      child.stderr.on('data', (chunk: string) => (stderr += chunk));
+      const exited = new Promise<number | null>((resolve) => {
+        child.once('exit', (code) => resolve(code));
+      });
+      const deadline = setTimeout(() => child.kill('SIGKILL'), 240_000);
+      child.stdin.write(
+        `${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: 1, clientCapabilities: {} },
+        })}\n`,
+      );
+      await Promise.race([answered, exited]);
+      child.stdin.end();
+      const status = await exited;
+      clearTimeout(deadline);
 
-      expect(result.error).toBeUndefined();
-      expect(result.status).toBe(0);
-      expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+      if (stdout.length === 0) {
+        throw new Error(
+          `The sandboxed CLI sent no ACP reply (exit ${String(status)}): ${stderr}`,
+        );
+      }
+      const reply: unknown = JSON.parse(stdout.split('\n')[0]);
+      expect(reply).toStrictEqual(
+        expect.objectContaining({
+          id: 1,
+          result: expect.objectContaining({ protocolVersion: 1 }),
+        }),
+      );
+      expect(stderr).toContain('SANDBOX=bwrap');
+      expect(status).toBe(0);
     },
-    60_000,
+    300_000,
   );
 
   it.skipIf(skipBwrap)(
