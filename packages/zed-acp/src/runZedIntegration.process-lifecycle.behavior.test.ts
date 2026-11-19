@@ -69,6 +69,11 @@ interface RunningServer {
   readonly disconnectClient: () => void;
 }
 
+/** Quotes a value as one POSIX shell word, including embedded single quotes. */
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -78,9 +83,20 @@ function isAlive(pid: number): boolean {
   }
 }
 
-function killQuietly(pid: number, signal: NodeJS.Signals): void {
+/**
+ * Signals one process, or with `group` the process group it leads. Refuses
+ * any pid that is not a positive integer above 1, so a bad value can never
+ * become `kill(0)` (this runner's group) or `kill(-1)` (every process the
+ * user owns).
+ */
+function killQuietly(
+  pid: number,
+  signal: NodeJS.Signals,
+  { group = false }: { group?: boolean } = {},
+): void {
+  if (!Number.isSafeInteger(pid) || pid <= 1) return;
   try {
-    process.kill(pid, signal);
+    process.kill(group ? -pid : pid, signal);
   } catch {
     // Already gone.
   }
@@ -89,7 +105,7 @@ function killQuietly(pid: number, signal: NodeJS.Signals): void {
 async function readToolPid(pidFile: string): Promise<number | undefined> {
   try {
     const pid = Number.parseInt((await readFile(pidFile, 'utf8')).trim(), 10);
-    return Number.isInteger(pid) ? pid : undefined;
+    return Number.isSafeInteger(pid) && pid > 1 ? pid : undefined;
   } catch {
     return undefined;
   }
@@ -154,12 +170,15 @@ async function toolCallTerminated(server: RunningServer): Promise<boolean> {
 async function startServerWithRunningToolCall(
   cleanups: Array<() => Promise<void>>,
 ): Promise<RunningServer> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'zed-lifecycle-')));
+  // The space and the quote keep the tool call's shell quoting under test.
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "zed lifecycle '-")),
+  );
   const workspace = join(root, 'workspace');
   const pidFile = join(root, 'tool.pid');
   const responses = join(root, 'responses.jsonl');
   await mkdir(workspace);
-  const command = `echo $$ > ${pidFile} && exec sleep ${TOOL_CALL_SECONDS}`;
+  const command = `echo $$ > ${shellQuote(pidFile)} && exec sleep ${TOOL_CALL_SECONDS}`;
   await writeFile(
     responses,
     [
@@ -223,7 +242,9 @@ async function startServerWithRunningToolCall(
     },
   );
   cleanups.push(async () => {
-    if (child.pid !== undefined) killQuietly(-child.pid, 'SIGKILL');
+    if (child.pid !== undefined) {
+      killQuietly(child.pid, 'SIGKILL', { group: true });
+    }
     const leftover = await readToolPid(pidFile);
     if (leftover !== undefined && isAlive(leftover)) {
       killQuietly(leftover, 'SIGKILL');
@@ -286,58 +307,61 @@ async function startServerWithRunningToolCall(
 }
 
 describe('ACP server process lifecycle', () => {
-  const cleanups: Array<() => Promise<void>> = [];
+  // The cases rely on `$$`, `exec sleep` and POSIX signals.
+  describe.skipIf(process.platform === 'win32')('on a POSIX host', () => {
+    const cleanups: Array<() => Promise<void>> = [];
 
-  afterEach(async () => {
-    for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+    afterEach(async () => {
+      for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+    });
+
+    it(
+      'exits within a bound after SIGTERM when the client disconnected during a tool call',
+      async () => {
+        const server = await startServerWithRunningToolCall(cleanups);
+        expect(isAlive(server.toolPid)).toBe(true);
+        server.disconnectClient();
+        server.child.kill('SIGTERM');
+
+        const exit = await exitWithinBound(server, 'SIGTERM');
+
+        expect(exit.code).toBe(0);
+        expect(await toolCallTerminated(server)).toBe(true);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      'exits on its own after stdin reaches EOF during a tool call',
+      async () => {
+        const server = await startServerWithRunningToolCall(cleanups);
+        expect(isAlive(server.toolPid)).toBe(true);
+        server.disconnectClient();
+
+        const exit = await exitWithinBound(server, 'stdin EOF');
+
+        expect(exit.code).toBe(0);
+        expect(await toolCallTerminated(server)).toBe(true);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it.each([
+      ['SIGTERM', 0],
+      ['SIGINT', 130],
+    ] as const)(
+      'after %s while the client is still connected, exits with code %i once cleanup is done',
+      async (signal, expectedCode) => {
+        const server = await startServerWithRunningToolCall(cleanups);
+        expect(isAlive(server.toolPid)).toBe(true);
+        server.child.kill(signal);
+
+        const exit = await exitWithinBound(server, signal);
+
+        expect(exit.code).toBe(expectedCode);
+        expect(await toolCallTerminated(server)).toBe(true);
+      },
+      TEST_TIMEOUT_MS,
+    );
   });
-
-  it(
-    'exits within a bound after SIGTERM when the client disconnected during a tool call',
-    async () => {
-      const server = await startServerWithRunningToolCall(cleanups);
-      expect(isAlive(server.toolPid)).toBe(true);
-      server.disconnectClient();
-      server.child.kill('SIGTERM');
-
-      const exit = await exitWithinBound(server, 'SIGTERM');
-
-      expect(exit.code).toBe(0);
-      expect(await toolCallTerminated(server)).toBe(true);
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    'exits on its own after stdin reaches EOF during a tool call',
-    async () => {
-      const server = await startServerWithRunningToolCall(cleanups);
-      expect(isAlive(server.toolPid)).toBe(true);
-      server.disconnectClient();
-
-      const exit = await exitWithinBound(server, 'stdin EOF');
-
-      expect(exit.code).toBe(0);
-      expect(await toolCallTerminated(server)).toBe(true);
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it.each([
-    ['SIGTERM', 0],
-    ['SIGINT', 130],
-  ] as const)(
-    'after %s while the client is still connected, exits with code %i once cleanup is done',
-    async (signal, expectedCode) => {
-      const server = await startServerWithRunningToolCall(cleanups);
-      expect(isAlive(server.toolPid)).toBe(true);
-      server.child.kill(signal);
-
-      const exit = await exitWithinBound(server, signal);
-
-      expect(exit.code).toBe(expectedCode);
-      expect(await toolCallTerminated(server)).toBe(true);
-    },
-    TEST_TIMEOUT_MS,
-  );
 });
