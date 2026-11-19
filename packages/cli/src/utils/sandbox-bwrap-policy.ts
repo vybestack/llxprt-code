@@ -68,12 +68,22 @@ function normalizeMountDestination(destination: string): string {
   return destination;
 }
 
-function isWithin(parent: string, candidate: string): boolean {
+/**
+ * True when `candidate` is `parent` or lies below it. Only a leading `..`
+ * path segment means "outside"; a directory named `..cache` is inside.
+ */
+export function isWithin(parent: string, candidate: string): boolean {
   const relative = path.relative(parent, candidate);
   return (
     relative === '' ||
-    (!relative.startsWith('..') && !path.isAbsolute(relative))
+    (relative !== '..' &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative))
   );
+}
+
+function isNestedBelow(parent: string, candidate: string): boolean {
+  return candidate !== parent && isWithin(parent, candidate);
 }
 
 export function addBwrapDestinationParents(
@@ -88,9 +98,13 @@ export function addBwrapDestinationParents(
   }
 }
 
+/**
+ * The home directory is masked before the workspace binds are applied, so a
+ * workspace root that equals or contains it would be bound over the mask and
+ * expose the real home to the payload.
+ */
 function assertSafeWorkspace(workspace: string, homeDir: string): void {
-  const protectedRoots = ['/'];
-  if (protectedRoots.includes(workspace) || workspace === homeDir) {
+  if (workspace === '/' || isWithin(workspace, homeDir)) {
     throw new FatalSandboxError(
       `The bwrap workspace '${workspace}' overlaps a protected root; choose a project directory below the home directory.`,
     );
@@ -245,6 +259,23 @@ function resolveBwrapDeviceGrants(
   return resolved;
 }
 
+/**
+ * Storage roots that need a mask of their own. A root is left out only when
+ * its canonical path lies inside the canonical home directory, which is
+ * masked as a whole. A symbolic link inside the home that points elsewhere
+ * resolves to the outside target, which the read-only host bind would
+ * otherwise expose at its real path.
+ */
+export function storageRootsRequiringMask(
+  storageRoots: readonly string[],
+  homeDir: string,
+): string[] {
+  const canonicalHome = canonicalDirectory(homeDir, 'home directory');
+  return storageRoots
+    .map((root) => canonicalDirectory(root, 'protected host storage root'))
+    .filter((root) => !isWithin(canonicalHome, root));
+}
+
 export function buildBwrapMountArgs(
   input: BwrapMountPolicyInput,
 ): readonly string[] {
@@ -291,6 +322,13 @@ export function buildBwrapMountArgs(
   }
   for (const root of roots) {
     appendMount(args, root, root, 'rw');
+  }
+  // A runtime root inside a workspace would otherwise be hidden by the
+  // writable workspace bind above, so it is bound read-only again.
+  for (const root of runtimeRoots) {
+    if (roots.some((workspaceRoot) => isNestedBelow(workspaceRoot, root))) {
+      appendMount(args, root, root, 'ro');
+    }
   }
   for (const mount of profileMounts) {
     appendMount(args, mount.source, mount.destination, mount.mode);

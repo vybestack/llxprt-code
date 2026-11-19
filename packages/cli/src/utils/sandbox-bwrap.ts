@@ -24,6 +24,8 @@ import { forwardSignalsToSandboxProcess } from './sandbox-signal-forwarding.js';
 import {
   addBwrapDestinationParents,
   buildBwrapMountArgs,
+  isWithin,
+  storageRootsRequiringMask,
 } from './sandbox-bwrap-policy.js';
 import { acquireHostCredentialProxy } from './sandbox-credential-proxy.js';
 import { getPassthroughEnvVars } from './sandbox-env.js';
@@ -120,12 +122,7 @@ function planBwrapWorkspaces(
   const roots = [primaryRoot, ...includeRoots];
   for (let index = 0; index < roots.length; index += 1) {
     for (const other of roots.slice(index + 1)) {
-      const leftToRight = path.relative(roots[index], other);
-      const rightToLeft = path.relative(other, roots[index]);
-      const overlaps = (relative: string): boolean =>
-        relative === '' ||
-        (!relative.startsWith('..') && !path.isAbsolute(relative));
-      if (overlaps(leftToRight) || overlaps(rightToLeft)) {
+      if (isWithin(roots[index], other) || isWithin(other, roots[index])) {
         throw new FatalSandboxError(
           `Bwrap workspace roots overlap: '${roots[index]}' and '${other}'.`,
         );
@@ -390,8 +387,9 @@ function prepareBwrapLaunchPlan(
     devices: config.devices,
     network: config.network,
     homeDir,
-    maskedRoots: [globalData, globalCache, globalLog].filter(
-      (root) => !root.startsWith(`${homeDir}${path.sep}`) && root !== homeDir,
+    maskedRoots: storageRootsRequiringMask(
+      [globalData, globalCache, globalLog],
+      homeDir,
     ),
     runtimeRoots: runtimeContext.runtimeRoots,
     sshAgentSocket:
