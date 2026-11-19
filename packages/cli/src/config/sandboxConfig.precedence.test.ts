@@ -133,16 +133,24 @@ describe('sandbox precedence (issue #3083)', () => {
 
   it('keeps Docker and Podman ahead of bwrap for automatic Linux selection', async () => {
     if (process.platform !== 'linux') return;
-    bwrapProbeMock.mockImplementation(() => {
-      throw new Error('automatic bwrap candidate should not be probed');
-    });
+    // enginesAvailable() resets the probe mock, so the throwing implementation
+    // is installed after it and the call count is checked after each load.
+    const rejectBwrapProbe = (): void => {
+      bwrapProbeMock.mockImplementation(() => {
+        throw new Error('automatic bwrap candidate should not be probed');
+      });
+    };
     enginesAvailable('docker', 'podman', 'bwrap');
+    rejectBwrapProbe();
     const dockerConfig = await loadSandboxConfig(makeSettings(true), {});
     expect(dockerConfig?.command).toBe('docker');
+    expect(bwrapProbeMock).not.toHaveBeenCalled();
 
     enginesAvailable('podman', 'bwrap');
+    rejectBwrapProbe();
     const podmanConfig = await loadSandboxConfig(makeSettings(true), {});
     expect(podmanConfig?.command).toBe('podman');
+    expect(bwrapProbeMock).not.toHaveBeenCalled();
   });
 
   it('uses bwrap when it is the only available Linux sandbox engine', async () => {

@@ -58,6 +58,8 @@ function discoverRenderNode(): string | undefined {
 }
 
 function discoverDeniedDevice(): string | undefined {
+  // Module-level discovery runs during collection, before skipBwrap can apply.
+  if (process.platform !== 'linux') return undefined;
   return fs
     .readdirSync('/dev')
     .map((name) => `/dev/${name}`)

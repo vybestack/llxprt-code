@@ -349,11 +349,14 @@ describe('sandbox device host resolution', () => {
     ).toMatch(/more than 64/);
   });
 
-  it('resolves a real character device on the host', () => {
-    expect(resolveSandboxDevices(['/dev/null']).nodes).toStrictEqual([
-      '/dev/null',
-    ]);
-  });
+  it.skipIf(process.platform === 'win32')(
+    'resolves a real character device on the host',
+    () => {
+      expect(resolveSandboxDevices(['/dev/null']).nodes).toStrictEqual([
+        '/dev/null',
+      ]);
+    },
+  );
 
   it('rejects a path that is absent from the real host', () => {
     expect(

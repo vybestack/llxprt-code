@@ -162,34 +162,40 @@ describe('nested SANDBOX detection (issue #2943)', () => {
     expect(config).not.toHaveProperty('image');
   });
 
-  it('rejects resource limits for an explicit bwrap profile', async () => {
-    enginesAvailable('docker', 'bwrap');
-    loadSandboxProfileMock.mockResolvedValueOnce({
-      engine: 'bwrap',
-      resources: { cpus: 2 },
-    });
-    const error = await expectFatalSandbox(makeSettings(undefined), {
-      sandboxProfileLoad: 'custom',
-    });
+  it.skipIf(process.platform !== 'linux')(
+    'rejects resource limits for an explicit bwrap profile',
+    async () => {
+      enginesAvailable('docker', 'bwrap');
+      loadSandboxProfileMock.mockResolvedValueOnce({
+        engine: 'bwrap',
+        resources: { cpus: 2 },
+      });
+      const error = await expectFatalSandbox(makeSettings(undefined), {
+        sandboxProfileLoad: 'custom',
+      });
 
-    expect(error.message).toContain('bwrap');
-    expect(error.message).toContain('resources.cpus');
-  });
+      expect(error.message).toContain('bwrap');
+      expect(error.message).toContain('resources.cpus');
+    },
+  );
 
-  it('rejects proxied networking for an explicit bwrap profile', async () => {
-    enginesAvailable('docker', 'bwrap');
-    loadSandboxProfileMock.mockResolvedValueOnce({
-      engine: 'bwrap',
-      network: 'proxied',
-    });
-    const error = await expectFatalSandbox(makeSettings(undefined), {
-      sandboxProfileLoad: 'custom',
-    });
+  it.skipIf(process.platform !== 'linux')(
+    'rejects proxied networking for an explicit bwrap profile',
+    async () => {
+      enginesAvailable('docker', 'bwrap');
+      loadSandboxProfileMock.mockResolvedValueOnce({
+        engine: 'bwrap',
+        network: 'proxied',
+      });
+      const error = await expectFatalSandbox(makeSettings(undefined), {
+        sandboxProfileLoad: 'custom',
+      });
 
-    expect(error.message).toContain('bwrap');
-    expect(error.message).toContain('network');
-    expect(error.message).toContain('proxied');
-  });
+      expect(error.message).toContain('bwrap');
+      expect(error.message).toContain('network');
+      expect(error.message).toContain('proxied');
+    },
+  );
 
   it('AC2: LLxprt-written SANDBOX="sandbox-exec" suppresses --sandbox with warning', async () => {
     const warnSpy = silenceWarn();
@@ -356,36 +362,45 @@ describe('bwrap environment policy', () => {
     vi.restoreAllMocks();
   });
 
-  it('rejects legacy proxied network mode for bwrap before launch', async () => {
-    process.env.SANDBOX_NETWORK = 'proxied';
+  it.skipIf(process.platform !== 'linux')(
+    'rejects legacy proxied network mode for bwrap before launch',
+    async () => {
+      process.env.SANDBOX_NETWORK = 'proxied';
 
-    const error = await expectFatalSandbox(makeSettings(undefined), {
-      sandboxEngine: 'bwrap',
-    });
+      const error = await expectFatalSandbox(makeSettings(undefined), {
+        sandboxEngine: 'bwrap',
+      });
 
-    expect(error.message).toContain('bwrap');
-    expect(error.message).toContain('proxied');
-  });
+      expect(error.message).toContain('bwrap');
+      expect(error.message).toContain('proxied');
+    },
+  );
 
-  it('rejects legacy proxied network mode supplied through LLXPRT_SANDBOX_NETWORK', async () => {
-    process.env.LLXPRT_SANDBOX_NETWORK = 'proxied';
+  it.skipIf(process.platform !== 'linux')(
+    'rejects legacy proxied network mode supplied through LLXPRT_SANDBOX_NETWORK',
+    async () => {
+      process.env.LLXPRT_SANDBOX_NETWORK = 'proxied';
 
-    const error = await expectFatalSandbox(makeSettings(undefined), {
-      sandboxEngine: 'bwrap',
-    });
+      const error = await expectFatalSandbox(makeSettings(undefined), {
+        sandboxEngine: 'bwrap',
+      });
 
-    expect(error.message).toContain('LLXPRT_SANDBOX_NETWORK');
-    expect(error.message).toContain('proxied');
-  });
+      expect(error.message).toContain('LLXPRT_SANDBOX_NETWORK');
+      expect(error.message).toContain('proxied');
+    },
+  );
 
-  it('rejects an inherited abstract D-Bus endpoint before bwrap launch', async () => {
-    process.env.DBUS_SESSION_BUS_ADDRESS = 'unix:abstract=/tmp/dbus-test';
+  it.skipIf(process.platform !== 'linux')(
+    'rejects an inherited abstract D-Bus endpoint before bwrap launch',
+    async () => {
+      process.env.DBUS_SESSION_BUS_ADDRESS = 'unix:abstract=/tmp/dbus-test';
 
-    const error = await expectFatalSandbox(makeSettings(undefined), {
-      sandboxEngine: 'bwrap',
-    });
+      const error = await expectFatalSandbox(makeSettings(undefined), {
+        sandboxEngine: 'bwrap',
+      });
 
-    expect(error.message).toContain('abstract D-Bus');
-    expect(error.message).toContain('network: "off"');
-  });
+      expect(error.message).toContain('abstract D-Bus');
+      expect(error.message).toContain('network: "off"');
+    },
+  );
 });
