@@ -353,6 +353,9 @@ describe('bwrap environment policy', () => {
     process.env = { ...ORIGINAL_ENV };
     delete process.env.SANDBOX;
     delete process.env.LLXPRT_SANDBOX;
+    // An inherited network mode would win over the one a test sets.
+    delete process.env.LLXPRT_SANDBOX_NETWORK;
+    delete process.env.SANDBOX_NETWORK;
     enginesAvailable('bwrap');
     loadSandboxProfileMock.mockResolvedValue({ engine: 'bwrap' });
   });
