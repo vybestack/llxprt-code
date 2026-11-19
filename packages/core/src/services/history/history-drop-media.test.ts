@@ -123,6 +123,36 @@ describe('dropping stored media keeps a reference', () => {
     });
   }, 60000);
 
+  it('addresses a row by the journal label a provider request carries', async () => {
+    await withRemovalFixture(async ({ history }, store) => {
+      const pasted = await image(store, 4, { kind: 'pasted', readAt: READ_AT });
+      const input = [rowWith(0, pasted), rowWith(1, pasted)];
+      history.add(input[0]);
+      history.add(input[1]);
+      await history.settleMediaOwnership();
+      const request = await history.prepareCuratedForProviderSnapshot();
+      const native = request.native;
+      if (native === undefined) throw new Error('expected a journal request');
+      const labels: bigint[] = [];
+      for await (const row of native.indexed.openMediaRows())
+        labels.push(row.label);
+      await request.close();
+      expect(labels).toHaveLength(2);
+      const label = labels[1];
+      const blockIndex = input[1].blocks.length - 1;
+
+      await history.dropMedia([{ label, blockIndex }], DROPPED_AT);
+      await history.waitForOwnershipSettlement();
+      const stored = await rows(history);
+      expect(stored[0]).toStrictEqual(input[0]);
+      expect(droppedAt(stored[1]).contentId).toBe(pasted.contentId);
+      await expect(
+        history.dropMedia([{ label: label + 1000n, blockIndex }], DROPPED_AT),
+      ).rejects.toThrow(`no row labelled ${label + 1000n}`);
+      expect(await rows(history)).toStrictEqual(stored);
+    });
+  }, 60000);
+
   it('refuses a block that is not stored media and leaves the row unchanged', async () => {
     await withRemovalFixture(async ({ history }, store) => {
       const pasted = await image(store, 3, { kind: 'pasted', readAt: READ_AT });

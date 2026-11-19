@@ -20,12 +20,15 @@ import {
   snapshotReferences,
 } from './journalMediaReferences.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 
-/** One stored media block whose bytes are dropped; positions are row and block indices. */
-export interface HistoryMediaDrop {
-  readonly position: number;
-  readonly blockIndex: number;
-}
+/**
+ * One stored media block whose bytes are dropped: the row by its position or
+ * by its journal label (stable across in-place edits), and the block index.
+ */
+export type HistoryMediaDrop =
+  | { readonly position: number; readonly blockIndex: number }
+  | { readonly label: bigint; readonly blockIndex: number };
 
 export interface HistoryDropMediaRequest {
   readonly drops: readonly HistoryMediaDrop[];
@@ -61,13 +64,31 @@ export function droppedBlockOf(
   };
 }
 
-function byPosition(
+async function positionOf(
+  saved: VersionSnapshot,
+  drop: HistoryMediaDrop,
+): Promise<number> {
+  if ('position' in drop) return drop.position;
+  const position = await saved.rowsBelow(drop.label);
+  if (
+    position >= saved.rows ||
+    (await saved.entryAt(position)).label !== drop.label
+  )
+    throw new Error(
+      `History has no row labelled ${drop.label} to drop media from`,
+    );
+  return position;
+}
+
+async function byPosition(
+  saved: VersionSnapshot,
   drops: readonly HistoryMediaDrop[],
-): ReadonlyMap<number, ReadonlySet<number>> {
+): Promise<ReadonlyMap<number, ReadonlySet<number>>> {
   const positions = new Map<number, Set<number>>();
-  for (const { position, blockIndex } of drops) {
+  for (const drop of drops) {
+    const position = await positionOf(saved, drop);
     const blocks = positions.get(position) ?? new Set<number>();
-    blocks.add(blockIndex);
+    blocks.add(drop.blockIndex);
     positions.set(position, blocks);
   }
   return positions;
@@ -138,14 +159,14 @@ export async function dropMediaOnJournal(
   store: JournalHistoryStore,
   request: HistoryDropMediaRequest,
 ): Promise<number> {
-  const positions = byPosition(request.drops);
-  if (positions.size === 0) return 0;
+  if (request.drops.length === 0) return 0;
   await store.waitForDurable();
   const mark = store.captureCompensation();
   try {
     const saved = await mark.saved;
     if (saved.rows !== store.getLength())
       throw new Error('History changed while its media was being dropped');
+    const positions = await byPosition(saved, request.drops);
     const changes: PositionedContent[] = [];
     for (const [position, blocks] of positions) {
       if (!Number.isSafeInteger(position) || position >= saved.rows)
