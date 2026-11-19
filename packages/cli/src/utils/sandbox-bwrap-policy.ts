@@ -112,11 +112,32 @@ const BWRAP_MASKED_PATHS = [
   '/var/tmp',
 ] as const;
 
-function assertSafeWorkspace(workspace: string, homeDir: string): void {
+/**
+ * The literal mask path plus its canonical target. bwrap applies `--tmpfs`
+ * to the target of a symbolic link in the host root, so a workspace that
+ * resolves to that target is bound over the mask. A mask path that does not
+ * exist on the host has no target, and only the literal path is compared.
+ */
+function maskPathAliases(masked: string): readonly string[] {
+  try {
+    const canonical = fs.realpathSync(masked);
+    return canonical === masked ? [masked] : [masked, canonical];
+  } catch {
+    return [masked];
+  }
+}
+
+export function assertSafeWorkspace(
+  workspace: string,
+  homeDir: string,
+  maskedPaths: readonly string[] = BWRAP_MASKED_PATHS,
+): void {
   if (
     workspace === '/' ||
     isWithin(workspace, homeDir) ||
-    BWRAP_MASKED_PATHS.some((masked) => isWithin(workspace, masked))
+    maskedPaths
+      .flatMap(maskPathAliases)
+      .some((masked) => isWithin(workspace, masked))
   ) {
     throw new FatalSandboxError(
       `The bwrap workspace '${workspace}' overlaps a protected root; choose a project directory below the home directory.`,

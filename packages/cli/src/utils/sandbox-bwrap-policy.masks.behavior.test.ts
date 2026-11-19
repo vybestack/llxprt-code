@@ -103,6 +103,81 @@ describe('bwrap workspace roots and the masked system paths', () => {
   );
 });
 
+describe('bwrap workspace roots and symlinked or missing mask paths', () => {
+  afterEach(removeScratchRoots);
+
+  function symlinkedMask(): {
+    readonly home: string;
+    readonly link: string;
+    readonly target: string;
+  } {
+    const root = createRoot();
+    const home = directory(root, 'home');
+    const target = directory(root, 'srv', 'shared-tmp');
+    directory(root, 'var');
+    const link = path.join(root, 'var', 'tmp');
+    fs.symlinkSync(path.join('..', 'srv', 'shared-tmp'), link);
+    return { home, link, target };
+  }
+
+  it('rejects a root that is the canonical target of a symlinked mask path', () => {
+    const { home, link, target } = symlinkedMask();
+    const workspace = fs.realpathSync(link);
+
+    expect(workspace).toBe(target);
+    expect(() => policy.assertSafeWorkspace(workspace, home, [link])).toThrow(
+      /protected root/,
+    );
+  });
+
+  it('rejects a root that contains the canonical target of a symlinked mask path', () => {
+    const { home, link, target } = symlinkedMask();
+
+    expect(() =>
+      policy.assertSafeWorkspace(path.dirname(target), home, [link]),
+    ).toThrow(/protected root/);
+  });
+
+  it('rejects a root that contains the literal path of a symlinked mask path', () => {
+    const { home, link } = symlinkedMask();
+
+    expect(() =>
+      policy.assertSafeWorkspace(path.dirname(link), home, [link]),
+    ).toThrow(/protected root/);
+  });
+
+  it('compares the literal path when a mask path does not exist', () => {
+    const root = createRoot();
+    const home = directory(root, 'home');
+    const missing = path.join(root, 'var', 'tmp');
+
+    expect(() => policy.assertSafeWorkspace(root, home, [missing])).toThrow(
+      /protected root/,
+    );
+    expect(() =>
+      policy.assertSafeWorkspace(path.dirname(missing), home, [missing]),
+    ).toThrow(/protected root/);
+  });
+
+  it('keeps allowing a project directory below a symlinked mask target', () => {
+    const { home, link, target } = symlinkedMask();
+    const project = directory(target, 'project');
+
+    expect(() =>
+      policy.assertSafeWorkspace(project, home, [link]),
+    ).not.toThrow();
+  });
+
+  it('keeps allowing an unrelated directory when the mask path is a symlink', () => {
+    const { home, link } = symlinkedMask();
+    const project = directory(createRoot(), 'project');
+
+    expect(() =>
+      policy.assertSafeWorkspace(project, home, [link]),
+    ).not.toThrow();
+  });
+});
+
 describe('bwrap profile mount sources and the masked home', () => {
   afterEach(removeScratchRoots);
 
