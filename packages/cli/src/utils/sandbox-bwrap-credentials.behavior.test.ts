@@ -109,38 +109,15 @@ function runOptionsFd(capability: string): Promise<string> {
   });
 }
 
-const NUL = String.fromCharCode(0);
-const TOKEN_ARGUMENT_PREFIX = `LLXPRT_CAPABILITY_TOKEN${NUL}`;
-const TOKEN_LENGTH = 64;
 const TOKEN_VALUE = /[0-9a-f]{64}/;
-const MAX_SCANNED_MAPPING_BYTES = 128 * 1024 * 1024;
+// Bun reserves its string and object heaps in mappings of 1 GiB.
+const MAX_SCANNED_MAPPING_BYTES = 2 * 1024 * 1024 * 1024;
 const SCAN_CHUNK_BYTES = 1024 * 1024;
 const logger = new DebugLogger('llxprt:test:bwrap-credentials');
 
 interface MemoryRange {
   readonly start: number;
   readonly end: number;
-}
-
-/**
- * True when the text holds `--setenv LLXPRT_CAPABILITY_TOKEN <64 hex>` as
- * NUL-separated bwrap arguments: the variable name, a NUL, the token, a NUL.
- */
-function containsTokenArgument(text: string): boolean {
-  let from = 0;
-  for (;;) {
-    const at = text.indexOf(TOKEN_ARGUMENT_PREFIX, from);
-    if (at < 0) return false;
-    const valueStart = at + TOKEN_ARGUMENT_PREFIX.length;
-    const value = text.slice(valueStart, valueStart + TOKEN_LENGTH);
-    if (
-      TOKEN_VALUE.test(value) &&
-      text.charAt(valueStart + TOKEN_LENGTH) === NUL
-    ) {
-      return true;
-    }
-    from = at + 1;
-  }
 }
 
 function parseReadableRange(line: string): MemoryRange | undefined {
@@ -182,16 +159,26 @@ function readAt(
   }
 }
 
-function scanRange(memory: number, range: MemoryRange): boolean {
+function scanRange(
+  memory: number,
+  range: MemoryRange,
+  needle: Buffer,
+): boolean {
   const chunk = Buffer.alloc(SCAN_CHUNK_BYTES);
   let position = range.start;
   let carry = Buffer.alloc(0);
   while (position < range.end) {
     const read = readAt(memory, chunk, position, range.end);
-    if (read === undefined || read === 0) return false;
+    if (read === undefined) {
+      // An unreadable stretch inside a mapping does not end the search.
+      position += Math.min(chunk.length, range.end - position);
+      carry = Buffer.alloc(0);
+      continue;
+    }
+    if (read === 0) return false;
     const current = Buffer.concat([carry, chunk.subarray(0, read)]);
-    if (containsTokenArgument(current.toString('latin1'))) return true;
-    carry = current.subarray(Math.max(0, current.length - 128));
+    if (current.includes(needle)) return true;
+    carry = current.subarray(Math.max(0, current.length - needle.length + 1));
     position += read;
   }
   return false;
@@ -229,11 +216,19 @@ function descendants(root: number): number[] {
   return result;
 }
 
-function scanReadableMemory(pid: number): boolean | undefined {
+/**
+ * Searches the readable memory of a process for the exact token bytes, as
+ * 8-bit text and as UTF-16, without printing them. Returns undefined when the
+ * process memory cannot be opened by this test process.
+ */
+function scanReadableMemory(pid: number, token: string): boolean | undefined {
+  const needles = [Buffer.from(token, 'latin1'), Buffer.from(token, 'utf16le')];
   try {
     const memory = fsSync.openSync(`/proc/${pid}/mem`, 'r');
     try {
-      return readableRanges(pid).some((range) => scanRange(memory, range));
+      return readableRanges(pid).some((range) =>
+        needles.some((needle) => scanRange(memory, range, needle)),
+      );
     } finally {
       fsSync.closeSync(memory);
     }
@@ -295,6 +290,7 @@ describe('bwrap options-fd capability transport', () => {
       const payloadPath = path.join(workspace, 'payload.ts');
       const authResult = path.join(workspace, 'auth-result');
       const release = path.join(workspace, 'release');
+      const tokenFile = path.join(workspace, 'token-for-scan');
       await fs.writeFile(
         payloadPath,
         [
@@ -302,6 +298,7 @@ describe('bwrap options-fd capability transport', () => {
           'import net from "node:net";',
           'const token = fs.readFileSync(3, "utf8").trim();',
           'fs.closeSync(3);',
+          `fs.writeFileSync(${JSON.stringify(tokenFile)}, token);`,
           'const body = Buffer.from(JSON.stringify({v:2,id:"production-launch-test",op:"handshake",payload:{minVersion:1,maxVersion:2,capabilityToken:token}}));',
           'const header = Buffer.alloc(4); header.writeUInt32BE(body.length);',
           'const socket = net.createConnection(process.env.LLXPRT_CREDENTIAL_SOCKET);',
@@ -372,8 +369,13 @@ describe('bwrap options-fd capability transport', () => {
           }
         });
         expect(init).toBeDefined();
+        // The payload received this exact token over its descriptor. The host
+        // side learns it from the payload so that every search below looks for
+        // the real bytes.
+        const token = fsSync.readFileSync(tokenFile, 'latin1');
+        expect(token).toMatch(TOKEN_VALUE);
         const hasToken = (file: string): boolean =>
-          TOKEN_VALUE.test(fsSync.readFileSync(file, 'latin1'));
+          fsSync.readFileSync(file, 'latin1').includes(token);
         expect(hasToken(`/proc/${outer}/cmdline`)).toBe(false);
         expect(hasToken(`/proc/${outer}/environ`)).toBe(false);
         for (const pid of namespaceMembers) {
@@ -382,12 +384,38 @@ describe('bwrap options-fd capability transport', () => {
             'latin1',
           );
           expect(environment).not.toContain('LLXPRT_CAPABILITY_TOKEN=');
-          expect(TOKEN_VALUE.test(environment)).toBe(false);
+          expect(environment).not.toContain(token);
+        }
+        // Positive control: the payload process read the token, so a scan that
+        // can see its memory must find the token there. Without this, a scan
+        // that finds nothing in bwrap could simply be unable to find anything.
+        const payloadPid = processes.find((pid) => {
+          try {
+            const argv = fsSync
+              .readFileSync(`/proc/${pid}/cmdline`, 'latin1')
+              .split('\0');
+            return argv[0] === process.execPath && argv.includes(payloadPath);
+          } catch {
+            return false;
+          }
+        });
+        expect(payloadPid).toBeDefined();
+        const control =
+          payloadPid === undefined
+            ? undefined
+            : scanReadableMemory(payloadPid, token);
+        if (control === undefined) {
+          logger.warn(
+            () =>
+              'Skipping the memory scan: the payload process memory is unreadable to the host test process.',
+          );
+        } else {
+          expect(control).toBe(true);
         }
         for (const pid of [outer, init].filter(
           (value): value is number => value !== undefined,
         )) {
-          const found = scanReadableMemory(pid);
+          const found = scanReadableMemory(pid, token);
           if (found === undefined) {
             logger.warn(
               () =>
