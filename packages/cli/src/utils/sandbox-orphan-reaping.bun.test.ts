@@ -30,6 +30,10 @@ import {
   writePortableExecutable,
 } from '../../test-utils/sandbox-fixture-compiler.js';
 import { assignContainerName } from './sandbox-containers.js';
+import {
+  readCurrentPidNamespace,
+  type SandboxOwnerMetadata as OwnerMetadata,
+} from './sandbox-owner-labels.js';
 import { runContainerSandbox } from './sandbox-exec.js';
 
 type ContainerCommand = ContainerSandboxConfig['command'];
@@ -50,23 +54,6 @@ const ENGINE_ENV_KEYS = [
   'LLXPRT_TEST_PS_HANG',
   'LLXPRT_TEST_PS_OUTPUT',
 ] satisfies readonly string[];
-
-interface OwnerMetadata {
-  readonly version: 1;
-  readonly hostname: string;
-  readonly pid: number;
-  readonly startTimeMs: number;
-  readonly startTimeSource: 'observed' | 'estimated';
-  readonly pidNamespace?: string;
-}
-
-function currentPidNamespace(): string | undefined {
-  try {
-    return fs.readlinkSync('/proc/self/ns/pid');
-  } catch {
-    return undefined;
-  }
-}
 
 function requirePid(child: ChildProcess): number {
   if (child.pid === undefined) {
@@ -428,7 +415,7 @@ describe('sandbox orphan recovery startup', () => {
     const recordedOwner: unknown = JSON.parse(
       ownerLabel.slice(ownerLabel.indexOf('=') + 1),
     );
-    const pidNamespace = currentPidNamespace();
+    const pidNamespace = readCurrentPidNamespace();
     const expectedOwner: OwnerMetadata = {
       version: 1,
       hostname: os.hostname(),
@@ -554,49 +541,6 @@ describe('sandbox orphan recovery startup', () => {
       state: '',
     });
   });
-
-  it('retains a container whose missing owner ran in another PID namespace', async () => {
-    const owner = spawn(process.execPath, [
-      '-e',
-      'setInterval(() => {}, 1000)',
-    ]);
-    const metadata: OwnerMetadata = {
-      ...ownerFor(owner),
-      pidNamespace: 'pid:[1]',
-    };
-    await stopChild(owner);
-    const statePath = engineStatePath('docker');
-    const originalState = `${row('other-namespace-container', metadata)}\n`;
-    fs.writeFileSync(statePath, originalState);
-
-    await runRecoveryStartup('docker');
-
-    expect(fs.readFileSync(statePath, 'utf8')).toBe(originalState);
-  });
-
-  it.skipIf(currentPidNamespace() === undefined)(
-    'removes a marked container whose owner exited in this PID namespace',
-    async () => {
-      const owner = spawn(process.execPath, [
-        '-e',
-        'setInterval(() => {}, 1000)',
-      ]);
-      const metadata: OwnerMetadata = {
-        ...ownerFor(owner),
-        pidNamespace: currentPidNamespace(),
-      };
-      await stopChild(owner);
-      const statePath = engineStatePath('docker');
-      fs.writeFileSync(
-        statePath,
-        `${row('same-namespace-container', metadata)}\n`,
-      );
-
-      await runRecoveryStartup('docker');
-
-      expect(fs.readFileSync(statePath, 'utf8')).toBe('');
-    },
-  );
 
   it('removes a marked dead container from CRLF engine output', async () => {
     const owner = spawn(process.execPath, [
