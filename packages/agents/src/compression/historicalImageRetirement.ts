@@ -16,7 +16,6 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { invalidateResponsesStatefulChainForRetainedRewrite } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RequestMediaByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { PendingMediaBudgetError } from './pendingMediaBudgetError.js';
 import { envelopeProtectedStart } from './pendingBoundary.js';
 
 /**
@@ -361,21 +360,4 @@ export function compressionCanRelieve(
     return false;
   }
   return hasCountedMedia(contents.slice(0, splitAt));
-}
-
-/**
- * Names a pending-only media overflow, judged against the budget the request
- * was rejected under; any other error passes through.
- */
-export function explainPendingOverflow(
-  error: unknown,
-  pending: readonly IContent[],
-): unknown {
-  if (!(error instanceof RequestMediaByteOverflowError)) {
-    return error;
-  }
-  const pendingBytes = totalCountedBytes(pending);
-  return error.budgetBytes > 0 && pendingBytes > error.budgetBytes
-    ? new PendingMediaBudgetError(error, pendingBytes)
-    : error;
 }

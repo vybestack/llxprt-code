@@ -15,7 +15,7 @@ import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__te
  * and <3.1 MB each, also below Anthropic's documented 5 MB/image allowance.
  * agents/src/compression/{historicalImageRetirement,source-image-retirement}.ts
  * retire oldest historical pixels to 75% only after crossing the media budget;
- * pending pixels stay. mediaPressureFallback.ts drops all historical images,
+ * pending pixels stay. Media-pressure relief drops all historical images,
  * never pending ones. Four PNGs nearly fill the default budget without retiring.
  * A 32 MB explicit media budget admits the pending-only body-cap image set;
  * retirement/fallback cannot shrink it. Default-budget text plus images cannot

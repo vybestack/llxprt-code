@@ -168,6 +168,39 @@ describe('dropping stored media keeps a reference', () => {
     });
   }, 60000);
 
+  it('a guarded rollback puts a dropped image back with its blob', async () => {
+    await withRemovalFixture(async ({ history }, store) => {
+      const pasted = await image(store, 6, { kind: 'pasted', readAt: READ_AT });
+      const row = rowWith(0, pasted);
+      history.add(row);
+      await history.settleMediaOwnership();
+
+      await history.detachedValues.withRollbackCheckpoint(async (restore) => {
+        await history.dropMedia(
+          [{ position: 0, blockIndex: row.blocks.length - 1 }],
+          DROPPED_AT,
+        );
+        await history.waitForOwnershipSettlement();
+        expect(droppedAt((await rows(history))[0]).contentId).toBe(
+          pasted.contentId,
+        );
+        expect(
+          (await store.reclaimUnreferenced(new Set(), Date.now()))
+            .objectsRemoved,
+        ).toBe(0);
+        await restore();
+      }, true);
+      await history.waitForOwnershipSettlement();
+
+      expect(await rows(history)).toStrictEqual([row]);
+      expect(await store.hasReservations(pasted.contentId)).toBe(true);
+      expect(
+        (await store.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
+      ).toBe(0);
+      expect(await store.readVerified(pasted)).toHaveLength(5);
+    });
+  }, 60000);
+
   it('breaks the Responses chain from the first dropped row onward only', async () => {
     await withRemovalFixture(async ({ history }, store) => {
       const pasted = await image(store, 5, { kind: 'pasted', readAt: READ_AT });
