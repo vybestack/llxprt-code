@@ -877,9 +877,12 @@ The engine supports launches from a source checkout as well as the built CLI
 bundle. It grants the checkout's `packages` tree and root `node_modules`
 read-only so workspace package links resolve, while keeping the home directory
 masked. Those trees stay read-only when the workspace is the checkout itself,
-and the rest of the workspace stays writable. The engine refuses a workspace or
-included directory that equals or contains the home directory, because binding
-it would expose the real home over its mask.
+and the rest of the workspace stays writable. The engine masks `/home`,
+`/root`, `/run`, `/tmp` and `/var/tmp` with private tmpfs mounts. It refuses a
+workspace or included directory that equals or contains one of those paths or
+the home directory, because binding it would expose the real directory over its
+mask; a directory below them, such as `/tmp/project`, is accepted. It also
+refuses a profile mount whose source equals or contains the home directory.
 
 Signals reach a bwrap session the way [Stopping a sandboxed
 session](#stopping-a-sandboxed-session) describes, with one difference: the

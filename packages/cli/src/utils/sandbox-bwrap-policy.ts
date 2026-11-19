@@ -99,12 +99,25 @@ export function addBwrapDestinationParents(
 }
 
 /**
- * The home directory is masked before the workspace binds are applied, so a
- * workspace root that equals or contains it would be bound over the mask and
- * expose the real home to the payload.
+ * Host paths that bwrap replaces with a private tmpfs before any workspace
+ * bind is applied. A workspace root that equals or contains one of them, or
+ * the home directory, would be bound over its mask and expose the real
+ * directory to the payload.
  */
+const BWRAP_MASKED_PATHS = [
+  '/home',
+  '/root',
+  '/run',
+  '/tmp',
+  '/var/tmp',
+] as const;
+
 function assertSafeWorkspace(workspace: string, homeDir: string): void {
-  if (workspace === '/' || isWithin(workspace, homeDir)) {
+  if (
+    workspace === '/' ||
+    isWithin(workspace, homeDir) ||
+    BWRAP_MASKED_PATHS.some((masked) => isWithin(workspace, masked))
+  ) {
     throw new FatalSandboxError(
       `The bwrap workspace '${workspace}' overlaps a protected root; choose a project directory below the home directory.`,
     );
@@ -167,7 +180,7 @@ function validatedProfileMounts(
     if (
       overlapsProtectedPath ||
       isWithin(destination, homeDir) ||
-      source === homeDir
+      isWithin(source, homeDir)
     ) {
       throw new FatalSandboxError(
         `Sandbox mount destination '${destination}' overlaps a protected bwrap control path.`,
@@ -205,7 +218,7 @@ function buildBwrapBaseArgs(
     '/',
     '/',
   ];
-  for (const mask of ['/home', '/root', '/run', '/tmp', '/var/tmp']) {
+  for (const mask of BWRAP_MASKED_PATHS) {
     appendMask(args, mask);
   }
   for (const maskedRoot of input.maskedRoots ?? []) {
