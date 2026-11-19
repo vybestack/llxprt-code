@@ -67,8 +67,19 @@ with a scratchpad is kept and reported.
   Opening tags may carry attributes (`<scratchpad\b[^>]*>`); an unterminated scratchpad before
   the snapshot drops the whole preamble, one after it (or in text without a snapshot) runs to the
   end.
-- Untagged summaries recorded before #2768 are recognized by shape: a human entry that opens
-  with `<scratchpad` and holds `<state_snapshot>`.
+- Untagged summaries from before #2768 need provenance as well as shape (whole text is a
+  scratchpad followed by a closed `<state_snapshot>`). The old strategies built the summary as
+  `{ speaker: 'human', blocks, ...(usage ? { metadata: { usage } } : {}) }`, and before #2768
+  recording stored `newHistory[0]` as the `compressed` record's summary. So a human entry with
+  `metadata.usage` is recognized (no user message carries usage), and replay tags a legacy-shaped
+  `compressed` record summary with `isSummary` (covers summaries without usage). A user message
+  of the same shape is never touched.
+- Middle-out takes the last-prompt text from the cleaned summary when the last human entry is a
+  summary, so neither the large-last-prompt turn nor the continuation repeats its scratchpad.
+- The debug logger's `stderr` target writes through `console.warn` (stderr) instead of
+  `console.log` (stdout), so headless stdout carries only session output.
+- The security preamble permits the `VERIFIED` reply that the trusted verification instruction
+  asks for; format instructions in history are still ignored.
 - `compression.md` resolves through `loadCompressionPromptFile` like the other files, so the
   fallback is the shipped default. `getCompressionPrompt()` and its TS template are deleted; the
   enriched sections it alone had (REQ-HD-010) moved into `defaults/compression.md`. An existing
