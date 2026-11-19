@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ContentPart } from '@vybestack/llxprt-code-tools';
+import type { ContentPart, InlineData } from '@vybestack/llxprt-code-tools';
 
 import {
   limitOutputTokens,
@@ -251,6 +251,37 @@ function toBlocksFromLegacyParts(input: unknown): ContentBlock[] {
   return blocks;
 }
 
+function inlineDataToMediaBlock(inlineData: InlineData): MediaBlock {
+  return {
+    type: 'media',
+    mimeType: inlineData.mimeType ?? '',
+    data: inlineData.data ?? '',
+    encoding: 'base64',
+    ...(inlineData.displayName ? { filename: inlineData.displayName } : {}),
+    ...(inlineData.sourcePath === undefined
+      ? {}
+      : {
+          origin: {
+            kind: 'file',
+            path: inlineData.sourcePath,
+            readAt: new Date().toISOString(),
+          },
+        }),
+    ...(inlineData.originalData === undefined
+      ? {}
+      : { originalData: inlineData.originalData }),
+    ...(inlineData.originalMimeType === undefined
+      ? {}
+      : { originalMimeType: inlineData.originalMimeType }),
+    ...(inlineData.originalDimensions === undefined
+      ? {}
+      : { originalDimensions: inlineData.originalDimensions }),
+    ...(inlineData.transformation === undefined
+      ? {}
+      : { transformation: inlineData.transformation }),
+  };
+}
+
 function contentPartToBlocks(part: ContentPart): ContentBlock[] {
   if ('thought' in part && part.thought === true) {
     return [
@@ -292,29 +323,7 @@ function contentPartToBlocks(part: ContentPart): ContentBlock[] {
   }
 
   if (part.inlineData) {
-    return [
-      {
-        type: 'media',
-        mimeType: part.inlineData.mimeType ?? '',
-        data: part.inlineData.data ?? '',
-        encoding: 'base64',
-        ...(part.inlineData.displayName
-          ? { filename: part.inlineData.displayName }
-          : {}),
-        ...(part.inlineData.originalData === undefined
-          ? {}
-          : { originalData: part.inlineData.originalData }),
-        ...(part.inlineData.originalMimeType === undefined
-          ? {}
-          : { originalMimeType: part.inlineData.originalMimeType }),
-        ...(part.inlineData.originalDimensions === undefined
-          ? {}
-          : { originalDimensions: part.inlineData.originalDimensions }),
-        ...(part.inlineData.transformation === undefined
-          ? {}
-          : { transformation: part.inlineData.transformation }),
-      },
-    ];
+    return [inlineDataToMediaBlock(part.inlineData)];
   }
 
   if (part.fileData) {

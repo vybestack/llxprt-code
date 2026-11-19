@@ -10,10 +10,12 @@ import * as path from 'path';
 import {
   getErrorMessage,
   isNodeError,
+  legacyPartsToBlocks,
   validatePathWithinWorkspace,
   type AgentRequestInput,
   type ContentBlock,
   type DiscoveredMCPResource,
+  type MediaBlock,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
@@ -24,6 +26,7 @@ import type { IndividualToolCallDisplay } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { addToolGroup } from './atCommandResourceHelpers.js';
+import { isClipboardImagePath } from '../utils/clipboardUtils.js';
 export { processResourceAttachments } from './atCommandResourceHelpers.js';
 
 export interface AtCommandPart {
@@ -701,6 +704,13 @@ function processReadManyFilesPart(
   config: AtCommandHelperRuntime,
 ): void {
   if (typeof part !== 'string') {
+    const mediaBlocks = legacyPartsToBlocks([part]).filter(
+      (block) => block.type === 'media',
+    );
+    if (mediaBlocks.length > 0) {
+      processedQueryParts.push(...mediaBlocks.map(pastedWhenClipboardImage));
+      return;
+    }
     processedQueryParts.push({
       type: 'text',
       text:
@@ -720,6 +730,13 @@ function processReadManyFilesPart(
     text: `\nContent from @${parsed.displayPath}:\n`,
   });
   processedQueryParts.push({ type: 'text', text: parsed.content });
+}
+
+function pastedWhenClipboardImage(block: MediaBlock): MediaBlock {
+  const origin = block.origin;
+  if (origin?.kind !== 'file' || !isClipboardImagePath(origin.path))
+    return block;
+  return { ...block, origin: { kind: 'pasted', readAt: origin.readAt } };
 }
 
 function parseFileContentPart(

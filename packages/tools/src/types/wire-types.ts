@@ -49,6 +49,10 @@ export interface InlineData {
   mimeType?: string;
   data?: string;
   displayName?: string;
+  /** Absolute path the bytes were read from. Recorded as the media origin so a
+   * dropped image can name the file the model may read again; never sent on
+   * the wire. */
+  sourcePath?: string;
   originalData?: string;
   originalMimeType?: string;
   originalDimensions?: { readonly width: number; readonly height: number };

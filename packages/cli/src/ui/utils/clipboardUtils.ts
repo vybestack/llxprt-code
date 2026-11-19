@@ -120,6 +120,20 @@ function getClipboardTempDir(targetDir: string | undefined): string {
   return path.join(baseDir, '.llxprt-clipboard');
 }
 
+/**
+ * True when `filePath` names an image saved by saveClipboardImage. Those files
+ * are temporary (cleanupOldClipboardImages removes them after an hour), so an
+ * image read from one is recorded as pasted rather than as a re-readable file.
+ */
+export function isClipboardImagePath(filePath: string): boolean {
+  const fileName = path.basename(filePath);
+  return (
+    path.basename(path.dirname(filePath)) === '.llxprt-clipboard' &&
+    fileName.startsWith('clipboard-') &&
+    IMAGE_EXTENSIONS.includes(path.extname(fileName).toLowerCase())
+  );
+}
+
 async function saveWindowsClipboardImage(
   tempDir: string,
   timestamp: number,
