@@ -11,6 +11,7 @@ import {
   type ThinkingBlock,
   EmojiFilter,
   type EmojiFilterMode,
+  describeDroppedMedia,
 } from '@vybestack/llxprt-code-core';
 import {
   type HistoryItem,
@@ -214,6 +215,8 @@ function toToolCallStatus(
 interface ToolResponseLookup {
   result: unknown;
   error?: string;
+  /** Transcript lines of the images dropped from this response. */
+  droppedMedia?: readonly string[];
   /** chronology seq of the tool entry that carried this response. */
   seq?: number;
 }
@@ -233,17 +236,48 @@ function buildResponseMap(
   for (const content of contents) {
     if (content.speaker !== 'tool') continue;
     const entrySeq = content.metadata?.chronology?.seq;
+    const dropped = droppedLinesByCall(content);
     for (const block of content.blocks) {
       if (block.type === 'tool_response') {
+        const lines = dropped.get(block.callId);
         map.set(block.callId, {
           result: block.result,
           error: block.error,
+          ...(lines !== undefined ? { droppedMedia: lines } : {}),
           ...(entrySeq !== undefined ? { seq: entrySeq } : {}),
         });
       }
     }
   }
   return map;
+}
+
+/**
+ * The transcript line of each image dropped from a tool row, keyed by the
+ * call of the response it rode with (the nearest response before it, or the
+ * first one when none precedes it).
+ */
+function droppedLinesByCall(content: IContent): Map<string, string[]> {
+  const lines = new Map<string, string[]>();
+  let owner = content.blocks.find((b) => b.type === 'tool_response')?.callId;
+  for (const block of content.blocks) {
+    if (block.type === 'tool_response') owner = block.callId;
+    if (block.type !== 'media_dropped' || owner === undefined) continue;
+    const list = lines.get(owner) ?? [];
+    list.push(describeDroppedMedia(block));
+    lines.set(owner, list);
+  }
+  return lines;
+}
+
+function withDroppedLines(
+  text: string | undefined,
+  lines: readonly string[] | undefined,
+): string | undefined {
+  if (lines === undefined) return text;
+  return [...(text === undefined || text === '' ? [] : [text]), ...lines].join(
+    NEWLINE,
+  );
 }
 
 interface MarkdownSegment {
@@ -328,7 +362,7 @@ function processAiContent(
         callId: tc.id,
         name: tc.name,
         description: tc.description ?? tc.name,
-        resultDisplay: display?.text,
+        resultDisplay: withDroppedLines(display?.text, response?.droppedMedia),
         status: toToolCallStatus(response),
         confirmationDetails: undefined,
         retention: display?.retention,
@@ -412,12 +446,19 @@ export function iContentToHistoryItems(
   for (const [index, content] of contents.entries()) {
     const source = rowSourceFor(sources, index);
     if (content.speaker === 'human') {
-      const text =
+      const typed =
         content.metadata?.displayText ??
         content.blocks
           .filter((b): b is TextBlock => b.type === 'text')
           .map((b) => b.text)
           .join('\n');
+      const dropped = content.blocks.flatMap((b) =>
+        b.type === 'media_dropped' ? [describeDroppedMedia(b)] : [],
+      );
+      const text = withDroppedLines(
+        typed,
+        dropped.length === 0 ? undefined : dropped,
+      );
       if (text) {
         items.push({
           type: 'user',
