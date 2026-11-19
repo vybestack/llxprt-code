@@ -92,6 +92,25 @@ async function waitUntil(
   }
 }
 
+/** Identity of this process's PID namespace; absent where /proc has none. */
+const currentPidNamespace = ((): string | undefined => {
+  try {
+    return fs.readlinkSync('/proc/self/ns/pid');
+  } catch {
+    return undefined;
+  }
+})();
+
+/** Whether this host lists bound Unix sockets, which the reaper depends on. */
+const unixSocketTableReadable = ((): boolean => {
+  try {
+    fs.readFileSync('/proc/net/unix', 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 /** The pid of a process that has already ended. */
 function deadPid(): number {
   return spawnSync('/bin/true').pid;
@@ -220,6 +239,9 @@ describe('bwrap session directories', () => {
         pid,
         startTimeMs,
         startTimeSource: 'observed',
+        ...(currentPidNamespace === undefined
+          ? {}
+          : { pidNamespace: currentPidNamespace }),
       };
     }
 
@@ -294,16 +316,74 @@ describe('bwrap session directories', () => {
       expect(fs.existsSync(dir)).toBe(true);
     });
 
-    it('removes an old directory without an owner record when nothing listens on its socket', () => {
+    it.skipIf(!unixSocketTableReadable)(
+      'removes an old directory without an owner record when nothing listens on its socket',
+      () => {
+        const tmp = root();
+        const dir = staleDir(tmp, 'legacy');
+        fs.writeFileSync(path.join(dir, 'proxy.sock'), '');
+        ageDir(dir, 3_600_000);
+
+        reapStaleBwrapSessionDirs(tmp);
+
+        expect(fs.existsSync(dir)).toBe(false);
+      },
+    );
+
+    it('keeps an old directory without an owner record when bound sockets cannot be listed', () => {
       const tmp = root();
-      const dir = staleDir(tmp, 'legacy');
+      const dir = staleDir(tmp, 'legacy-blind');
       fs.writeFileSync(path.join(dir, 'proxy.sock'), '');
       ageDir(dir, 3_600_000);
 
+      reapStaleBwrapSessionDirs(tmp, path.join(tmp, 'no-such-socket-table'));
+
+      expect(fs.existsSync(dir)).toBe(true);
+    });
+
+    it('keeps the directory of an owner that ran in another PID namespace', () => {
+      // A pid that is absent here can belong to a live process elsewhere.
+      const tmp = root();
+      const dir = staleDir(tmp, 'other-namespace');
+      writeOwner(dir, {
+        ...ownerOf(deadPid()),
+        pidNamespace: 'pid:[1]',
+      });
+
       reapStaleBwrapSessionDirs(tmp);
 
-      expect(fs.existsSync(dir)).toBe(false);
+      expect(fs.existsSync(dir)).toBe(true);
     });
+
+    it.skipIf(currentPidNamespace === undefined)(
+      'keeps the directory of an owner record that names no PID namespace',
+      () => {
+        const tmp = root();
+        const dir = staleDir(tmp, 'no-namespace');
+        const owner: Record<string, unknown> = ownerOf(deadPid());
+        delete owner['pidNamespace'];
+        writeOwner(dir, owner);
+
+        reapStaleBwrapSessionDirs(tmp);
+
+        expect(fs.existsSync(dir)).toBe(true);
+      },
+    );
+
+    it.skipIf(currentPidNamespace === undefined)(
+      'records the creating process PID namespace in the owner file',
+      () => {
+        const tmp = root();
+        const dir = createBwrapSessionDir(tmp);
+
+        const owner: unknown = JSON.parse(
+          fs.readFileSync(path.join(dir, BWRAP_SESSION_OWNER_FILE), 'utf8'),
+        );
+        expect(owner).toStrictEqual(
+          expect.objectContaining({ pidNamespace: currentPidNamespace }),
+        );
+      },
+    );
 
     it('keeps an old directory without an owner record while a process listens on its socket', async () => {
       // A Unix socket path is limited to about 107 bytes, so this case needs a

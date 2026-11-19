@@ -5,6 +5,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
 
 export const SANDBOX_MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed';
@@ -18,6 +19,13 @@ export interface SandboxOwnerMetadata {
   readonly pid: number;
   readonly startTimeMs: number;
   readonly startTimeSource: 'observed' | 'estimated';
+  /**
+   * Identity of the owner's PID namespace (the target of /proc/self/ns/pid).
+   * A pid is only meaningful inside the namespace that issued it. Absent on
+   * records written where the link cannot be read and on records that predate
+   * the field.
+   */
+  readonly pidNamespace?: string;
 }
 
 const PS_WEEKDAYS: readonly string[] = [
@@ -91,24 +99,29 @@ function observeCurrentProcessStartTime(): number | undefined {
   }
 }
 
+/** The PID namespace this process runs in, when the platform exposes it. */
+export function readCurrentPidNamespace(): string | undefined {
+  try {
+    const namespace = fs.readlinkSync('/proc/self/ns/pid');
+    return namespace.length > 0 ? namespace : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Identity of this process instance, recorded on every resource it owns. */
 export function buildCurrentSandboxOwner(): SandboxOwnerMetadata {
   const observedStartTimeMs = observeCurrentProcessStartTime();
-  return observedStartTimeMs === undefined
-    ? {
-        version: 1,
-        hostname: os.hostname(),
-        pid: process.pid,
-        startTimeMs: Date.now() - process.uptime() * 1000,
-        startTimeSource: 'estimated',
-      }
-    : {
-        version: 1,
-        hostname: os.hostname(),
-        pid: process.pid,
-        startTimeMs: observedStartTimeMs,
-        startTimeSource: 'observed',
-      };
+  const pidNamespace = readCurrentPidNamespace();
+  return {
+    version: 1,
+    hostname: os.hostname(),
+    pid: process.pid,
+    startTimeMs: observedStartTimeMs ?? Date.now() - process.uptime() * 1000,
+    startTimeSource:
+      observedStartTimeMs === undefined ? 'estimated' : 'observed',
+    ...(pidNamespace === undefined ? {} : { pidNamespace }),
+  };
 }
 
 function isUnknownRecord(value: unknown): value is Record<string, unknown> {
@@ -131,6 +144,12 @@ function isSandboxOwnerMetadata(value: unknown): value is SandboxOwnerMetadata {
     typeof value.startTimeMs !== 'number' ||
     !Number.isFinite(value.startTimeMs) ||
     value.startTimeMs <= 0
+  ) {
+    return false;
+  }
+  if (
+    value.pidNamespace !== undefined &&
+    (typeof value.pidNamespace !== 'string' || value.pidNamespace.length === 0)
   ) {
     return false;
   }
@@ -174,11 +193,22 @@ function processIsMissing(error: unknown): boolean {
   );
 }
 
-/** Returns true only when this host can prove the recorded process instance ended. */
+/**
+ * Returns true only when this host can prove the recorded process instance
+ * ended. A record that names a PID namespace is judged only from inside that
+ * namespace, because a pid that is missing here can belong to a live process
+ * in another one.
+ */
 export function sandboxOwnerIsDead(owner: SandboxOwnerMetadata): boolean {
   try {
     if (owner.hostname !== os.hostname()) return false;
   } catch {
+    return false;
+  }
+  if (
+    owner.pidNamespace !== undefined &&
+    owner.pidNamespace !== readCurrentPidNamespace()
+  ) {
     return false;
   }
   try {

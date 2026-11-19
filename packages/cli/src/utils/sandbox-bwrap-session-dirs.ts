@@ -67,11 +67,16 @@ function readOwner(
   return parseSandboxOwner(payload) ?? 'unreadable';
 }
 
+/** Where Linux lists the Unix sockets that processes have bound. */
+const UNIX_SOCKET_TABLE = '/proc/net/unix';
+
 /** Paths that some process on this host has bound as a Unix socket. */
-function boundUnixSocketPaths(): readonly string[] | undefined {
+function boundUnixSocketPaths(
+  socketTable: string,
+): readonly string[] | undefined {
   try {
     return fs
-      .readFileSync('/proc/net/unix', 'utf8')
+      .readFileSync(socketTable, 'utf8')
       .split('\n')
       .slice(1)
       .map((line) => line.trim().split(/\s+/))
@@ -85,25 +90,39 @@ function boundUnixSocketPaths(): readonly string[] | undefined {
 function isUnownedSessionDirAbandoned(
   sessionDir: string,
   ageMs: number,
+  socketTable: string,
 ): boolean {
   if (ageMs < UNOWNED_GRACE_MS) return false;
-  const bound = boundUnixSocketPaths();
+  const bound = boundUnixSocketPaths(socketTable);
   const prefix = `${sessionDir}${path.sep}`;
   return (
     bound !== undefined && !bound.some((socket) => socket.startsWith(prefix))
   );
 }
 
-function isStale(sessionDir: string, modifiedMs: number): boolean {
+function isStale(
+  sessionDir: string,
+  modifiedMs: number,
+  socketTable: string,
+): boolean {
   const owner = readOwner(sessionDir);
   if (owner === 'unreadable') return false;
   if (owner === 'absent') {
-    return isUnownedSessionDirAbandoned(sessionDir, Date.now() - modifiedMs);
+    return isUnownedSessionDirAbandoned(
+      sessionDir,
+      Date.now() - modifiedMs,
+      socketTable,
+    );
+  }
+  // Every launcher on Linux records its PID namespace; a record without one
+  // cannot be placed relative to this process, so its pid proves nothing.
+  if (process.platform === 'linux' && owner.pidNamespace === undefined) {
+    return false;
   }
   return sandboxOwnerIsDead(owner);
 }
 
-function reapIfStale(root: string, entry: string): void {
+function reapIfStale(root: string, entry: string, socketTable: string): void {
   const sessionDir = path.join(root, entry);
   try {
     // lstat keeps a planted symbolic link from redirecting the removal.
@@ -112,7 +131,7 @@ function reapIfStale(root: string, entry: string): void {
     if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) {
       return;
     }
-    if (isStale(sessionDir, stat.mtimeMs)) {
+    if (isStale(sessionDir, stat.mtimeMs, socketTable)) {
       fs.rmSync(sessionDir, { recursive: true, force: true });
     }
   } catch (error) {
@@ -125,13 +144,17 @@ function reapIfStale(root: string, entry: string): void {
 /**
  * Removes session directories left by hosts that are provably gone: SIGKILL,
  * an OOM kill or a crash, none of which run the host's own cleanup. A
- * directory is removed only when its recorded owner is dead (same host, no
- * such process or a different process start time), or when it has no owner
+ * directory is removed only when its recorded owner is dead (same host and
+ * PID namespace, no such process or a different process start time), or when
+ * it has no owner
  * record, is older than {@link UNOWNED_GRACE_MS} and no process listens on
  * its socket. Anything else is a live session or cannot be judged and stays.
  * Failures are logged and never block the launch.
  */
-export function reapStaleBwrapSessionDirs(root: string = os.tmpdir()): void {
+export function reapStaleBwrapSessionDirs(
+  root: string = os.tmpdir(),
+  socketTable: string = UNIX_SOCKET_TABLE,
+): void {
   let entries: string[];
   try {
     entries = fs.readdirSync(root);
@@ -139,6 +162,7 @@ export function reapStaleBwrapSessionDirs(root: string = os.tmpdir()): void {
     return;
   }
   for (const entry of entries) {
-    if (entry.startsWith(BWRAP_SESSION_DIR_PREFIX)) reapIfStale(root, entry);
+    if (entry.startsWith(BWRAP_SESSION_DIR_PREFIX))
+      reapIfStale(root, entry, socketTable);
   }
 }
