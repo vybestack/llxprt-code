@@ -17,11 +17,18 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RetirementSession } from './image-retirement-harness.js';
-import { readHistory, readCurated } from './retirement-source-fixture.js';
+import {
+  historyApartFromDrops,
+  readCurated,
+  readHistory,
+} from './retirement-source-fixture.js';
 const sessions: Array<{ session: RetirementSession; directory: string }> = [];
 
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  isMediaReferenceBlock,
+  type IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   RequestBodyByteOverflowError,
@@ -94,6 +101,7 @@ function harness(
   session.estimateOverride = estimate;
   return {
     history: session.history,
+    seedImages: () => seedImages(session),
     compressionRuns: () => session.compressionRuns,
     envelope: (pending: IContent[]) => ({ pendingContents: pending }),
     send: async (
@@ -122,11 +130,19 @@ const summarizeHistory: Compression = async (history) => {
   return PerformCompressionResult.COMPRESSED;
 };
 
-function seedImages(history: HistoryService): void {
-  history.add(imageTurn('a'));
-  history.add(textTurn('ai', 'seen a'));
-  history.add(imageTurn('b'));
-  history.add(textTurn('ai', 'seen b'));
+/** Stored history holds admitted images: references that know their source. */
+async function seedImages(session: RetirementSession): Promise<void> {
+  for (const label of ['a', 'b']) {
+    const image = await session.admit(
+      (IMAGE_BASE64_LENGTH / 4) * 3,
+      label.charCodeAt(0),
+    );
+    session.history.add({
+      ...imageTurn(label),
+      blocks: [imageTurn(label).blocks[0], image.reference],
+    });
+    session.history.add(textTurn('ai', `seen ${label}`));
+  }
 }
 
 /** Earlier non-image media: nothing the request view may retire. */
@@ -135,6 +151,14 @@ function seedDocuments(history: HistoryService): void {
   history.add(textTurn('ai', 'read a'));
   history.add(pdfTurn('b', 400));
   history.add(textTurn('ai', 'read b'));
+}
+
+/** Request body characters of a media block, inline or stored by reference. */
+function base64Characters(block: IContent['blocks'][number]): number {
+  if (isMediaReferenceBlock(block)) return block.normalizedBase64Length;
+  return block.type === 'media' && block.encoding === 'base64'
+    ? block.data.length
+    : 0;
 }
 
 function mediaCount(contents: readonly IContent[]): number {
@@ -172,7 +196,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
   it('compresses once under byte pressure and keeps the pending image', async () => {
     const h = harness(summarizeHistory);
-    seedImages(h.history);
+    await h.seedImages();
     await h.history.waitForTokenUpdates();
     const pending = [imageTurn('p')];
 
@@ -187,7 +211,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
   it('retires every historical image and keeps the pending one when compression changes nothing (issue #4000)', async () => {
     const h = harness(() => Promise.resolve(PerformCompressionResult.NOOP));
-    seedImages(h.history);
+    await h.seedImages();
     await h.history.waitForTokenUpdates();
 
     const result = await h.send(h.envelope([imageTurn('p')]), 'p3');
@@ -197,7 +221,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
   it('retires every historical image and keeps the pending one when compression itself fails (issue #4000)', async () => {
     const h = harness(() => Promise.reject(new Error('summarizer offline')));
-    seedImages(h.history);
+    await h.seedImages();
     await h.history.waitForTokenUpdates();
 
     const result = await h.send(h.envelope([imageTurn('p')]), 'p4');
@@ -258,11 +282,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
           (sum, content) =>
             sum +
             content.blocks.reduce(
-              (blockSum, block) =>
-                blockSum +
-                (block.type === 'media' && block.encoding === 'base64'
-                  ? block.data.length
-                  : 0),
+              (blockSum, block) => blockSum + base64Characters(block),
               0,
             ),
           0,
@@ -280,7 +300,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
     it('shares the single bounded compression pass with media overflow', async () => {
       const history = new HistoryService({ scratchRoots: historyScratchRoots });
       const h = harness(summarizeHistory, bodyEstimate(history));
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
 
       const result = await h.send(h.envelope([imageTurn('p')]), 'body-1');
@@ -294,7 +314,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         () => Promise.resolve(PerformCompressionResult.NOOP),
         bodyEstimate(history),
       );
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
 
       const result = await h.send(
@@ -354,7 +374,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         new RequestMediaResolutionError('sha256:gone', 'turn-x', 'store read'),
       ),
     );
-    seedImages(h.history);
+    await h.seedImages();
     await h.history.waitForTokenUpdates();
 
     const error = await rejection(h.send(h.envelope([imageTurn('p')]), 'p7'));
@@ -368,7 +388,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
   it('propagates cancellation raised during byte-pressure compression', async () => {
     const aborted = new DOMException('aborted', 'AbortError');
     const h = harness(() => Promise.reject(aborted));
-    seedImages(h.history);
+    await h.seedImages();
     await h.history.waitForTokenUpdates();
 
     const error = await rejection(
@@ -384,7 +404,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
       await history.waitForTokenUpdates();
       throw new Error('summarizer crashed after truncating history');
     });
-    seedImages(h.history);
+    await h.seedImages();
     await h.history.waitForTokenUpdates();
 
     const result = await h.send(h.envelope([imageTurn('p')]), 'p-partial');
@@ -408,7 +428,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
   it('does not compress when the request is aborted', async () => {
     const aborted = new DOMException('aborted', 'AbortError');
     const h = harness(summarizeHistory, () => Promise.reject(aborted));
-    seedImages(h.history);
+    await h.seedImages();
     await h.history.waitForTokenUpdates();
 
     await rejection(h.send(h.envelope([imageTurn('p')]), 'p8'));
@@ -418,7 +438,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
   it('retires historical images without compressing when the pending boundary is unrecoverable (issue #4000)', async () => {
     const h = harness(summarizeHistory);
-    seedImages(h.history);
+    await h.seedImages();
     await h.history.waitForTokenUpdates();
 
     const result = await h.send(
@@ -437,17 +457,18 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
       return contents.flatMap((content) =>
         content.blocks.filter(
           (block) =>
-            block.type === 'text' &&
-            block.text.includes('was omitted from this request'),
+            block.type === 'media_dropped' ||
+            (block.type === 'text' &&
+              block.text.includes('was omitted from this request')),
         ),
       ).length;
     }
 
     it('retires earlier images instead of compressing and keeps the pending image', async () => {
       const h = harness(summarizeHistory, undefined, BYTE_BUDGET);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
-      const before = JSON.stringify(await readHistory(h.history));
+      const before = await historyApartFromDrops(h.history);
 
       const result = await h.send(h.envelope([imageTurn('p')]), 'r1');
 
@@ -455,8 +476,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         media: mediaCount(result),
         notes: noteCount(result),
         compressionRuns: h.compressionRuns(),
-        canonicalUnchanged:
-          JSON.stringify(await readHistory(h.history)) === before,
+        canonicalUnchanged: (await historyApartFromDrops(h.history)) === before,
       }).toStrictEqual({
         media: 1,
         notes: 2,
@@ -467,7 +487,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
     it('reports a pending-only overflow without compressing or touching history', async () => {
       const h = harness(summarizeHistory, undefined, BYTE_BUDGET);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
       const oversizedPending: IContent = {
         speaker: 'human',
@@ -481,7 +501,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
           },
         ],
       };
-      const before = JSON.stringify(await readHistory(h.history));
+      const before = await historyApartFromDrops(h.history);
 
       const error = await rejection(
         h.send(h.envelope([oversizedPending]), 'r2'),
@@ -491,8 +511,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         typed: error instanceof PendingMediaBudgetError,
         stillByteOverflow: error instanceof RequestMediaByteOverflowError,
         compressionRuns: h.compressionRuns(),
-        canonicalUnchanged:
-          JSON.stringify(await readHistory(h.history)) === before,
+        canonicalUnchanged: (await historyApartFromDrops(h.history)) === before,
       }).toStrictEqual({
         typed: true,
         stillByteOverflow: true,
@@ -506,7 +525,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
       h.history.add(pdfTurn('earlier', 300));
       h.history.add(textTurn('ai', 'read the first document'));
       await h.history.waitForTokenUpdates();
-      const before = JSON.stringify(await readHistory(h.history));
+      const before = await historyApartFromDrops(h.history);
 
       const error = await rejection(
         h.send(h.envelope([pdfTurn('pending', 1200)]), 'r5'),
@@ -515,8 +534,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
       expect({
         typed: error instanceof PendingMediaBudgetError,
         compressionRuns: h.compressionRuns(),
-        canonicalUnchanged:
-          JSON.stringify(await readHistory(h.history)) === before,
+        canonicalUnchanged: (await historyApartFromDrops(h.history)) === before,
         message: error instanceof Error ? error.message : undefined,
       }).toStrictEqual({
         typed: true,
@@ -529,7 +547,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
     it('judges pending media against the budget the request was rejected under, not the configured one', async () => {
       const h = harness(summarizeHistory, undefined, 5 * BYTE_BUDGET);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
 
       const error = await rejection(
@@ -544,7 +562,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
     it('still gives earlier media one compression pass when pending media fits the rejecting budget', async () => {
       const h = harness(summarizeHistory, undefined, 5 * BYTE_BUDGET);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
 
       const result = await h.send(h.envelope([pdfTurn('pending', 600)]), 'r7');
@@ -554,7 +572,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
     it('protects only the newest content and retires older images when the pending boundary is undefined (issue #4000)', async () => {
       const h = harness(summarizeHistory, undefined, BYTE_BUDGET);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
 
       const result = await h.send(
@@ -614,7 +632,9 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
       const h = harness(
         async (target) => {
           const kept = (await readCurated(target)).filter((content) =>
-            content.blocks.some((b) => b.type === 'media'),
+            content.blocks.some(
+              (b) => b.type === 'media' || b.type === 'media_dropped',
+            ),
           );
           await target.clear();
           for (const content of kept) target.add(content);
@@ -633,7 +653,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         BYTE_BUDGET,
       );
       h.history.add(bloated);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
 
       const result = await h.send(h.envelope([imageTurn('p')]), 'r5');
@@ -642,7 +662,11 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         compressionRuns: h.compressionRuns(),
         media: mediaCount(result),
         notes: noteCount(result),
-        canonicalImages: mediaCount(await readHistory(h.history)),
+        canonicalImages: (await readHistory(h.history)).flatMap((content) =>
+          content.blocks.filter(
+            (block) => block.type === 'media' || block.type === 'media_dropped',
+          ),
+        ).length,
       }).toStrictEqual({
         compressionRuns: 1,
         media: 1,
@@ -653,7 +677,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
     it('returns an identical request view for repeated preparation of the same history', async () => {
       const h = harness(summarizeHistory, undefined, BYTE_BUDGET);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
       const pending = [imageTurn('p')];
 
@@ -670,23 +694,27 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
         () => Promise.reject(aborted),
         BYTE_BUDGET,
       );
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
       const pending = [imageTurn('p')];
-      const before = JSON.stringify([await readHistory(h.history), pending]);
+      const before = JSON.stringify([
+        await historyApartFromDrops(h.history),
+        pending,
+      ]);
 
       const error = await rejection(h.send(h.envelope(pending), 'r7'));
 
       expect({
         rejected: error instanceof Error,
         unchanged:
-          JSON.stringify([await readHistory(h.history), pending]) === before,
+          JSON.stringify([await historyApartFromDrops(h.history), pending]) ===
+          before,
       }).toStrictEqual({ rejected: true, unchanged: true });
     });
 
     it('re-applies retirement through the compression callback entry point', async () => {
       const h = harness(summarizeHistory, undefined, BYTE_BUDGET);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
 
       const result = await h.callback([imageTurn('p')], 'r8');
@@ -702,7 +730,7 @@ describe('ProviderContentEnforcer byte pressure (issue #3984)', () => {
 
     it('does not retire anything for an explicit zero budget, leaving the existing policy path', async () => {
       const h = harness(summarizeHistory, undefined, 0);
-      seedImages(h.history);
+      await h.seedImages();
       await h.history.waitForTokenUpdates();
 
       const result = await h.send(h.envelope([imageTurn('p')]), 'r9');

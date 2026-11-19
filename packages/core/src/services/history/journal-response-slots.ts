@@ -120,9 +120,7 @@ async function mediaFor(
       media.push(
         ...source.indices.flatMap((index, block) =>
           source.ids.header.blocks[index].type === ROW_BLOCK_TYPE.media ||
-          source.ids.header.blocks[index].type ===
-            ROW_BLOCK_TYPE.media_dropped ||
-          snapshot.isMediaReplacement?.(source.entry.label, index) === true
+          source.ids.header.blocks[index].type === ROW_BLOCK_TYPE.media_dropped
             ? [{ at: partPosition(source, block), orphan: false }]
             : [],
         ),
@@ -177,8 +175,7 @@ async function metadataFor(
       return (
         type === ROW_BLOCK_TYPE.tool_response ||
         type === ROW_BLOCK_TYPE.media ||
-        type === ROW_BLOCK_TYPE.media_dropped ||
-        snapshot.isMediaReplacement?.(next.entry.label, index) === true
+        type === ROW_BLOCK_TYPE.media_dropped
       );
     }) &&
     selected.every(

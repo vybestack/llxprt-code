@@ -323,7 +323,6 @@ describe('native Chat preparation ownership and planning', () => {
             close: () => selection.close(),
             native: {
               indexed: native.indexed,
-              project: (projection) => native.project(projection),
               withKimi: (consume) => native.withKimi(consume),
               withFormat: (registration, consume) =>
                 native.withFormat(

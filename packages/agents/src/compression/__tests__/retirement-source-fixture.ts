@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  invalidateResponsesStatefulChain,
+  isMediaDroppedBlock,
+  isMediaReferenceBlock,
+  type IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   ProviderRequestSelection,
   ProviderRequestRows,
@@ -22,7 +27,8 @@ import { runGuardedCompression } from '../guardedCompression.js';
 import { executeFallbackTransaction } from '../providerFallbackTransaction.js';
 import { truncateSourceToolResponses } from '../source-tool-truncation.js';
 import {
-  retireSourceImages,
+  retiredSourceImages,
+  noteRetiredImages,
   assertSourcePendingMediaBudget,
 } from '../source-image-retirement.js';
 import { createSourceCompressionCallback } from '../source-compression-callback.js';
@@ -42,6 +48,27 @@ export async function readHistory(
   const rows: IContent[] = [];
   for await (const row of history.streamRawHistory()) rows.push(row);
   return rows;
+}
+/**
+ * Canonical history as JSON with every stored image written as its content id,
+ * whether its bytes are kept or dropped to a source reference (Andrew's
+ * decision on #854). Two reads compare equal when history changed only by
+ * retirement dropping images.
+ */
+export async function historyApartFromDrops(
+  history: HistoryService,
+): Promise<string> {
+  const rows = await readHistory(history);
+  return JSON.stringify(
+    rows.map((row) => ({
+      ...row,
+      blocks: row.blocks.map((block) =>
+        isMediaDroppedBlock(block) || isMediaReferenceBlock(block)
+          ? { storedImage: block.contentId }
+          : block,
+      ),
+    })),
+  );
 }
 export async function readCurated(
   history: HistoryService,
@@ -148,15 +175,16 @@ function makeRetirementCandidate(
 ): SourceCandidate<ProviderRequestSelection> {
   let pending = input.pending;
   const capture = () => input.history.historyMutationGuard();
+  const reopen = async (): Promise<ProviderRequestSelection> => {
+    const source =
+      await input.history.prepareCuratedForProviderSnapshot(pending);
+    own(source);
+    return source;
+  };
   return new SourceCandidate(
     initial,
     estimate,
-    async () => {
-      const source =
-        await input.history.prepareCuratedForProviderSnapshot(pending);
-      own(source);
-      return source;
-    },
+    reopen,
     {
       read: async () => pending,
       replace: (rows) => {
@@ -173,7 +201,21 @@ function makeRetirementCandidate(
         );
         return source;
       }
-      const projected = await retireSourceImages(
+      if (input.contents === undefined) {
+        // Stored history: the product drops the images in the journal and
+        // rebuilds the request from it (streamprocessor-disk-source.ts).
+        const retired = await retiredSourceImages(
+          source,
+          input.protectedContents,
+          input.budget,
+          all,
+        );
+        if (retired.length === 0) return source;
+        await input.history.dropMedia(retired);
+        pending = [...invalidateResponsesStatefulChain(pending)];
+        return reopen();
+      }
+      const projected = await noteRetiredImages(
         source,
         input.protectedContents,
         input.budget,

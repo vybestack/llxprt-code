@@ -263,66 +263,53 @@ function retirementReplacements(
   return replacements;
 }
 
-async function projectRetirement(
-  source: ProviderRequestSelection,
-  replacements: Replacements,
-): Promise<ProviderRequestSelection> {
-  const first = replacements.keys().next().value;
-  if (first === undefined) return source;
-  const header = (row: IContent, label: bigint): IContent =>
-    label < first
-      ? row
-      : invalidateResponsesStatefulChainForRetainedRewrite([row], 0)[0];
-  if (source.native !== undefined) {
-    const projected = await source.native.project({
-      blockReplacements: replacements,
-      header,
-    });
-    return {
-      count: projected.count,
-      native: projected.native,
-      index: projected.index,
-      readAt: (index, signal) => projected.readAt(index, signal),
-      openReader: (signal) => projected.openReader(signal),
-      async close() {
-        try {
-          await projected.close();
-        } finally {
-          await source.close();
-        }
-      },
-    };
-  }
-  const rewrite = (row: IContent, index: number): IContent => {
-    const blocks = replacements.get(BigInt(index));
-    return header(
-      blocks === undefined
-        ? row
-        : {
-            ...row,
-            blocks: row.blocks.map(
-              (block, index) => blocks.get(index) ?? block,
-            ),
-          },
-      BigInt(index),
-    );
-  };
-  return {
-    callerOwned: true,
-    count: source.count,
-    async *openReader(signal) {
-      let index = 0;
-      for await (const row of source.openReader(signal))
-        yield rewrite(row, index++);
-    },
-    readAt: async (index, signal) =>
-      rewrite(await source.readAt(index, signal), index),
-    close: () => source.close(),
-  };
+/** One retired stored image: its journal row label and block index. */
+export interface RetiredSourceImage {
+  readonly label: bigint;
+  readonly blockIndex: number;
 }
 
-/** Keeps only image positions, sizes and notes. Pixel payloads never enter the overlay. */
-export async function retireSourceImages(
+/**
+ * The stored images retirement drops under `budgetBytes`, oldest first, never
+ * at or after the protected pending boundary. Only positions and sizes are
+ * read; pixel payloads never enter the facts.
+ */
+export async function retiredSourceImages(
+  source: ProviderRequestSelection,
+  protectedContents: readonly IContent[],
+  budgetBytes: number,
+  retireAll = false,
+  signal?: AbortSignal,
+): Promise<RetiredSourceImage[]> {
+  if (
+    !Number.isSafeInteger(budgetBytes) ||
+    budgetBytes <= 0 ||
+    source.count === 0
+  )
+    return [];
+  const { rows, protectedLabel } = await collectMediaFacts(
+    source,
+    protectedContents,
+    signal,
+  );
+  const retired: RetiredSourceImage[] = [];
+  for (const [label, blocks] of retirementReplacements(
+    rows,
+    protectedLabel,
+    budgetBytes,
+    retireAll,
+  ))
+    for (const blockIndex of blocks.keys()) retired.push({ label, blockIndex });
+  return retired;
+}
+
+/**
+ * Rows that are not stored history (hook-supplied or history-override rows)
+ * cannot be dropped in the journal; their retired images become notes in this
+ * request only, addressed by request row index. Stored history goes through
+ * HistoryService.dropMedia instead.
+ */
+export async function noteRetiredImages(
   source: ProviderRequestSelection,
   protectedContents: readonly IContent[],
   budgetBytes: number,
@@ -336,14 +323,50 @@ export async function retireSourceImages(
   )
     return source;
   const { rows, protectedLabel } = await collectMediaFacts(
-    source,
+    {
+      count: source.count,
+      openReader: (signal) => source.openReader(signal),
+      readAt: (index, signal) => source.readAt(index, signal),
+      close: () => source.close(),
+    },
     protectedContents,
     signal,
   );
-  return projectRetirement(
-    source,
-    retirementReplacements(rows, protectedLabel, budgetBytes, retireAll),
+  const replacements = retirementReplacements(
+    rows,
+    protectedLabel,
+    budgetBytes,
+    retireAll,
   );
+  const first = replacements.keys().next().value;
+  if (first === undefined) return source;
+  const rewrite = (row: IContent, index: number): IContent => {
+    const blocks = replacements.get(BigInt(index));
+    const rewritten =
+      blocks === undefined
+        ? row
+        : {
+            ...row,
+            blocks: row.blocks.map(
+              (block, index) => blocks.get(index) ?? block,
+            ),
+          };
+    return BigInt(index) < first
+      ? rewritten
+      : invalidateResponsesStatefulChainForRetainedRewrite([rewritten], 0)[0];
+  };
+  return {
+    callerOwned: true,
+    count: source.count,
+    async *openReader(signal) {
+      let index = 0;
+      for await (const row of source.openReader(signal))
+        yield rewrite(row, index++);
+    },
+    readAt: async (index, signal) =>
+      rewrite(await source.readAt(index, signal), index),
+    close: () => source.close(),
+  };
 }
 
 /** Uses the same protected boundary as retirement, against the rejecting budget. */

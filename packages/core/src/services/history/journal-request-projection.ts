@@ -11,15 +11,11 @@ import {
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
 import { encodeContentRow } from './journalRowCodec.js';
-import type { TextBlock, IContent } from './IContent.js';
+import type { IContent } from './IContent.js';
 import type { JournalResponseSource } from './journal-response-source.js';
 
 export interface JournalRequestProjection {
   readonly headerLabels?: readonly [] | readonly [bigint];
-  readonly blockReplacements?: ReadonlyMap<
-    bigint,
-    ReadonlyMap<number, TextBlock>
-  >;
   readonly label?: bigint;
   readonly removedBlock?: number;
   readonly removedRow?: boolean;
@@ -168,7 +164,6 @@ export class JournalProjectedSource implements JournalRequestBase {
       this.selected(entry) && this.projection.removedRow !== true
         ? await this.changed()
         : await this.snapshot.readIds(entry);
-    const replacements = this.projection.blockReplacements?.get(entry.label);
     return {
       header: {
         ...ids.header,
@@ -176,11 +171,6 @@ export class JournalProjectedSource implements JournalRequestBase {
           this.selected(entry) && this.projection.removedRow === true
             ? ids.header.flags & ~ROW_FLAG.curated
             : ids.header.flags,
-        blocks: ids.header.blocks.map((block, index) =>
-          replacements?.has(index) === true
-            ? { ...block, type: ROW_BLOCK_TYPE.text }
-            : block,
-        ),
       },
       rawIds: ids.rawIds,
       ...('head' in ids ? { head: ids.head } : {}),
@@ -188,60 +178,19 @@ export class JournalProjectedSource implements JournalRequestBase {
   }
 
   async readRow(entry: RowEntry): Promise<StoredRow> {
-    const row = this.selected(entry)
-      ? await this.changed()
-      : await this.snapshot.readRow(entry);
-    const replacements = this.projection.blockReplacements?.get(entry.label);
-    if (replacements === undefined) return row;
-    return {
-      ...row,
-      header: (await this.readIds(entry)).header,
-      blocks: row.blocks.map((bytes, index) => {
-        const replacement = replacements.get(index);
-        return replacement === undefined
-          ? bytes
-          : Buffer.from(JSON.stringify(replacement));
-      }),
-    };
+    return this.selected(entry) ? this.changed() : this.snapshot.readRow(entry);
   }
 
   async *blocks(entry: RowEntry): AsyncGenerator<DirectoryBlock> {
     if (!this.selected(entry)) {
-      for await (const block of this.snapshot.blocks(entry)) {
-        const replacement = this.projection.blockReplacements
-          ?.get(entry.label)
-          ?.get(block.ordinal);
-        if (replacement === undefined) yield block;
-        else {
-          const bytes = Buffer.from(JSON.stringify(replacement));
-          yield {
-            ordinal: block.ordinal,
-            type: ROW_BLOCK_TYPE.text,
-            length: bytes.byteLength,
-            normalizedJson: true,
-            async *parts() {
-              yield bytes;
-            },
-          };
-        }
-      }
+      yield* this.snapshot.blocks(entry);
       return;
     }
     const stored = await this.changed();
-    for (const [ordinal, original] of stored.blocks.entries()) {
-      const replacement = this.projection.blockReplacements
-        ?.get(entry.label)
-        ?.get(ordinal);
-      const bytes =
-        replacement === undefined
-          ? original
-          : Buffer.from(JSON.stringify(replacement));
+    for (const [ordinal, bytes] of stored.blocks.entries()) {
       yield {
         ordinal,
-        type:
-          replacement === undefined
-            ? stored.header.blocks[ordinal].type
-            : ROW_BLOCK_TYPE.text,
+        type: stored.header.blocks[ordinal].type,
         length: bytes.byteLength,
         normalizedJson: true,
         async *parts() {
@@ -257,11 +206,6 @@ export class JournalProjectedSource implements JournalRequestBase {
     index: number,
     ids?: RowIds,
   ): Promise<Uint8Array> {
-    const replacement = this.projection.blockReplacements
-      ?.get(entry.label)
-      ?.get(index);
-    if (replacement !== undefined)
-      return Buffer.from(JSON.stringify(replacement));
     return this.selected(entry)
       ? (await this.changed()).blocks[index]
       : this.snapshot.readBlock(entry, index, ids);

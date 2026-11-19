@@ -7,6 +7,7 @@ import {
 } from './historyMutationEffects.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import {
+  invalidateResponsesStatefulChain,
   isMediaReferenceBlock,
   type ContentBlock,
   type IContent,
@@ -20,6 +21,7 @@ import {
   snapshotReferences,
 } from './journalMediaReferences.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+import { ROW_FLAG, ROW_SPEAKER } from '../../journal/rowRecord.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 
 /**
@@ -148,6 +150,40 @@ async function followRows(
 }
 
 /**
+ * Stored Responses parents at or after the first dropped row hold the image
+ * bytes server-side; they lose `responsesStored` so the next Responses request
+ * resends history from there without the bytes. Only row headers are walked;
+ * a row is read only when it is a parent.
+ */
+async function staleResponseParents(
+  saved: VersionSnapshot,
+  first: number,
+  dropped: ReadonlyMap<number, ReadonlySet<number>>,
+  resumeBoundary: bigint | undefined,
+): Promise<PositionedContent[]> {
+  const stale: PositionedContent[] = [];
+  let position = first;
+  for await (const entry of saved.entries(first)) {
+    const at = position++;
+    if (
+      dropped.has(at) ||
+      entry.speaker !== ROW_SPEAKER.ai ||
+      ((entry.flags & ROW_FLAG.responseParent) === 0 &&
+        decodeStoredRow(await saved.readMetadata(entry), resumeBoundary)
+          .metadata?.responsesStored !== true)
+    )
+      continue;
+    const row = decodeStoredRow(await saved.readRow(entry), resumeBoundary);
+    if (row.metadata?.responsesStored === true)
+      stale.push({
+        position: at,
+        content: invalidateResponsesStatefulChain([row])[0],
+      });
+  }
+  return stale;
+}
+
+/**
  * Replaces the named media blocks of stored rows with `media_dropped`
  * references in one in-place purge group (design 4.6): only the affected
  * rows are read and rewritten, under their own labels and owners. The owner
@@ -178,9 +214,20 @@ export async function dropMediaOnJournal(
       );
       changes.push({
         position,
-        content: droppedRow(row, blocks, request.droppedAt),
+        content: invalidateResponsesStatefulChain([
+          droppedRow(row, blocks, request.droppedAt),
+        ])[0],
       });
     }
+    changes.push(
+      ...(await staleResponseParents(
+        saved,
+        Math.min(...positions.keys()),
+        positions,
+        store.resumeBoundary,
+      )),
+    );
+    changes.sort((left, right) => left.position - right.position);
     try {
       store.purge(changes);
       await store.waitForDurable();

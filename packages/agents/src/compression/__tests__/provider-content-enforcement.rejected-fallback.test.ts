@@ -1,4 +1,4 @@
-import { readHistory } from './retirement-source-fixture.js';
+import { historyApartFromDrops } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -58,7 +58,7 @@ describe('rejected fallback truncation keeps other writers entries (issue #4000 
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = JSON.stringify(await readHistory(session.history));
+    const before = await historyApartFromDrops(session.history);
     session.useCompression(() => Promise.reject(new Error('summarizer down')));
     session.useFallback(async (_history, applyResult) => {
       await applyResult([aiTurn(CANDIDATE)]);
@@ -70,7 +70,7 @@ describe('rejected fallback truncation keeps other writers entries (issue #4000 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
       historyRestored:
-        JSON.stringify(await readHistory(session.history)) === before,
+        (await historyApartFromDrops(session.history)) === before,
     }).toStrictEqual({ contextOverflow: true, historyRestored: true });
   });
 });

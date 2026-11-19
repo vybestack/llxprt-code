@@ -93,6 +93,16 @@ function createMediaHistoryProvider(
   };
   return provider;
 }
+function fixtureStore(
+  directory: string,
+  quotaBytes = 1024 * 1024,
+): LocalMediaStore {
+  return new LocalMediaStore({
+    rootDirectory: join(directory, 'media'),
+    quotaBytes,
+  });
+}
+
 export function createMediaHistoryChat(
   directory: string,
   lifecycle: ProviderFileLifecycle,
@@ -101,15 +111,14 @@ export function createMediaHistoryChat(
   limits: {
     readonly quotaBytes?: number;
     readonly mediaBudgetBytes?: number;
+    /** A store the caller admits history images into. */
+    readonly store?: LocalMediaStore;
   } = {},
 ): ChatSession {
   const provider = createMediaHistoryProvider(onRequest);
   const setup = createChatSessionRuntime({ provider });
   const history = new HistoryService({ scratchRoots: historyScratchRoots });
-  const store = new LocalMediaStore({
-    rootDirectory: join(directory, 'media'),
-    quotaBytes: limits.quotaBytes ?? 1024 * 1024,
-  });
+  const store = limits.store ?? fixtureStore(directory, limits.quotaBytes);
   const state = createAgentRuntimeState({
     runtimeId: 'media-history-runtime',
     provider: provider.name,

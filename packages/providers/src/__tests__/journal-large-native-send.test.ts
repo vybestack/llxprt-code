@@ -48,7 +48,7 @@ import {
   retireHistoricalImages,
   retireEveryHistoricalImage,
 } from '../../../agents/src/compression/historicalImageRetirement.js';
-import { retireSourceImages } from '../../../agents/src/compression/source-image-retirement.js';
+import { retiredSourceImages } from '../../../agents/src/compression/source-image-retirement.js';
 import { ProviderSourceEnforcer } from '../../../agents/src/compression/provider-source-enforcement.js';
 import { computeMarginAdjustedLimit } from '../../../agents/src/compression/contextLimitPolicy.js';
 import { ANTHROPIC_NATIVE_REQUEST_ENVELOPE_BYTES } from '../anthropic/AnthropicEndpointUtils.js';
@@ -258,12 +258,12 @@ async function verifyMaximumSend(
   const sink = await localWireHashSink(route);
   try {
     expect(
-      await retireSourceImages(
+      await retiredSourceImages(
         fixture.selection,
         [rows[rows.length - 1]],
         media.binding.budgetBytes,
       ),
-    ).toBe(fixture.selection);
+    ).toStrictEqual([]);
     const expected = await oracle(
       route.id === 'anthropic-cache-off' ? sink.route : route,
       rows,
@@ -394,20 +394,20 @@ describe('native Anthropic pending-image body overflow', () => {
     let networkSubmissions = 0;
     try {
       expect(
-        await retireSourceImages(
+        await retiredSourceImages(
           fixture.selection,
           [pending],
           media.binding.budgetBytes,
         ),
-      ).toBe(fixture.selection);
+      ).toStrictEqual([]);
       expect(
-        await retireSourceImages(
+        await retiredSourceImages(
           fixture.selection,
           [pending],
           media.binding.budgetBytes,
           true,
         ),
-      ).toBe(fixture.selection);
+      ).toStrictEqual([]);
       globalThis.fetch = withFetchPreconnect(async (): Promise<Response> => {
         networkSubmissions += 1;
         return route.respond();

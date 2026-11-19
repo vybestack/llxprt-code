@@ -33,7 +33,13 @@ describe('guard overhead calibration across media relief (issue #4000 CodeRabbit
     await conversation.seedImages(3);
     const pending = [textTurn('next question')];
     const original = await session.compose(pending);
-    const relieved = await session.recomposeViaCallback(pending);
+    // Relieved through the same rows the guarded calls send: the composed
+    // request, not stored history, so measuring never drops stored images.
+    const relieved = await session.recomposeViaCallback(
+      pending,
+      undefined,
+      original,
+    );
     return {
       original,
       pending,

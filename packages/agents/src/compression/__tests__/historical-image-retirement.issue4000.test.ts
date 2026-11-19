@@ -1,4 +1,4 @@
-import { readHistory } from './retirement-source-fixture.js';
+import { historyApartFromDrops } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -191,7 +191,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
   ): Promise<void> {
     const original = await session.store.readVerified(oldest.reference);
     expect({
-      history: JSON.stringify(await readHistory(session.history)) === before,
+      history: (await historyApartFromDrops(session.history)) === before,
       originalReadable: Buffer.from(original).equals(Buffer.from(oldest.bytes)),
       activeRequests: session.resolver.accounting().activeRequestCount,
       reserved: await session.store.hasReservations(oldest.reference.contentId),
@@ -225,7 +225,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
       'sends a text-only turn with older images retired and the newest kept',
       async () => {
         const images = await seedUqmHistory(REAL);
-        const before = JSON.stringify(await readHistory(session.history));
+        const before = await historyApartFromDrops(session.history);
 
         await session.send([textTurn('what did the last screenshots show?')]);
 
@@ -243,7 +243,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
       async () => {
         const images = await seedUqmHistory(REAL);
         const pasted = await admitBase64(3_000_000);
-        const before = JSON.stringify(await readHistory(session.history));
+        const before = await historyApartFromDrops(session.history);
 
         await session.send([imageTurn(pasted.reference, 'pasted-now')]);
 
@@ -262,7 +262,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
       'sends the same history when the pending boundary is unrecoverable',
       async () => {
         const images = await seedUqmHistory(REAL);
-        const before = JSON.stringify(await readHistory(session.history));
+        const before = await historyApartFromDrops(session.history);
 
         await session.send(
           [textTurn('what did the last screenshots show?')],
@@ -288,7 +288,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
 
     it('retires older images and keeps the last content when the boundary is undefined', async () => {
       const images = await seedUqmHistory(SCALED);
-      const before = JSON.stringify(await readHistory(session.history));
+      const before = await historyApartFromDrops(session.history);
 
       await session.send([textTurn('final question')], true, {
         pending: undefined,
@@ -319,7 +319,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
 
     it('retires older images when the tail differs from the declared pending blocks', async () => {
       const images = await seedUqmHistory(SCALED);
-      const before = JSON.stringify(await readHistory(session.history));
+      const before = await historyApartFromDrops(session.history);
 
       await session.send([textTurn('rewritten by a hook')], true, {
         pending: [textTurn('what the user typed')],
@@ -364,7 +364,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
       before: string;
     }> {
       const images = await seedUqmHistory(SCALED);
-      const before = JSON.stringify(await readHistory(session.history));
+      const before = await historyApartFromDrops(session.history);
       await session.send([textTurn('final question')]);
       return { images, before };
     }
@@ -460,7 +460,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
         session.useCompression(() =>
           Promise.reject(new Error('summarizer offline')),
         );
-        const before = JSON.stringify(await readHistory(session.history));
+        const before = await historyApartFromDrops(session.history);
 
         await session.send([textTurn('carry on')]);
 
@@ -481,7 +481,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
       await startSession(SCALED.budget);
       const images = await seedUqmHistory(SCALED);
       const oversized = await admitBase64(2_000_000);
-      const before = JSON.stringify(await readHistory(session.history));
+      const before = await historyApartFromDrops(session.history);
 
       const error = await rejection(
         session.send([imageTurn(oversized.reference, 'too-big')]),
@@ -499,7 +499,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
       await startSession(SCALED.budget);
       const images = await seedUqmHistory(SCALED);
       const oversized = await admitBase64(2_000_000);
-      const before = JSON.stringify(await readHistory(session.history));
+      const before = await historyApartFromDrops(session.history);
 
       const error = await rejection(
         session.send([imageTurn(oversized.reference, 'too-big')], true, {
@@ -517,7 +517,7 @@ describe('history media pressure never ends a turn (issue #4000)', () => {
     it('still rejects encoded media for a zero budget instead of retiring it', async () => {
       await startSession(0);
       const images = await seedUqmHistory(SCALED);
-      const before = JSON.stringify(await readHistory(session.history));
+      const before = await historyApartFromDrops(session.history);
 
       const error = await rejection(session.send([textTurn('final question')]));
 

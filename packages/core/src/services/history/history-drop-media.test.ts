@@ -167,4 +167,37 @@ describe('dropping stored media keeps a reference', () => {
       expect(await store.hasReservations(pasted.contentId)).toBe(true);
     });
   }, 60000);
+
+  it('breaks the Responses chain from the first dropped row onward only', async () => {
+    await withRemovalFixture(async ({ history }, store) => {
+      const pasted = await image(store, 5, { kind: 'pasted', readAt: READ_AT });
+      const stored = (id: string): IContent => ({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: id }],
+        metadata: { id, responsesStored: true },
+      });
+      const input = [
+        stored('resp_before'),
+        rowWith(1, pasted),
+        stored('resp_after'),
+      ];
+      for (const row of input) history.add(row);
+      await history.settleMediaOwnership();
+
+      await history.dropMedia(
+        [{ position: 1, blockIndex: input[1].blocks.length - 1 }],
+        DROPPED_AT,
+      );
+      await history.waitForOwnershipSettlement();
+
+      const after = await rows(history);
+      expect(after.map((row) => row.metadata?.responsesStored)).toStrictEqual([
+        true,
+        undefined,
+        undefined,
+      ]);
+      expect(after[2].metadata?.id).toBe('resp_after');
+      expect(after[2].blocks).toStrictEqual(input[2].blocks);
+    });
+  }, 60000);
 });

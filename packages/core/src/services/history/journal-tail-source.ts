@@ -141,7 +141,6 @@ export class JournalTailSource implements JournalResponseSource {
     return (
       this.isTail(label) ||
       label === this.projection?.label ||
-      this.projection?.blockReplacements?.has(label) === true ||
       this.projection?.headerLabels?.some((header) => header === label) === true
     );
   }
@@ -151,9 +150,6 @@ export class JournalTailSource implements JournalResponseSource {
       ? this.firstLabel + (label - this.firstLabel) * LABEL_STEP
       : label;
   }
-
-  readonly isMediaReplacement = (label: bigint, index: number): boolean =>
-    this.projection?.blockReplacements?.get(label)?.has(index) === true;
 
   readonly isTail = (label: bigint): boolean => label >= this.firstLabel;
   readonly header = (row: IContent, entry: RowEntry): IContent =>
@@ -171,12 +167,9 @@ export class JournalTailSource implements JournalResponseSource {
     readonly maxRows: number;
   }> {
     const labels = new Set(this.projection?.headerLabels);
-    for (const label of this.projection?.blockReplacements?.keys() ?? [])
-      labels.add(label);
     let maxRows = this.tailRows.length + this.overlay.size + labels.size;
-    const changed = new Set(this.projection?.blockReplacements?.keys());
-    if (this.projection?.label !== undefined)
-      changed.add(this.projection.label);
+    const changed =
+      this.projection?.label === undefined ? [] : [this.projection.label];
     for (const label of changed) {
       if (this.isTail(label)) continue;
       labels.add(label);

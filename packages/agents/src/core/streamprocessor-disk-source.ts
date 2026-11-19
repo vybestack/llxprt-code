@@ -2,10 +2,14 @@
 import { responseTransportSource } from './response-transport-source.js';
 import { DEFAULT_REQUEST_MEDIA_BUDGET_BYTES } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
-  retireSourceImages,
+  retiredSourceImages,
+  noteRetiredImages,
   assertSourcePendingMediaBudget,
 } from '../compression/source-image-retirement.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  invalidateResponsesStatefulChain,
+  type IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -120,35 +124,63 @@ async function submitSourcePrompt(
   );
 }
 
-function sourceImageView(input: StreamDiskSourceInput) {
+/**
+ * Stored history drops its retired images in the journal (Andrew's decision on
+ * #854: a dropped image becomes a reference to its source) and the request is
+ * rebuilt from the journal. Hook-supplied and history-override rows are not
+ * stored history and only get notes in the request.
+ */
+function sourceImageView(
+  input: StreamDiskSourceInput,
+  pending: SourcePendingRows,
+  reopen: () => Promise<PendingAwareRequestSelection>,
+) {
   return async (
     candidate: PendingAwareRequestSelection,
     retireAll: boolean,
     error?: unknown,
   ): Promise<PendingAwareRequestSelection> => {
+    const protectedContents = Array.isArray(input.userContent)
+      ? input.userContent
+      : [input.userContent];
     if (error !== undefined) {
       await assertSourcePendingMediaBudget(
         candidate,
-        Array.isArray(input.userContent)
-          ? input.userContent
-          : [input.userContent],
+        protectedContents,
         error,
         input.signal,
       );
       return candidate;
     }
-    const retired = await retireSourceImages(
+    const budget =
+      input.requestMediaBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
+    if (candidate.native !== undefined && input.historyOverride === undefined) {
+      const retired = await retiredSourceImages(
+        candidate,
+        protectedContents,
+        budget,
+        retireAll,
+        input.signal,
+      );
+      if (retired.length === 0) return candidate;
+      await input.history.dropMedia(retired);
+      // Pending rows follow every dropped row, so a stored Responses parent
+      // among them now holds image bytes the request no longer carries.
+      pending.replace([
+        ...invalidateResponsesStatefulChain(await pending.read()),
+      ]);
+      return reopen();
+    }
+    const noted = await noteRetiredImages(
       candidate,
-      Array.isArray(input.userContent)
-        ? input.userContent
-        : [input.userContent],
-      input.requestMediaBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
+      protectedContents,
+      budget,
       retireAll,
       input.signal,
     );
-    return retired === candidate
+    return noted === candidate
       ? candidate
-      : pendingAwareRequestSelection(retired, candidate.pendingSelection);
+      : pendingAwareRequestSelection(noted, candidate.pendingSelection);
   };
 }
 
@@ -215,7 +247,7 @@ export async function streamDiskSource(
             hookOwner,
             modelParameters: input.modelParameters,
           },
-          sourceImageView(input),
+          sourceImageView(input, pending, reopen),
         ),
       onPrepared: input.onPrepared,
       takeSource: input.takeSource,

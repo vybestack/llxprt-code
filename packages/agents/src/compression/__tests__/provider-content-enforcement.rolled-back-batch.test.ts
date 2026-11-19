@@ -39,6 +39,12 @@ async function revertedBatch(history: HistoryService): Promise<void> {
     }),
     releaseAll: async () => undefined,
     reconcile: async () => undefined,
+    // Media relief drops retired images in stored history, which the owner
+    // follows with a reference replacement.
+    prepareReferenceReplacement: () => ({
+      publish: () => undefined,
+      rollback: () => undefined,
+    }),
     prepareReferenceAddition: () => ({
       publish: () => undefined,
       rollback: () => undefined,

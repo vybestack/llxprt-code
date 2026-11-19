@@ -56,6 +56,8 @@ export class SourceCandidate<S> {
     const projected = await this.projectView(this.current, retireAll);
     if (projected === this.current) return false;
     this.current = projected;
+    // A stored image drop changed history and rebuilt the candidate from it.
+    this.unchanged = this.captureHistoryGuard?.();
     this.measured = undefined;
     return true;
   }

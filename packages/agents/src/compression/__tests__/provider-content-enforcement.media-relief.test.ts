@@ -1,4 +1,4 @@
-import { readHistory } from './retirement-source-fixture.js';
+import { historyApartFromDrops } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -53,12 +53,14 @@ function mediaBlocks(contents: readonly IContent[]): number {
   ).length;
 }
 
+/** Retired images the request announces: stored drops or request notes. */
 function noteBlocks(contents: readonly IContent[]): number {
   return contents.flatMap((content) =>
     content.blocks.filter(
       (block) =>
-        block.type === 'text' &&
-        block.text.includes('was omitted from this request'),
+        block.type === 'media_dropped' ||
+        (block.type === 'text' &&
+          block.text.includes('was omitted from this request')),
     ),
   ).length;
 }
@@ -243,7 +245,7 @@ describe('history media relief keeps the other limits (issue #4000 review round 
       await startSession(500_000, IDLE_RETIREMENT);
       const images = await seedImages(3);
       session.useCompressionOutcome(PerformCompressionResult.SKIPPED_COOLDOWN);
-      const before = JSON.stringify(await readHistory(session.history));
+      const before = await historyApartFromDrops(session.history);
       const declared = ['a', 'b', 'c', 'd', 'e'].map((label) =>
         textTurn(`declared ${label}`),
       );
@@ -258,7 +260,7 @@ describe('history media relief keeps the other limits (issue #4000 review round 
         sentImages: collectImageData(body, []).length,
         notes: countRetirementNotes(body),
         canonicalUnchanged:
-          JSON.stringify(await readHistory(session.history)) === before,
+          (await historyApartFromDrops(session.history)) === before,
       }).toStrictEqual({
         requests: 1,
         sentImages: 0,

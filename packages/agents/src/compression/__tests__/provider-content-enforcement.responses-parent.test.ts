@@ -126,7 +126,7 @@ describe('stored Responses parents in the pending tail after retire-all recompos
     });
   });
 
-  it('keeps canonical history entries marked as stored', async () => {
+  it('clears the stored marker of canonical parents after the first dropped image and leaves the caller pending rows alone', async () => {
     const session = conversation.session();
     session.contextLimit = 1_000_000;
     await conversation.seedImages(3);
@@ -136,13 +136,20 @@ describe('stored Responses parents in the pending tail after retire-all recompos
 
     await session.recomposeViaCallback(pending);
 
+    // Dropped images become source references in stored history (Andrew's
+    // decision on #854), so a later stored parent no longer matches it.
+    const canonical = await readHistory(session.history);
     expect({
-      canonicalHistoryStored: (await readHistory(session.history))
+      canonicalHistoryStored: canonical
         .filter((content) => content.metadata?.responsesStored === true)
         .map((content) => content.metadata?.id),
+      committedKept: canonical.some(
+        (content) => content.metadata?.id === 'resp_committed',
+      ),
       pendingStored: pending[1].metadata?.responsesStored,
     }).toStrictEqual({
-      canonicalHistoryStored: ['resp_committed'],
+      canonicalHistoryStored: [],
+      committedKept: true,
       pendingStored: true,
     });
   });

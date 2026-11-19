@@ -65,6 +65,17 @@ const baseTokenizerFactory: RuntimeTokenizerFactory = {
 
 const tokenizerFactory = withGpt56DiskSources(baseTokenizerFactory, tmpdir());
 
+export const IMAGE_READ_AT = '2026-11-19T18:00:00.000Z';
+
+/** The absolute path a harness image records as where it was read from. */
+export function imagePath(
+  directory: string,
+  length: number,
+  fill: number,
+): string {
+  return join(directory, 'screens', `image-${length}-${fill}.png`);
+}
+
 export interface AdmittedImage {
   readonly reference: MediaReferenceBlock;
   readonly base64: string;
@@ -130,9 +141,14 @@ export function collectText(value: unknown, found: string[]): string[] {
 
 /** Number of retirement notes the model would read in this request body. */
 export function countRetirementNotes(body: unknown): number {
+  const text = collectText(body, []).join('\n');
+  // Stored history drops a retired image to its source reference; rows that
+  // are not stored history carry a note in the request instead.
   return (
-    collectText(body, []).join('\n').split('was omitted from this request')
-      .length - 1
+    text.split('was omitted from this request').length -
+    1 +
+    text.split('[image dropped: ').length -
+    1
   );
 }
 
@@ -330,11 +346,19 @@ export class RetirementSession {
     store: LocalMediaStore = this.store,
   ): Promise<AdmittedImage> {
     const bytes = new Uint8Array(length).fill(fill);
-    const reference = await store.admit({
+    const admitted = await store.admit({
       bytes,
       mimeType: 'image/png',
       semanticMetadata: {},
     });
+    const reference: MediaReferenceBlock = {
+      ...admitted,
+      origin: {
+        kind: 'file',
+        path: imagePath(this.directory, length, fill),
+        readAt: IMAGE_READ_AT,
+      },
+    };
     return { reference, base64: Buffer.from(bytes).toString('base64'), bytes };
   }
 
