@@ -108,6 +108,21 @@ ${readShippedDefault('compression.md').trim()}
 
       expect(compression.trimEnd()).toMatch(/Generate the <state_snapshot>\.$/);
     });
+
+    it(`${strategyName}: the default preamble of the verification request permits the VERIFIED reply`, async () => {
+      const provider = createRecordingProvider(SNAPSHOT, 'VERIFIED');
+      const context = buildRecordingContext(provider, generateHistory(20), {
+        verification: true,
+      });
+
+      await createStrategy(strategyName).compress(context);
+      const verificationPreamble = requestText(
+        provider.requests[1].slice(0, 1),
+      );
+
+      expect(verificationPreamble).toStartWith('### CRITICAL INSTRUCTION');
+      expect(verificationPreamble).toContain('VERIFIED');
+    });
   }
 });
 
