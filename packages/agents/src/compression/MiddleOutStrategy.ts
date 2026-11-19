@@ -62,7 +62,10 @@ import {
   COMPRESSION_PROMPT_FILES,
   loadCompressionPromptFile,
 } from '@vybestack/llxprt-code-core/core/compression/compressionPromptFiles.js';
-import { stripScratchpadSections } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
+import {
+  stripScratchpadFromCompressionSummaries,
+  stripScratchpadSections,
+} from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
@@ -615,8 +618,13 @@ export class MiddleOutStrategy implements CompressionStrategy {
     return -1;
   }
 
+  /**
+   * The last human entry can be an older compression summary; its text is
+   * taken without scratchpad sections, as in the compressed span (#4128).
+   */
   private extractTextFromMessage(message: IContent): string {
-    return message.blocks
+    return stripScratchpadFromCompressionSummaries([message])
+      .flatMap((cleaned) => cleaned.blocks)
       .map((block) => {
         if (block.type === 'text') {
           return block.text;

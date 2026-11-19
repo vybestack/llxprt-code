@@ -24,7 +24,11 @@ import {
   requestText,
   type StrategyName,
 } from './compression-request-capture.js';
-import { generateHistory, humanMsg } from './MiddleOutStrategy-test-helpers.js';
+import {
+  aiTextMsg,
+  generateHistory,
+  humanMsg,
+} from './MiddleOutStrategy-test-helpers.js';
 
 const SNAPSHOT =
   '<state_snapshot><overall_goal>Fix #4128</overall_goal></state_snapshot>';
@@ -170,4 +174,55 @@ describe('compression summaries are stored without a scratchpad (issue #4128)', 
       expect(requests[0]).toContain(userText);
     });
   }
+});
+
+describe('middle-out never carries a summary scratchpad forward as the last prompt (issue #4128)', () => {
+  const LARGE_SNAPSHOT = `<state_snapshot><overall_goal>${'Keep every detail of #4128. '.repeat(120)}</overall_goal></state_snapshot>`;
+  const TAGGED_SUMMARY: IContent = {
+    ...humanMsg(`<scratchpad>old notes</scratchpad>\n${LARGE_SNAPSHOT}`),
+    metadata: { isSummary: true, reason: 'compression-state-snapshot' },
+  };
+
+  async function compressWithLastHuman(lastHuman: IContent): Promise<{
+    result: StrategyCompressionResult;
+    requests: string[];
+  }> {
+    const history = [
+      ...generateHistory(10),
+      lastHuman,
+      ...Array.from({ length: 9 }, (_, index) =>
+        aiTextMsg(`ai follow-up ${index}`),
+      ),
+    ];
+    const provider = createRecordingProvider(IMPROVED);
+    const context = buildRecordingContext(provider, history);
+    const result = await createStrategy('middle-out').compress(context);
+    return { result, requests: provider.requests.map(requestText) };
+  }
+
+  it('sends the large last prompt from the cleaned summary', async () => {
+    const { requests } = await compressWithLastHuman(TAGGED_SUMMARY);
+
+    expect(requests[0]).toContain(LARGE_SNAPSHOT);
+    expect(requests[0].toLowerCase()).not.toContain('scratchpad');
+  });
+
+  it('keeps the scratchpad out of the stored continuation', async () => {
+    const { result } = await compressWithLastHuman(TAGGED_SUMMARY);
+    if (result.kind !== 'applied') {
+      throw new Error(`expected an applied compression, got ${result.kind}`);
+    }
+
+    expect(requestText(result.newHistory).toLowerCase()).not.toContain(
+      'scratchpad',
+    );
+  });
+
+  it('sends a large ordinary last prompt that mentions a scratchpad unchanged', async () => {
+    const userText = `<scratchpad>my notes</scratchpad>\n${LARGE_SNAPSHOT}`;
+
+    const { requests } = await compressWithLastHuman(humanMsg(userText));
+
+    expect(requests[0]).toContain(`\n\n${userText}\n`);
+  });
 });
