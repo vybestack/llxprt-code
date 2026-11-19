@@ -43,7 +43,14 @@ function removeScratchRoots(): void {
 describe('bwrap workspace roots and the masked system paths', () => {
   afterEach(removeScratchRoots);
 
-  const maskedAndContaining = ['/tmp', '/run', '/var/tmp', '/var', '/home', '/root'];
+  const maskedAndContaining = [
+    '/tmp',
+    '/run',
+    '/var/tmp',
+    '/var',
+    '/home',
+    '/root',
+  ];
 
   for (const masked of maskedAndContaining) {
     it.skipIf(!onLinux || !fs.existsSync(masked))(

@@ -240,9 +240,9 @@ describe('bwrap launch with profile values', () => {
         },
       );
 
-      expect(fs.readFileSync(path.join(run.workspace, 'exit-code'), 'utf8')).toBe(
-        '3',
-      );
+      expect(
+        fs.readFileSync(path.join(run.workspace, 'exit-code'), 'utf8'),
+      ).toBe('3');
       expect(run.status).toBe(3);
       expect(run.output).not.toContain('EPIPE');
       expect(
