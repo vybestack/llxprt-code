@@ -12,7 +12,7 @@ const historyScratchRoots = new ScratchRootOwner();
 export async function anthropicViewFixture(
   rows: Iterable<IContent>,
   tail: readonly IContent[],
-  change?: { readonly at: number; readonly replacement?: IContent },
+  change?: { readonly at: number; readonly replacement: IContent },
 ): Promise<{
   readonly selection: JournalProviderRequestSnapshot;
   close(): Promise<void>;
@@ -47,12 +47,7 @@ export async function anthropicViewFixture(
         ? undefined
         : {
             label,
-            removedRow: change.replacement === undefined,
-            readChangedRow: async (): Promise<IContent> => {
-              if (change.replacement === undefined)
-                throw new Error('Removed view row cannot be read');
-              return change.replacement;
-            },
+            readChangedRow: async (): Promise<IContent> => change.replacement,
             header: (row: IContent): IContent => row,
           };
     const resources = nativeRequestResources(store);

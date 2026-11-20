@@ -42,7 +42,7 @@ interface SpanCase {
   readonly rows: readonly IContent[];
   readonly tail: readonly IContent[];
   readonly cache?: '5m';
-  readonly change?: { readonly at: number; readonly replacement?: IContent };
+  readonly change?: { readonly at: number; readonly replacement: IContent };
 }
 const scenarios: readonly SpanCase[] = [
   {
@@ -72,12 +72,6 @@ const scenarios: readonly SpanCase[] = [
     tail: [text('answer', 'ai'), text('next')],
   },
   {
-    name: 'a purge removing the first holder',
-    rows: [text('removed question'), text('answer', 'ai'), text('next')],
-    tail: [text('pending')],
-    change: { at: 0 },
-  },
-  {
     name: 'a count-changing replacement containing tool rows',
     rows: [
       text('question'),
@@ -105,12 +99,21 @@ const scenarios: readonly SpanCase[] = [
     rows: [
       { ...text('anchored question'), metadata: { cacheAnchor: true } },
       text('answer', 'ai'),
-      text('removed'),
+      {
+        speaker: 'tool',
+        blocks: [
+          ...call('call_cached').blocks,
+          ...text('old tool text').blocks,
+        ],
+      },
       text('last answer', 'ai'),
     ],
     tail: [text('pending')],
     cache: '5m',
-    change: { at: 2 },
+    change: {
+      at: 2,
+      replacement: { speaker: 'tool', blocks: call('call_cached').blocks },
+    },
   },
 ];
 

@@ -8,6 +8,7 @@ import {
   sendAnthropicJournalCase,
 } from './support/anthropic-journal-case.js';
 import { rowsSelection } from './support/wireBodyCapture.js';
+import { DROPPED_TOOL_IMAGE } from './support/dropped-tool-image-rows.js';
 
 const question: IContent = {
   speaker: 'human',
@@ -46,23 +47,31 @@ const image: IContent = {
   ],
 };
 
+const droppedImage: IContent = {
+  speaker: 'human',
+  blocks: [{ type: 'text', text: 'image' }, DROPPED_TOOL_IMAGE],
+};
+
 const cases: ReadonlyArray<{
   readonly name: string;
   readonly rows: readonly IContent[];
   readonly tail: readonly IContent[];
-  readonly change?: { readonly at: number; readonly replacement?: IContent };
+  readonly change: { readonly at: number; readonly replacement: IContent };
+  readonly resized: boolean;
 }> = [
   {
-    name: 'purge removing a tool round',
+    name: 'purge dropping an image to its reference',
     rows: [question, answer, round, image, answer],
     tail: [question],
-    change: { at: 2 },
+    change: { at: 3, replacement: droppedImage },
+    resized: false,
   },
   {
     name: 'purge replacing a tool span with a summary',
     rows: [question, answer, round, question, answer],
     tail: [question],
     change: { at: 2, replacement: summary },
+    resized: true,
   },
 ];
 
@@ -73,7 +82,7 @@ describe('native Anthropic journal view HTTP', () => {
     ),
   )(
     'sends $name with $cache without request files',
-    async ({ rows, tail, change, cache }) => {
+    async ({ rows, tail, change, resized, cache }) => {
       const fixture = await anthropicViewFixture(rows, tail, change);
       const sink = await anthropicJournalSink();
       const route = {
@@ -85,9 +94,10 @@ describe('native Anthropic journal view HTTP', () => {
         for await (const row of fixture.selection.openReader())
           reference.push(row);
         const changes = fixture.selection.indexed.viewPlan.changedSources;
+        expect(changes.some((row) => row.oldCount > 0)).toBe(true);
         expect(
           changes.some((row) => row.count !== row.oldCount && row.oldCount > 0),
-        ).toBe(true);
+        ).toBe(resized);
         await sendAnthropicJournalCase(route, rowsSelection(reference));
         const created = await operationFileCreates(async () => {
           await sendAnthropicJournalCase(route, fixture.selection);

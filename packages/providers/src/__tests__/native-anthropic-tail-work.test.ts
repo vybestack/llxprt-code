@@ -10,6 +10,7 @@ import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from './providerTestConfig.js';
 import { journalSendFixture } from './support/journal-send-fixture.js';
 import { anthropicViewFixture } from './support/anthropic-view-fixture.js';
+import { DROPPED_TOOL_IMAGE } from './support/dropped-tool-image-rows.js';
 import {
   buildHistoryCallOptions,
   WIRE_ROUTES,
@@ -86,14 +87,32 @@ describe('native Anthropic pending request preparation work', () => {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'purged' }],
     };
+    const shown: IContent = {
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: 'purged' },
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          encoding: 'base64',
+          data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lxoAAAAASUVORK5CYII=',
+        },
+      ],
+    };
     const fixture = await anthropicViewFixture(
       [
         ...prefix,
-        user,
+        shown,
         { speaker: 'ai', blocks: [{ type: 'text', text: 'retained answer' }] },
       ],
       [user],
-      { at: 4096 },
+      {
+        at: 4096,
+        replacement: {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'purged' }, DROPPED_TOOL_IMAGE],
+        },
+      },
     );
     const provider = new AnthropicProvider(
       'test-api-key',
