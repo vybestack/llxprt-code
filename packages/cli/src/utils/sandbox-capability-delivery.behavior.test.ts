@@ -581,6 +581,7 @@ describe('capability delivery through the mount (#3573)', () => {
           extraEnv: inherited,
         });
 
+        expect(result.exit).toBe(0);
         expectDeliveredOnlyOnFd3(result);
         expectPrefixSawNothing();
         expectNoTokenAnywhere(result);

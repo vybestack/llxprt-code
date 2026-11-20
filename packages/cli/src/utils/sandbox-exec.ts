@@ -41,6 +41,10 @@ import {
   LOCAL_DEV_SANDBOX_IMAGE_NAME,
 } from './sandbox-containers.js';
 import { entrypoint } from './sandbox-entrypoint.js';
+import {
+  planSourceDependencyPreparation,
+  runSourceDependencyPreparation,
+} from './sandbox-dependency-preparation.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import {
   planCheckpointStorage,
@@ -290,6 +294,16 @@ function planCheckpointPersistence(
   };
 }
 
+/**
+ * The SSH agent bridge's entrypoint prefix, if the launch set one up. Bridge
+ * prefixes are composed after the trusted capability capture stanza (F1).
+ */
+function sshBridgePrefixes(sshResult: SshAgentResult): string[] {
+  return sshResult.entrypointPrefix === undefined
+    ? []
+    : [sshResult.entrypointPrefix];
+}
+
 /** Runs the Docker/Podman sandbox path: image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
   config: ContainerSandboxConfig,
@@ -337,17 +351,8 @@ async function prepareContainerSandbox(
   const containerName = assignContainerName(args, config, image);
   addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
 
-  const {
-    sshResult,
-    podmanMacOSPortsForwarded,
-    proxyCommand,
-    portForwardingResult,
-  } = networkAndEnv;
-  // Compose bridge prefixes after the trusted capability capture stanza (F1).
-  const entrypointPrefixes: string[] = [];
-  if (sshResult.entrypointPrefix !== undefined) {
-    entrypointPrefixes.push(sshResult.entrypointPrefix);
-  }
+  const { sshResult, podmanMacOSPortsForwarded } = networkAndEnv;
+  const entrypointPrefixes = sshBridgePrefixes(sshResult);
   const credentialProxySetup = await startCredentialProxyGuarded(
     args,
     config,
@@ -369,14 +374,22 @@ async function prepareContainerSandbox(
   return {
     args,
     finalEntrypoint,
-    proxyCommand,
+    proxyCommand: networkAndEnv.proxyCommand,
     userFlag,
     image,
     containerName,
     workdir,
-    portForwardingResult,
+    portForwardingResult: networkAndEnv.portForwardingResult,
     ...credentialProxySetup,
     dependencyVolumeLifecycle,
+    // #3573: a source checkout installs its dependencies in a separate
+    // container without the capability mount or credential socket.
+    sourceDependencyPreparation: planSourceDependencyPreparation(
+      config,
+      workspacePlan,
+      dependencyVolumeLifecycle.preparationVolumes,
+      userFlag,
+    ),
     reservedTunnelPorts,
     sshResult,
   };
@@ -470,6 +483,7 @@ async function executeContainerSandbox(
     portForwardingResult,
     sshResult,
     dependencyVolumeLifecycle,
+    sourceDependencyPreparation,
   } = prepared;
   let credentialProxyBridgeCleanup = prepared.credentialProxyBridgeCleanup;
 
@@ -492,6 +506,13 @@ async function executeContainerSandbox(
           lifecycle,
         )
       : undefined;
+
+  // The install runs after the proxy sidecar (a proxied launch needs it for
+  // network access) and before the main container exists, so nothing the
+  // install started can outlive it or see the capability delivery.
+  if (sourceDependencyPreparation !== undefined) {
+    await runSourceDependencyPreparation(sourceDependencyPreparation);
+  }
 
   const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
   const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });

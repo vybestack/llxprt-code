@@ -48,6 +48,7 @@ import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
 import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
+import type { SourceDependencyPreparationPlan } from './sandbox-dependency-preparation.js';
 import {
   setupCredentialProxy,
   type CredentialProxyBridgeCleanup,
@@ -86,6 +87,8 @@ export interface ContainerSandboxPrepared {
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: CredentialProxyBridgeCleanup | undefined;
   dependencyVolumeLifecycle: DependencyVolumeLifecycle;
+  /** Set for a source checkout: the separate dependency preparation run. */
+  sourceDependencyPreparation?: SourceDependencyPreparationPlan | undefined;
   reservedTunnelPorts: Set<number>;
   sshResult: SshAgentResult;
 }
@@ -142,15 +145,14 @@ function appendDeviceArgs(args: string[], config: SandboxConfig): void {
   args.push(...buildContainerDeviceArgs(resolved));
 }
 
-/** Builds docker/podman run args. */
-export function buildContainerRunArgs(
-  config: SandboxConfig,
-  image: string,
-  workdir: string,
-  containerWorkdir: string,
-  sessionTmpdir: string,
-): string[] {
-  const args = ['run', '-i', '--rm', '--init', '--workdir', containerWorkdir];
+/**
+ * The policy flags every sandbox container run shares, in launch order:
+ * privilege hardening, the user's SANDBOX_FLAGS, resource limits and the
+ * network-off setting. The main container and the source-checkout dependency
+ * preparation container both start from this list so they cannot drift apart.
+ */
+export function buildContainerPolicyArgs(): string[] {
+  const args: string[] = [];
   // Privilege hardening defaults: applied before SANDBOX_FLAGS so a user can
   // still add specific capabilities back via SANDBOX_FLAGS. See
   // project-plans/issue-2902-sandbox-privilege-hardening.md.
@@ -182,6 +184,19 @@ export function buildContainerRunArgs(
       'Sandbox network mode "proxied" requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.',
     );
   }
+  return args;
+}
+
+/** Builds docker/podman run args. */
+export function buildContainerRunArgs(
+  config: SandboxConfig,
+  image: string,
+  workdir: string,
+  containerWorkdir: string,
+  sessionTmpdir: string,
+): string[] {
+  const args = ['run', '-i', '--rm', '--init', '--workdir', containerWorkdir];
+  args.push(...buildContainerPolicyArgs());
   appendDeviceArgs(args, config);
   if (shouldAllocateSandboxTty()) args.push('-t');
   args.push('--volume', `${workdir}:${containerWorkdir}`);
@@ -330,13 +345,19 @@ export function validateContainerSandboxEnv(): void {
   parseSandboxEnvVars();
 }
 
-function addSandboxEnvVars(args: string[]): void {
-  const entries = parseSandboxEnvVars();
-  for (const env of entries) {
+/** The `--env` pairs for the user's SANDBOX_ENV entries. */
+export function buildUserSandboxEnvArgs(): string[] {
+  const args: string[] = [];
+  for (const env of parseSandboxEnvVars()) {
     const envName = env.substring(0, env.indexOf('='));
     debugLogger.log(`SANDBOX_ENV: ${envName}=<redacted>`);
     args.push('--env', env);
   }
+  return args;
+}
+
+function addSandboxEnvVars(args: string[]): void {
+  args.push(...buildUserSandboxEnvArgs());
 }
 
 /** Adds custom SANDBOX_MOUNTS volume flags. */
@@ -417,6 +438,29 @@ export function addContainerEnvVars(
   }
 }
 
+/**
+ * The proxy environment a proxied container receives, with the loopback proxy
+ * host rewritten to the sidecar's name. Empty when no proxy command is set.
+ */
+export function buildProxiedNetworkEnvArgs(): string[] {
+  if (!isNonEmptyEnvValue(process.env.LLXPRT_SANDBOX_PROXY_COMMAND)) return [];
+  const args: string[] = [];
+  const proxy = rewriteProxyHostname(resolveSandboxProxyUrl(process.env));
+  args.push('--env', `HTTPS_PROXY=${proxy}`);
+  args.push('--env', `https_proxy=${proxy}`);
+  args.push('--env', `HTTP_PROXY=${proxy}`);
+  args.push('--env', `http_proxy=${proxy}`);
+  const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
+  if (noProxy !== undefined) {
+    args.push('--env', `NO_PROXY=${noProxy}`);
+    args.push('--env', `no_proxy=${noProxy}`);
+  }
+  return args;
+}
+
+/** Name of the internal network a proxied sandbox joins. */
+export const SANDBOX_INTERNAL_NETWORK_NAME = SANDBOX_NETWORK_NAME;
+
 /** Sets up container networking, including proxy env and network creation. */
 export function setupContainerNetworking(
   args: string[],
@@ -425,17 +469,7 @@ export function setupContainerNetworking(
 ): string | undefined {
   const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
   if (isNonEmptyEnvValue(proxyCommand)) {
-    const proxy = rewriteProxyHostname(resolveSandboxProxyUrl(process.env));
-    args.push('--env', `HTTPS_PROXY=${proxy}`);
-    args.push('--env', `https_proxy=${proxy}`);
-    args.push('--env', `HTTP_PROXY=${proxy}`);
-    args.push('--env', `http_proxy=${proxy}`);
-
-    const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
-    if (noProxy !== undefined) {
-      args.push('--env', `NO_PROXY=${noProxy}`);
-      args.push('--env', `no_proxy=${noProxy}`);
-    }
+    args.push(...buildProxiedNetworkEnvArgs());
     // execSync resolves the command against the process STARTUP env in Bun,
     // so PATH mutations made in-process (e.g. by tests) are ignored unless
     // the current env is passed explicitly.

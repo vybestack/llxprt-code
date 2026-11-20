@@ -320,9 +320,11 @@ that matches nothing has no effect. These checks finish before Docker or Podman
 creates a volume or container.
 
 Each private volume is initialized for the user the container already runs as,
-even when that user's UID differs from the host user. This isolation applies
-to normal installed-mode sessions. A `NODE_ENV=development` source-entrypoint
-session keeps using the shared workspace binds unchanged.
+even when that user's UID differs from the host user. A `NODE_ENV=development`
+launch from an llxprt-code source checkout gets the same private volumes. The
+Linux dependencies for that checkout are installed into them by a separate
+container that runs before the main one (see
+[Source-checkout dependency preparation](#source-checkout-dependency-preparation)).
 
 Inside a sandboxed session this means:
 
@@ -725,6 +727,42 @@ container starts — see [Network](#network).
 
 > **Note:** Seatbelt mode does not use the credential proxy. It runs on your
 > host with full access to your keyring and token store.
+
+#### Source-checkout dependency preparation
+
+A launch from an llxprt-code source checkout with `NODE_ENV=development`
+installs Linux dependencies with `bun install --no-save` before it runs the
+checked-out TypeScript. That install runs lifecycle scripts from the
+checkout, which is project-controlled code, so it must not run where the
+capability is. The main container holds the token file in its capability mount
+from its start, and its entrypoint shell keeps the token in memory until the
+final `exec`. Code from the same UID could read the shell's memory on a host
+that allows ptrace, or read the shell's open descriptors under `/proc`.
+
+The install therefore runs in a separate, short-lived container that starts
+before the main container and is removed when the install ends:
+
+- It uses the same image, workdir, workspace binds, private dependency
+  volumes, hardening flags (`--cap-drop=ALL`, `no-new-privileges`),
+  `SANDBOX_FLAGS`, resource limits, network mode and `SANDBOX_ENV` entries as
+  the main container.
+- It has no capability mount, no credential socket, no credential bridge, no
+  SSH agent, no LLxprt config directory, no session directory, no Git config
+  mounts and none of the host passthrough variables.
+- On the current-user path it runs directly as your UID and GID with
+  `HOME=/tmp`, because it needs neither the root setup stage nor `su`.
+- Whatever the install leaves behind, including daemons, ends with that
+  container. Nothing project-controlled runs in the main container's
+  entrypoint between the token capture and the final `exec`.
+
+A failed install fails the launch with `Failed to prepare isolated Linux
+dependencies for LLxprt source development`; a missing `package.json` or
+`bun.lock`, or a sandbox image without Bun, fails it with the message that
+names that cause. The main container is never started, and the dependency
+volumes, the preparation container and the capability directory are released
+as for any other failed launch. A proxied-network launch starts the proxy
+sidecar first, so the install reaches the network the same way the main
+container does. Installer output appears in your terminal while the install runs.
 
 ### SSH agent forwarding
 
@@ -1153,6 +1191,14 @@ yours, or Podman where the image user maps to a sub-UID). Set
 `SANDBOX_SET_UID_GID=true` so the sandbox runs as your UID/GID and the entrypoint
 can open and delete the file. The entrypoint refuses to start without the file
 rather than run the CLI with no credential channel or leave a readable copy.
+
+**"Failed to prepare isolated Linux dependencies for LLxprt source development"**
+— the separate preparation container's `bun install --no-save` failed. The
+install output is printed above the message. The failure is in the checkout's
+dependencies or in the container's network access, since the preparation
+container gets the same network settings as the main container (a
+`network: off` session cannot install). See
+[Source-checkout dependency preparation](#source-checkout-dependency-preparation).
 
 **SSH not working in Podman on macOS** — use a stable socket path. The default
 launchd socket paths are unreliable. Set up a dedicated socket under a

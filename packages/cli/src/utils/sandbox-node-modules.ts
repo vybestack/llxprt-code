@@ -333,10 +333,24 @@ function warnCleanupFailed(
   process.stderr.write(message);
 }
 
+/**
+ * What the source-checkout preparation container needs to attach to the
+ * same private dependency volumes as the main container (#3573 review).
+ */
+export interface DependencyPreparationVolumes {
+  readonly runId: string;
+  /** Removed by the lifecycle's release on every path, like the main container. */
+  readonly containerName: string;
+  /** `--mount` specifications, identical to the ones the main container gets. */
+  readonly mounts: readonly string[];
+}
+
 export interface DependencyVolumeLifecycle {
   (): void;
   recordMainContainerName(name: string): void;
   release(): void;
+  /** Absent when no private dependency volumes were planned. */
+  readonly preparationVolumes?: DependencyPreparationVolumes;
 }
 
 export type DependencyMountPlan =
@@ -452,6 +466,7 @@ function runEngineCleanupStep(
 function registerVolumeLifecycle(
   engine: 'docker' | 'podman',
   initContainerName: string,
+  preparationContainerName: string,
   originallyAbsentDestinations: readonly string[],
 ): MutableDependencyVolumeLifecycle {
   let released = false;
@@ -465,9 +480,11 @@ function registerVolumeLifecycle(
     process.off('exit', release);
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
-    const containers = [mainContainerName, initContainerName].filter(
-      (name): name is string => name !== undefined,
-    );
+    const containers = [
+      mainContainerName,
+      preparationContainerName,
+      initContainerName,
+    ].filter((name): name is string => name !== undefined);
     runEngineCleanupStep('remove dependency containers for', engine, () =>
       removeAttachedDependencyContainers(engine, containers),
     );
@@ -571,9 +588,11 @@ export function addPrivateDependencyMounts(
   const runId = createSandboxDependencyRunId();
   const volumeNames = planDependencyVolumeNames(planned.destinations.length);
   const initContainerName = `${volumeNames[0]}-init`;
+  const preparationContainerName = `${volumeNames[0]}-prep`;
   const lifecycle = registerVolumeLifecycle(
     engine,
     initContainerName,
+    preparationContainerName,
     planned.originallyAbsentDestinations,
   );
 
@@ -611,19 +630,20 @@ export function addPrivateDependencyMounts(
   }
 
   addSandboxDependencyRunLabel(args, runId);
-  planned.destinations.forEach((destination, index) => {
-    args.push(
-      '--mount',
-      buildVolumeMountFlagArg(
-        volumeNames[index],
-        getContainerPath(destination),
-      ),
-    );
-  });
+  const mounts = planned.destinations.map((destination, index) =>
+    buildVolumeMountFlagArg(volumeNames[index], getContainerPath(destination)),
+  );
+  for (const mount of mounts) args.push('--mount', mount);
   debugLogger.log(
     `Prepared ${volumeNames.length} engine-owned private sandbox dependency volume(s).`,
   );
-  return lifecycle;
+  return Object.assign(lifecycle, {
+    preparationVolumes: {
+      runId,
+      containerName: preparationContainerName,
+      mounts,
+    },
+  });
 }
 
 function errorMessage(error: unknown): string {
