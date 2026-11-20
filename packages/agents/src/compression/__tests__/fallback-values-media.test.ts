@@ -20,6 +20,7 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { applyPendingWindowFallback } from '../pendingWindowFallback.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 const historyScratchRoots = createTestScratchOwner();
 
 function mediaDeps(
@@ -62,16 +63,20 @@ async function run(size: number, rollback: boolean): Promise<number> {
   const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
   const owner = new HistoryMediaOwnership(store, historyScratchRoots);
   try {
-    const prior = await store.admit({
-      bytes: new Uint8Array([1]),
-      mimeType: 'application/octet-stream',
-      semanticMetadata: {},
-    });
-    const next = await store.admit({
-      bytes: new Uint8Array([2]),
-      mimeType: 'application/octet-stream',
-      semanticMetadata: {},
-    });
+    const prior = await withAdmittedOrigin(
+      store.admit({
+        bytes: new Uint8Array([1]),
+        mimeType: 'application/octet-stream',
+        semanticMetadata: {},
+      }),
+    );
+    const next = await withAdmittedOrigin(
+      store.admit({
+        bytes: new Uint8Array([2]),
+        mimeType: 'application/octet-stream',
+        semanticMetadata: {},
+      }),
+    );
     return await withValueTransformFixture(async (fixture) => {
       const { history, recorder, owners } = fixture;
       await history.registerMediaOwner(owner);

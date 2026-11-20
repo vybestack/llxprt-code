@@ -19,6 +19,7 @@ import {
 } from './helpers/client-owner-session.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { useRecordingPrompts } from './helpers/recording-prompts.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 
 interface SharedHistorySessions {
   readonly opened: OpenedClientOwner;
@@ -175,11 +176,13 @@ describe('native session history operation lifetimes', () => {
         workingDir: directory,
         mediaOwner: media,
       });
-      const reference = await media.store.admit({
-        bytes: new Uint8Array([4, 5, 6]),
-        mimeType: 'image/png',
-        semanticMetadata: { caption: 'attachment' },
-      });
+      const reference = await withAdmittedOrigin(
+        media.store.admit({
+          bytes: new Uint8Array([4, 5, 6]),
+          mimeType: 'image/png',
+          semanticMetadata: { caption: 'attachment' },
+        }),
+      );
       await agent.session.replaceHistory([
         {
           speaker: 'human',

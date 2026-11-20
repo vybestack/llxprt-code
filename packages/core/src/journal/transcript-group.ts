@@ -14,6 +14,10 @@ import { decodeRowHeader } from './rowRecord.js';
 import { entryByLabel } from './rowTreeQueries.js';
 import { iterateRowEntries } from './rowTreeReader.js';
 import { rootRef } from './groupSegments.js';
+import {
+  reviseRemovedTranscript,
+  type TranscriptRevision,
+} from './transcript-revision.js';
 import type { RowEntry } from './rowEntry.js';
 import {
   TranscriptTreeWriter,
@@ -174,6 +178,7 @@ export class TranscriptGroup {
     built: BuiltGroup,
     plan: GroupPlan,
     edits: readonly VersionEdit[],
+    revision?: TranscriptRevision,
   ): Promise<BuiltGroup> {
     const mutation = built.state.mutation;
     if (
@@ -188,6 +193,21 @@ export class TranscriptGroup {
     // membership. Other edits may need built map nodes evicted from the caches.
     if (edits.length !== 1 || edits[0].kind !== 'restore')
       await this.target.drain();
+    const metaRoot = await this.members(built, plan);
+    if (revision !== undefined) {
+      await this.target.drain();
+      this.head = await reviseRemovedTranscript(
+        this.ctx,
+        this.target,
+        built,
+        this.head,
+        revision,
+        async (id) =>
+          decodeMembership(
+            await this.reader('meta').get(metaRoot, `member:${id}`),
+          ).count > 0,
+      );
+    }
     const state = new KeyedMapBatch(
       this.reader('state'),
       built.state.stateRoot,
@@ -196,7 +216,6 @@ export class TranscriptGroup {
     if (this.head.root !== this.initialRoot)
       state.set(TRANSCRIPT_HEAD_KEY, encodeTranscriptHead(this.head));
     const stateRoot = await state.commit(this.appender());
-    const metaRoot = await this.members(built, plan);
     return {
       ...built,
       groupCaches: { metaCache: this.metaCache, stateCache: this.stateCache },
@@ -369,7 +388,12 @@ export async function prepareTranscriptBuild(
     built: {
       ...prepared.built,
       finishTranscript: (built) =>
-        transcript.finish(built, plan, prepared.edits),
+        transcript.finish(
+          built,
+          plan,
+          prepared.edits,
+          prepared.transcriptRevision,
+        ),
     },
   };
 }

@@ -9,6 +9,7 @@ import {
 } from './media-metrics-test-helpers.js';
 import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
+import { withAdmittedOrigin } from './__tests__/support/admitted-origin.js';
 const historyScratchRoots = createTestScratchOwner();
 
 const REQUEST_BUDGET = 8 * 1024 * 1024;
@@ -16,16 +17,20 @@ const REQUEST_BUDGET = 8 * 1024 * 1024;
 describe('media metrics and real ownership', () => {
   it('does not reserve media or emit history events and counts removed media independently from spool', async () => {
     await withMetricStore(async (store) => {
-      const first = await store.admit({
-        bytes: new Uint8Array([1, 2, 3]),
-        mimeType: 'audio/wav',
-        semanticMetadata: {},
-      });
-      const second = await store.admit({
-        bytes: new Uint8Array([4, 5, 6, 7]),
-        mimeType: 'audio/wav',
-        semanticMetadata: {},
-      });
+      const first = await withAdmittedOrigin(
+        store.admit({
+          bytes: new Uint8Array([1, 2, 3]),
+          mimeType: 'audio/wav',
+          semanticMetadata: {},
+        }),
+      );
+      const second = await withAdmittedOrigin(
+        store.admit({
+          bytes: new Uint8Array([4, 5, 6, 7]),
+          mimeType: 'audio/wav',
+          semanticMetadata: {},
+        }),
+      );
       const history = new StreamMetricHistory({
         scratchRoots: historyScratchRoots,
       });

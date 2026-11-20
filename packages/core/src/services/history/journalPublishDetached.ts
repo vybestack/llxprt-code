@@ -24,6 +24,7 @@ import { snapshotRows } from './journalDetachedCapture.js';
 import { JournalDetachedPublication } from './journalDetachedPublication.js';
 import { pullFeed, type PullFeed } from './journalDetachedStream.js';
 import type { JournalHistoryStore } from './journalHistoryStore.js';
+import { droppedTranscriptMedia } from './journalTranscriptDrop.js';
 
 interface PublicationCompletion {
   finalized: boolean;
@@ -272,6 +273,9 @@ async function createCandidate(
       options.assertCurrent?.();
       await publication.prepare(async (group) => {
         densitySpans = new JournalDensitySpans(group);
+        group.reviseRemovedTranscript(
+          droppedTranscriptMedia(store.resumeBoundary),
+        );
         result.value = await produce();
         options.signal?.throwIfAborted();
         if (options.audit !== undefined)

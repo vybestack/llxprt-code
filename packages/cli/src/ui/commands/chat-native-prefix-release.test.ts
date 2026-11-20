@@ -10,6 +10,7 @@ import {
   useTempDir,
   withCLI,
 } from './native-prefix-test-helpers.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 
 async function reservationFiles(root: string): Promise<string[]> {
   return (
@@ -32,16 +33,20 @@ describe('actual CLI prefix release failure drains every held media reference', 
       async ({ agent, client, context, recording }) => {
         const store = clientMediaStore(client);
         if (store === undefined) throw new Error('Missing media store');
-        const a = await store.admit({
-          bytes: new Uint8Array([1, 3]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
-        const b = await store.admit({
-          bytes: new Uint8Array([2, 4]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
+        const a = await withAdmittedOrigin(
+          store.admit({
+            bytes: new Uint8Array([1, 3]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+        );
+        const b = await withAdmittedOrigin(
+          store.admit({
+            bytes: new Uint8Array([2, 4]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+        );
         await agent.setHistory([row(0), row(1), { ...row(2), blocks: [a, b] }]);
         const before = await contents(client.getHistory());
         const reservations = await reservationFiles(store.rootDirectory);
@@ -93,11 +98,13 @@ describe('actual CLI prefix release failure drains every held media reference', 
       async ({ agent, client, context, recording }) => {
         const store = clientMediaStore(client);
         if (store === undefined) throw new Error('Missing media store');
-        const reference = await store.admit({
-          bytes: new Uint8Array([7, 9]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
+        const reference = await withAdmittedOrigin(
+          store.admit({
+            bytes: new Uint8Array([7, 9]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+        );
         await agent.setHistory([
           row(0),
           row(1),

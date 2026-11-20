@@ -16,6 +16,7 @@ import {
   reopenedRows,
   persistedEntries,
 } from './__tests__/support/service-atomicity.js';
+import { withAdmittedOrigin } from '../../storage/__tests__/support/admitted-origin.js';
 const historyScratchRoots = createTestScratchOwner();
 
 const stages = [
@@ -42,16 +43,20 @@ describe('HistoryService replacement compensation with real primary and mirror',
       });
       const owner = new DetachedMediaOwner(media, historyScratchRoots);
       try {
-        const previousMedia = await media.admit({
-          bytes: new Uint8Array([1]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
-        const candidateMedia = await media.admit({
-          bytes: new Uint8Array([2]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
+        const previousMedia = await withAdmittedOrigin(
+          media.admit({
+            bytes: new Uint8Array([1]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+        );
+        const candidateMedia = await withAdmittedOrigin(
+          media.admit({
+            bytes: new Uint8Array([2]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+        );
         history.setTokenizerFactory(exactTokenizer());
         await history.registerMediaOwner(owner);
         await history.addBatch(

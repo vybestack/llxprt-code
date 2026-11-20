@@ -19,6 +19,7 @@ import {
   useTempDir,
   withCLI,
 } from './native-prefix-test-helpers.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 
 function barrier(): { promise: Promise<void>; open(): void } {
   let open = (): void => {
@@ -115,11 +116,13 @@ describe('actual CLI clear with a pinned pending media consumer', () => {
           const store = clientMediaStore(client);
           if (store === undefined) throw new Error('Missing media store');
           const bytes = new Uint8Array([17, 29, 43, 255]);
-          const reference = await store.admit({
-            bytes,
-            mimeType: 'image/png',
-            semanticMetadata: {},
-          });
+          const reference = await withAdmittedOrigin(
+            store.admit({
+              bytes,
+              mimeType: 'image/png',
+              semanticMetadata: {},
+            }),
+          );
           await agent.setHistory(
             Array.from({ length: size }, (_, index) =>
               index === size - 1

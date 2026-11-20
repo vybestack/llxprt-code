@@ -11,6 +11,7 @@ import {
 } from './chronology-rollback-test-helpers.js';
 import { detachedDigest } from './detached-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
+import { withAdmittedOrigin } from '../../storage/__tests__/support/admitted-origin.js';
 
 const stages = [
   'tokenizer',
@@ -44,11 +45,13 @@ async function stageFailure(pending: boolean, stage: string): Promise<void> {
   await withDetachedMedia(async (store, owner) => {
     await withNativeDetachedFixture(async (fixture) => {
       const { history, owners } = fixture;
-      const image = await store.admit({
-        bytes: new Uint8Array([1]),
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
+      const image = await withAdmittedOrigin(
+        store.admit({
+          bytes: new Uint8Array([1]),
+          mimeType: 'image/png',
+          semanticMetadata: {},
+        }),
+      );
       const baseline = Object.freeze({
         ...marked(0),
         blocks: [...marked(0).blocks, image],

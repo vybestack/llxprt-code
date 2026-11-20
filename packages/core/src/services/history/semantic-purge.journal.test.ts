@@ -17,6 +17,7 @@ import {
   expectedDroppedImage,
   readFromFile,
 } from './__tests__/support/dropped-media-expectation.js';
+import { withAdmittedOrigin } from '../../storage/__tests__/support/admitted-origin.js';
 
 type Fixture = Parameters<Parameters<typeof withNativePurgeFixture>[0]>[0];
 const success = { status: 'success', cachePrefixWritten: true } as const;
@@ -67,18 +68,22 @@ async function failureOf(operation: Promise<void>): Promise<unknown> {
 
 async function seed({ history, store, assertDurable }: Fixture) {
   const image = readFromFile(
-    await store.admit({
-      bytes: new Uint8Array([1]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    }),
+    await withAdmittedOrigin(
+      store.admit({
+        bytes: new Uint8Array([1]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    ),
     '/workspace/prompt.png',
   );
-  const kept = await store.admit({
-    bytes: new Uint8Array([2]),
-    mimeType: 'application/octet-stream',
-    semanticMetadata: {},
-  });
+  const kept = await withAdmittedOrigin(
+    store.admit({
+      bytes: new Uint8Array([2]),
+      mimeType: 'application/octet-stream',
+      semanticMetadata: {},
+    }),
+  );
   await history.addBatch([
     {
       speaker: 'human',

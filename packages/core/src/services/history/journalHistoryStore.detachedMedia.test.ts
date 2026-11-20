@@ -12,6 +12,7 @@ import type { DetachedHistoryTransform } from './detachedHistoryMutation.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import { openOwnedJournal, type OwnedJournal } from './journalOwnedFixture.js';
+import { withAdmittedOrigin } from '../../storage/__tests__/support/admitted-origin.js';
 const historyScratchRoots = createTestScratchOwner();
 
 const now = (execute: () => Promise<void>): Promise<void> => execute();
@@ -32,11 +33,13 @@ describe('detached publication and media ownership on the journal', () => {
   });
 
   async function admit(byte: number): Promise<MediaReferenceBlock> {
-    return media.admit({
-      bytes: new Uint8Array([byte]),
-      mimeType: 'application/octet-stream',
-      semanticMetadata: {},
-    });
+    return withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([byte]),
+        mimeType: 'application/octet-stream',
+        semanticMetadata: {},
+      }),
+    );
   }
 
   /** A journal whose only row references `a`, which the media owner holds. */

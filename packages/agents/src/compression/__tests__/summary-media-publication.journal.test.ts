@@ -12,6 +12,7 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
 import { middleoutSetup } from './middleout-disk-helpers.js';
 import { oneshotSetup } from './oneshot-disk-helpers.js';
 import { buildCompressionSystemInstruction } from '../compressionSystemPrompt.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 const historyScratchRoots = createTestScratchOwner();
 
 class RejectingMediaOwner extends HistoryMediaOwnership {
@@ -55,11 +56,13 @@ describe('native summary publication media lifetime', () => {
               history,
               'eager summary media forbidden',
             );
-            const reference = await media.admit({
-              bytes: new Uint8Array([1]),
-              mimeType: 'application/octet-stream',
-              semanticMetadata: {},
-            });
+            const reference = await withAdmittedOrigin(
+              media.admit({
+                bytes: new Uint8Array([1]),
+                mimeType: 'application/octet-stream',
+                semanticMetadata: {},
+              }),
+            );
             const owner = new RejectingMediaOwner(media, historyScratchRoots);
             await history.registerMediaOwner(owner);
             await history.detachedValues.replace(

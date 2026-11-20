@@ -27,6 +27,7 @@ import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
 } from './session-media-package.js';
+import { withAdmittedOrigin } from '../storage/__tests__/support/admitted-origin.js';
 
 const PROJECT_HASH = 'package-rewrite-project';
 
@@ -46,11 +47,13 @@ describe('session media package with a refusal_rewrite record', () => {
       rootDirectory: join(tempDirectory, 'source', 'media'),
       quotaBytes: 1024,
     });
-    const reference = await sourceStore.admit({
-      bytes: new Uint8Array([5, 6, 7, 8]),
-      mimeType: 'application/octet-stream',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      sourceStore.admit({
+        bytes: new Uint8Array([5, 6, 7, 8]),
+        mimeType: 'application/octet-stream',
+        semanticMetadata: {},
+      }),
+    );
     const withMedia = (text: string): IContent => ({
       speaker: 'human',
       blocks: [{ type: 'text', text }, reference],

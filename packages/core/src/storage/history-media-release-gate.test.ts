@@ -23,6 +23,7 @@ import {
   MediaAdmissionService,
 } from './media-admission-service.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
+import { withAdmittedOrigin } from './__tests__/support/admitted-origin.js';
 const historyScratchRoots = createTestScratchOwner();
 
 const directory = tempDirectory('native-media-gate-');
@@ -47,16 +48,20 @@ describe('rollback checkpoint media release', () => {
       rootDirectory: join(directory(), 'rollback-checkpoint'),
       quotaBytes: 1024,
     });
-    const prior = await media.admit({
-      bytes: new Uint8Array([1]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
-    const candidate = await media.admit({
-      bytes: new Uint8Array([2]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const prior = await withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([1]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
+    const candidate = await withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([2]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     await history.registerMediaOwner(
       new HistoryMediaOwnership(media, historyScratchRoots),
     );
@@ -92,11 +97,13 @@ describe('media release while the gate is draining', () => {
       rootDirectory: join(directory(), 'enqueuing-media'),
       quotaBytes: 1024,
     });
-    const reference = await media.admit({
-      bytes: new Uint8Array([2, 3, 9]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([2, 3, 9]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     await media.reserve(reference, historyOwnerIdFor(reference.contentId));
     const gate = new HistoryMediaReleaseGate(session.store, media, () => false);
     await gate.open();
@@ -129,11 +136,13 @@ describe('media release while the gate is draining', () => {
       rootDirectory: join(directory(), 'busy-media'),
       quotaBytes: 1024,
     });
-    const reference = await media.admit({
-      bytes: new Uint8Array([7, 3, 9]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([7, 3, 9]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     await media.reserve(reference, historyOwnerIdFor(reference.contentId));
     const gate = new HistoryMediaReleaseGate(session.store, media, () => false);
     await gate.open();
@@ -231,11 +240,13 @@ describe('version-pinned history media ownership', () => {
       quotaBytes: 1024,
     });
     const bytes = new Uint8Array([4, 6, 8]);
-    const reference = await media.admit({
-      bytes,
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      media.admit({
+        bytes,
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     await history.registerMediaOwner(
       new HistoryMediaOwnership(media, historyScratchRoots),
     );
@@ -286,11 +297,13 @@ describe('version-pinned history media ownership', () => {
       rootDirectory: join(directory(), 'paused-read'),
       quotaBytes: 1024,
     });
-    const reference = await media.admit({
-      bytes: new Uint8Array([2, 4, 6]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([2, 4, 6]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     await history.registerMediaOwner(
       new HistoryMediaOwnership(media, historyScratchRoots),
     );
@@ -355,11 +368,13 @@ describe('version-pinned history media ownership', () => {
       rootDirectory: join(directory(), 'readopted'),
       quotaBytes: 1024,
     });
-    const reference = await media.admit({
-      bytes: new Uint8Array([9, 7, 5]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([9, 7, 5]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     await history.registerMediaOwner(
       new HistoryMediaOwnership(media, historyScratchRoots),
     );
@@ -392,11 +407,13 @@ describe('version-pinned history media ownership', () => {
       rootDirectory: join(directory(), 'admission'),
       quotaBytes: 1024,
     });
-    const reference = await media.admit({
-      bytes: new Uint8Array([5, 3, 1]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([5, 3, 1]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     const owner = new HistoryMediaOwnership(media, historyScratchRoots);
     await history.registerMediaOwner(owner);
     const admission = new MediaAdmissionService(media);
@@ -429,11 +446,13 @@ describe('version-pinned history media ownership', () => {
       rootDirectory: join(directory(), 'adopted'),
       quotaBytes: 1024,
     });
-    const reference = await media.admit({
-      bytes: new Uint8Array([8, 6, 4]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      media.admit({
+        bytes: new Uint8Array([8, 6, 4]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
     await history.registerMediaOwner(
       new HistoryMediaOwnership(media, historyScratchRoots),
@@ -460,11 +479,13 @@ describe('version-pinned history media ownership', () => {
       quotaBytes: 1024,
     });
     const bytes = new Uint8Array([1, 2, 3]);
-    const reference = await media.admit({
-      bytes,
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
+    const reference = await withAdmittedOrigin(
+      media.admit({
+        bytes,
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      }),
+    );
     const resolver = new RequestMediaResolver(media);
     await history.registerMediaOwner(
       new HistoryMediaOwnership(media, historyScratchRoots),
@@ -537,11 +558,13 @@ describe('version-pinned history media ownership', () => {
     });
     const references = [];
     for (let index = 1; index <= 3; index++) {
-      const reference = await media.admit({
-        bytes: new Uint8Array([index, 9, 7]),
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
+      const reference = await withAdmittedOrigin(
+        media.admit({
+          bytes: new Uint8Array([index, 9, 7]),
+          mimeType: 'image/png',
+          semanticMetadata: {},
+        }),
+      );
       await media.reserve(reference, historyOwnerIdFor(reference.contentId));
       references.push(reference);
     }

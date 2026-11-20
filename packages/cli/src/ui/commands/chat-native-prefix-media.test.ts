@@ -14,6 +14,7 @@ import {
   useTempDir,
   withCLI,
 } from './native-prefix-test-helpers.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 
 const bytes = new Uint8Array([1, 3, 5, 7]);
 
@@ -27,11 +28,13 @@ describe('actual CLI native prefix media reservations', () => {
         async ({ agent, client, context, recording }) => {
           const store = clientMediaStore(client);
           if (store === undefined) throw new Error('Missing media store');
-          const reference = await store.admit({
-            bytes,
-            mimeType: 'image/png',
-            semanticMetadata: {},
-          });
+          const reference = await withAdmittedOrigin(
+            store.admit({
+              bytes,
+              mimeType: 'image/png',
+              semanticMetadata: {},
+            }),
+          );
           await agent.setHistory([
             row(0),
             row(1),
@@ -96,11 +99,13 @@ describe('actual CLI native prefix media reservations', () => {
       async ({ agent, client, context, recording }) => {
         const store = clientMediaStore(client);
         if (store === undefined) throw new Error('Missing media store');
-        const reference = await store.admit({
-          bytes,
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
+        const reference = await withAdmittedOrigin(
+          store.admit({
+            bytes,
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+        );
         await agent.setHistory([
           row(0),
           row(1),
@@ -127,11 +132,13 @@ describe('actual CLI native prefix media reservations', () => {
     await withCLI(directory(), 3, async ({ agent, client, context }) => {
       const store = clientMediaStore(client);
       if (store === undefined) throw new Error('Missing media store');
-      const reference: MediaReferenceBlock = await store.admit({
-        bytes,
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
+      const reference: MediaReferenceBlock = await withAdmittedOrigin(
+        store.admit({
+          bytes,
+          mimeType: 'image/png',
+          semanticMetadata: {},
+        }),
+      );
       await agent.setHistory([
         row(0),
         row(1),

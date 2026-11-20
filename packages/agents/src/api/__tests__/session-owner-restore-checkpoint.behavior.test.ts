@@ -19,6 +19,7 @@ import {
   readJournalFileFacts,
   type NativeFileControl,
 } from './helpers/native-session-fixture.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 
 const human = (text: string) => ({
   speaker: 'human' as const,
@@ -34,11 +35,13 @@ describe('native agent owner restore and checkpoint names', () => {
   it('uses captured media for durable recording, checkpoint fork and resume without Config media access', async () => {
     await withNativeRecordingFixture(async ({ agent, config, clientFor }) => {
       const store = requireMediaStore(clientFor(agent));
-      const media = await store.admit({
-        bytes: new Uint8Array([1, 3, 5, 7]),
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
+      const media = await withAdmittedOrigin(
+        store.admit({
+          bytes: new Uint8Array([1, 3, 5, 7]),
+          mimeType: 'image/png',
+          semanticMetadata: {},
+        }),
+      );
       Object.defineProperty(config, 'getLocalMediaStore', {
         configurable: true,
         value: () => {
@@ -360,16 +363,20 @@ describe('public restore media reservation failure', () => {
     it(`keeps live and durable rows atomic when the second media reservation fails (${fixture.name})`, async () => {
       await fixture(async ({ agent, clientFor }) => {
         const store = requireMediaStore(clientFor(agent));
-        const first = await store.admit({
-          bytes: new Uint8Array([2, 4, 6]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
-        const second = await store.admit({
-          bytes: new Uint8Array([3, 5, 7]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
+        const first = await withAdmittedOrigin(
+          store.admit({
+            bytes: new Uint8Array([2, 4, 6]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+        );
+        const second = await withAdmittedOrigin(
+          store.admit({
+            bytes: new Uint8Array([3, 5, 7]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+        );
         await agent.setHistory([
           { speaker: 'human', blocks: [first] },
           ai('kept reply'),

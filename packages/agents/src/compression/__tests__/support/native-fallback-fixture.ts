@@ -20,6 +20,7 @@ import {
 import { createCoreSuffixFixtureGraph } from '../../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { compressionValueDigest } from '../compression-value-fixture.js';
 import { nativeFileRows } from './native-file-rows.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 const historyScratchRoots = new ScratchRootOwner();
 
 class FinalizationOwner extends HistoryMediaOwnership {
@@ -192,11 +193,13 @@ export async function withNativeFallbackFixture(
         return compressionValueDigest(nativeFileRows(path));
       },
       admit: () =>
-        media.admit({
-          bytes: new Uint8Array([1]),
-          mimeType: 'application/octet-stream',
-          semanticMetadata: {},
-        }),
+        withAdmittedOrigin(
+          media.admit({
+            bytes: new Uint8Array([1]),
+            mimeType: 'application/octet-stream',
+            semanticMetadata: {},
+          }),
+        ),
       reserved: (contentId) => media.hasReservations(contentId),
     });
   } finally {

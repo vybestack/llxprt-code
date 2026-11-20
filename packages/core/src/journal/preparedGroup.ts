@@ -19,6 +19,7 @@ import type { RecordAccess } from './recordAccess.js';
 import type { MapKind } from './keyedMap.js';
 import { buildStreamedAppend } from './streamed-append-build.js';
 import type { AppendInput } from './streamed-append-pass.js';
+import type { TranscriptRevision } from './transcript-revision.js';
 
 function retainedKeys(
   kind: MapKind,
@@ -56,6 +57,8 @@ export interface PreparedGroup {
     value: Uint8Array,
     storage?: 'body',
   ): Promise<void>;
+  /** How the transcript copy of each row this group removes from context is revised (design 16.3). */
+  reviseRemovedTranscript(revision: TranscriptRevision): void;
 }
 
 export type GroupPreparation = (group: PreparedGroup) => Promise<void>;
@@ -72,6 +75,7 @@ export interface PreparedBuild {
   readonly facts: NativeFactIndexRegistration | undefined;
   readonly streamedAppend?: boolean;
   readonly retainedMetadataKeys?: readonly string[];
+  readonly transcriptRevision?: TranscriptRevision;
 }
 
 async function sameMetadata(
@@ -372,6 +376,7 @@ export async function prepareBuild(
     return builder.result;
   }
   const writes = preparationWrites(appender);
+  let transcriptRevision: TranscriptRevision | undefined;
   try {
     await preparation.prepare({
       appender: writes.appender,
@@ -384,6 +389,9 @@ export async function prepareBuild(
         builder.copyMetadata(source, root, keys, writes.appender),
       retainMetadata: (key, value, storage) =>
         builder.retain(key, value, writes.appender, 'meta', storage),
+      reviseRemovedTranscript: (revision) => {
+        transcriptRevision = revision;
+      },
     });
     for (const edit of edits) {
       if (edit.kind === 'setState')
@@ -402,5 +410,7 @@ export async function prepareBuild(
       throw error;
     throw new JournalInputError(error);
   }
-  return builder.result;
+  return transcriptRevision === undefined
+    ? builder.result
+    : { ...builder.result, transcriptRevision };
 }

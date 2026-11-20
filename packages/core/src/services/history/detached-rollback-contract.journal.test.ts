@@ -10,6 +10,7 @@ import {
   exactTokenizer,
   rejectedValue,
 } from './chronology-rollback-test-helpers.js';
+import { withAdmittedOrigin } from '../../storage/__tests__/support/admitted-origin.js';
 
 const stages = [
   'capture',
@@ -29,11 +30,13 @@ describe('native detached failure compensation', () => {
       await withDetachedMedia(async (store, owner) => {
         await withNativeDetachedFixture(
           async ({ history, owners, durable, session, bindOrigin }) => {
-            const image = await store.admit({
-              bytes: new Uint8Array([1]),
-              mimeType: 'image/png',
-              semanticMetadata: {},
-            });
+            const image = await withAdmittedOrigin(
+              store.admit({
+                bytes: new Uint8Array([1]),
+                mimeType: 'image/png',
+                semanticMetadata: {},
+              }),
+            );
             const rows = Array.from({ length: 6 }, (_, index) =>
               index === 0
                 ? {

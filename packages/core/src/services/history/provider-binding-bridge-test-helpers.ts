@@ -42,6 +42,7 @@ export function bindingReference(): MediaReferenceBlock {
     byteLength: 3,
     normalizedBase64Length: 4,
     semanticMetadata: {},
+    origin: { kind: 'pasted', readAt: '2026-11-20T10:00:00.000Z' },
     caption: 'binding reference',
   };
 }
