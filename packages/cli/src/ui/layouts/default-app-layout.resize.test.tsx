@@ -70,6 +70,8 @@ const { computeInputWidth, computeSuggestionsWidth, STATIC_EXTRA_HEIGHT } =
   await import('../utils/ui-sizing.js');
 
 const OLD_HISTORY = 'OLD3434_COMMITTED';
+// Erase the visible screen, then home the cursor.
+const CLEAR_VISIBLE_SCREEN = '\u001B[2J\u001B[1;1H';
 const evidenceRoot = resolve(import.meta.dir, '../../../../../tmp/verify3434');
 await mkdir(evidenceRoot, { recursive: true });
 const evidenceDirectory = await mkdtemp(resolve(evidenceRoot, 'resize-'));
@@ -401,6 +403,35 @@ describe('production standard-buffer resize emission', () => {
         expect(
           [...deltas, added].map((delta) => delta.oldHistoryOccurrences),
         ).toStrictEqual([0, 0, 0]);
+      },
+    );
+  });
+
+  it('clears the visible screen and redraws the live frame when the terminal narrows', async () => {
+    await withLayout(
+      'narrow-clears-screen',
+      1,
+      async ({ resize }): Promise<void> => {
+        const [stream] = await resize(40, 40);
+        const clearAt = stream.raw.indexOf(CLEAR_VISIBLE_SCREEN);
+        expect(clearAt).toBeGreaterThanOrEqual(0);
+        expect(
+          stripAnsi(stream.raw.slice(clearAt + CLEAR_VISIBLE_SCREEN.length)),
+        ).toContain('Pending 0:');
+        expect(stream.oldHistoryOccurrences).toBe(0);
+      },
+    );
+  });
+
+  it('keeps the visible screen when the terminal widens', async () => {
+    await withLayout(
+      'widen-keeps-screen',
+      1,
+      async ({ resize }): Promise<void> => {
+        const deltas = await resize(120, 40);
+        expect(
+          deltas.map((delta) => delta.raw.includes(CLEAR_VISIBLE_SCREEN)),
+        ).toStrictEqual([false, false]);
       },
     );
   });
