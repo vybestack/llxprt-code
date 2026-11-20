@@ -11,7 +11,7 @@
  * first, then the child, the signal forwarder, the proxy close handler, the
  * cleanup handlers and the wait for the child to close. Docker itself is a
  * stand-in `docker` on PATH, so the real startProxyContainer,
- * wireProxyContainerCloseHandler, wireCleanupHandlers and awaitSandboxExit
+ * watchProxyContainer, wireCleanupHandlers and awaitSandboxExit
  * run unchanged.
  *
  * HOST_WITH_PROXY_SIDECAR=1 starts the proxy sidecar. HOST_WITH_BRIDGE=1
@@ -29,7 +29,7 @@ import path from 'node:path';
 import {
   startProxyContainer,
   wireCleanupHandlers,
-  wireProxyContainerCloseHandler,
+  watchProxyContainer,
 } from '../sandbox-containers.js';
 import { awaitSandboxExit } from '../sandbox-exec.js';
 import { forwardSignalsToSandboxProcess } from '../sandbox-signal-forwarding.js';
@@ -59,10 +59,8 @@ const sandboxProcess = spawn(path.join(stubDir, 'sandbox-child'), [], {
   stdio: 'inherit',
 });
 forwardSignalsToSandboxProcess(sandboxProcess);
-const proxyContainerWatch = wireProxyContainerCloseHandler(
-  proxyContainer,
-  sandboxProcess,
-);
+const proxyContainerWatch = watchProxyContainer(proxyContainer);
+proxyContainerWatch.endOnFailure(sandboxProcess);
 
 const bridgeCleanup =
   process.env['HOST_WITH_BRIDGE'] === '1'

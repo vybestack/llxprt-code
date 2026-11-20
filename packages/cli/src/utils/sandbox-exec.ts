@@ -33,7 +33,7 @@ import {
   setupContainerUser,
   setupCredentialProxy,
   startProxyContainer,
-  wireProxyContainerCloseHandler,
+  watchProxyContainer,
   wireCleanupHandlers,
   handleStdinForSandbox,
   restoreStdinAfterSandbox,
@@ -44,6 +44,7 @@ import { entrypoint } from './sandbox-entrypoint.js';
 import {
   planSourceDependencyPreparation,
   runSourceDependencyPreparation,
+  type SourceDependencyPreparationPlan,
 } from './sandbox-dependency-preparation.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import {
@@ -461,6 +462,29 @@ export async function awaitSandboxExit(
   return exitCode;
 }
 
+/**
+ * Runs the source-checkout install, if the launch has one, after the proxy
+ * sidecar (a proxied launch needs it for network access) and before the main
+ * container exists, so nothing the install started can outlive it or see the
+ * capability delivery. A sidecar that exited meanwhile fails the launch here,
+ * so no main container starts without its proxy; that failure is the root
+ * cause and takes precedence over an install error it may have produced.
+ */
+async function prepareSourceDependencies(
+  plan: SourceDependencyPreparationPlan | undefined,
+  proxyContainerWatch: ProxyContainerWatch,
+): Promise<void> {
+  if (plan !== undefined) {
+    try {
+      await runSourceDependencyPreparation(plan);
+    } catch (error) {
+      proxyContainerWatch.throwIfFailed();
+      throw error;
+    }
+  }
+  proxyContainerWatch.throwIfFailed();
+}
+
 /** Spawns container and proxy, wires cleanup, and waits for exit. */
 async function executeContainerSandbox(
   config: ContainerSandboxConfig,
@@ -507,12 +531,13 @@ async function executeContainerSandbox(
         )
       : undefined;
 
-  // The install runs after the proxy sidecar (a proxied launch needs it for
-  // network access) and before the main container exists, so nothing the
-  // install started can outlive it or see the capability delivery.
-  if (sourceDependencyPreparation !== undefined) {
-    await runSourceDependencyPreparation(sourceDependencyPreparation);
-  }
+  // The sidecar is watched from here on, so an exit during the install is
+  // recorded before any sandbox child exists.
+  const proxyContainerWatch = watchProxyContainer(proxyContainerProcess);
+  await prepareSourceDependencies(
+    sourceDependencyPreparation,
+    proxyContainerWatch,
+  );
 
   const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
   const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
@@ -521,10 +546,7 @@ async function executeContainerSandbox(
     sandboxProcess.kill('SIGTERM');
   });
   dependencyVolumeLifecycle.recordMainContainerName(containerName);
-  const proxyContainerWatch = wireProxyContainerCloseHandler(
-    proxyContainerProcess,
-    sandboxProcess,
-  );
+  proxyContainerWatch.endOnFailure(sandboxProcess);
   restoreStdinAfterSandbox(
     sandboxProcess,
     stdinWasPaused,

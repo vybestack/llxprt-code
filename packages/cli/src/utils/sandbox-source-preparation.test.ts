@@ -34,6 +34,8 @@ import {
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -67,6 +69,7 @@ const FAILURE_MESSAGE =
   'Failed to prepare isolated Linux dependencies for LLxprt source development';
 const CAPABILITY_MOUNT_DESTINATION = '/run/llxprt-capability';
 const POSIX = process.platform !== 'win32';
+const PROXY_SIDECAR_NAME = 'llxprt-code-sandbox-proxy';
 
 type SpawnMock = Mock<typeof childProcess.spawn>;
 
@@ -133,6 +136,8 @@ describe('source-checkout dependency preparation', () => {
     let isolatedCacheDir = '';
     let engineRuns: string[][] = [];
     let preparationOutcome: PreparationOutcome = { kind: 'exit', code: 0 };
+    let sidecarProcess: childProcess.ChildProcess | undefined;
+    let sidecarExitsDuringPreparation = false;
 
     function spawnMock(): SpawnMock {
       return childProcess.spawn as unknown as SpawnMock;
@@ -162,6 +167,9 @@ describe('source-checkout dependency preparation', () => {
       spawnMock().mockImplementation(((_command: string, args: string[]) => {
         if (args[0] === 'images') return exitedEngineProcess('image-id\n', 0);
         engineRuns.push([...args]);
+        if (flagValue(args, '--name') === PROXY_SIDECAR_NAME) {
+          return startSidecarStandIn(args);
+        }
         const isPreparation = flagValue(args, '--name').endsWith('-prep');
         if (!isPreparation) {
           attachToFakeEngine(args, { keepAfterExit: true });
@@ -176,8 +184,28 @@ describe('source-checkout dependency preparation', () => {
         attachToFakeEngine(args, {
           keepAfterExit: preparationOutcome.code !== 0,
         });
+        if (sidecarExitsDuringPreparation) {
+          // The sidecar dies while the install runs, before any main
+          // container exists.
+          sidecarProcess?.emit('close', 137, null);
+        }
         return exitedEngineProcess('', preparationOutcome.code);
       }) as unknown as typeof childProcess.spawn);
+    }
+
+    /**
+     * A sidecar that stays up until the test ends it. It is registered with
+     * the fake engine, as the real one would be, so `network connect` finds it.
+     */
+    function startSidecarStandIn(
+      args: readonly string[],
+    ): childProcess.ChildProcess {
+      attachToFakeEngine(args, { keepAfterExit: true });
+      const proc = new EventEmitter() as unknown as childProcess.ChildProcess;
+      proc.stdout = new PassThrough();
+      proc.stderr = new PassThrough();
+      sidecarProcess = proc;
+      return proc;
     }
 
     function preparationRuns(): string[][] {
@@ -187,9 +215,10 @@ describe('source-checkout dependency preparation', () => {
     }
 
     function mainRuns(): string[][] {
-      return engineRuns.filter(
-        (args) => !flagValue(args, '--name').endsWith('-prep'),
-      );
+      return engineRuns.filter((args) => {
+        const name = flagValue(args, '--name');
+        return !name.endsWith('-prep') && name !== PROXY_SIDECAR_NAME;
+      });
     }
 
     function singleRun(runs: string[][]): string[] {
@@ -230,6 +259,8 @@ describe('source-checkout dependency preparation', () => {
       vi.spyOn(os, 'platform').mockReturnValue('linux');
       engineRuns = [];
       preparationOutcome = { kind: 'exit', code: 0 };
+      sidecarProcess = undefined;
+      sidecarExitsDuringPreparation = false;
       installEngineStandIn();
     });
 
@@ -405,6 +436,82 @@ describe('source-checkout dependency preparation', () => {
         await expect(runContainerSandbox(CONFIG, [])).rejects.toThrowError(
           FAILURE_MESSAGE,
         );
+        expect(mainRuns()).toStrictEqual([]);
+        assertEverythingReleased();
+      }, 30_000);
+    });
+
+    describe('when the proxy sidecar exits during preparation', () => {
+      let readinessServer: http.Server | undefined;
+
+      beforeEach(async () => {
+        // The host probes the proxy endpoint with curl until it answers, so a
+        // real local listener stands in for the sidecar's proxy.
+        const server = http.createServer((_request, response) => {
+          response.end('ok');
+        });
+        readinessServer = server;
+        await new Promise<void>((resolve) => {
+          server.listen(0, '127.0.0.1', resolve);
+        });
+        const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        for (const key of [
+          'HTTPS_PROXY',
+          'https_proxy',
+          'HTTP_PROXY',
+          'http_proxy',
+        ]) {
+          process.env[key] = url;
+        }
+        process.env.LLXPRT_SANDBOX_PROXY_COMMAND = 'stand-in-proxy';
+        // Stopping the sidecar reaches the fake engine; every other shell
+        // probe keeps the stand-in answer.
+        (
+          childProcess.execSync as Mock<typeof childProcess.execSync>
+        ).mockImplementation(((command: string) => {
+          if (command.startsWith('docker rm -f')) {
+            return __actual.execSync(command, { env: process.env });
+          }
+          return command === 'id -u' || command === 'id -g'
+            ? Buffer.from('1234\n')
+            : Buffer.from('image-id\n');
+        }) as typeof childProcess.execSync);
+        sidecarExitsDuringPreparation = true;
+      });
+
+      afterEach(async () => {
+        const server = readinessServer;
+        if (server === undefined) return;
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        });
+      });
+
+      it('fails the launch, starts no main container and releases everything', async () => {
+        const capabilityDirsBefore = capabilityHostDirectories();
+
+        await expect(runContainerSandbox(CONFIG, [])).rejects.toThrowError(
+          /Proxy container command .* exited with code 137/,
+        );
+
+        expect(preparationRuns()).toHaveLength(1);
+        expect(mainRuns()).toStrictEqual([]);
+        assertEverythingReleased();
+        expect(
+          capabilityHostDirectories().filter(
+            (entry) => !capabilityDirsBefore.includes(entry),
+          ),
+        ).toStrictEqual([]);
+      }, 30_000);
+
+      it('reports the sidecar exit rather than the install failure it caused', async () => {
+        preparationOutcome = { kind: 'exit', code: 1 };
+
+        await expect(runContainerSandbox(CONFIG, [])).rejects.toThrowError(
+          /Proxy container command .* exited with code 137/,
+        );
+
         expect(mainRuns()).toStrictEqual([]);
         assertEverythingReleased();
       }, 30_000);

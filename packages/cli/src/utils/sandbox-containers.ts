@@ -721,30 +721,37 @@ export async function startProxyContainer(
 }
 
 /**
- * What the proxy sidecar's close handler observed, read by the launch path
- * after the sandbox child has closed.
+ * What the proxy sidecar's close handler observed, read by the launch path.
  */
 export interface ProxyContainerWatch {
   /** Throws the fatal error for a sidecar that exited without being asked to. */
   throwIfFailed(): void;
+  /**
+   * Ends `sandboxProcess` when the sidecar fails, at once when it already
+   * has. The launch path raises the failure itself after the child closes.
+   */
+  endOnFailure(sandboxProcess: ChildProcess): void;
 }
 
 const NO_PROXY_CONTAINER_FAILURE: ProxyContainerWatch = {
   throwIfFailed: () => {},
+  endOnFailure: () => {},
 };
 
 /**
- * Ends the sandbox child when the proxy sidecar dies unasked, and records the
- * failure for the launch path. The launch path raises it after the child has
- * closed: a throw from this listener would end the host at once, before the
- * child's close and before the release of the resources the launch owns.
+ * Records an unasked exit of the proxy sidecar. The launch attaches this as
+ * soon as the sidecar is up, so an exit during source-checkout dependency
+ * preparation (before any sandbox child exists) is still seen. A throw from
+ * the close listener would end the host at once, before the release of the
+ * resources the launch owns, so the failure is only recorded here and raised
+ * by the launch path.
  */
-export function wireProxyContainerCloseHandler(
+export function watchProxyContainer(
   proxyContainer: ProxyContainerHandle | undefined,
-  sandboxProcess: ChildProcess,
 ): ProxyContainerWatch {
   if (proxyContainer === undefined) return NO_PROXY_CONTAINER_FAILURE;
   let failure: FatalSandboxError | undefined;
+  let sandboxChild: ChildProcess | undefined;
   proxyContainer.process.on('close', (code, signal) => {
     // An intended stop ends the sidecar while the sandboxed child is still
     // handling the same signal. The host keeps waiting for that child and
@@ -755,11 +762,15 @@ export function wireProxyContainerCloseHandler(
     );
     // The sandbox child is not detached, so there is no process group with its
     // id to signal; address the child itself.
-    sandboxProcess.kill('SIGTERM');
+    sandboxChild?.kill('SIGTERM');
   });
   return {
     throwIfFailed: () => {
       if (failure !== undefined) throw failure;
+    },
+    endOnFailure: (sandboxProcess) => {
+      sandboxChild = sandboxProcess;
+      if (failure !== undefined) sandboxProcess.kill('SIGTERM');
     },
   };
 }
