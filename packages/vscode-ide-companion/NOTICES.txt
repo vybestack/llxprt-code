@@ -27,7 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ============================================================
-@modelcontextprotocol/sdk@1.29.0
+@modelcontextprotocol/sdk@1.32.1
 (git+https://github.com/modelcontextprotocol/typescript-sdk.git)
 
 MIT License
@@ -136,7 +136,7 @@ SOFTWARE.
 
 
 ============================================================
-fast-uri@3.1.6
+fast-uri@3.1.8
 (git+https://github.com/fastify/fast-uri.git)
 
 Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae
@@ -1095,7 +1095,7 @@ THE SOFTWARE.
 
 
 ============================================================
-qs@6.15.3
+qs@6.16.1
 (https://github.com/ljharb/qs.git)
 
 BSD 3-Clause License
@@ -2046,7 +2046,7 @@ IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 ============================================================
-proxy-addr@2.0.7
+proxy-addr@2.0.8
 (No repository found)
 
 (The MIT License)
@@ -2322,7 +2322,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 ============================================================
-ip-address@10.5.0
+ip-address@10.7.4
 (https://github.com/beaugunderson/ip-address.git)
 
 Copyright (C) 2011 by Beau Gunderson
@@ -2347,7 +2347,7 @@ THE SOFTWARE.
 
 
 ============================================================
-hono@4.13.4
+hono@4.13.13
 (git+https://github.com/honojs/hono.git)
 
 MIT License
@@ -5536,7 +5536,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ============================================================
-undici@7.29.0
+undici@7.30.1
 (git+https://github.com/nodejs/undici.git)
 
 MIT License

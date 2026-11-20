@@ -66,7 +66,7 @@ describe('executeProviderActivation provider-scope persistence (#2534)', () => {
       await route.agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'client-probe' }] },
       ]);
-      expect(JSON.stringify(await route.agent.getHistory())).toContain(
+      expect(JSON.stringify(await route.agent.session.getHistory())).toContain(
         'client-probe',
       );
       return {

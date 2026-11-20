@@ -1,4 +1,4 @@
-import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
+import type { SlashCommandHandlerDeps } from './slashCommandHandlers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,13 +17,14 @@ import {
   DebugLogger,
   validateSessionMediaPackage,
 } from '@vybestack/llxprt-code-core';
-import { useOwnerSessionAgents } from './__tests__/owner-session-agents.js';
-import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
+import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
+import { NativeJournalCursor } from '../stores/turn/native-journal-cursor.js';
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import {
   type UseSessionBrowserProps,
@@ -32,8 +33,10 @@ import {
 import { processSlashCommand } from './slashCommandHandlers.js';
 import { convertMessageToHistoryItem } from './slashCommandProcessorSupport.js';
 
-const BROKEN_NAME = 'session-2026-10-08T21-18-08-broken000001.jsonl';
-const EMPTY_FILE_REASON = 'Empty file or unreadable first line';
+const BROKEN_NAME = 'session-2026-10-08T21-18-08-broken000001.llxj';
+function brokenReason(path: string): string {
+  return `Session file ${path} ends inside its header (8 bytes)`;
+}
 
 const human = (text: string) => ({
   speaker: 'human' as const,
@@ -41,150 +44,178 @@ const human = (text: string) => ({
 });
 
 describe('owner mode with an unreadable recording present (issue #3732)', () => {
-  const openAgent = useOwnerSessionAgents();
   it('/continue <id> restores the session and warns with the unreadable file and reason', async () => {
-    const { agent, config: sourceConfig } = await openAgent();
-    const chatsDir = sourceConfig.projectChatsDir;
-    await agent.setHistory([human('owner restored conversation')]);
-    await agent.session.setRecording({ enabled: true });
-    const sourceId = (await agent.session.listSessions()).at(0)?.id;
-    if (!sourceId) throw new Error('Missing source session');
-    await agent.session.setRecording({ enabled: false });
-    const brokenPath = join(chatsDir, BROKEN_NAME);
-    await writeFile(brokenPath, '', 'utf-8');
+    await withRecordingLifetimeFixture(async ({ agent, borrow, chatsDir }) => {
+      await agent.setHistory([human('owner restored conversation')]);
+      await agent.session.setRecording({ enabled: true });
+      const sourceId = (await agent.session.listSessions()).at(0)?.id;
+      if (!sourceId) throw new Error('Missing source session');
+      await agent.session.setRecording({ enabled: false });
+      const brokenPath = join(chatsDir, BROKEN_NAME);
+      await writeFile(brokenPath, 'LLXJRNL\0', 'utf-8');
 
-    const { agent: next } = await openAgent();
-    const turnStore = createTurnStore();
-    const { commands } = turnStore;
-    const addItem: SlashCommandHandlerDeps['addItem'] = (item, timestamp) =>
-      commands.addItem(item, timestamp);
-    const continueCommand = createContinueCommand(
-      bindContinueCommandOperations(
-        next.session.exportSession.bind(next.session),
-        () => false,
-        async () => [...(await next.session.listBrowserTargets())],
-        validateSessionMediaPackage,
-      ),
-    );
-    const deps: SlashCommandHandlerDeps = {
-      commands: [continueCommand],
-      config: {
-        getEphemeralSetting: () => 'auto',
-        logSlashCommand: () => {},
-      } as never,
-      commandContext: createMockCommandContext({
-        recordingOwner: 'agent',
-        ui: {
-          addItem: commands.addItem,
-          clear: commands.clearItems,
-          loadHistory: commands.loadHistory,
+      const next = await borrow();
+      await next.session.setRecording({ enabled: true });
+      const turnStore = createTurnStore();
+      const { commands } = turnStore;
+      const addItem: SlashCommandHandlerDeps['addItem'] = (item, timestamp) =>
+        commands.addItem(item, timestamp);
+      commands.bindJournal(() => ({
+        appendDisplay: next.session.appendDisplay.bind(next.session),
+        length: () => next.session.getJournalLength(),
+      }));
+      const continueCommand = createContinueCommand(
+        bindContinueCommandOperations(
+          next.session.exportSession.bind(next.session),
+          () => false,
+          async () => [...(await next.session.listBrowserTargets())],
+          validateSessionMediaPackage,
+        ),
+      );
+      const deps: SlashCommandHandlerDeps = {
+        commands: [continueCommand],
+        config: {
+          getEphemeralSetting: () => 'auto',
+          logSlashCommand: () => {},
+        } as never,
+        commandContext: createMockCommandContext({
+          recordingOwner: 'agent',
+          ui: {
+            addItem: commands.addItem,
+            clear: commands.clearItems,
+          },
+          services: { agent: next },
+        }),
+        actions: {} as never,
+        addItem,
+        addMessage: (message) => {
+          addItem(
+            convertMessageToHistoryItem(message),
+            message.timestamp.getTime(),
+          );
         },
-        services: { agent: next },
-      }),
-      actions: {} as never,
-      addItem,
-      addMessage: (message) => {
-        addItem(
-          convertMessageToHistoryItem(message),
-          message.timestamp.getTime(),
-        );
-      },
-      setIsProcessing: () => {},
-      setLocalIsProcessing: () => {},
-      setPendingItem: () => {},
-      setSessionShellAllowlist: () => {},
-      setConfirmationRequest: () => {},
-      confirmationLogger: new DebugLogger('test-confirmation'),
-      slashCommandLogger: new DebugLogger('test-slash'),
-      beginSlashCommandAction: () => new AbortController(),
-      endSlashCommandAction: () => {},
-      resumeOwnedSession: null,
-      isMcpDiscoveryPending: () => false,
-      resumeRawSession: null,
-      replayResumedHistory: () => {},
-      recordCommandError: async () => {},
-      loadCommandHistory: async () => {},
-    };
+        setIsProcessing: () => {},
+        setLocalIsProcessing: () => {},
+        setPendingItem: () => {},
+        setSessionShellAllowlist: () => {},
+        setConfirmationRequest: () => {},
+        confirmationLogger: new DebugLogger('test-confirmation'),
+        slashCommandLogger: new DebugLogger('test-slash'),
+        beginSlashCommandAction: () => new AbortController(),
+        endSlashCommandAction: () => {},
+        resumeOwnedSession: null,
+        isMcpDiscoveryPending: () => false,
+        resumeRawSession: null,
+        refreshResumedHistory: commands.clearItems,
+        recordCommandError: async () => {},
+        writeOutput: async (item) => {
+          await appendJournalUiItem(next.session, undefined, item);
+        },
+      };
 
-    deps.resumeOwnedSession = bindFixtureOwnerResume(
-      deps.commandContext,
-      deps.commandContext.services.config,
-    );
-    await processSlashCommand(deps, `/continue ${sourceId}`);
+      deps.resumeOwnedSession = async (action) => {
+        if (action.sessionRef === undefined)
+          throw new Error('Expected session reference');
+        return (
+          await resumeOwnerSession(
+            next.session.resume.bind(next.session),
+            action.sessionRef,
+            next.session.listBrowserTargetsDetailed.bind(next.session),
+          )
+        ).warnings;
+      };
+      await processSlashCommand(deps, `/continue ${sourceId}`);
 
-    const visible = turnStore.store
-      .getState()
-      .history.map((item) => ('text' in item ? item.text : item.type));
-    expect(visible).toStrictEqual([
-      'owner restored conversation',
-      `Warning: Skipped unreadable session recording ${brokenPath}: ${EMPTY_FILE_REASON}`,
-    ]);
+      const path = next.session.getRecording().path;
+      if (path === undefined) throw new Error('Missing resumed journal');
+      const cursor = await NativeJournalCursor.open(path, {}, 10);
+      try {
+        const visible = (await cursor.pageBack(10)).entries
+          .reverse()
+          .flatMap((entry) =>
+            entry.kind === 'projected'
+              ? ['text' in entry.item ? entry.item.text : entry.item.type]
+              : [],
+          );
+        expect(visible).toStrictEqual([
+          'owner restored conversation',
+          `Warning: Skipped unreadable session recording ${brokenPath}: ${brokenReason(brokenPath)}`,
+        ]);
+      } finally {
+        await cursor.close();
+      }
+    });
   });
 
   it('names the unreadable file when /continue references it directly', async () => {
-    const { agent: next, config } = await openAgent();
-    const chatsDir = config.projectChatsDir;
-    await mkdir(chatsDir, { recursive: true });
-    const brokenPath = join(chatsDir, BROKEN_NAME);
-    await writeFile(brokenPath, '', 'utf-8');
-    const failure = await resumeOwnerSession(
-      next.session.resume.bind(next.session),
-      BROKEN_NAME,
-      'allowed',
-      next.session.listBrowserTargetsDetailed.bind(next.session),
-    ).then(
-      () => null,
-      (error: unknown) => error,
-    );
+    await withRecordingLifetimeFixture(async ({ borrow, chatsDir }) => {
+      await mkdir(chatsDir, { recursive: true });
+      const brokenPath = join(chatsDir, BROKEN_NAME);
+      await writeFile(brokenPath, 'LLXJRNL\0', 'utf-8');
+      const next = await borrow();
+      const failure = await resumeOwnerSession(
+        next.session.resume.bind(next.session),
+        BROKEN_NAME,
+        next.session.listBrowserTargetsDetailed.bind(next.session),
+      ).then(
+        () => null,
+        (error: unknown) => error,
+      );
 
-    expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toContain(
-      `unreadable recording skipped: ${brokenPath}: ${EMPTY_FILE_REASON}`,
-    );
+      expect(failure).toBeInstanceOf(Error);
+      if (!(failure instanceof Error)) throw new Error('Missing resume error');
+      expect(failure.message).toContain(
+        `unreadable recording skipped: ${brokenPath}: ${brokenReason(brokenPath)}`,
+      );
+    });
   });
 
   it('the session browser counts the skipped unreadable recording', async () => {
-    const { agent, config: sourceConfig } = await openAgent();
-    const chatsDir = sourceConfig.projectChatsDir;
-    await agent.setHistory([human('browser healthy session')]);
-    await agent.session.setRecording({ enabled: true });
-    const sourceId = (await agent.session.listSessions()).at(0)?.id;
-    if (!sourceId) throw new Error('Missing source session');
-    await agent.session.setRecording({ enabled: false });
-    await writeFile(join(chatsDir, BROKEN_NAME), '', 'utf-8');
-    const { agent: next, config } = await openAgent();
+    await withRecordingLifetimeFixture(
+      async ({ agent, borrow, chatsDir, config }) => {
+        await agent.setHistory([human('browser healthy session')]);
+        await agent.session.setRecording({ enabled: true });
+        const sourceId = (await agent.session.listSessions()).at(0)?.id;
+        if (!sourceId) throw new Error('Missing source session');
+        await agent.session.setRecording({ enabled: false });
+        await writeFile(join(chatsDir, BROKEN_NAME), 'LLXJRNL\0', 'utf-8');
+        const next = await borrow();
 
-    const catalog: Pick<
-      UseSessionBrowserProps,
-      'readCatalog' | 'deleteTarget'
-    > = {
-      readCatalog: bindOwnerBrowserCatalog(
-        () => next.session.listBrowserTargetsDetailed(),
-        () => next.session.getRecording().path,
-        () => config.getSessionId(),
-      ),
-      deleteTarget: async (target) => {
-        if (target.kind === 'checkpoint')
-          await next.session.deleteCheckpoint(target.checkpointId);
-        else await next.session.deleteSession(target.session.sessionId);
+        const catalog: Pick<
+          UseSessionBrowserProps,
+          'readCatalog' | 'deleteTarget'
+        > = {
+          readCatalog: bindOwnerBrowserCatalog(
+            () => next.session.listBrowserTargetsDetailed(),
+            () => next.session.getRecording().path,
+            () => config.getSessionId(),
+          ),
+          deleteTarget: async (target) => {
+            if (target.kind === 'checkpoint')
+              await next.session.deleteCheckpoint(target.checkpointId);
+            else await next.session.deleteSession(target.session.sessionId);
+          },
+        };
+        const browser = renderHook(() =>
+          useSessionBrowser({
+            chatsDir,
+            projectHash: config.projectTempDir.split('/').at(-1) ?? '',
+            currentSessionId: config.getSessionId(),
+            ...catalog,
+            onSelect: async () => ({ ok: false, error: 'not selected' }),
+            onClose: () => {},
+          }),
+        );
+        await waitFor(() =>
+          expect(browser.result.current.isLoading).toBe(false),
+        );
+
+        expect({
+          listed: browser.result.current.sessions.map((row) => row.sessionId),
+          skippedCount: browser.result.current.skippedCount,
+        }).toStrictEqual({ listed: [sourceId], skippedCount: 1 });
+        browser.unmount();
       },
-    };
-    const browser = renderHook(() =>
-      useSessionBrowser({
-        chatsDir,
-        projectHash: config.projectTempDir.split('/').at(-1) ?? '',
-        currentSessionId: config.getSessionId(),
-        ...catalog,
-        onSelect: async () => ({ ok: false, error: 'not selected' }),
-        onClose: () => {},
-      }),
     );
-    await waitFor(() => expect(browser.result.current.isLoading).toBe(false));
-
-    expect({
-      listed: browser.result.current.sessions.map((row) => row.sessionId),
-      skippedCount: browser.result.current.skippedCount,
-    }).toStrictEqual({ listed: [sourceId], skippedCount: 1 });
-    browser.unmount();
   });
 });

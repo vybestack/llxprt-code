@@ -1,0 +1,308 @@
+{
+  "name": "seeded-59",
+  "description": "random mutation sequence, seed 59",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 4,
+        "prefix": "s59"
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "153059407412052d5309018f53e4e417580412e9efd449cfebd2b2b944213f49",
+          "tags": [
+            "ece48e3d4774ef4a",
+            "5db53cd727388995",
+            "ee4ae9c02ecaee5f",
+            "938ccd9a52b2dd5b"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "153059407412052d5309018f53e4e417580412e9efd449cfebd2b2b944213f49",
+          "tags": [
+            "ece48e3d4774ef4a",
+            "5db53cd727388995",
+            "ee4ae9c02ecaee5f",
+            "938ccd9a52b2dd5b"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "070d3100a750ec6a6d20e7dad64eaf545b346ece525b1f91c059cf8b42e189e8",
+          "tags": ["ece48e3d4774ef4a", "5db53cd727388995", "ee4ae9c02ecaee5f"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "070d3100a750ec6a6d20e7dad64eaf545b346ece525b1f91c059cf8b42e189e8",
+          "tags": ["ece48e3d4774ef4a", "5db53cd727388995", "ee4ae9c02ecaee5f"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "compress",
+        "summary": {
+          "speaker": "ai",
+          "text": "s59-sum-2"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "3868c612501197926dee989edad17a2bb96be304582e0ce8a5d72d435cc0de9b",
+          "tags": ["7038dce19552ee78"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "3868c612501197926dee989edad17a2bb96be304582e0ce8a5d72d435cc0de9b",
+          "tags": ["7038dce19552ee78"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s59-add-3"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "296b12fddd7cbc7270923314d4231b17f2cee2a4be62e863f040a5513318cfb3",
+          "tags": ["7038dce19552ee78", "f81442e47a925b34"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "296b12fddd7cbc7270923314d4231b17f2cee2a4be62e863f040a5513318cfb3",
+          "tags": ["7038dce19552ee78", "f81442e47a925b34"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s59-add-4"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "791ec23f135053616e31f3c322dc02f9aaa33541e572a09444f8e140b18f8e7b",
+          "tags": ["7038dce19552ee78", "f81442e47a925b34", "38c2b56266c8f863"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "791ec23f135053616e31f3c322dc02f9aaa33541e572a09444f8e140b18f8e7b",
+          "tags": ["7038dce19552ee78", "f81442e47a925b34", "38c2b56266c8f863"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s59-add-5"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "a1d857115531110288b28ab5d52825ea0145933bfcf57d659bb7f4b7fe15dea9",
+          "tags": [
+            "7038dce19552ee78",
+            "f81442e47a925b34",
+            "38c2b56266c8f863",
+            "4c452f03b7ed3ce5"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "a1d857115531110288b28ab5d52825ea0145933bfcf57d659bb7f4b7fe15dea9",
+          "tags": [
+            "7038dce19552ee78",
+            "f81442e47a925b34",
+            "38c2b56266c8f863",
+            "4c452f03b7ed3ce5"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "compress",
+        "summary": {
+          "speaker": "ai",
+          "text": "s59-sum-6"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "e12caeb72fbef79792e6a18b91eba2c7e0d17539019dfee0258d498e56d354eb",
+          "tags": ["bf60c9f772b61854"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "e12caeb72fbef79792e6a18b91eba2c7e0d17539019dfee0258d498e56d354eb",
+          "tags": ["bf60c9f772b61854"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s59-add-7"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "4898f8e6af15ad484b532c498134b698ee6ae2748875a23220eed014cd2cc965",
+          "tags": ["bf60c9f772b61854", "b0332de22c2b7c23"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "4898f8e6af15ad484b532c498134b698ee6ae2748875a23220eed014cd2cc965",
+          "tags": ["bf60c9f772b61854", "b0332de22c2b7c23"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "e12caeb72fbef79792e6a18b91eba2c7e0d17539019dfee0258d498e56d354eb",
+          "tags": ["bf60c9f772b61854"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "e12caeb72fbef79792e6a18b91eba2c7e0d17539019dfee0258d498e56d354eb",
+          "tags": ["bf60c9f772b61854"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "clear"
+      },
+      "observed": {
+        "live": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        },
+        "resumed": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s59-add-10"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "08e18945947baac6e0b9935a0faa86e2b7f52148a1664a25a0bd88036895db69",
+          "tags": ["2b89d40875259a28"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "08e18945947baac6e0b9935a0faa86e2b7f52148a1664a25a0bd88036895db69",
+          "tags": ["2b89d40875259a28"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "addAll",
+        "rows": [
+          {
+            "speaker": "human",
+            "text": "s59-q-11"
+          },
+          {
+            "speaker": "ai",
+            "text": "s59-a-11"
+          }
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "406398dcb8d261ea1382d7d3f1b3b1d338142d92b6a29f84edd3362d88c21b3c",
+          "tags": ["2b89d40875259a28", "65b9c0e0039b8583", "9713933f6bf64dbc"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "406398dcb8d261ea1382d7d3f1b3b1d338142d92b6a29f84edd3362d88c21b3c",
+          "tags": ["2b89d40875259a28", "65b9c0e0039b8583", "9713933f6bf64dbc"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 2,
+          "digest": "34109d9bba86f2d748df50f66809b144d5612add51328f2f4a3ca12149edf594",
+          "tags": ["2b89d40875259a28", "65b9c0e0039b8583"]
+        },
+        "resumed": {
+          "length": 2,
+          "digest": "34109d9bba86f2d748df50f66809b144d5612add51328f2f4a3ca12149edf594",
+          "tags": ["2b89d40875259a28", "65b9c0e0039b8583"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "s59-add-15"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "b97f05a38135b872a2e9a71667a6da07673899819a4640e9f436ec1554dea7ee",
+          "tags": ["2b89d40875259a28", "65b9c0e0039b8583", "9ab7d5e737ccd1a1"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "b97f05a38135b872a2e9a71667a6da07673899819a4640e9f436ec1554dea7ee",
+          "tags": ["2b89d40875259a28", "65b9c0e0039b8583", "9ab7d5e737ccd1a1"]
+        }
+      }
+    }
+  ]
+}

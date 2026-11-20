@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 /**
  * Registry of the slash-command actions that are currently in flight
@@ -55,5 +55,12 @@ export function createSlashCommandCancellation(): SlashCommandCancellation {
 }
 
 export function useSlashCommandCancellation(): SlashCommandCancellation {
-  return useMemo(() => createSlashCommandCancellation(), []);
+  const cancellation = useMemo(() => createSlashCommandCancellation(), []);
+  useEffect(
+    () => () => {
+      cancellation.cancelActiveSlashCommand();
+    },
+    [cancellation],
+  );
+  return cancellation;
 }

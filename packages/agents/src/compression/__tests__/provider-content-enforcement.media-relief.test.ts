@@ -1,3 +1,4 @@
+import { historyApartFromDrops } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -52,12 +53,14 @@ function mediaBlocks(contents: readonly IContent[]): number {
   ).length;
 }
 
+/** Retired images the request announces: stored drops or request notes. */
 function noteBlocks(contents: readonly IContent[]): number {
   return contents.flatMap((content) =>
     content.blocks.filter(
       (block) =>
-        block.type === 'text' &&
-        block.text.includes('was omitted from this request'),
+        block.type === 'media_dropped' ||
+        (block.type === 'text' &&
+          block.text.includes('was omitted from this request')),
     ),
   ).length;
 }
@@ -71,7 +74,7 @@ describe('history media relief keeps the other limits (issue #4000 review round 
     budget: number | undefined,
     enforcerBudget: number | undefined = budget,
   ): Promise<void> {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(
       directory,
       budget,
@@ -109,7 +112,7 @@ describe('history media relief keeps the other limits (issue #4000 review round 
     nextFill = 1;
   });
   afterEach(async () => {
-    session.dispose();
+    await session.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -139,7 +142,7 @@ describe('history media relief keeps the other limits (issue #4000 review round 
       session.useCompression(async (history) => {
         runs += 1;
         if (runs === 1) throw new Error('summarizer offline on the byte pass');
-        history.clear();
+        await history.clear();
         history.add(aiTurn('short summary of the earlier conversation'));
         images.forEach((image, index) =>
           history.add(imageTurn(image.reference, `kept-${index}`)),
@@ -205,11 +208,12 @@ describe('history media relief keeps the other limits (issue #4000 review round 
         await admitImage(),
       ];
       session.useCompression(async (history) => {
-        history.clear();
-        history.add(aiTurn('PARTIAL SUMMARY'));
-        replacements.forEach((image, index) =>
-          history.add(imageTurn(image.reference, `replacement-${index}`)),
-        );
+        await history.detachedValues.replace([
+          aiTurn('PARTIAL SUMMARY'),
+          ...replacements.map((image, index) =>
+            imageTurn(image.reference, `replacement-${index}`),
+          ),
+        ]);
         await history.waitForTokenUpdates();
         throw new Error('summarizer crashed after rewriting history');
       });
@@ -241,7 +245,7 @@ describe('history media relief keeps the other limits (issue #4000 review round 
       await startSession(500_000, IDLE_RETIREMENT);
       const images = await seedImages(3);
       session.useCompressionOutcome(PerformCompressionResult.SKIPPED_COOLDOWN);
-      const before = JSON.stringify(session.history.getAll());
+      const before = await historyApartFromDrops(session.history);
       const declared = ['a', 'b', 'c', 'd', 'e'].map((label) =>
         textTurn(`declared ${label}`),
       );
@@ -255,7 +259,8 @@ describe('history media relief keeps the other limits (issue #4000 review round 
         requests: session.sent.length,
         sentImages: collectImageData(body, []).length,
         notes: countRetirementNotes(body),
-        canonicalUnchanged: JSON.stringify(session.history.getAll()) === before,
+        canonicalUnchanged:
+          (await historyApartFromDrops(session.history)) === before,
       }).toStrictEqual({
         requests: 1,
         sentImages: 0,

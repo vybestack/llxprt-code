@@ -44,7 +44,8 @@
     "../../bun-test-corrections.d.ts",
     "index.ts",
     "src/**/*.ts",
-    "src/**/*.json"
+    "src/**/*.json",
+    "../../node_modules/bun-types/jsc.d.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

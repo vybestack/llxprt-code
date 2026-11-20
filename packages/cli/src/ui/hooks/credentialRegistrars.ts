@@ -24,7 +24,10 @@ import {
 } from '../commands/keyCommand.js';
 import { createKeyfileCommand } from '../commands/keyfileCommand.js';
 import { createLogoutCommand } from '../commands/logoutCommand.js';
-import { createMcpAuthCommand } from '../commands/mcpAuth.js';
+import {
+  type McpAuthOutput,
+  createMcpAuthCommand,
+} from '../commands/mcpAuth.js';
 import { createMcpCommand } from '../commands/mcpCommand.js';
 import { bindMcpCommand } from '../commands/mcpCommandHost.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -43,6 +46,7 @@ export function createMcpOwnerCommand(
   isConfigured: boolean,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],
+  writeOutput: McpAuthOutput,
   reloadCommands: () => void,
 ): SlashCommand {
   const auth = createMcpAuthCommand(
@@ -64,7 +68,7 @@ export function createMcpOwnerCommand(
       () => isConfigured,
     ),
     () => settings.merged.enableFuzzyFiltering ?? true,
-    addItem,
+    writeOutput,
     reloadCommands,
   );
   return createMcpCommand(

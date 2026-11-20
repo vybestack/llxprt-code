@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -11,6 +12,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 export interface MockContentGenerator {
   generateContent: ReturnType<typeof vi.fn>;
@@ -96,7 +98,9 @@ export function createTokenSyncTestFixture(): TokenSyncTestFixture {
     embedContent: vi.fn(),
   };
 
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 
   return {
     mockConfig,

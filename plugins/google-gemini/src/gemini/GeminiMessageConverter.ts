@@ -11,6 +11,7 @@ import {
   type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import { isGemini3Model } from './modelClassification.js';
 import { buildToolResponsePayload } from '@vybestack/llxprt-code-providers/utils/toolResponsePayload.js';
 
@@ -49,6 +50,8 @@ export function convertHumanBlocksToGeminiParts(
       parts.push({ text: block.text });
     } else if (block.type === 'media') {
       parts.push(...convertMediaBlockToGeminiParts(block));
+    } else if (block.type === 'media_dropped') {
+      parts.push({ text: droppedMediaModelText(block) });
     }
   }
   return parts;
@@ -93,13 +96,21 @@ export function convertToolContentToGeminiContents(
     toolResponseBlock,
     configForMessages,
   );
+  // A dropped image's reference joins the result text of the response it rode with.
+  const result = content.blocks.reduce(
+    (text, block) =>
+      block.type === 'media_dropped'
+        ? `${text}\n${droppedMediaModelText(block)}`
+        : text,
+    payload.result,
+  );
   const frPart: Part = {
     functionResponse: {
       id: toolResponseBlock.callId,
       name: toolResponseBlock.toolName,
       response: {
         status: payload.status,
-        result: payload.result,
+        result,
         error: payload.error,
         truncated: payload.truncated,
         originalLength: payload.originalLength,
@@ -128,34 +139,42 @@ export function convertHistoryToGeminiFormat(
   currentModel = 'gemini-2.5-pro',
   configForMessages?: OutputLimitConfig,
 ): Array<{ role: string; parts: Part[] }> {
+  return content.flatMap((row) =>
+    convertGeminiRow(row, currentModel, configForMessages),
+  );
+}
+
+export function convertGeminiRow(
+  c: IContent,
+  currentModel = 'gemini-2.5-pro',
+  configForMessages?: OutputLimitConfig,
+): Array<{ role: string; parts: Part[] }> {
   const contents: Array<{ role: string; parts: Part[] }> = [];
-  for (const c of content) {
-    switch (c.speaker) {
-      case 'human': {
-        const parts = convertHumanBlocksToGeminiParts(c.blocks);
-        if (parts.length > 0) {
-          contents.push({ role: 'user', parts });
-        }
-        break;
+  switch (c.speaker) {
+    case 'human': {
+      const parts = convertHumanBlocksToGeminiParts(c.blocks);
+      if (parts.length > 0) {
+        contents.push({ role: 'user', parts });
       }
-      case 'ai': {
-        const parts = convertAiBlocksToGeminiParts(c.blocks);
-        if (parts.length > 0) {
-          contents.push({ role: 'model', parts });
-        }
-        break;
-      }
-      case 'tool':
-        convertToolContentToGeminiContents(
-          c,
-          currentModel,
-          configForMessages,
-          contents,
-        );
-        break;
-      default:
-        break;
+      break;
     }
+    case 'ai': {
+      const parts = convertAiBlocksToGeminiParts(c.blocks);
+      if (parts.length > 0) {
+        contents.push({ role: 'model', parts });
+      }
+      break;
+    }
+    case 'tool':
+      convertToolContentToGeminiContents(
+        c,
+        currentModel,
+        configForMessages,
+        contents,
+      );
+      break;
+    default:
+      break;
   }
   return contents;
 }

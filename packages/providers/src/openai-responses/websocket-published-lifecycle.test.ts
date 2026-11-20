@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import {
   createCodexResponsesWebSocketTransport,
@@ -46,6 +47,16 @@ const prefixes = {
     },
   ],
 };
+
+function expectArgumentArrival(content: IContent | void): void {
+  expect(content?.blocks).toStrictEqual([]);
+  expect(content?.toolArgumentDelta).toStrictEqual({
+    sourceId: 'item',
+    id: 'abandoned',
+    name: 'charge',
+    arguments: '{}',
+  });
+}
 
 describe('published Responses lifecycle interruption', () => {
   it('preserves an unrelated 400 even when its message describes the lifecycle limit', async () => {
@@ -107,7 +118,10 @@ describe('published Responses lifecycle interruption', () => {
         undefined,
         undefined,
       );
-      const published = await iterator.next();
+      const first = await iterator.next();
+      expect(first.done).toBe(false);
+      if (kind === 'tool') expectArgumentArrival(first.value);
+      const published = kind === 'tool' ? await iterator.next() : first;
       expect(published.done).toBe(false);
       const publishedTypes: Record<string, string> = {
         text: 'text',

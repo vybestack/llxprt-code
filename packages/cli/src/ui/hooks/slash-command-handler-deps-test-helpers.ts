@@ -6,6 +6,7 @@
 
 import { vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { createCommands } from '../../__tests__/command-history-result-fixture.js';
 import {
   createMockCommandContext,
@@ -22,11 +23,45 @@ export function createDeps(
   addItem: ReturnType<typeof vi.fn>,
   overrides: Partial<CommandHandlerFixture> = {},
 ): CommandHandlerFixture {
+  const context =
+    overrides.commandContext ?? createMockCommandContext({ ui: { addItem } });
   return {
     commands: createCommands(undefined),
     config: null,
-    commandContext: createMockCommandContext({ ui: { addItem } }),
-    actions: {} as SlashCommandHandlerDeps['actions'],
+    commandContext: context,
+    writeOutput: async (item) => {
+      if (context.recordingOwner === 'agent') {
+        const agent = context.services.agent;
+        if (agent === null) throw new Error('Missing output owner');
+        await appendJournalUiItem(agent.session, undefined, item);
+      } else addItem(item, Date.now());
+    },
+    actions: {
+      openAuthDialog: () => {},
+      openThemeDialog: () => {},
+      openEditorDialog: () => {},
+      openPrivacyNotice: () => {},
+      openSettingsDialog: () => {},
+      openLoggingDialog: () => {},
+      openSubagentDialog: () => {},
+      openModelsDialog: () => {},
+      openPermissionsDialog: () => {},
+      openPoliciesDialog: () => {},
+      openProviderDialog: () => {},
+      openLoadProfileDialog: () => {},
+      openCreateProfileDialog: () => {},
+      openProfileListDialog: () => {},
+      viewProfileDetail: () => {},
+      openProfileEditor: () => {},
+      quit: () => {},
+      setDebugMessage: () => {},
+      toggleCorgiMode: () => {},
+      toggleDebugProfiler: () => {},
+      dispatchExtensionStateUpdate: () => {},
+      addConfirmUpdateExtensionRequest: () => {},
+      openWelcomeDialog: () => {},
+      openSessionBrowserDialog: () => {},
+    },
     addItem,
     addMessage: vi.fn(),
     setIsProcessing: vi.fn(),
@@ -41,9 +76,17 @@ export function createDeps(
     resumeOwnedSession: null,
     isMcpDiscoveryPending: () => false,
     resumeRawSession: null,
-    replayResumedHistory: () => {},
+    refreshResumedHistory: () => {},
     recordCommandError: async () => {},
-    loadCommandHistory: async () => {},
     ...overrides,
   };
+}
+
+export function errorTexts(addItem: ReturnType<typeof vi.fn>): string[] {
+  return addItem.mock.calls.flatMap(([item]) => {
+    if (typeof item !== 'object' || item === null) return [];
+    if (!('type' in item) || item.type !== 'error') return [];
+    if (!('text' in item) || typeof item.text !== 'string') return [];
+    return [item.text];
+  });
 }

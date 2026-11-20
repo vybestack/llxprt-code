@@ -70,6 +70,8 @@ export function parseAgentConstruction(
     tokenStore,
     credentialAuthority: _credentialAuthority,
     mediaOwner: suppliedMediaOwner,
+    namedWriters: _namedWriters,
+    scratchRoots: _scratchRoots,
     ...validatable
   } = rawConfig;
   validateHostTransports(_filesystemService, _executeShellCommand);

@@ -26,7 +26,6 @@ import { useQueuedSubmissions } from '../useQueuedSubmissions.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
 import { StreamingState } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createDeferred } from './createDeferred.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { streamPolicyOperations } from './stream-policy-operations.js';
@@ -94,9 +93,9 @@ function renderNotificationQueue(
     onAuthError: noop,
     sanitizeContent: (text) => ({ text, blocked: false }),
     flushPendingHistoryItem: noop,
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: { current: null },
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: { current: false },
     setTurnCancelled: noop,
     queuedSubmissionsRef,
@@ -211,7 +210,9 @@ async function expectHistoryContains(
   agent: Agent,
   text: string,
 ): Promise<void> {
-  expect(JSON.stringify(await agent.getHistory())).toContain(text);
+  expect(
+    JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+  ).toContain(text);
 }
 
 async function waitForShellCleanup(
@@ -307,7 +308,7 @@ describe('background notification queue ownership', () => {
       expect(committed.current).toBe(StreamingState.Idle);
       expect(attempts).toBe(1);
       await admitNewSession(agent);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
     } finally {
       state.current = StreamingState.Idle;
       state.suspension = undefined;
@@ -394,11 +395,11 @@ describe('background notification queue ownership', () => {
         await expectHistoryContains(agent, CHILD_FAILURE);
         await delay(350);
         expect(attempts).toBe(deferral === 'clear' ? 1 : 2);
-        expect(JSON.stringify(await agent.getHistory())).toContain(
-          CHILD_FAILURE,
-        );
+        expect(
+          JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+        ).toContain(CHILD_FAILURE);
         await agent.session.startNewSession();
-        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await agent.session.getHistory()).toStrictEqual([]);
         rendered.unmount();
       } finally {
         release.resolve();
@@ -569,7 +570,7 @@ describe('background notification queue ownership', () => {
         } else if (retirement === 'unmount') rendered.unmount();
         else if (retirement === 'clear')
           act(() => rendered.result.current.clearSubmissions());
-        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
         await expect(agent.session.startNewSession()).rejects.toThrow(
           'completion notices',
         );
@@ -592,11 +593,11 @@ describe('background notification queue ownership', () => {
         await expectHistoryContains(agent, CHILD_FAILURE);
         await delay(350);
         expect(delivered).toBe(1);
-        expect(JSON.stringify(await agent.getHistory())).toContain(
-          CHILD_FAILURE,
-        );
+        expect(
+          JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+        ).toContain(CHILD_FAILURE);
         await agent.session.startNewSession();
-        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await agent.session.getHistory()).toStrictEqual([]);
         rendered.unmount();
         expect((await cleanup()) !== null).toBe(
           retirement === 'stream failure',
@@ -665,7 +666,7 @@ describe('background notification queue ownership', () => {
         await waitForShellCleanup(agent, outcome);
         await admitNewSession(agent);
         expect(delivered).toHaveLength(1);
-        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
       } finally {
         rendered.unmount();
         await work?.close();
@@ -733,7 +734,7 @@ describe('background notification queue ownership', () => {
       expect({ id: agent.session.getSessionId() }).toStrictEqual(oldSession);
       release.resolve();
       await finished.promise;
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
       await expect(agent.session.startNewSession()).rejects.toThrow(
         'completion notices',
       );
@@ -750,7 +751,7 @@ describe('background notification queue ownership', () => {
       await notices.delivered(2);
       await expectHistoryContains(agent, 'OLD_SESSION_OUTPUT');
       await admitNewSession(agent);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
       recovery.unmount();
     } finally {
       release.resolve();
@@ -816,7 +817,7 @@ describe('background notification queue ownership', () => {
       release.resolve();
       await streamed.promise;
       await admitNewSession(agent);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual([]);
     } finally {
       release.resolve();
       rendered.unmount();

@@ -139,17 +139,17 @@ async function withModelBoundary(
     provider === 'fake' ? FakeProvider.prototype : OpenAIProvider.prototype,
     'generateChatCompletion',
   ).mockImplementation(async function* (
-    options: GenerateChatOptions | IContent[],
+    options: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
-    const contents = Array.isArray(options) ? options : options.contents;
-    requests = [
-      ...requests,
-      contents
-        .flatMap((content) => content.blocks)
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('\n'),
-    ];
+    const contents =
+      Symbol.asyncIterator in options ? options : options.contents;
+    const texts: string[] = [];
+    for await (const content of contents) {
+      for (const block of content.blocks) {
+        if (block.type === 'text') texts.push(block.text);
+      }
+    }
+    requests = [...requests, texts.join('\n')];
     if (requests.length === 1) {
       entered.release();
       await blocked.promise;

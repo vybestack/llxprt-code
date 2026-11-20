@@ -39,7 +39,7 @@ export type InlineContentRuntime = Pick<
   McpState,
   'getMcpServers' | 'getBlockedMcpServers'
 > &
-  InputPromptRuntime;
+  InputPromptRuntime & { getSkillCount(): number };
 
 export interface InlineContentProps {
   streamingState: StreamingState;
@@ -125,6 +125,7 @@ function StatusBarLeftPrompt(props: InlineContentProps) {
         contextFileNames={props.contextFileNames}
         mcpServers={props.config.getMcpServers()}
         blockedMcpServers={props.config.getBlockedMcpServers()}
+        skillCount={props.config.getSkillCount()}
         showToolDescriptions={props.showToolDescriptions}
       />
     );

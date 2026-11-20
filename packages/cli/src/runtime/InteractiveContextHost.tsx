@@ -116,7 +116,7 @@ export class InteractiveContextHost {
     this.setActiveModel = createSessionModelCommand({
       getModel: () => agent.getModel(),
       getProvider: () => agent.getProvider(),
-      setModel: (model) => agent.setModel(model),
+      setProvider: (provider, model) => agent.setProvider(provider, model),
     });
     this.#getActiveModelParams = reads.getActiveModelParams.bind(reads);
     this.#setActiveModelParam = params.set.bind(params);

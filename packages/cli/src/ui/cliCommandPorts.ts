@@ -688,6 +688,7 @@ export function buildLayoutRuntime(
       | 'search'
     >;
     historyFilePath: string;
+    getSkillCount(): number;
     mcp: Pick<
       McpState,
       'getBlockedMcpServers' | 'getMcpServers' | 'listResources'
@@ -708,6 +709,7 @@ export function buildLayoutRuntime(
   const { session, shell, files, memory, mcp, app, extensions } = runtime;
   return {
     getLlxprtMdFileCount: memory.getLlxprtMdFileCount,
+    getSkillCount: runtime.getSkillCount,
     getScreenReader: app.getScreenReader,
     getEnableInteractiveShell: shell.getEnableInteractiveShell,
     isTrustedFolder: app.isTrustedFolder,

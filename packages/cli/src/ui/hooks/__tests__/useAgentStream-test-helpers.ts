@@ -198,6 +198,9 @@ function createHistoryControl(mockClient: Record<string, unknown>) {
         | undefined;
       return fn ? ((await fn()) as unknown as readonly IContent[]) : [];
     },
+    async *streamHistory(): AsyncGenerator<IContent> {
+      yield* await this.getHistory();
+    },
     async setHistory() {},
     async addHistory(message: unknown) {
       const fn = mockClient.addHistory as ((m: unknown) => void) | undefined;

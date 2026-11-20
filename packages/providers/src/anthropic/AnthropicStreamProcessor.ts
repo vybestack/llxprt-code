@@ -66,7 +66,9 @@ type CurrentThinkingBlock = {
 };
 
 type CurrentToolCall = {
+  attemptId: string;
   id: string;
+  historyId: string;
   name: string;
   input: string;
   inputBytes: number;
@@ -141,6 +143,7 @@ function buildThinkingContent(params: {
 }
 
 interface StreamAssemblyState {
+  readonly attemptId: string;
   currentToolCall: CurrentToolCall | undefined;
   currentThinkingBlock: CurrentThinkingBlock | undefined;
   terminalSeen: boolean;
@@ -158,6 +161,7 @@ async function* processStreamEvents(
   options: StreamProcessorOptions,
 ): AsyncGenerator<IContent> {
   const state: StreamAssemblyState = {
+    attemptId: randomUUID(),
     currentToolCall: undefined,
     currentThinkingBlock: undefined,
     terminalSeen: false,
@@ -166,7 +170,8 @@ async function* processStreamEvents(
   };
 
   for await (const chunk of stream) {
-    yield* applyStreamEvent(chunk, state, options);
+    for (const content of applyStreamEvent(chunk, state, options))
+      yield { ...content, responseAttemptId: state.attemptId };
   }
 
   if (!state.terminalSeen) {
@@ -232,6 +237,7 @@ function* applyContentBlockStart(
     state.thinkingBlockIdentity,
     options.logger,
     options.includeThinkingInResponse,
+    state.attemptId,
   );
   if (blockResult.currentToolCall !== undefined) {
     state.currentToolCall = blockResult.currentToolCall;
@@ -372,6 +378,7 @@ function handleContentBlockStartStateful(
   thinkingBlockIdentity: ThinkingBlockIdentity,
   logger: { debug: (fn: () => string) => void },
   includeThinkingInResponse: boolean,
+  attemptId: string,
 ): {
   currentToolCall?: CurrentToolCall;
   currentThinkingBlock?: CurrentThinkingBlock;
@@ -382,7 +389,11 @@ function handleContentBlockStartStateful(
     const toolBlock = chunk.content_block as ToolUseBlock;
     return {
       currentToolCall: {
+        attemptId,
         id: toolBlock.id,
+        historyId: normalizeToHistoryToolId(
+          `${toolBlock.id}_seq${toolCallSequence++}`,
+        ),
         name: unprefixToolName(toolBlock.name, isOAuth),
         input: '',
         inputBytes: 0,
@@ -449,6 +460,17 @@ function handleContentBlockDelta(
       currentToolCall.name,
       'anthropic',
     );
+    return {
+      speaker: 'ai',
+      blocks: [],
+      toolArgumentDelta: {
+        attemptId: currentToolCall.attemptId,
+        sourceId: currentToolCall.id,
+        id: currentToolCall.historyId,
+        name: currentToolCall.name,
+        arguments: jsonDelta.partial_json,
+      },
+    };
   } else if (chunk.delta.type === 'thinking_delta' && currentThinkingBlock) {
     const thinkingDelta = chunk.delta as {
       type: 'thinking_delta';
@@ -524,14 +546,24 @@ function completeToolCall(
     );
   }
 
+  const finalArguments = JSON.stringify(processedParameters);
   return {
     speaker: 'ai',
+    toolArgumentDelta: {
+      attemptId: currentToolCall.attemptId,
+      sourceId: currentToolCall.id,
+      id: currentToolCall.historyId,
+      name: currentToolCall.name,
+      arguments: '',
+      complete: true,
+      ...(finalArguments === currentToolCall.input
+        ? {}
+        : { replacementArguments: finalArguments }),
+    },
     blocks: [
       {
         type: 'tool_call',
-        id: normalizeToHistoryToolId(
-          `${currentToolCall.id}_seq${toolCallSequence++}`,
-        ),
+        id: currentToolCall.historyId,
         name: currentToolCall.name,
         parameters: processedParameters,
       },

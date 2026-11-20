@@ -11,8 +11,8 @@ import { ownerClients } from '../../../agents/src/api/__tests__/helpers/session-
 /**
  * The history service of the client the owner currently delegates to, found
  * through an effect: `getHistoryService` is wrapped on the instance of each
- * client the owner's factory built, the public `nativeHistory.hasHistory()`
- * runs, and the wrapper that fired reports what the active client returned.
+ * client the owner's factory built, a context-range subscription reads the
+ * active history, and the wrapper that fired reports what that client returned.
  * The wrappers are removed again before returning.
  */
 export function readCurrentOwnerHistory(
@@ -36,7 +36,11 @@ export function readCurrentOwnerHistory(
     };
   });
   try {
-    owner.clients.conversationBinding.nativeHistory.hasHistory();
+    const stop = owner.clients.conversationBinding.subscribeContextRange(
+      new Set(),
+      () => {},
+    );
+    stop();
   } finally {
     for (const restore of restores) restore();
   }

@@ -54,7 +54,19 @@ describe('Agent finalization collaborators', () => {
         },
       ];
       await agent.setHistory(history);
-      expect(await agent.getHistory()).toStrictEqual(history);
+      expect(await agent.session.getHistory()).toStrictEqual(
+        history.map((row, index) => ({
+          ...row,
+          metadata: {
+            chronology: {
+              seq: index + 1,
+              userTurn: 1,
+              step: index + 1,
+              recordedAt: expect.any(Number),
+            },
+          },
+        })),
+      );
       let completed = 0;
       const first = agent.dispose().then(() => {
         completed += 1;

@@ -1,6 +1,4 @@
-import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type {
-  ToolCallRequestInfo,
   Config,
   EditorType,
   ToolRegistry,
@@ -193,7 +191,7 @@ describe('useAgentStream', () => {
   });
 
   const mockLoadedSettings: LoadedSettings = {
-    merged: { preferredEditor: 'vscode' },
+    merged: { preferredEditor: 'vscode', ui: {} },
     user: { path: '/user/settings.json', settings: {} },
     workspace: { path: '/workspace/.gemini/settings.json', settings: {} },
     errors: [],
@@ -236,7 +234,6 @@ describe('useAgentStream', () => {
           },
         }),
         {
-          history: [],
           addItem: mockAddItem,
           settings: mockLoadedSettings,
           onDebugMessage: mockOnDebugMessage,
@@ -287,7 +284,6 @@ describe('useAgentStream', () => {
             },
           }),
           {
-            history: [],
             addItem: mockAddItem,
             settings: mockLoadedSettings,
             onDebugMessage: mockOnDebugMessage,
@@ -495,7 +491,6 @@ describe('useAgentStream', () => {
             },
           }),
           {
-            history: [],
             addItem: mockAddItem,
             settings: mockLoadedSettings,
             onDebugMessage: mockOnDebugMessage,
@@ -660,167 +655,5 @@ describe('useAgentStream', () => {
         );
       },
     );
-  });
-
-  it('should flush pending text rationale before scheduling tool calls to ensure correct history order', async () => {
-    const addItemOrder: string[] = [];
-    let capturedOnComplete:
-      | Parameters<typeof useReactToolScheduler>[0]
-      | undefined;
-
-    const mockScheduleToolCalls = vi.fn(async (requests) => {
-      addItemOrder.push('scheduleToolCalls_START');
-      // Simulate tools completing and triggering onComplete immediately.
-      // This mimics the behavior that caused the regression where tool results
-      // were added to history during the await scheduleToolCalls(...) block.
-      const tools = requests.map(
-        (
-          r: ToolCallRequestInfo,
-        ): Parameters<
-          Parameters<typeof useReactToolScheduler>[0]
-        >[1][number] => {
-          const tool = new MockTool({ name: r.name });
-          return {
-            request: r,
-            status: 'success',
-            tool,
-            invocation: tool.build(r.args),
-            response: {
-              callId: r.callId,
-              responseParts: [],
-              resultDisplay: 'done',
-              error: undefined,
-              errorType: undefined,
-            },
-            durationMs: 0,
-          };
-        },
-      );
-      if (capturedOnComplete === undefined)
-        throw new Error('Scheduler callback not supplied');
-      await capturedOnComplete(Symbol('test-scheduler'), tools, {
-        isPrimary: true,
-      });
-      addItemOrder.push('scheduleToolCalls_END');
-    });
-
-    mockAddItem.mockImplementation((item: { type: string }) => {
-      addItemOrder.push(`addItem:${item.type}`);
-      return 0;
-    });
-
-    // We need to capture the onComplete callback from useReactToolScheduler
-    mockUseReactToolScheduler.mockImplementation((onComplete) => {
-      capturedOnComplete = onComplete;
-      return [
-        [], // toolCalls
-        mockScheduleToolCalls,
-        vi.fn(), // markToolsAsDisplayCleared
-        vi.fn(), // cancelAllToolCalls
-        0, // lastToolOutputTime
-        true, // interactiveRuntimeReady
-        vi.fn(),
-        vi.fn(),
-      ];
-    });
-
-    const agentForHook4 = await createFakeAgentFromMockClient(
-      new MockedAgentClientClass(mockConfig),
-    );
-    const { result } = renderHook(() =>
-      useAgentStream(
-        agentForHook4,
-        createStreamRuntimeForTest(mockConfig, {
-          ephemeral: {
-            getEphemeralSetting: (key) =>
-              key === 'context-limit' ? contextLimit : undefined,
-          },
-        }),
-        {
-          history: [],
-          addItem: mockAddItem,
-          settings: mockLoadedSettings,
-          onDebugMessage: mockOnDebugMessage,
-          handleSlashCommand: mockHandleSlashCommand,
-          shellModeActive: false,
-          getPreferredEditor: () => 'vscode' as EditorType,
-          onAuthError: vi.fn(),
-          performMemoryRefresh: vi.fn(),
-          onEditorClose: () => {},
-          onCancelSubmit: vi.fn(),
-          setShellInputFocused: vi.fn(),
-          terminalWidth: 80,
-          terminalHeight: 24,
-        },
-        undefined,
-        undefined,
-        undefined,
-      ),
-    );
-
-    const mockStream = (async function* () {
-      yield {
-        type: ServerEventType.Content,
-        value: 'Rationale rationale.',
-      };
-      yield {
-        type: ServerEventType.ToolCallRequest,
-        value: { callId: '1', name: 'test_tool', args: {} },
-      };
-    })();
-    mockSendMessageStream.mockReturnValue(mockStream);
-
-    await act(async () => {
-      await result.current.submitQuery('test input');
-    });
-
-    // A ToolCallRequest in the stream no longer makes the CLI call
-    // scheduleToolCalls: the dispatcher treats tool-call as display-only and
-    // the agent executes tools itself, so the React scheduler is now reached
-    // only for client-initiated calls. Drive the completion callback directly
-    // to exercise the ordering guarantee that does still exist —
-    // useAgentEventStream flushes pending AI content before adding the
-    // tool_group item.
-    const completedTool = new MockTool({ name: 'test_tool' });
-    const completedTools: Parameters<
-      Parameters<typeof useReactToolScheduler>[0]
-    >[1] = [
-      {
-        request: {
-          callId: '1',
-          name: 'test_tool',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'test-prompt',
-        },
-        status: 'success',
-        tool: completedTool,
-        invocation: completedTool.build({}),
-        response: {
-          callId: '1',
-          responseParts: [],
-          resultDisplay: 'done',
-          error: undefined,
-          errorType: undefined,
-        },
-        durationMs: 0,
-      },
-    ];
-
-    expect(capturedOnComplete).toBeDefined();
-    await act(async () => {
-      await capturedOnComplete!(Symbol('test-scheduler'), completedTools, {
-        isPrimary: true,
-      });
-    });
-
-    const rationaleIndex = addItemOrder.indexOf('addItem:gemini');
-    const toolGroupIndex = addItemOrder.indexOf('addItem:tool_group');
-
-    expect(rationaleIndex).toBeGreaterThan(-1);
-    expect(toolGroupIndex).toBeGreaterThan(-1);
-
-    // Core guarantee: the rationale is committed to history before the tools.
-    expect(rationaleIndex).toBeLessThan(toolGroupIndex);
   });
 });

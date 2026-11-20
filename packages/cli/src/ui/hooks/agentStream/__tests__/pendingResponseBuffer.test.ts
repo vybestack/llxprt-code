@@ -10,7 +10,6 @@ import {
   IncrementalSplitScanner,
   MAX_UNCLOSED_FENCE_LENGTH,
 } from '../incrementalSplitScanner.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 
 interface StreamResult {
   readonly committed: readonly string[];
@@ -18,12 +17,12 @@ interface StreamResult {
 }
 
 function streamBuffer(deltas: readonly string[]): StreamResult {
-  const buffer = new PendingResponseBuffer(undefined);
+  const buffer = new IncrementalSplitScanner();
   const committed: string[] = [];
 
   for (const delta of deltas) {
-    buffer.push(delta);
-    const stableText = buffer.stableText;
+    buffer.append(delta);
+    const stableText = buffer.getText();
     const splitPoint = buffer.getSplitPoint();
     if (splitPoint !== stableText.length) {
       const prefix = stableText.slice(0, splitPoint);
@@ -34,7 +33,7 @@ function streamBuffer(deltas: readonly string[]): StreamResult {
     }
   }
 
-  return { committed, retained: buffer.stableText };
+  return { committed, retained: buffer.getText() };
 }
 
 const STREAM_DELTA = 'word salad goes here and here and here.\n\n';

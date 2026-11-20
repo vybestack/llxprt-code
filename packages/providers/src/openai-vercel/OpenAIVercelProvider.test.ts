@@ -37,21 +37,31 @@ function extractUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
-function createQwenChatResponse(
+async function createQwenChatResponse(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
   observeRoles: (roles: string[]) => void,
-): Response {
+): Promise<Response> {
   const url = extractUrl(input);
   if (!url.includes('/chat/completions')) {
     throw new Error(`Unexpected URL: ${url}`);
   }
 
-  const parsedBody = JSON.parse(String(init?.body ?? '{}')) as {
-    messages?: Array<{ role?: string }>;
-    model?: string;
-  };
-  const roles = (parsedBody.messages ?? []).map((msg) => msg.role ?? '');
+  const parsedBody: unknown = JSON.parse(await new Response(init?.body).text());
+  if (typeof parsedBody !== 'object' || parsedBody === null)
+    throw new Error('Expected Qwen request object');
+  if (!('messages' in parsedBody) || !Array.isArray(parsedBody.messages))
+    throw new Error('Expected Qwen request messages');
+  const roles = parsedBody.messages.map((message: unknown): string => {
+    if (
+      typeof message !== 'object' ||
+      message === null ||
+      !('role' in message) ||
+      typeof message.role !== 'string'
+    )
+      throw new Error('Expected Qwen message role');
+    return message.role;
+  });
   observeRoles(roles);
 
   if (roles.includes('developer')) {
@@ -71,7 +81,10 @@ function createQwenChatResponse(
       id: 'chatcmpl-test',
       object: 'chat.completion',
       created: 0,
-      model: parsedBody.model ?? 'qwen3-coder-plus',
+      model:
+        'model' in parsedBody && typeof parsedBody.model === 'string'
+          ? parsedBody.model
+          : 'qwen3-coder-plus',
       choices: [
         {
           index: 0,

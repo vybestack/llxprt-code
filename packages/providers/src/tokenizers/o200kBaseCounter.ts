@@ -5,6 +5,10 @@
  */
 
 import type * as Tiktoken from '@dqbd/tiktoken';
+import {
+  countLongNeutralText,
+  EncodingCache,
+} from '@vybestack/llxprt-code-core/utils/neutral-long-piece.js';
 
 /**
  * Provenance of the pinned local `o200k_base` BPE asset.
@@ -87,6 +91,19 @@ export function createO200kBaseEncoderResolver(
   return createRetainOnSuccessResolver(loadModule);
 }
 
+const ENCODING_CACHE = Symbol('o200kEncodingCache');
+
+export function o200kEncodingCache(encoder: O200kBaseEncoder): EncodingCache {
+  if (
+    ENCODING_CACHE in encoder &&
+    encoder[ENCODING_CACHE] instanceof EncodingCache
+  )
+    return encoder[ENCODING_CACHE];
+  const cache = new EncodingCache();
+  Object.defineProperty(encoder, ENCODING_CACHE, { value: cache });
+  return cache;
+}
+
 /**
  * Count `text` as ordinary BPE text. Special-token-looking text is encoded as
  * its constituent bytes and can never be promoted to a control token.
@@ -95,5 +112,9 @@ export function countO200kBaseTokens(
   encoder: O200kBaseEncoder,
   text: string,
 ): number {
-  return encoder.encode(text, [], []).length;
+  return countLongNeutralText(
+    text,
+    (piece) => encoder.encode(piece, [], []).length,
+    o200kEncodingCache(encoder),
+  );
 }

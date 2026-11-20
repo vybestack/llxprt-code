@@ -10,6 +10,7 @@ import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset as ProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
@@ -22,6 +23,35 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 
 const DEFAULT_RUNTIME_SOURCE = 'test-utils#createProviderCallOptions';
+
+/**
+ * The contract default when a caller passes no rows (issue #854): an empty
+ * async iterable, matching the streaming `contents` shape.
+ */
+function emptyContentStream(): AsyncIterable<IContent> {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next: async (): Promise<IteratorResult<IContent>> => ({
+          done: true,
+          value: undefined,
+        }),
+      };
+    },
+  };
+}
+
+function fixtureContentStream(
+  contents: ProviderCallOptionsInit['contents'],
+): AsyncIterable<IContent> {
+  if (contents === undefined) return emptyContentStream();
+  if (Symbol.asyncIterator in contents) return contents;
+  return {
+    async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void> {
+      yield* contents;
+    },
+  };
+}
 
 let runtimeSequence = 0;
 
@@ -37,7 +67,11 @@ interface SettingsOverrides {
 
 export interface ProviderCallOptionsInit {
   providerName: string;
-  contents?: GenerateChatOptions['contents'];
+  /**
+   * Tests may assemble rows eagerly; the provider receives a cold stream
+   * over those rows, matching the runtime contract (issue #854).
+   */
+  contents?: GenerateChatOptions['contents'] | readonly IContent[];
   tools?: ProviderToolset;
   metadata?: Record<string, unknown>;
   userMemory?: GenerateChatOptions['userMemory'];
@@ -172,6 +206,9 @@ function ensureInvocation(
  * Creates GenerateChatOptions with explicit settings/config/runtime bindings.
  * Tests should prefer this helper over calling provider methods directly
  * with ad-hoc option objects to ensure fail-fast coverage remains intact.
+ *
+ * Array fixtures are exposed as cold streams; caller-supplied streams retain
+ * their own iteration and cancellation behavior.
  */
 export function createProviderCallOptions(
   init: ProviderCallOptionsInit,
@@ -203,7 +240,7 @@ export function createProviderCallOptions(
   );
 
   return {
-    contents: init.contents ?? [],
+    contents: fixtureContentStream(init.contents),
     tools: init.tools,
     metadata: mergedMetadata,
     invocation,

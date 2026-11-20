@@ -4,15 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Agent, AgentHistoryItem } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   describeUnreadableRecording,
   matchUnreadableRecordings,
-  type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
-import type { HistoryItem } from '../types.js';
-import { iContentToHistoryItems } from './iContentToHistoryItems.js';
-
 /**
  * Resume through the Agent session owner. Recordings discovery skipped as
  * unreadable come back as `warnings` (shown after the restore, like the raw
@@ -21,23 +17,17 @@ import { iContentToHistoryItems } from './iContentToHistoryItems.js';
 export async function resumeOwnerSession(
   resume: Agent['session']['resume'],
   ref: string,
-  emojiFilterMode: EmojiFilterMode,
   listBrowserTargetsDetailed: Agent['session']['listBrowserTargetsDetailed'],
 ): Promise<{
-  readonly history: readonly AgentHistoryItem[];
-  readonly uiHistory: readonly HistoryItem[];
   readonly warnings: readonly string[];
 }> {
-  let history: readonly AgentHistoryItem[];
   try {
-    history = await resume(ref);
+    await resume(ref);
   } catch (error) {
     throw await nameUnreadableRecording(listBrowserTargetsDetailed, ref, error);
   }
   const { unreadableRecordings } = await listBrowserTargetsDetailed();
   return {
-    history,
-    uiHistory: iContentToHistoryItems([...history], emojiFilterMode),
     warnings: unreadableRecordings.map(
       (recording) =>
         `Skipped unreadable session recording ${describeUnreadableRecording(recording)}`,

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,6 +9,7 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import { executeCompression } from '../compression-execution.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { readCompressionTokenCount } from '../agentStatsProjector.js';
+const historyScratchRoots = createTestScratchOwner();
 
 class UnreadableHistory extends HistoryService {
   override getTotalTokens(): number {
@@ -17,9 +19,11 @@ class UnreadableHistory extends HistoryService {
 
 describe('compression history invariant', () => {
   it('does not convert an internal history failure into an empty compression count', () => {
-    expect(() => readCompressionTokenCount(new UnreadableHistory())).toThrow(
-      'History token accounting invariant failed',
-    );
+    expect(() =>
+      readCompressionTokenCount(
+        new UnreadableHistory({ scratchRoots: historyScratchRoots }),
+      ),
+    ).toThrow('History token accounting invariant failed');
   });
 
   it('reports zero compression tokens only when history is absent', () => {

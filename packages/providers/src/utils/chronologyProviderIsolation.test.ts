@@ -10,7 +10,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildMessagesWithReasoning } from '../openai/OpenAIRequestBuilder.js';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
 import { convertToVercelMessages } from '../openai-vercel/messageConversion.js';
-import { buildProviderDumpBody } from './providerRequestConversion.js';
+import { buildProviderDumpBody } from './__tests__/support/arrayDumpBody.js';
 
 /**
  * Issue #1721 constraint C1.

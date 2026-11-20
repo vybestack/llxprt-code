@@ -19,7 +19,7 @@ import { PromptResolutionError } from '@vybestack/llxprt-code-core/core/compress
 import {
   buildRecordingContext,
   createRecordingProvider,
-  createStrategy,
+  compressViaDisk,
   installShippedCompressionDefaults,
   readShippedDefault,
   requestText,
@@ -51,7 +51,7 @@ async function compressAndCapture(
     promptBaseDir,
     verification: true,
   });
-  const result = await createStrategy(strategyName).compress(context);
+  const result = await compressViaDisk(strategyName, context);
   expect(result.kind).toBe('applied');
   return provider.requests.map(requestText);
 }
@@ -115,7 +115,7 @@ ${readShippedDefault('compression.md').trim()}
         verification: true,
       });
 
-      await createStrategy(strategyName).compress(context);
+      await compressViaDisk(strategyName, context);
       const verificationPreamble = requestText(
         provider.requests[1].slice(0, 1),
       );
@@ -192,7 +192,7 @@ describe('compression prompt file overrides (issue #4128)', () => {
       });
 
       await expect(
-        createStrategy(strategyName).compress(context),
+        compressViaDisk(strategyName, context),
       ).rejects.toBeInstanceOf(PromptResolutionError);
       expect(provider.requests).toHaveLength(0);
     });
@@ -211,7 +211,7 @@ describe('compression prompt file overrides (issue #4128)', () => {
         });
 
         await expect(
-          createStrategy(strategyName).compress(context),
+          compressViaDisk(strategyName, context),
         ).rejects.toMatchObject({ code: 'EACCES' });
         expect(provider.requests).toHaveLength(0);
       });

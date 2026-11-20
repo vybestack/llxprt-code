@@ -33,7 +33,10 @@ import type {
   PrepareProviderInvocation,
 } from './AgentRuntimeContext.js';
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
-import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
+import {
+  createAgentRuntimeContext,
+  registerRuntimeMediaOwner,
+} from './createAgentRuntimeContext.js';
 import type { ProviderRequestCollaborators } from './providerRuntimeContext.js';
 import {
   createContentGenerator,
@@ -123,7 +126,6 @@ const defaultContentGeneratorFactory: ContentGeneratorFactory = (
 ) => createContentGenerator(contentConfig, config, sessionId);
 
 function hydrateContentGeneratorConfig(
-  profile: AgentRuntimeProfileSnapshot,
   contentConfig: ContentGeneratorConfig,
 ): ContentGeneratorConfig {
   const contentGeneratorFactory = contentConfig.contentGeneratorFactory;
@@ -181,6 +183,13 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw error;
 }
 
+async function adoptRuntimeMedia(
+  runtimeContext: AgentRuntimeContext,
+): Promise<void> {
+  await registerRuntimeMediaOwner(runtimeContext);
+  await runtimeContext.history.settleMediaOwnership();
+}
+
 export function loadAgentRuntime(
   options: ToolSelectedRuntimeLoaderOptions,
 ): Promise<ToolSelectedRuntimeLoaderResult>;
@@ -192,81 +201,98 @@ export async function loadAgentRuntime(
 ): Promise<AgentRuntimeLoaderResult> {
   const { profile, mediaStore, overrides = {}, signal } = options;
   throwIfAborted(signal);
+  const history =
+    overrides.historyService ??
+    new HistoryService({ scratchRoots: profile.config.scratchRoots });
+  try {
+    const providerAdapter: AgentRuntimeProviderAdapter =
+      overrides.providerAdapter ??
+      createProviderAdapterFromManager(profile.providerManager);
 
-  const history = overrides.historyService ?? new HistoryService();
+    const sessionIdentity = { getSessionId: () => profile.state.sessionId };
+    const telemetryAdapter: AgentRuntimeTelemetryAdapter =
+      overrides.telemetryAdapter ??
+      createTelemetryAdapter(sessionIdentity, profile.telemetry);
 
-  const providerAdapter: AgentRuntimeProviderAdapter =
-    overrides.providerAdapter ??
-    createProviderAdapterFromManager(profile.providerManager);
-
-  const sessionIdentity = { getSessionId: () => profile.state.sessionId };
-  const telemetryAdapter: AgentRuntimeTelemetryAdapter =
-    overrides.telemetryAdapter ??
-    createTelemetryAdapter(sessionIdentity, profile.telemetry);
-
-  const toolsView: ToolRegistryView =
-    overrides.toolsView ??
-    createFilteredToolRegistryView(
-      profile.toolRegistry,
-      profile.readToolGovernance,
-    );
-  const mediaAdmission =
-    overrides.mediaAdmission ?? new MediaAdmissionService(mediaStore);
-  const mediaResolver =
-    overrides.mediaResolver ?? new RequestMediaResolver(mediaStore);
-
-  const runtimeContext = createAgentRuntimeContext({
-    state: profile.state,
-    promptEstimator: profile.promptEstimator,
-    settings: profile.settings,
-    provider: providerAdapter,
-    telemetry: telemetryAdapter,
-    requestDiagnostics: profile.requestDiagnostics,
-    tools: toolsView,
-    history,
-    readRuntimeSettings: profile.readRuntimeSettings,
-    prepareProviderInvocation: profile.prepareProviderInvocation,
-    providerRuntime: profile.providerRuntime,
-    mediaStore,
-    mediaAdmission,
-    mediaResolver,
-  });
-
-  await history.settleMediaOwnership();
-  let contentGenerator: ContentGenerator;
-  if (overrides.contentGenerator) {
-    contentGenerator = overrides.contentGenerator;
-  } else {
-    const contentConfig = profile.contentGeneratorConfig;
-    if (!contentConfig) {
-      throw new Error(
-        'AgentRuntimeLoader requires contentGeneratorConfig when no contentGenerator override is supplied.',
+    const toolsView: ToolRegistryView =
+      overrides.toolsView ??
+      createFilteredToolRegistryView(
+        profile.toolRegistry,
+        profile.readToolGovernance,
       );
-    }
+    const mediaAdmission =
+      overrides.mediaAdmission ?? new MediaAdmissionService(mediaStore);
+    const mediaResolver =
+      overrides.mediaResolver ?? new RequestMediaResolver(mediaStore);
 
-    const hydratedConfig = hydrateContentGeneratorConfig(
-      profile,
-      contentConfig,
-    );
+    const runtimeContext = createAgentRuntimeContext({
+      scratchRoots: profile.config.scratchRoots,
+      state: profile.state,
+      promptEstimator: profile.promptEstimator,
+      settings: profile.settings,
+      provider: providerAdapter,
+      telemetry: telemetryAdapter,
+      requestDiagnostics: profile.requestDiagnostics,
+      tools: toolsView,
+      history,
+      readRuntimeSettings: profile.readRuntimeSettings,
+      prepareProviderInvocation: profile.prepareProviderInvocation,
+      providerRuntime: profile.providerRuntime,
+      mediaStore,
+      mediaAdmission,
+      mediaResolver,
+    });
 
-    const factory =
-      overrides.contentGeneratorFactory ?? defaultContentGeneratorFactory;
-    contentGenerator = await factory(
-      hydratedConfig,
+    await adoptRuntimeMedia(runtimeContext);
+    const contentGenerator = await resolveContentGenerator(
+      profile.contentGeneratorConfig,
       profile.config,
       profile.state.sessionId,
+      overrides.contentGenerator,
+      overrides.contentGeneratorFactory,
     );
-  }
 
-  return {
-    runtimeContext,
-    history,
-    providerAdapter,
-    telemetryAdapter,
-    telemetryRoot: options.profile.telemetry,
-    toolsView,
-    contentGenerator,
-    toolRegistry: profile.toolRegistry,
-    settingsSnapshot: profile.settings,
-  };
+    return {
+      runtimeContext,
+      history,
+      providerAdapter,
+      telemetryAdapter,
+      telemetryRoot: options.profile.telemetry,
+      toolsView,
+      contentGenerator,
+      toolRegistry: profile.toolRegistry,
+      settingsSnapshot: profile.settings,
+    };
+  } catch (error) {
+    if (overrides.historyService === undefined) {
+      try {
+        await history.dispose();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Runtime loading and history disposal failed',
+        );
+      }
+    }
+    throw error;
+  }
+}
+
+async function resolveContentGenerator(
+  contentConfig: ContentGeneratorConfig | undefined,
+  config: Config,
+  sessionId: string,
+  override: ContentGenerator | undefined,
+  factory: ContentGeneratorFactory = defaultContentGeneratorFactory,
+): Promise<ContentGenerator> {
+  if (override !== undefined) return override;
+  if (contentConfig === undefined)
+    throw new Error(
+      'AgentRuntimeLoader requires contentGeneratorConfig when no contentGenerator override is supplied.',
+    );
+  return factory(
+    hydrateContentGeneratorConfig(contentConfig),
+    config,
+    sessionId,
+  );
 }

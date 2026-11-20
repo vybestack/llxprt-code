@@ -1,3 +1,7 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -29,6 +33,11 @@ const modelTools = installModelToolFixture();
  * generateChatCompletion async generator.
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { ChatSession } from './chatSession.js';
+import type { StreamEvent } from './chatSession.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   InvalidStreamError,
@@ -48,15 +57,15 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
-import type { StreamEvent } from './chatSession.js';
-import { ChatSession } from './chatSession.js';
+
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -82,7 +91,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   function buildChatSession(history?: HistoryService): ChatSession {
@@ -93,6 +102,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
@@ -107,7 +117,8 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
           signal,
         ),
       state: runtimeState,
-      history: history ?? new HistoryService(),
+      history:
+        history ?? new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,
@@ -145,17 +156,21 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
   function registerProvider(
     generateChatCompletion: (
       options: GenerateChatOptions,
-    ) => AsyncGenerator<unknown>,
+    ) => AsyncGenerator<IContent>,
   ): IProvider {
     const provider: IProvider = {
       name: 'stub',
       isDefault: true,
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
-      generateChatCompletion:
-        generateChatCompletion as IProvider['generateChatCompletion'],
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
-    } as unknown as IProvider;
+      generateChatCompletion(
+        options: GenerateChatOptions | AsyncIterable<IContent>,
+      ): AsyncIterableIterator<IContent> {
+        if (!('contents' in options))
+          throw new Error('Expected request options');
+        return generateChatCompletion(options);
+      },
+    };
     manager.registerProvider(provider);
     return provider;
   }
@@ -230,7 +245,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       let attempt = 0;
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         attempt++;
         if (attempt === 1) {
           yield {
@@ -306,7 +321,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -394,7 +409,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -437,20 +452,11 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    * @scenario Durable history is the successful attempt alone
    */
   it('records only the successful attempt in history', async () => {
-    const { ai, aiText, human } =
-      await observeRecordsOnlyTheSuccessfulAttemptInHistory();
-    expect(ai).toHaveLength(1);
-    expect(aiText).toBe('recovered response');
-    expect(aiText).not.toContain('partial');
-    expect(human).toHaveLength(1);
-  });
-
-  const observeRecordsOnlyTheSuccessfulAttemptInHistory = async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -475,19 +481,22 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     await chat.waitForIdle();
 
-    const ai = history.getAll().filter((content) => content.speaker === 'ai');
+    await withRows(history.streamRawHistory(), (rows) => {
+      const ai = rows.filter((content) => content.speaker === 'ai');
 
-    const aiText = ai[0].blocks
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as { text: string }).text)
-      .join('');
+      const aiText = ai[0].blocks
+        .filter((block) => block.type === 'text')
+        .map((block) => (block as { text: string }).text)
+        .join('');
 
-    const human = history
-      .getAll()
-      .filter((content) => content.speaker === 'human');
+      const human = rows.filter((content) => content.speaker === 'human');
 
-    return { ai, aiText, human };
-  };
+      expect(ai).toHaveLength(1);
+      expect(aiText).toBe('recovered response');
+      expect(aiText).not.toContain('partial');
+      expect(human).toHaveLength(1);
+    });
+  });
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P02
@@ -498,7 +507,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -529,7 +538,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -568,7 +577,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       const observation = { attempt: 0 };
       const generateChatCompletionMock = vi.fn(async function* (
         _options: GenerateChatOptions,
-      ) {
+      ): AsyncGenerator<IContent, void, unknown> {
         observation.attempt++;
         if (observation.attempt === 1) {
           yield {
@@ -605,7 +614,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -635,7 +644,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -662,7 +671,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       yield {
         speaker: 'ai',
@@ -682,7 +691,11 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       'prompt-issue-3048-abort-signal',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('terminated');
+    // The source route reports the user's cancellation itself (AbortError)
+    // instead of the provider's 'terminated' text; no restart is the contract.
+    await expect(collectEvents(stream)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
     expect(attempt).toBe(1);
   });
 
@@ -704,11 +717,11 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
   });
 
   const observeKeepsEagerlyRecordedToolResponseIdsAcrossADiscard = async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
-    ) {
+    ): AsyncGenerator<IContent, void, unknown> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -726,9 +739,11 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     const chat = buildChatSession(history);
 
-    const completed = [
+    const tool = new MockTool({ name: 'read_file' });
+    const completed: CompletedToolCall[] = [
       {
-        status: 'success' as const,
+        status: 'success',
+        tool,
         request: {
           callId: 'toolu_eager_1',
           name: 'read_file',
@@ -754,8 +769,10 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
             },
           ],
           resultDisplay: 'package-json',
+          error: undefined,
+          errorType: undefined,
         },
-        invocation: { execute: vi.fn() },
+        invocation: tool.build({ file_path: '/test/package.json' }),
       },
     ];
     chat.recordCompletedToolCalls('stub-model', completed);
@@ -781,9 +798,9 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     await chat.waitForIdle();
 
-    const toolResponseCount = history
-      .getAll()
-      .reduce(
+    let toolResponseCount = 0;
+    await withRows(history.streamRawHistory(), (rows) => {
+      toolResponseCount = rows.reduce(
         (count, content) =>
           count +
           content.blocks.filter(
@@ -793,6 +810,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
           ).length,
         0,
       );
+    });
 
     return { attempt, toolResponseCount };
   };

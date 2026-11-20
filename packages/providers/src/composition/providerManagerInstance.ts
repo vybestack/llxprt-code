@@ -10,6 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
+import type { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SessionAuthPolicy } from '../auth/types.js';
 
@@ -63,10 +64,12 @@ export function createRuntimeContentGeneratorFactory(): RuntimeContentGeneratorF
 
 export function configureProviderTokenizer(
   manager: RuntimeProviderManager,
+  scratchRoots: ScratchRootOwner,
   supplied: RuntimeTokenizerFactory | undefined = undefined,
 ): RuntimeTokenizerFactory {
   const installed = manager.getTokenizerFactory?.();
-  const selected = supplied ?? installed ?? createRuntimeTokenizerFactory();
+  const selected =
+    supplied ?? installed ?? createRuntimeTokenizerFactory(scratchRoots);
   if (selected !== installed) manager.setTokenizerFactory?.(selected);
   return selected;
 }
@@ -462,7 +465,7 @@ function tryActivateFakeProvider(
   }
   if (config) {
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   }
   const fakeProvider = new FakeProvider(fakeResponsesPath, process.cwd());
   manager.registerProvider(fakeProvider);
@@ -548,7 +551,7 @@ export function createProviderPopulationTarget(
       tryActivateFakeProvider(manager, config, path),
     configure: (config) => {
       manager.setConfig(config);
-      configureProviderTokenizer(manager);
+      configureProviderTokenizer(manager, config.scratchRoots);
     },
     registerProviders: (options) =>
       registerAllProviders(

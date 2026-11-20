@@ -256,7 +256,10 @@ describe('explicit session authentication lifecycle', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
+    const factoriesTokenizer = configureProviderTokenizer(
+      builtCallerManager,
+      builtCallerConfig.scratchRoots,
+    );
     const factoriesContent = createRuntimeContentGeneratorFactory();
     builtCallerTokenizer = factoriesTokenizer;
     builtCallerContent = factoriesContent;
@@ -323,7 +326,9 @@ describe('explicit session authentication lifecycle', () => {
           .listeners(CoreEvent.ModelChanged)
           .filter((listener) => previousListeners.includes(listener)),
       ).toStrictEqual([]);
-      await sessionClient().startChat(await sessionClient().getHistory());
+      await sessionClient().startChat(
+        await Array.fromAsync(sessionClient().getHistory()),
+      );
       expect(sessionClient().isInitialized()).toBe(true);
     });
   });

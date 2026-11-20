@@ -17,24 +17,24 @@
 
 import { useEffect, useRef } from 'react';
 import path from 'path';
-import { promises as nodeFs } from 'fs';
 import type { WorkspaceCheckpointOperations } from '@vybestack/llxprt-code-core';
+import {
+  checkpointFs,
+  writeCheckpointAtomically,
+  type FsOps,
+} from './checkpoint-disk-writer.js';
+import {
+  CheckpointHistoryArray,
+  streamPrettyCheckpointJson,
+} from './pretty-json-stream.js';
+export type { FsOps } from './checkpoint-disk-writer.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { getErrorMessage, isNodeError } from '@vybestack/llxprt-code-core';
 import type { TrackedToolCall } from '../useReactToolScheduler.js';
-import type { HistoryItem } from '../../types.js';
 
-type CheckpointHistoryReader = Agent['getHistory'];
+type CheckpointHistoryReader = Agent['streamHistory'];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface FsOps {
-  mkdir: (
-    dir: string,
-    options: { recursive: boolean },
-  ) => Promise<string | undefined>;
-  writeFile: (path: string, data: string) => Promise<void>;
-}
 
 // ─── createToolCheckpoint ─────────────────────────────────────────────────────
 
@@ -58,15 +58,13 @@ export async function createToolCheckpoint(
     'createFileSnapshot' | 'getCurrentCommitHash'
   >,
   readHistory: CheckpointHistoryReader,
-  history: HistoryItem[],
   onDebugMessage: (message: string) => void,
-  fsOps: FsOps = {
-    mkdir: nodeFs.mkdir as FsOps['mkdir'],
-    writeFile: nodeFs.writeFile as FsOps['writeFile'],
-  },
+  fsOps: FsOps = checkpointFs,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const filePath = toolCall.request.args['file_path'] as string;
-  if (!filePath) {
+  signal?.throwIfAborted();
+  const filePath = toolCall.request.args['file_path'];
+  if (typeof filePath !== 'string' || filePath.length === 0) {
     onDebugMessage(
       `Skipping restorable tool call due to missing file_path: ${toolCall.request.name}`,
     );
@@ -102,14 +100,11 @@ export async function createToolCheckpoint(
   const checkpointFileName = `${timestamp}-${fileName}-${toolName}.json`;
   const checkpointFilePath = path.join(checkpointDir, checkpointFileName);
 
-  const clientHistory = await readHistory();
-
-  await fsOps.writeFile(
+  await writeCheckpointAtomically(
     checkpointFilePath,
-    JSON.stringify(
+    streamPrettyCheckpointJson(
       {
-        history,
-        clientHistory,
+        clientHistory: new CheckpointHistoryArray(readHistory(signal)),
         toolCall: {
           name: toolCall.request.name,
           args: toolCall.request.args,
@@ -117,9 +112,10 @@ export async function createToolCheckpoint(
         commitHash,
         filePath,
       },
-      null,
-      2,
+      signal,
     ),
+    fsOps,
+    signal,
   );
 }
 
@@ -145,12 +141,12 @@ async function saveRestorableToolCalls(
         'createFileSnapshot' | 'getCurrentCommitHash'
       >
     | undefined,
-  history: HistoryItem[],
   readHistory: CheckpointHistoryReader,
   checkpointDir: string,
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
   checkpointedCallIds?: Set<string>,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!isCheckpointingEnabled()) return;
 
@@ -164,10 +160,7 @@ async function saveRestorableToolCalls(
 
   if (!checkpointDir) return;
 
-  const effectiveFsOps: FsOps = fsOps ?? {
-    mkdir: nodeFs.mkdir as FsOps['mkdir'],
-    writeFile: nodeFs.writeFile as FsOps['writeFile'],
-  };
+  const effectiveFsOps: FsOps = fsOps ?? checkpointFs;
 
   try {
     await effectiveFsOps.mkdir(checkpointDir, { recursive: true });
@@ -197,9 +190,9 @@ async function saveRestorableToolCalls(
         checkpointDir,
         gitService,
         readHistory,
-        history,
         onDebugMessage,
         effectiveFsOps,
+        signal,
       );
     } catch (error) {
       // Remove reservation so the next effect run can retry.
@@ -219,8 +212,8 @@ async function saveRestorableToolCalls(
  * @param isCheckpointingEnabled - Bound read of checkpoint enablement.
  * @param gitService - Git service (may be undefined if no project root).
  * @param history - Current UI history items.
- * @param readHistory - Bound read of the owning session's chat history.
- * @param storage - Storage service providing the checkpoint directory path.
+ * @param agent - Agent facade for fetching chat history.
+ * @param checkpointDir - Project checkpoint directory path.
  * @param onDebugMessage - Debug message callback.
  * @param fsOps - Injected filesystem operations (defaults to node:fs, override in tests).
  */
@@ -233,13 +226,18 @@ export function useCheckpointPersistence(
         'createFileSnapshot' | 'getCurrentCommitHash'
       >
     | undefined,
-  history: HistoryItem[],
   readHistory: CheckpointHistoryReader,
   checkpointDir: string,
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
 ): void {
   const checkpointedCallIdsRef = useRef<Set<string>>(new Set());
+  const lifetime = useRef(new AbortController());
+
+  useEffect(() => {
+    lifetime.current = new AbortController();
+    return () => lifetime.current.abort();
+  }, []);
 
   useEffect(() => {
     // Clear checkpointed tracking for callIds no longer in the tool list,
@@ -255,19 +253,18 @@ export function useCheckpointPersistence(
       toolCalls,
       isCheckpointingEnabled,
       gitService,
-      history,
       readHistory,
       checkpointDir,
       onDebugMessage,
       fsOps,
       checkpointedCallIdsRef.current,
+      lifetime.current.signal,
     );
   }, [
     toolCalls,
     isCheckpointingEnabled,
     onDebugMessage,
     gitService,
-    history,
     readHistory,
     checkpointDir,
     fsOps,

@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -27,6 +28,7 @@ import {
   makeResumeContext,
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 type ResumeLockHandle = SessionBrowserTestState['lockHandles'][number];
 
@@ -70,7 +72,7 @@ describe('Two-phase swap #4', () => {
       currentSessionId: 'other-session',
     });
 
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
     expect(result.ok).toBe(true);
     assertTrue(result.ok);
     const newRecording = context.recordingCallbacks.getCurrentRecording();
@@ -79,7 +81,7 @@ describe('Two-phase swap #4', () => {
 
     // Write multiple events to verify no write errors
     for (let i = 0; i < 5; i++) {
-      newRecording!.recordContent(makeContent(`message ${i}`));
+      await recordRowsForTest(newRecording!, [makeContent(`message ${i}`)]);
     }
     await newRecording!.flush();
 

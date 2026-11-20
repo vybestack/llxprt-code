@@ -109,9 +109,16 @@ function useLayoutMeasure(p: AppLayoutParams) {
       consoleMessages,
       showErrorDetails,
     });
+  const alternateViewport = useStoreSelector(
+    p.terminalStore.store,
+    (state) => state.useAlternateBuffer && !state.screenReaderEnabled,
+  );
   const availableTerminalHeight = useMemo(
-    () => terminalHeight - footerHeight - STATIC_EXTRA_HEIGHT,
-    [terminalHeight, footerHeight],
+    () =>
+      terminalHeight -
+      footerHeight -
+      (alternateViewport ? 0 : STATIC_EXTRA_HEIGHT),
+    [terminalHeight, footerHeight, alternateViewport],
   );
   useEffect(() => {
     commands.setAvailableTerminalHeight(availableTerminalHeight);

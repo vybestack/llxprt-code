@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
@@ -34,6 +35,7 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -107,7 +109,7 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   function buildChatSession(
@@ -120,6 +122,7 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         settingsOwner.prepareProviderInvocation(
           runtimeState.runtimeId,
@@ -130,7 +133,7 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
           requestFetch,
         ),
       state: runtimeState,
-      history: new HistoryService(),
+      history: new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,

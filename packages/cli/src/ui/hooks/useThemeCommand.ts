@@ -7,7 +7,7 @@
 import { useCallback, useEffect } from 'react';
 import { themeManager } from '../themes/theme-manager.js';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js'; // Import LoadedSettings, AppSettings, MergedSetting
-import { type HistoryItem, MessageType } from '../types.js';
+import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import process from 'node:process';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
@@ -36,7 +36,7 @@ function useThemeValidation(
   effectiveTheme: string | undefined,
   dialogs: DialogOpeners,
   setThemeError: (error: string | null) => void,
-  addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
+  addItem: (item: HistoryItemWithoutId, timestamp: number) => void,
 ): void {
   useEffect(() => {
     if (effectiveTheme === undefined) {
@@ -64,7 +64,7 @@ function useThemeValidation(
 export const useThemeCommand = (
   loadedSettings: LoadedSettings,
   dialogs: DialogOpeners,
-  addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
+  addItem: (item: HistoryItemWithoutId, timestamp: number) => void,
   setThemeError: (error: string | null) => void,
 ): UseThemeCommandReturn => {
   // Determine the effective theme

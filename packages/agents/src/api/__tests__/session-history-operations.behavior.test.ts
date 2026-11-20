@@ -19,6 +19,7 @@ import {
 } from './helpers/client-owner-session.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { useRecordingPrompts } from './helpers/recording-prompts.js';
+import { withAdmittedOrigin } from '@vybestack/llxprt-code-core/storage/__tests__/support/admitted-origin.js';
 
 interface SharedHistorySessions {
   readonly opened: OpenedClientOwner;
@@ -105,6 +106,8 @@ describe('native session history operation lifetimes', () => {
           peerCounts.push(count);
           deliveries.push({ owner: 'peer', tokens: count });
         });
+        expect(counts).toStrictEqual([1000]);
+        expect(peerCounts).toStrictEqual([1000]);
         await sleep(150);
         expect(counts).toStrictEqual([1000]);
         expect(peerCounts).toStrictEqual([1000]);
@@ -138,16 +141,18 @@ describe('native session history operation lifetimes', () => {
           { owner: 'peer', tokens: 3000 },
         ]);
         expect(peerCounts[peerCounts.length - 1]).toBe(3000);
-        expect(peer.readHistorySnapshot()?.messages[0].blocks).toStrictEqual([
-          { type: 'text', text: 'peer after owner disposal' },
-        ]);
+        expect(
+          (await Array.fromAsync(peer.readHistorySnapshot()?.messages ?? []))[0]
+            .blocks,
+        ).toStrictEqual([{ type: 'text', text: 'peer after owner disposal' }]);
         stopPeer();
         await opened.client.addHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'still borrowed' }],
         });
         expect(
-          history.getAll()[history.getAll().length - 1]?.blocks,
+          (await Array.fromAsync(history.streamRawHistory())).slice(-1)[0]
+            ?.blocks,
         ).toContainEqual({
           type: 'text',
           text: 'still borrowed',
@@ -171,11 +176,13 @@ describe('native session history operation lifetimes', () => {
         workingDir: directory,
         mediaOwner: media,
       });
-      const reference = await media.store.admit({
-        bytes: new Uint8Array([4, 5, 6]),
-        mimeType: 'image/png',
-        semanticMetadata: { caption: 'attachment' },
-      });
+      const reference = await withAdmittedOrigin(
+        media.store.admit({
+          bytes: new Uint8Array([4, 5, 6]),
+          mimeType: 'image/png',
+          semanticMetadata: { caption: 'attachment' },
+        }),
+      );
       await agent.session.replaceHistory([
         {
           speaker: 'human',
@@ -183,7 +190,11 @@ describe('native session history operation lifetimes', () => {
         },
       ]);
       expect(
-        agent.session.readHistorySnapshot()?.messages[0].blocks,
+        (
+          await Array.fromAsync(
+            agent.session.readHistorySnapshot()?.messages ?? [],
+          )
+        )[0].blocks,
       ).toContainEqual(reference);
       expect(
         await media.store.hasReservations(reference.selectedObject.contentId),

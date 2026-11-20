@@ -23,7 +23,9 @@ describe('Explicit session client lifetime', () => {
       await agent.setModel('replacement-model');
       expect(agent.getModel()).toBe('replacement-model');
       expect(
-        (await agent.getHistory()).filter((item) => item.speaker === 'human'),
+        (await agent.session.getHistory()).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(1);
       await agent.dispose();
     } finally {

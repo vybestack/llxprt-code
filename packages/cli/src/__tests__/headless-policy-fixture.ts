@@ -50,7 +50,7 @@ export function makeHeadlessConfig(sessionId: string): {
   );
   manager.registerProvider(new OpenAIProvider(undefined));
   manager.setActiveProvider('openai');
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
   return {
     credentialAuthority,
     config,

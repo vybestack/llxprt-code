@@ -40,6 +40,14 @@ export interface TelemetryAttributes {
   readonly success?: boolean;
   readonly duration_ms?: number;
   readonly request_text?: string;
+  readonly artifact_id?: string;
+  readonly content_bytes?: number;
+  readonly content_sha256?: string;
+  readonly chunk_index?: number;
+  readonly chunk_byte_offset?: number;
+  readonly chunk_data?: string;
+  readonly chunk_count?: number;
+  readonly content_complete?: boolean;
   readonly hook_event_name?: string;
   readonly hook_name?: string;
   readonly hook_input?: Record<string, unknown>;

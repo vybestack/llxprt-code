@@ -10,24 +10,16 @@ import { Colors } from '../colors.js';
 import type {
   CommandContext,
   SlashCommand,
-  MessageActionReturn,
   SlashCommandActionReturn,
 } from './types.js';
 import { composeChatCommand } from './chatCommandShape.js';
 import {
-  HistoryMutationService,
   type ContinueTarget,
   type UnreadableRecording,
   type IContent,
-  type SessionRecordingService,
-  type TextBlock,
-  type ThinkingBlock,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
-import type {
-  ChatDetail,
-  HistoryItemChatList,
-  HistoryItemWithoutId,
-} from '../types.js';
+import type { ChatDetail, HistoryItemChatList } from '../types.js';
 import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
@@ -40,7 +32,7 @@ import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
  * command, so invocation context never selects the owner.
  */
 export interface ChatRecordingOperations {
-  readonly getRecording: () => SessionRecordingService | null;
+  readonly getRecording: () => SessionRecordingPort | null;
   readonly getProjectHash: () => string | null;
   readonly getChatsDir: () => string | null;
   readonly listTargets: () => Promise<{
@@ -56,8 +48,18 @@ export interface ChatRecordingOperations {
   ) => Promise<void>;
   readonly nameSession: (name: string, overwrite: boolean) => Promise<void>;
   /** Live chat history, or null when no chat has been initialized. */
-  readonly getChatHistory: () => readonly IContent[] | null;
-  readonly replaceChatHistory: (history: IContent[]) => Promise<void>;
+  readonly getChatHistory: () => AsyncIterable<IContent> | null;
+  readonly clearHistory: (options?: {
+    readonly signal?: AbortSignal;
+    readonly publish?: () => void | Promise<void>;
+  }) => Promise<void>;
+  readonly restoreTurns: (
+    turns: number,
+    options?: {
+      readonly signal?: AbortSignal;
+      readonly publish?: () => void | Promise<void>;
+    },
+  ) => Promise<{ readonly itemsRemoved: number }>;
   /** Configured model name, or null when no configuration is available. */
   readonly getModel: () => string | null;
 }
@@ -390,12 +392,47 @@ function createRenameAction(
   };
 }
 
+async function hasRemovableTurn(
+  history: AsyncIterable<IContent>,
+): Promise<boolean> {
+  let humans = 0;
+  for await (const row of history) {
+    if (row.speaker === 'human' && ++humans === 2) return true;
+  }
+  return false;
+}
+
+async function reportHistoryMutation(
+  operation: 'clear' | 'restore',
+  signal: AbortSignal,
+  recording: SessionRecordingPort,
+  execute: () => Promise<SlashCommandActionReturn | void>,
+): Promise<SlashCommandActionReturn | void> {
+  try {
+    signal.throwIfAborted();
+    if (!recording.isActive()) throw new Error('Recording is not active');
+    await recording.flush();
+    signal.throwIfAborted();
+    if (!recording.isActive())
+      throw new Error('Recording failed before the cut');
+    return await execute();
+  } catch (error) {
+    signal.throwIfAborted();
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Failed to ${operation} history: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 function createClearAction(
   operations: ChatRecordingOperations,
 ): NonNullable<SlashCommand['action']> {
-  return async (context): Promise<MessageActionReturn | void> => {
+  return async (context): Promise<SlashCommandActionReturn | void> => {
+    context.signal.throwIfAborted();
     const history = operations.getChatHistory();
-    if (history === null) {
+    if (history === null || !(await hasRemovableTurn(history))) {
       return {
         type: 'message',
         messageType: 'info',
@@ -412,55 +449,29 @@ function createClearAction(
       };
     }
 
-    const result = await new HistoryMutationService().clear(history, recording);
-
-    if (!result.ok) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to clear history: ${result.error}`,
-      };
-    }
-    if (result.itemsRemoved === 0) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: 'No conversation to clear.',
-      };
-    }
-
-    await operations.replaceChatHistory(result.remainingHistory);
-    context.ui.updateHistoryTokenCount(0);
-    context.ui.clear();
-    return undefined;
+    return reportHistoryMutation(
+      'clear',
+      context.signal,
+      recording,
+      async () => {
+        await operations.clearHistory({
+          signal: context.signal,
+          publish: () => {
+            context.ui.updateHistoryTokenCount(0);
+            context.ui.clear();
+          },
+        });
+      },
+    );
   };
-}
-
-function toUiHistory(history: readonly IContent[]): HistoryItemWithoutId[] {
-  // Model thinking blocks ride along raw here; the load_history handler
-  // filters them with the same emoji rule as the text (#2888).
-  return history.map((content: IContent) => {
-    const textBlocks = content.blocks.filter(
-      (b): b is TextBlock => b.type === 'text',
-    );
-    const text = textBlocks.map((b) => b.text).join('');
-    const thinkingBlocks = content.blocks.filter(
-      (b): b is ThinkingBlock => b.type === 'thinking',
-    );
-    return {
-      type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
-      text,
-      ...(content.speaker === 'ai' && thinkingBlocks.length > 0
-        ? { thinkingBlocks }
-        : {}),
-    };
-  });
 }
 
 async function restoreHistory(
   operations: ChatRecordingOperations,
   turns: number,
-): Promise<SlashCommandActionReturn> {
+  context: CommandContext,
+): Promise<SlashCommandActionReturn | void> {
+  context.signal.throwIfAborted();
   const currentHistory = operations.getChatHistory();
   if (currentHistory === null) {
     return {
@@ -489,41 +500,32 @@ async function restoreHistory(
     };
   }
 
-  const result = await new HistoryMutationService().restore(
-    currentHistory,
-    turnsToRestore,
+  return reportHistoryMutation(
+    'restore',
+    context.signal,
     recording,
+    async () => {
+      const result = await operations.restoreTurns(turnsToRestore, {
+        signal: context.signal,
+        publish: () => context.ui.clear(),
+      });
+      if (result.itemsRemoved === 0) {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content:
+            'Not enough history to restore the requested number of turns.',
+        };
+      }
+      return undefined;
+    },
   );
-
-  if (!result.ok) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to restore history: ${result.error}`,
-    };
-  }
-
-  if (result.itemsRemoved === 0) {
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: 'Not enough history to restore the requested number of turns.',
-    };
-  }
-
-  // The slash-command result handler applies the client history exactly once
-  // after durable persistence succeeds.
-  return {
-    type: 'load_history',
-    history: toUiHistory(result.remainingHistory),
-    clientHistory: result.remainingHistory,
-  };
 }
 
 function createRestoreAction(
   operations: ChatRecordingOperations,
 ): NonNullable<SlashCommand['action']> {
-  return async (_context, args): Promise<SlashCommandActionReturn> => {
+  return async (context, args): Promise<SlashCommandActionReturn | void> => {
     const turnsStr = args.trim();
     if (!turnsStr) {
       return {
@@ -542,7 +544,7 @@ function createRestoreAction(
       };
     }
 
-    return restoreHistory(operations, -turns);
+    return restoreHistory(operations, -turns, context);
   };
 }
 
@@ -590,17 +592,23 @@ function createNameAction(
   };
 }
 
-function describeHistoryEntries(operations: ChatRecordingOperations): string[] {
+async function describeHistoryEntries(
+  operations: ChatRecordingOperations,
+  signal: AbortSignal | undefined,
+): Promise<string[]> {
   const lines: string[] = [];
   try {
     const history = operations.getChatHistory();
     lines.push(`Chat initialized: ${history !== null}`);
+    let count = 0;
+    if (history !== null) for await (const _row of history) count++;
     lines.push(
       history === null
         ? 'History entries: 0 (chat not initialized)'
-        : `History entries: ${history.length}`,
+        : `History entries: ${count}`,
     );
   } catch {
+    signal?.throwIfAborted();
     lines.push('Chat initialized: true', 'History entries: unavailable');
   }
   return lines;
@@ -620,9 +628,9 @@ function describeModel(operations: ChatRecordingOperations): string {
 function createDebugAction(
   operations: ChatRecordingOperations,
 ): NonNullable<SlashCommand['action']> {
-  return async (): Promise<SlashCommandActionReturn> => {
+  return async (context): Promise<SlashCommandActionReturn> => {
     const debugInfo = [
-      ...describeHistoryEntries(operations),
+      ...(await describeHistoryEntries(operations, context.signal)),
       describeModel(operations),
     ];
 

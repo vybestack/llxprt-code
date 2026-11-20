@@ -60,6 +60,24 @@ function asLoadBalancerFailure(
   return thrown instanceof LoadBalancerFailoverError ? thrown : undefined;
 }
 
+/**
+ * Every listener a call registered on the caller's signal, the load
+ * balancer's linked controller and the request staging alike, is removed
+ * exactly once.
+ */
+function expectEveryListenerRemovedOnce(
+  add: { mock: { calls: unknown[][] } },
+  remove: { mock: { calls: unknown[][] } },
+): void {
+  expect(add.mock.calls.length).toBeGreaterThan(0);
+  expect(remove.mock.calls).toHaveLength(add.mock.calls.length);
+  for (const [, listener] of add.mock.calls) {
+    expect(
+      remove.mock.calls.filter(([, removed]) => removed === listener),
+    ).toHaveLength(1);
+  }
+}
+
 describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
   let settingsService: SettingsService;
   let runtimeConfig: Config;
@@ -132,7 +150,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
       const chunks: IContent[] = [];
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       // Advance time significantly - should still work without timeout
@@ -236,7 +256,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
       const chunks: IContent[] = [];
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       for await (const chunk of gen) {
@@ -280,7 +302,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
       const receivedChunks: string[] = [];
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       for await (const chunk of gen) {
@@ -338,7 +362,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       providerManager.registerProvider(mockProvider2);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       const chunks: IContent[] = [];
@@ -389,7 +415,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       providerManager.registerProvider(mockProvider2);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       for await (const _chunk of gen) {
@@ -480,9 +508,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     }
 
     expect(chunks).toHaveLength(1);
-    expect(add).toHaveBeenCalledTimes(1);
-    expect(remove).toHaveBeenCalledTimes(1);
-    expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
+    expectEveryListenerRemovedOnce(add, remove);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -520,16 +546,17 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
         }
       })(),
     ).rejects.toThrow('synchronous construction failure');
-    expect(add).toHaveBeenCalledTimes(1);
-    expect(remove).toHaveBeenCalledTimes(1);
-    expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
+    expectEveryListenerRemovedOnce(add, remove);
   });
 
   it('preserves transport failures when linked listener removal throws', async () => {
     const parent = new AbortController();
     const cleanupError = new Error('listener removal failed');
+    // Removal fails once the first attempt has started, so the linked
+    // controller's disposal and the request staging's release both throw.
+    let attemptStarted = false;
     vi.spyOn(parent.signal, 'removeEventListener').mockImplementation(() => {
-      throw cleanupError;
+      if (attemptStarted) throw cleanupError;
     });
     const primaryError = new Error('primary transport failed');
     const secondaryError = new Error('secondary transport failed');
@@ -539,6 +566,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     const throwingProvider: IProvider = {
       name: 'test-provider-1',
       async *generateChatCompletion(): AsyncGenerator<IContent> {
+        attemptStarted = true;
         const failure = selectTransportFailure(
           calls,
           primaryError,
@@ -624,7 +652,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
 
       const chunks: IContent[] = [];
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       for await (const chunk of gen) {

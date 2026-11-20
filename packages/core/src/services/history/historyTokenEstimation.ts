@@ -22,6 +22,8 @@ import type {
   ToolResponseBlock,
 } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
+import { hasTokenEstimationRows } from './compression-token-selection.js';
+import { droppedMediaModelText } from './droppedMediaText.js';
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
@@ -89,6 +91,8 @@ export function blockToTokenFallbackString(block: ContentBlock): string {
       return block.code;
     case 'media':
       return block.caption ?? '';
+    case 'media_dropped':
+      return droppedMediaModelText(block);
     default:
       return '';
   }
@@ -145,11 +149,14 @@ export async function estimateContentTokens(
   modelName: string,
   tokenizerProvider: TokenizerProvider,
   logger: DebugLogger,
+  signal?: AbortSignal,
 ): Promise<number> {
+  signal?.throwIfAborted();
   const tokenizer = tokenizerProvider.getTokenizerForModel(modelName);
   let totalTokens = 0;
 
   for (const block of content.blocks) {
+    signal?.throwIfAborted();
     if (block.type === 'media') {
       totalTokens += estimateMediaBlockImageTokens(
         block,
@@ -171,8 +178,9 @@ export async function estimateContentTokens(
       logger.debug('Error counting tokens for block, using fallback:', error);
       totalTokens += simpleTokenEstimateForText(blockText);
     }
+    signal?.throwIfAborted();
   }
-
+  signal?.throwIfAborted();
   return totalTokens;
 }
 
@@ -194,6 +202,8 @@ function blockToEstimationText(
       return block.code;
     case 'media':
       return block.caption ?? '';
+    case 'media_dropped':
+      return droppedMediaModelText(block);
     default:
       return '';
   }
@@ -262,25 +272,37 @@ function stringifyToolResponseForTokens(
  * Estimate total tokens for hypothetical contents without mutating history.
  */
 export async function estimateTokensForContents(
-  contents: IContent[],
+  contents: Iterable<IContent> | AsyncIterable<IContent>,
   modelName: string | undefined,
   tokenizerProvider: TokenizerProvider,
   logger: DebugLogger,
+  signal?: AbortSignal,
 ): Promise<number> {
-  if (contents.length === 0) {
-    return 0;
-  }
-
+  signal?.throwIfAborted();
   let total = 0;
-  for (const content of contents) {
+  const source = hasTokenEstimationRows(contents)
+    ? contents.tokenRows(signal)
+    : contents;
+  for await (const content of source) {
+    signal?.throwIfAborted();
     const effectiveModel = resolveModelName(content.metadata?.model, modelName);
-    total += await estimateContentTokens(
-      content,
-      effectiveModel,
-      tokenizerProvider,
-      logger,
-    );
+    total +=
+      'estimateTokens' in content
+        ? await content.estimateTokens(
+            effectiveModel,
+            tokenizerProvider,
+            logger,
+            signal,
+          )
+        : await estimateContentTokens(
+            content,
+            effectiveModel,
+            tokenizerProvider,
+            logger,
+            signal,
+          );
+    signal?.throwIfAborted();
   }
-
+  signal?.throwIfAborted();
   return total;
 }

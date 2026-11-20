@@ -139,7 +139,7 @@ async function acquireProviderStack(
     files,
     manager,
     oauth,
-    tokenizer: configureProviderTokenizer(manager),
+    tokenizer: configureProviderTokenizer(manager, config.scratchRoots),
   };
 }
 

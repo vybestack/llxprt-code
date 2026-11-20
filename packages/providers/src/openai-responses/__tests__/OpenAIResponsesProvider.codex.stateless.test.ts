@@ -32,7 +32,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../../__tests__/streamCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputItem } from '../OpenAIResponsesTypes.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
@@ -48,6 +48,18 @@ const requestFetch: NetworkFetch = () =>
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const TEST_RUNTIME_ID = 'codex-stateful-test-runtime';
 
+async function sentRequestOf(
+  request: OpenAIResponsesRequest,
+  options: StreamResponseOptions,
+): Promise<OpenAIResponsesRequest> {
+  if (options.requestFrameBytes === undefined) return structuredClone(request);
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of options.requestFrameBytes()) chunks.push(chunk);
+  return JSON.parse(
+    new TextDecoder().decode(Buffer.concat(chunks)),
+  ) as OpenAIResponsesRequest;
+}
+
 /**
  * In-process WebSocket transport double that records every request sent and
  * yields a deterministic completion. Mirrors what parseResponsesStream would
@@ -61,7 +73,9 @@ class RecordingTransport implements WebSocketTransport {
     request: OpenAIResponsesRequest,
     options: StreamResponseOptions,
   ): AsyncIterableIterator<IContent> {
-    this.sentRequests.push(structuredClone(request));
+    // A disk-backed request carries its content as frame bytes; record what
+    // the socket would send.
+    this.sentRequests.push(await sentRequestOf(request, options));
     this.lastOptions = options;
     yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
     yield {

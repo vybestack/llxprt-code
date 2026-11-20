@@ -102,7 +102,7 @@ interface DeclaredItem {
   readonly identities: ReadonlyMap<string, number>;
 }
 
-function declaredItem(content: IContent): DeclaredItem {
+export function declaredItem(content: IContent): DeclaredItem {
   const identities = new Map<string, number>();
   for (const identity of mediaIdentities(content)) {
     identities.set(identity, (identities.get(identity) ?? 0) + 1);
@@ -124,7 +124,7 @@ function sharesMedia(
  * when the same attachment appears again, as when the user pastes an image
  * they sent earlier.
  */
-function isRewriteOf(actual: IContent, declared: DeclaredItem): boolean {
+export function isRewriteOf(actual: IContent, declared: DeclaredItem): boolean {
   if (actual === declared.content) return true;
   if (actual.speaker !== declared.content.speaker) return false;
   let sharesProvenance = false;
@@ -150,7 +150,10 @@ function isRewriteOf(actual: IContent, declared: DeclaredItem): boolean {
  * and attachments play no part, so this never claims content the item merely
  * resembles.
  */
-function carriesProvenanceOf(actual: IContent, declared: IContent): boolean {
+export function carriesProvenanceOf(
+  actual: IContent,
+  declared: IContent,
+): boolean {
   if (actual.speaker !== declared.speaker) return false;
   let agrees = false;
   for (const key of PROVENANCE_KEYS) {

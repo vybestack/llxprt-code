@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -19,6 +20,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeEstimate,
@@ -29,6 +31,7 @@ import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import type { SerializedTokenUsageRecord } from './TokenUsageLogger.js';
 import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 async function createLogger(): Promise<{
   logger: TokenUsageLogger;
@@ -130,22 +133,22 @@ async function estimateResponsesPrompt(
   contents: readonly IContent[],
   stateful: boolean,
 ): Promise<PromptEnvelopeEstimate> {
-  const projection = await provider.projectPromptEnvelope(
-    createProviderCallOptions({
+  const projection = await provider.projectPromptEnvelope({
+    ...createProviderCallOptions({
       providerName: provider.name,
       resolved: {
         model: 'gpt-4o',
         baseURL: 'https://api.openai.com/v1',
         telemetry: { providerName: provider.name },
       },
-      contents: [...contents],
       ...(stateful ? { ephemerals: { 'responses-stateful': true } } : {}),
     }),
-  );
+    contents: callerOwnedRawProviderSource(contents),
+  });
   return estimatePromptEnvelope(
     provider.name,
     projection,
-    createRuntimeTokenizerFactory(),
+    createRuntimeTokenizerFactory(tokenizerScratchRoots),
   );
 }
 

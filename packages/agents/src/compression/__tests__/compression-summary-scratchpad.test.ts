@@ -13,15 +13,13 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  EmptySummaryError,
-  type StrategyCompressionResult,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   buildRecordingContext,
   createRecordingProvider,
-  createStrategy,
+  compressViaDisk,
   requestText,
+  type DiskCompressionResult,
   type StrategyName,
 } from './compression-request-capture.js';
 import {
@@ -36,7 +34,7 @@ const IMPROVED =
   '<state_snapshot><overall_goal>Fix #4128 fully</overall_goal></state_snapshot>';
 const STRATEGIES: readonly StrategyName[] = ['one-shot', 'middle-out'];
 
-function storedSummary(result: StrategyCompressionResult): string {
+function storedSummary(result: DiskCompressionResult): string {
   if (result.kind !== 'applied') {
     throw new Error(`expected an applied compression, got ${result.kind}`);
   }
@@ -59,7 +57,7 @@ async function compressWithReplies(
     options.history ?? generateHistory(20),
     { verification: options.verification },
   );
-  const result = await createStrategy(strategyName).compress(context);
+  const result = await compressViaDisk(strategyName, context);
   return {
     summary: storedSummary(result),
     requests: provider.requests.map(requestText),
@@ -184,7 +182,7 @@ describe('middle-out never carries a summary scratchpad forward as the last prom
   };
 
   async function compressWithLastHuman(lastHuman: IContent): Promise<{
-    result: StrategyCompressionResult;
+    result: DiskCompressionResult;
     requests: string[];
   }> {
     const history = [
@@ -196,7 +194,7 @@ describe('middle-out never carries a summary scratchpad forward as the last prom
     ];
     const provider = createRecordingProvider(IMPROVED);
     const context = buildRecordingContext(provider, history);
-    const result = await createStrategy('middle-out').compress(context);
+    const result = await compressViaDisk('middle-out', context);
     return { result, requests: provider.requests.map(requestText) };
   }
 

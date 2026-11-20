@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RequestArtifactDescriptor } from '../request-artifact.js';
+
 import type {
   ProviderCapabilities,
   ProviderContext,
@@ -18,7 +20,7 @@ export class ConversationRequestEvent {
   conversation_id: string;
   turn_number: number;
   prompt_id: string;
-  redacted_messages: unknown[];
+  request_artifact: RequestArtifactDescriptor;
   redacted_tools?: Array<{
     functionDeclarations: Array<{
       name: string;
@@ -34,7 +36,7 @@ export class ConversationRequestEvent {
     conversation_id: string,
     turn_number: number,
     prompt_id: string,
-    redacted_messages: unknown[],
+    request_artifact: RequestArtifactDescriptor,
     redacted_tools?: Array<{
       functionDeclarations: Array<{
         name: string;
@@ -51,7 +53,7 @@ export class ConversationRequestEvent {
     this.conversation_id = conversation_id;
     this.turn_number = turn_number;
     this.prompt_id = prompt_id;
-    this.redacted_messages = redacted_messages;
+    this.request_artifact = request_artifact;
     this.redacted_tools = redacted_tools;
     this.tool_format = tool_format;
     this.provider_switched = provider_switched;
@@ -65,7 +67,8 @@ export class ConversationResponseEvent {
   conversation_id: string;
   turn_number: number;
   prompt_id: string;
-  redacted_content: string;
+  redacted_content?: string;
+  response_artifact?: RequestArtifactDescriptor;
   duration_ms: number;
   success: boolean;
   error?: string;
@@ -76,7 +79,7 @@ export class ConversationResponseEvent {
     conversation_id: string,
     turn_number: number,
     prompt_id: string,
-    redacted_content: string,
+    redacted_content: string | RequestArtifactDescriptor,
     duration_ms: number,
     success: boolean,
     error?: string,
@@ -88,7 +91,11 @@ export class ConversationResponseEvent {
     this.conversation_id = conversation_id;
     this.turn_number = turn_number;
     this.prompt_id = prompt_id;
-    this.redacted_content = redacted_content;
+    if (typeof redacted_content === 'string') {
+      this.redacted_content = redacted_content;
+    } else {
+      this.response_artifact = redacted_content;
+    }
     this.duration_ms = duration_ms;
     this.success = success;
     this.error = error;

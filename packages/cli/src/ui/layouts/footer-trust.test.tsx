@@ -87,6 +87,7 @@ async function mountFooter(trustedFolder = true) {
     });
     return (
       <FooterRegion
+        subscribeContextRange={() => () => {}}
         readIdeMode={owner.ide.getIdeMode.bind(owner.ide)}
         readIdeDiffingEnabled={() => owner.ide.readConnection().diffingEnabled}
         subscribeIdeDiffing={(listener) =>

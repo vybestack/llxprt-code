@@ -1,0 +1,186 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { gcAndSweep } from 'bun:jsc';
+import { MAX_SETTLE_ROUNDS } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  activeRequestBodyCount,
+  RequestBodyCensus,
+} from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import {
+  buildSourceProviderChatOptions,
+  enforceAndStreamSourcePromptEnvelopeRetries,
+  type PreparedSourcePromptEnvelopeSend,
+} from './prompt-envelope-source-send.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+import {
+  preflightEndpoint,
+  preflightDisk,
+  preflightRuntime,
+  preflightInstructions,
+  barrier,
+} from './__tests__/support/source-preflight-fixture.js';
+import { sourceHeap } from './__tests__/support/streamprocessor-source-measurements.js';
+
+const root = sourceRootSetup();
+const retained: Array<
+  () => { prepared: PreparedSourcePromptEnvelopeSend; row: IContent }
+> = [];
+
+/**
+ * Counts collections through a FinalizationRegistry instead of WeakRef.deref.
+ * A deref puts the target back on the machine stack, and JSC scans the stack
+ * conservatively, so a deref census can keep its own target alive: a stale
+ * slot of the callback frame (prepared send plus its last row) survived the
+ * settling collections, and a per-round deref re-pinned it through every
+ * further round although no heap path to it existed.
+ */
+class ReleaseCensus {
+  private tracked = 0;
+  private released = 0;
+  track(target: object): void {
+    this.tracked++;
+    releases.register(target, this);
+  }
+  markReleased(): void {
+    this.released++;
+  }
+  get live(): number {
+    return this.tracked - this.released;
+  }
+}
+const releases = new FinalizationRegistry<ReleaseCensus>((census) => {
+  census.markReleased();
+});
+let preparedCensus = new ReleaseCensus();
+let rowCensus = new ReleaseCensus();
+function yieldToEventLoop(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+/** Collect from a fresh macrotask, then let finalizers report; a real holder never reports. */
+async function liveAfterSettling(census: ReleaseCensus): Promise<number> {
+  for (let round = 0; round < MAX_SETTLE_ROUNDS && census.live > 0; round++) {
+    await yieldToEventLoop();
+    gcAndSweep();
+    await yieldToEventLoop();
+  }
+  return census.live;
+}
+async function prepareCycle(
+  large: boolean,
+  trap: boolean,
+  census: RequestBodyCensus,
+): Promise<void> {
+  const fixture = await preflightDisk(root(), large);
+  const http = preflightEndpoint();
+  const setup = preflightRuntime(
+    root(),
+    `http://127.0.0.1:${http.server.port}/v1`,
+    false,
+    'gpt-5.6',
+    census,
+  );
+  const arrived = barrier();
+  const held = barrier();
+  const controller = new AbortController();
+  let callbacks = 0;
+  const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
+    provider: setup.provider,
+    tokenizerFactory: setup.tokenizerFactory,
+    source: fixture.source,
+    signal: controller.signal,
+    buildOptions: (source) =>
+      buildSourceProviderChatOptions(
+        source,
+        undefined,
+        setup.context,
+        setup.invocation,
+        undefined,
+        preflightInstructions,
+      ),
+    enforce: async (source, estimate) => {
+      await estimate(source);
+      return source;
+    },
+    async onPrepared(
+      prepared: PreparedSourcePromptEnvelopeSend,
+    ): Promise<void> {
+      callbacks++;
+      preparedCensus.track(prepared);
+      for await (const row of prepared.source.openReader(controller.signal)) {
+        rowCensus.track(row);
+        if (trap) retained.push(() => ({ prepared, row }));
+      }
+      arrived.release();
+      await held.wait;
+      controller.signal.throwIfAborted();
+    },
+    shouldRetryOnError: () => false,
+  });
+  const pending = stream.next();
+  const outcome = pending.then(
+    () => 'sent',
+    () => 'failed',
+  );
+  try {
+    expect(
+      await Promise.race([arrived.wait.then(() => 'prepared'), outcome]),
+    ).toBe('prepared');
+    expect(http.bodies).toHaveLength(0);
+    controller.abort(new Error('retention cancel'));
+    held.release();
+    expect(await outcome).toBe('failed');
+    expect(callbacks).toBe(1);
+    expect(fixture.state.active).toBe(0);
+    expect(fixture.state.closed).toBe(1);
+    expect(activeRequestBodyCount(census)).toBe(0);
+  } finally {
+    held.release();
+    await stream.return?.();
+    await http.server.stop(true);
+    await setup.config.dispose();
+  }
+}
+async function measureRetention(trap: boolean) {
+  const census = new RequestBodyCensus();
+  retained.length = 0;
+  // The measured cycle runs the full-size path (chunked token estimation, lazy
+  // encoder initialisation); warm that same path so the baseline excludes
+  // one-time initialisation and only per-cycle growth is measured.
+  await prepareCycle(true, false, census);
+  await prepareCycle(true, false, census);
+  await sourceHeap();
+  preparedCensus = new ReleaseCensus();
+  rowCensus = new ReleaseCensus();
+  const baseline = await sourceHeap();
+  await prepareCycle(true, trap, census);
+  const settled = await sourceHeap();
+  return {
+    baseline,
+    settled,
+    delta: settled - baseline,
+    livePrepared: await liveAfterSettling(preparedCensus),
+    liveRows: await liveAfterSettling(rowCensus),
+    retainedClosures: retained.length,
+    activeBodies: activeRequestBodyCount(census),
+  };
+}
+function expectReleased(facts: Awaited<ReturnType<typeof measureRetention>>) {
+  expect(facts.delta).toBeLessThan(1_048_576);
+  expect(facts.livePrepared).toBe(0);
+  expect(facts.liveRows).toBe(0);
+  expect(facts.retainedClosures).toBe(0);
+}
+describe('source preflight retained callback ownership', () => {
+  it('releases prepared callback closures and rows below the unchanged 1MiB gate', async () => {
+    const facts = await measureRetention(false);
+    expectReleased(facts);
+    expect(facts.activeBodies).toBe(0);
+  }, 90000);
+  it('trap: deliberately retained prepared closures fail the release gate', async () => {
+    const facts = await measureRetention(true);
+    expect(() => expectReleased(facts)).toThrow('expect(received)');
+  }, 90000);
+});

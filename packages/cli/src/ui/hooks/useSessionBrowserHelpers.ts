@@ -1,15 +1,17 @@
+import type { ContinueTarget } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   SessionDiscovery,
   SessionLockManager,
 } from '@vybestack/llxprt-code-core';
-import type { ContinueTarget } from '@vybestack/llxprt-code-core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
+import { buildEnrichedSession } from './sessionBrowserTarget.js';
 import type { Key } from './useKeypress.js';
 import type {
   EnrichedSessionSummary,
@@ -18,8 +20,6 @@ import type {
   UseSessionBrowserResult,
 } from './useSessionBrowser.js';
 import { useSessionKeypressHandler } from './useSessionBrowserKeypress.js';
-import { buildEnrichedSession } from './sessionBrowserTarget.js';
-import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 const PAGE_SIZE = 20;
 

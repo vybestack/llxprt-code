@@ -23,7 +23,6 @@ import type {
   MessageBusMessage,
   MessageBusType,
 } from '../confirmation-bus/types.js';
-import type { IContent } from '../services/history/IContent.js';
 import type {
   AsyncTaskInfo,
   RegisterTaskInput,
@@ -122,14 +121,8 @@ export interface RecordingPort {
   getSessionId(): string;
   getChatsDir(): string;
   getProjectHash(): string;
-  getPendingByteCount(): number;
   flush(): Promise<void>;
   dispose(): Promise<void>;
-  recordContent(content: IContent): void;
-  recordSemanticMediaPurge(
-    history: readonly IContent[],
-    frontier: { readonly contentIndex: number; readonly blockIndex: number },
-  ): void;
   recordSessionMetadata(title: string | null): void;
   getSessionMetadataTitle(): string | null | undefined;
 }

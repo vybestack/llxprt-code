@@ -97,7 +97,10 @@ async function owner(
     }),
   );
   manager.registerProvider(provider);
-  const factoriesTokenizer = configureProviderTokenizer(manager);
+  const factoriesTokenizer = configureProviderTokenizer(
+    manager,
+    config.scratchRoots,
+  );
   const factoriesContent = createRuntimeContentGeneratorFactory();
   const media = new SessionMediaOwner(config.projectTempDir, 1024 * 1024);
   const settingsOwner = new SessionSettingsOwner(settings);

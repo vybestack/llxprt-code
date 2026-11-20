@@ -133,7 +133,7 @@ function acquireProviders(
     settingsOwner,
     files,
     manager,
-    tokenizer: configureProviderTokenizer(manager),
+    tokenizer: configureProviderTokenizer(manager, config.scratchRoots),
     oauth,
   };
 }

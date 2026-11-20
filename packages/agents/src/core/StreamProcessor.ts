@@ -1,75 +1,74 @@
-import {
-  type DumpAttemptContext,
-  type ProviderFileLifecycle,
-} from '@vybestack/llxprt-code-providers';
-import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
-  ModelOutput,
-  ModelStreamChunk,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+  DumpAttemptContext,
+  ProviderFileLifecycle,
+} from '@vybestack/llxprt-code-providers';
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
-import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type {
+  ProviderFileBindingStore,
+  ProviderRequestCollaborators,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import {
   isRetryableError,
   retryWithBackoff,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
-import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
-import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
-// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type { StreamProcessorRuntime } from './chatSessionPorts.js';
-import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { CompressionHandler } from '../compression/CompressionHandler.js';
-import { fireBeforeModelHook } from './beforeModelHookFire.js';
 import type { ConversationManager } from './ConversationManager.js';
+import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import { sourceResponseArrival } from './response-transport-source.js';
+import { StreamTerminalState } from './streamTerminalState.js';
+import { cancellableResponseStream } from './cancellableResponseStream.js';
 import {
-  admitRefusalAuditChunk,
-  recordToolResponses,
-  releasePromptTurnIdentity,
-} from './streamRefusalAuditBoundary.js';
-import { processAfterModelHook } from './streamAfterModelHook.js';
-import { RefusalDumpPairing } from './refusalDumpPairing.js';
-import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
-import { prepareStreamEnvelope } from './streamEnvelopePreparation.js';
+  openResponseArrival,
+  responseArrivalFor,
+  appendResponseChunk,
+  prefetchResponseArrival,
+  takePrefetchedArrival,
+} from './responseArrival.js';
+import { recordSourceSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import {
-  applyToolSelectionHook,
-  buildRequestContentsResult,
-  buildRuntimeContext,
   contentForTelemetryPreservingUsage,
+  extractSystemInstructionText,
   preserveProviderDiagnosticsAfterHook,
-  logOutgoingRequest,
-  prepareRequestPayload,
-  selectRequestTools,
+  turnSystemInstruction,
   type PreparedRequest,
-  type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
+import { buildAndSendStreamRequest } from './streamprocessor-request.js';
 import {
-  consumeFirstChunkAndReturn,
   createDumpIdChunk,
   stripProviderAttemptDiagnostics,
   trackPromptTokens,
 } from './streamResponseHelpers.js';
 import type {
-  ProviderReadyRequest,
   SendRequestState,
+  ProviderReadyRequest,
 } from './sendRequestState.js';
+import { resendKeptRequestSource } from './streamprocessor-refusal-resend.js';
+import { throwIfRefused } from '../refusal/refusalDetection.js';
+import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
+import type { RefusalContextFingerprint } from '../refusal/refusalAudit.js';
+import type { RefusalContextRows } from '../refusal/refusalContextTracker.js';
+import { RefusalDumpPairing } from './refusalDumpPairing.js';
 import {
   accumulateStreamFinishInfo,
   attachStreamTiming,
@@ -79,33 +78,28 @@ import {
   type RawTokenDeltaBridge,
   type StreamFinishInfo,
 } from './streamTelemetryLogger.js';
-import { captureSendBoundaryAudit } from './sendBoundaryAudit.js';
+import { submitUserPrompt } from './prompt-submission.js';
+import { processAfterModelHook } from './streamAfterModelHook.js';
+import type { SourceAfterModelRequest } from './source-after-model-hook.js';
+import { splitUserTurnInput } from './streamTurnInput.js';
+import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
+import { stampTurnIdentityOnInput } from './turnIdentity.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
-import { logApiError, turnTelemetryPorts } from './turnLogging.js';
-
+import { turnTelemetryPorts } from './turnLogging.js';
 import { assertAdmittedRoute } from './admittedRouteSecurity.js';
-import type { PreparedUserTurn } from './mediaAdmissionSeam.js';
+import {
+  admitStreamChunkForHistory,
+  streamMediaAdmissions,
+  type PreparedUserTurn,
+} from './mediaAdmissionSeam.js';
+import { mediaAdmissionPort } from './runtimePorts.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { buildStreamChatOptions } from './streamChatOptions.js';
-import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import {
   failStreamProcessing,
   finalizeStreamResponse,
 } from './streamResponseFinalizer.js';
-import {
-  mediaAdmissionPort,
-  reasoningInclusionPolicy,
-} from './runtimePorts.js';
-import { stampTurnIdentityOnInput } from './turnIdentity.js';
-import { throwIfRefused } from '../refusal/refusalDetection.js';
-import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
-import type { RefusalContextFingerprint } from '../refusal/refusalAudit.js';
 
-function isPreparedUserTurn(
-  value: IContent | IContent[] | PreparedUserTurn,
-): value is PreparedUserTurn {
-  return !Array.isArray(value) && 'userContents' in value;
-}
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
 
@@ -114,15 +108,16 @@ export class StreamProcessor {
   }
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
-  private readonly refusalStreamAudit: RefusalStreamAudit;
-  private readonly releaseCompressionAuditListener: () => void;
-  private currentContextFingerprint: RefusalContextFingerprint | undefined;
 
   /** Canonical turn identity retained across retries for each logical prompt. */
   private readonly turnIdByPromptId = new Map<string, string>();
   private readonly refusalDumpPairing = new RefusalDumpPairing(
     () => this.currentAttemptIndex,
   );
+  private readonly refusalStreamAudit = new RefusalStreamAudit();
+  private readonly releaseCompressionAuditListener: () => void;
+  /** Send-boundary refusal context of the attempt in flight (#4101). */
+  private currentContextFingerprint: RefusalContextFingerprint | undefined;
   private currentAttemptIndex = 0;
   /** Whether the attempt in flight resends an earlier attempt of its send. */
   private currentIsResend = false;
@@ -172,7 +167,6 @@ export class StreamProcessor {
     private historyService: HistoryService,
     private readonly generationConfig: ChatSessionConfig,
   ) {
-    this.refusalStreamAudit = new RefusalStreamAudit();
     this.releaseCompressionAuditListener =
       this.compressionHandler.setCompressionAuditListener((provenance) =>
         this.refusalStreamAudit.recordCompression(provenance),
@@ -180,19 +174,30 @@ export class StreamProcessor {
   }
 
   /** Tracks tool responses already recorded during eager client streaming. */
-  private _finalizeStreamProcessing(
-    accumulated: ModelOutput,
-    options: Omit<Parameters<typeof finalizeStreamResponse>[0], 'accumulated'>,
-  ): Promise<void> {
-    return finalizeStreamResponse({ ...options, accumulated });
+  markToolResponsesRecorded(callIds: readonly string[]): void {
+    for (const callId of callIds) {
+      if (typeof callId === 'string' && callId.length > 0) {
+        this.eagerlyRecordedToolResponseCallIds.add(callId);
+      }
+    }
   }
 
-  markToolResponsesRecorded(callIds: readonly string[]): void {
-    recordToolResponses(this.eagerlyRecordedToolResponseCallIds, callIds);
+  async submitUserPrompt(
+    userInput: IContent | IContent[],
+    promptId: string,
+    origin?: object,
+  ): Promise<void> {
+    await submitUserPrompt(
+      this.ports,
+      userInput,
+      promptId,
+      this.eagerlyRecordedToolResponseCallIds,
+      origin,
+    );
   }
 
   releasePromptTurnIdentity(promptId: string): void {
-    releasePromptTurnIdentity(this.turnIdByPromptId, promptId);
+    this.turnIdByPromptId.delete(promptId);
   }
 
   resetRefusalContextBaseline(): void {
@@ -222,27 +227,10 @@ export class StreamProcessor {
 
     const providerBaseUrl =
       params.modelParameters?.route?.baseURL ?? this.ports.state.baseUrl;
-    let prepared: PreparedUserTurn | undefined;
-    let providerUserContent: IContent | IContent[];
-    let historyUserContent: IContent | IContent[];
-    if (isPreparedUserTurn(userInput)) {
-      prepared = userInput;
-      providerUserContent = userInput.userIContents;
-      historyUserContent = userInput.userContents;
-    } else {
-      prepared = undefined;
-      providerUserContent = userInput;
-      historyUserContent = userInput;
-    }
-    const existingTurnId = (
-      Array.isArray(providerUserContent)
-        ? providerUserContent
-        : [providerUserContent]
-    ).find((content) => content.metadata?.turnId !== undefined)?.metadata
-      ?.turnId;
+    const { prepared, providerUserContent, historyUserContent, inputTurnId } =
+      splitUserTurnInput(userInput);
     const turnId =
-      prepared?.turnId ??
-      existingTurnId ??
+      inputTurnId ??
       this.turnIdByPromptId.get(promptId) ??
       this.historyService.generateTurnKey();
     this.turnIdByPromptId.set(promptId, turnId);
@@ -268,6 +256,11 @@ export class StreamProcessor {
       );
     }
 
+    await this.submitUserPrompt(
+      stampedUserContent,
+      promptId,
+      params.recordingExecution?.historyOrigin,
+    );
     this.currentContextFingerprint = undefined;
     const streamResponse = await this._executeStreamApiCall(
       params,
@@ -280,7 +273,7 @@ export class StreamProcessor {
 
     return this._createCancellableStream(
       streamResponse,
-      historyUserContent,
+      stampTurnIdentityOnInput(historyUserContent, { promptId, turnId }),
       prepared,
       semanticMediaPurge,
       turnId,
@@ -302,9 +295,8 @@ export class StreamProcessor {
     attemptIndex: number,
     contextFingerprint: RefusalContextFingerprint | undefined,
   ): AsyncGenerator<ModelStreamChunk> {
-    let processedStream: AsyncGenerator<ModelStreamChunk> | undefined;
-    const ensureProcessedStream = (): AsyncGenerator<ModelStreamChunk> => {
-      processedStream ??= this.processStreamResponse(
+    return cancellableResponseStream(streamResponse, () =>
+      this.processStreamResponse(
         streamResponse,
         userContent,
         semanticMediaPurge,
@@ -314,51 +306,19 @@ export class StreamProcessor {
         contextFingerprint,
         promptId,
         attemptIndex,
-      );
-      return processedStream;
-    };
+      ),
+    );
+  }
 
-    const cancellableStream = {
-      async next(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        return ensureProcessedStream().next(value);
-      },
-      async return(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        if (processedStream) {
-          return typeof processedStream.return === 'function'
-            ? processedStream.return(value)
-            : { done: true, value: undefined };
-        }
-
-        if (typeof streamResponse.return === 'function') {
-          await streamResponse.return(value);
-        }
-
-        return { done: true, value: undefined };
-      },
-      async throw(error?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        if (processedStream) {
-          if (typeof processedStream.throw === 'function') {
-            return processedStream.throw(error);
-          }
-          throw error;
-        }
-
-        if (typeof streamResponse.throw === 'function') {
-          return streamResponse.throw(error);
-        }
-
-        if (typeof streamResponse.return === 'function') {
-          await streamResponse.return(undefined);
-        }
-
-        throw error;
-      },
-      [Symbol.asyncIterator](): AsyncGenerator<ModelStreamChunk> {
-        return this as AsyncGenerator<ModelStreamChunk>;
-      },
-    };
-
-    return cancellableStream as AsyncGenerator<ModelStreamChunk>;
+  /** Fingerprints the rows this attempt sends against the last successful commit. */
+  private async _captureRefusalContext(
+    rows: RefusalContextRows,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    this.currentContextFingerprint = await this.refusalStreamAudit.snapshot(
+      rows,
+      signal,
+    );
   }
 
   /**
@@ -408,15 +368,6 @@ export class StreamProcessor {
     });
   }
 
-  private _selectHookRequestTools(
-    params: SendMessageParams,
-  ): ReturnType<StreamProcessor['_applyToolSelectionHook']> {
-    return this._applyToolSelectionHook(
-      this._selectRequestTools(params),
-      params.hookOwner ?? params.recordingExecution?.hookOwner,
-    );
-  }
-
   private _bindProviderMediaAndFiles(provider: IProvider): IProvider {
     return bindProviderMediaAndFiles(
       provider,
@@ -436,289 +387,212 @@ export class StreamProcessor {
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
     sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    assertAdmittedRoute(params.modelParameters?.route);
     const dumpAttemptContext = this.refusalDumpPairing.createAttempt(promptId);
-    const requestDraft = this._buildContents(userContent, semanticMediaPurge);
-    const toolSelection = await this._selectHookRequestTools(params);
-    const { requestPayload, runtimeContext } = this._prepareRequestPayload(
-      requestDraft.contents,
-      toolSelection,
+    return buildAndSendStreamRequest({
+      sendState,
+      runtime: this.ports,
+      compression: this.compressionHandler,
+      history: this.historyService,
       params,
-    );
-
-    provider = this._bindProviderMediaAndFiles(provider);
-
-    try {
-      const { contents: finalContents, ...pendingRegion } =
-        await this._fireBeforeModel(
+      promptId,
+      userContent,
+      provider: this._bindProviderMediaAndFiles(provider),
+      semanticMediaPurge,
+      requestMediaBudgetBytes: this.requestMediaBudgetBytes,
+      fallbackTools: this.generationConfig.tools,
+      buildRuntime: (extras) =>
+        this.providerRuntimeBuilder('StreamProcessor.generateRequest', extras),
+      buildOptions: (contents, tools, runtime) =>
+        this._buildStreamChatOptions(
+          promptId,
+          { contents, tools },
+          runtime,
           params,
-          requestPayload.contents,
-          requestDraft.pending,
-          toolSelection,
-        );
-
-      const streamPreparation = await prepareStreamEnvelope(
-        provider,
-        finalContents,
-        pendingRegion,
-        (contents) =>
-          buildStreamChatOptions(
-            this.ports.prepareProviderInvocation,
-            provider.name,
-            promptId,
-            { contents, tools: toolSelection.tools },
-            runtimeContext.metadata,
+          provider.name,
+          dumpAttemptContext,
+        ),
+      consumeSource: (stream, startTime, allowedTools, afterModel) =>
+        this._consumeFirstChunkAndReturn(
+          stream,
+          undefined,
+          promptId,
+          startTime,
+          allowedTools,
+          this.currentRawTokenDeltaBridge,
+          dumpAttemptContext,
+          afterModel,
+          params.hookOwner ?? params.recordingExecution?.hookOwner,
+          params.recordingExecution?.historyOrigin,
+        ),
+      setEstimate: (estimate) => {
+        this.currentPromptEnvelopeEstimate = estimate;
+      },
+      recordSourceSeam: async (prepared, tools, signal) => {
+        await recordSourceSendSeamTelemetry({
+          usageLogger: this.compressionHandler.tokenUsageLogger,
+          promptId,
+          estimate: prepared.estimate,
+          runtimeState: this.ports.state,
+          historyService: this.historyService,
+          requestRows: prepared.source,
+          tools,
+          systemInstruction: turnSystemInstruction(
             params,
             this.generationConfig,
-            this.currentRawTokenDeltaBridge,
-            dumpAttemptContext,
           ),
-        this.compressionHandler,
-        promptId,
-        params.recordingExecution,
-        params.modelParameters,
-        this.ports.promptEstimator,
-      );
-
-      logOutgoingRequest(
-        this.turnTelemetryPorts(),
-        { ...requestPayload, contents: streamPreparation.contents },
-        this.ports.state.model,
-        promptId,
-      );
-      sendState?.keep({
-        contents: streamPreparation.contents,
-        toolSelection,
-        systemInstruction: this.generationConfig.systemInstruction,
-      });
-
-      const stream = await this._sendProviderRequest(
-        provider,
-        { ...requestPayload, contents: streamPreparation.contents },
-        runtimeContext,
-        params,
-        promptId,
-        toolSelection.allowedFunctionNames,
-        streamPreparation.prepared,
-        this.generationConfig,
-        dumpAttemptContext,
-      );
-      return withCompressionCallbackCleanup(
-        stream,
-        provider,
-        this.compressionHandler,
-        params.config?.abortSignal,
-      );
-    } catch (error) {
-      this.compressionHandler.clearProviderCompressionCallback(provider);
-      throw error;
-    }
-  }
-  private _fireBeforeModel(
-    params: SendMessageParams,
-    requestContents: IContent[],
-    pendingUserIContents: IContent[],
-    toolSelection: ToolSelectionHookResult,
-  ): ReturnType<typeof fireBeforeModelHook> {
-    return fireBeforeModelHook({
-      owner: params.hookOwner ?? params.recordingExecution?.hookOwner,
-      requestContents,
-      pendingUserIContents,
-      tools: toolSelection.tools ?? [],
-      hookRestrictedAllowedTools: toolSelection.allowedFunctionNames,
-      model: this.ports.state.model,
-      log: (msg) => this.logger.debug(() => msg),
+          turnId: this.turnIdByPromptId.get(promptId) ?? null,
+          signal,
+        });
+        await this._captureRefusalContext(prepared.source, signal);
+      },
+      log: (message) => this.logger.debug(() => message),
     });
   }
 
-  /**
-   * Sends a request that was already built, hooked and enforced, exactly as it
-   * was (issue #4036): the BeforeModel hook does not run again and the live
-   * history is not read.
-   */
   private async _resendKeptRequest(
     provider: IProvider,
     kept: ProviderReadyRequest,
     params: SendMessageParams,
     promptId: string,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    assertAdmittedRoute(params.modelParameters?.route);
-    const { requestPayload, runtimeContext } = this._prepareRequestPayload(
-      kept.contents,
-      kept.toolSelection,
-      params,
-    );
     const bound = this._bindProviderMediaAndFiles(provider);
-    try {
-      logOutgoingRequest(
-        this.turnTelemetryPorts(),
-        requestPayload,
-        this.ports.state.model,
-        promptId,
-      );
-      const stream = await this._sendProviderRequest(
-        bound,
-        requestPayload,
-        runtimeContext,
-        params,
-        promptId,
-        kept.toolSelection.allowedFunctionNames,
-        undefined,
-        { ...this.generationConfig, systemInstruction: kept.systemInstruction },
-      );
-      return withCompressionCallbackCleanup(
-        stream,
-        bound,
-        this.compressionHandler,
-        params.config?.abortSignal,
-      );
-    } catch (error) {
-      this.compressionHandler.clearProviderCompressionCallback(bound);
-      throw error;
-    }
+    const start = Date.now();
+    const source = kept.prepared.source;
+    const dumpAttemptContext = this.refusalDumpPairing.createAttempt(promptId);
+    await this._captureRefusalContext(source, params.config?.abortSignal);
+    const stream = await resendKeptRequestSource(
+      this.ports,
+      bound,
+      kept,
+      params,
+      promptId,
+      this.turnIdByPromptId.get(promptId) ?? promptId,
+      this.generationConfig,
+      this.currentRawTokenDeltaBridge,
+      (estimate) => {
+        this.currentPromptEnvelopeEstimate = estimate;
+      },
+      dumpAttemptContext,
+    );
+    return this._consumeFirstChunkAndReturn(
+      stream,
+      undefined,
+      promptId,
+      start,
+      kept.toolSelection.allowedFunctionNames,
+      this.currentRawTokenDeltaBridge,
+      dumpAttemptContext,
+      {
+        rows: () => source,
+        tools: kept.toolSelection.tools,
+        signal: params.config?.abortSignal,
+      },
+      params.hookOwner ?? params.recordingExecution?.hookOwner,
+      params.recordingExecution?.historyOrigin,
+    );
   }
 
-  private _prepareRequestPayload(
-    requestContents: IContent[],
-    toolSelection: ToolSelectionHookResult,
-    params: SendMessageParams,
-  ): {
-    requestPayload: PreparedRequest['requestPayload'];
-    baseRuntimeContext: ProviderRequestCollaborators;
-    runtimeContext: ProviderRequestCollaborators;
-  } {
-    const { requestPayload, baseRuntimeContext } = prepareRequestPayload({
-      requestContents,
-      tools: toolSelection.tools,
-      logger: this.logger,
-      providerRuntimeBuilder: (source, extras) =>
-        this.providerRuntimeBuilder(source, {
-          ...extras,
-          conversationLogEmptyTools: toolSelection.conversationLogEmptyTools,
-        }),
-      providerName:
-        params.modelParameters?.route?.provider.name ??
-        this.providerResolver('stream').name,
-      modelName: params.modelParameters?.route?.model ?? this.ports.state.model,
-      baseUrl:
-        params.modelParameters?.route?.baseURL ?? this.ports.state.baseUrl,
-    });
-
-    const runtimeContext = buildRuntimeContext(baseRuntimeContext, params);
-
-    return { requestPayload, baseRuntimeContext, runtimeContext };
-  }
-
-  // @plan:PLAN-20260617-COREAPI.P15
-  // @requirement:REQ-001
-  private async _sendProviderRequest(
-    provider: IProvider,
-    requestPayload: PreparedRequest['requestPayload'],
+  private _buildStreamChatOptions(
+    promptId: string,
+    requestPayload: {
+      contents: Iterable<IContent> | AsyncIterable<IContent>;
+      tools: PreparedRequest['requestPayload']['tools'];
+    },
     runtimeContext: ProviderRequestCollaborators,
     params: SendMessageParams,
-    promptId: string,
-    hookRestrictedAllowedTools: string[] | undefined,
-    preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
-    generation: ChatSessionConfig = this.generationConfig,
-    dumpAttemptContext: DumpAttemptContext = this.refusalDumpPairing.createAttempt(
+    providerName: string,
+    dumpAttemptContext: DumpAttemptContext,
+  ): GenerateChatOptions {
+    // The shared builder owns invocation, route, retry wiring and the fresh
+    // pass per consumer; the source route resolves the system prompt for this
+    // turn (not the session default).
+    const options = buildStreamChatOptions(
+      this.ports.prepareProviderInvocation,
+      providerName,
       promptId,
-    ),
-  ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    const startTime = Date.now();
-    try {
-      const chatOptions = buildStreamChatOptions(
-        this.ports.prepareProviderInvocation,
-        provider.name,
-        promptId,
-        requestPayload,
-        runtimeContext.metadata,
-        params,
-        generation,
-        this.currentRawTokenDeltaBridge,
-        dumpAttemptContext,
-      );
-      const prepared =
-        preparedAtEnforcement ??
-        (await prepareAtSendSeam(
-          provider,
-          chatOptions,
-          this.ports.promptEstimator,
-        ));
-      this.currentPromptEnvelopeEstimate = prepared.estimate;
-      this.currentContextFingerprint = captureSendBoundaryAudit(
-        this.refusalStreamAudit,
-        this.compressionHandler,
-        this.ports,
-        this.historyService,
-        prepared,
-        requestPayload,
-        generation,
-        promptId,
-        this.turnIdByPromptId.get(promptId) ?? null,
-      );
-      assertAdmittedRoute(params.modelParameters?.route);
-      const streamResponse = provider.generateChatCompletion({
-        ...prepared.options,
-        requestDiagnostics: this.ports.requestDiagnostics,
-      });
-      // Captured explicitly (not read inside the generator below): a later
-      // attempt replaces the instance field, and the explicit parameter is
-      // what keeps this attempt's stream wired to this attempt's tracker.
-      const rawTokenDeltaBridge = this.currentRawTokenDeltaBridge;
-
-      const convertedStream = await consumeFirstChunkAndReturn(
-        streamResponse,
-        requestPayload,
-        promptId,
-        startTime,
-        this.currentAttemptIndex,
-        hookRestrictedAllowedTools,
-        rawTokenDeltaBridge,
-        params.hookOwner ?? params.recordingExecution?.hookOwner,
-        dumpAttemptContext,
-        this._convertIContentStream.bind(this),
-      );
-      return convertedStream;
-    } catch (error) {
-      const durationMs = Date.now() - startTime;
-      logApiError(
-        this.turnTelemetryPorts(),
-        this.ports.state.model,
-        promptId,
-        durationMs,
-        error,
-      );
-      this.currentPromptEnvelopeEstimate = null;
-      throw error;
-    }
+      requestPayload,
+      runtimeContext.metadata,
+      params,
+      this.generationConfig,
+      this.currentRawTokenDeltaBridge,
+      dumpAttemptContext,
+    );
+    return {
+      ...options,
+      systemInstruction: extractSystemInstructionText(
+        turnSystemInstruction(params, this.generationConfig),
+      ),
+      requestDiagnostics: this.ports.requestDiagnostics,
+    };
   }
 
-  private _selectRequestTools(
-    params: SendMessageParams,
-  ): AgentClientGenerateConfig['tools'] {
-    return selectRequestTools(params, this.generationConfig.tools);
-  }
-
-  private async _applyToolSelectionHook(
-    tools: AgentClientGenerateConfig['tools'],
+  /**
+   * Eagerly consume first chunk within retry boundary (#1750).
+   */
+  private async _consumeFirstChunkAndReturn(
+    streamResponse: AsyncIterable<IContent>,
+    requestPayload: PreparedRequest['requestPayload'] | undefined,
+    promptId: string,
+    startTime: number,
+    hookRestrictedAllowedTools: string[] | undefined,
+    rawTokenDeltaBridge: RawTokenDeltaBridge | null,
+    dumpAttemptContext: DumpAttemptContext,
+    sourceRequest?: SourceAfterModelRequest,
     owner?: HookExecutionOwner,
-  ): Promise<ToolSelectionHookResult> {
-    return applyToolSelectionHook(tools, this.ports.state.model, owner);
-  }
+    origin?: object,
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    const arrival =
+      sourceResponseArrival(streamResponse) ??
+      (await openResponseArrival(
+        this.historyService,
+        this.ports,
+        promptId,
+        this.turnIdByPromptId.get(promptId) ??
+          this.historyService.generateTurnKey(),
+        origin,
+      ));
+    const convertedStream = this._convertIContentStream(
+      streamResponse,
+      requestPayload,
+      { promptId, startTime, attemptIndex: this.currentAttemptIndex },
+      hookRestrictedAllowedTools,
+      rawTokenDeltaBridge,
+      dumpAttemptContext,
+      sourceRequest,
+      owner,
+    );
 
-  private _buildContents(
-    userContent: IContent | IContent[],
-    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): {
-    contents: IContent[];
-    pending: IContent[];
-  } {
-    return buildRequestContentsResult(
-      userContent,
-      this.historyService,
-      semanticMediaPurge?.requestHistory,
+    return prefetchResponseArrival(
+      convertedStream,
+      arrival,
+      this.ports.ephemerals.reasoning.includeInContext(),
+      async (chunk) => {
+        const turnId = this.turnIdByPromptId.get(promptId) ?? promptId;
+        const content = stripProviderAttemptDiagnostics(chunk.content);
+        const historyChunk = await admitStreamChunkForHistory(
+          this.ports,
+          { ...chunk, content },
+          {
+            ...content,
+            blocks: filterHookRestrictedBlocks(
+              content.blocks,
+              chunk.hookRestrictions?.allowedToolNames,
+            ),
+          },
+          turnId,
+        );
+        return {
+          historyChunk,
+          release: async () => {
+            await this.ports.mediaAdmission?.releaseAdmissions(
+              streamMediaAdmissions(historyChunk, turnId),
+            );
+          },
+        };
+      },
     );
   }
-
   private async _handleBucketFailover(
     signal: AbortSignal | undefined,
   ): Promise<boolean | null> {
@@ -749,7 +623,7 @@ export class StreamProcessor {
    */
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
-    requestPayload: PreparedRequest['requestPayload'],
+    requestPayload: PreparedRequest['requestPayload'] | undefined,
     telemetryContext: {
       promptId: string;
       startTime: number;
@@ -757,13 +631,18 @@ export class StreamProcessor {
     },
     hookRestrictedAllowedTools: string[] | undefined,
     rawTokenDeltaBridge: RawTokenDeltaBridge | null | undefined,
-    owner: HookExecutionOwner | undefined,
     dumpAttemptContext: DumpAttemptContext,
+    sourceRequest?: SourceAfterModelRequest,
+    owner?: HookExecutionOwner,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
     let finish: StreamFinishInfo = {};
-    // Starts on first pull (provider-call boundary), excluding send-seam time (#3257).
-    // Attach precedes raw deltas; a null bridge means no token-usage tracker (#4068).
+    // Constructed at generator-body start (first pull — the provider call
+    // boundary), so provider_request_ms covers the stream lifecycle alone
+    // and excludes send-seam estimation (#3257). The provider stream is only
+    // iterated inside this generator body, so attach always happens before
+    // any provider code can fire a raw delta. A null bridge means the attempt
+    // is not logged (#4068), so no tracker is created.
     const timing = startAttemptTiming(rawTokenDeltaBridge);
 
     // The caller iterates this generator after _sendProviderRequest returned,
@@ -780,14 +659,16 @@ export class StreamProcessor {
           };
         }
         const hookChunk =
-          (await processAfterModelHook({
-            model: this.ports.state.model,
+          (await processAfterModelHook(
             iContent,
             requestPayload,
             chunk,
             hookRestrictedAllowedTools,
+            sourceRequest,
             owner,
-          })) ?? chunk;
+            this.ports.state.model,
+            this.logger,
+          )) ?? chunk;
         const yieldedChunk = preserveProviderDiagnosticsAfterHook(
           chunk,
           hookChunk,
@@ -832,15 +713,7 @@ export class StreamProcessor {
     trackPromptTokens(iContent, this.compressionHandler, this.logger);
   }
 
-  /**
-   * Process streaming response chunks into a complete conversation turn.
-   *
-   * CRITICAL: yield chunks inline during the for-await loop. Collecting all
-   * chunks first blocks user output, abort checks, and stalled provider streams.
-   * See issue #1846.
-   *
-   * @plan PLAN-20260707-AGENTNEUTRAL.P07 — accumulates neutral ModelStreamChunk
-   */
+  /** Journal each arrival before yielding or pulling the next provider chunk. */
   async *processStreamResponse(
     streamResponse: AsyncGenerator<ModelStreamChunk>,
     userInput: IContent | IContent[],
@@ -855,47 +728,47 @@ export class StreamProcessor {
     const includeThoughts = this.ports.ephemerals.reasoning.includeInContext();
     const turnId = capturedTurnId ?? this.historyService.generateTurnKey();
 
-    const accumulator = new StreamOutputAccumulator();
+    const arrival =
+      responseArrivalFor(streamResponse) ??
+      (await openResponseArrival(
+        this.historyService,
+        this.ports,
+        turnId,
+        turnId,
+        origin,
+      ));
+    const terminal = new StreamTerminalState();
     const admissions: MediaAdmissionRelease[] = [];
     let finalized = false;
     let failureCleanupStarted = false;
     try {
       for await (const chunk of streamResponse) {
-        const admitted = await admitRefusalAuditChunk(
-          this.ports,
-          {
-            ...chunk,
-            content: stripProviderAttemptDiagnostics(chunk.content),
-          },
+        const filteredContent = await this._journalStreamChunk(
+          chunk,
+          streamResponse,
           turnId,
+          arrival,
+          includeThoughts,
+          admissions,
+          terminal,
         );
-        admissions.push(...admitted.admissions);
-        accumulator.add({ ...chunk, content: admitted.historyContent });
-        yield { ...chunk, content: admitted.filteredContent };
+        yield { ...chunk, content: filteredContent };
       }
-      const accumulated = accumulator.materialize();
       // Classified before validation, history commit and success accounting:
       // a refused attempt's output never reaches any of them (issue #4036).
-      throwIfRefused(accumulated, turnId, contextFingerprint);
-      await this._finalizeStreamProcessing(accumulated, {
-        origin,
-        logger: this.logger,
-        conversationManager: this.conversationManager,
-        historyService: this.historyService,
-        compressionHandler: this.compressionHandler,
-        mediaAdmission: mediaAdmissionPort(this.ports),
-        reasoningInclusion: reasoningInclusionPolicy(this.ports),
+      throwIfRefused(terminal, turnId, contextFingerprint);
+      await this._finalizeStreamProcessing(
+        terminal,
         userInput,
         includeThoughts,
         semanticMediaPurge,
-        retryHandoff: this.currentIsResend,
-        eagerlyRecordedToolResponseCallIds:
-          this.eagerlyRecordedToolResponseCallIds,
         preparedUserTurn,
-        mediaAdmissions: admissions,
-      });
+        admissions,
+        origin,
+        arrival,
+      );
       this.refusalStreamAudit.commit(
-        this.historyService.getAll(),
+        this.historyService.getChronologyWatermark(),
         promptId,
         attemptIndex,
       );
@@ -908,9 +781,93 @@ export class StreamProcessor {
         mediaAdmissionPort(this.ports),
       );
     } finally {
+      if (!finalized)
+        await arrival.interrupt(failureCleanupStarted ? 'error' : 'cancelled');
       if (!finalized && !failureCleanupStarted) {
         await this.ports.mediaAdmission?.releaseAdmissions(admissions);
       }
     }
+  }
+
+  /** Admits one chunk to history and journals it; returns the hook-filtered content. */
+  private async _journalStreamChunk(
+    chunk: ModelStreamChunk,
+    streamResponse: AsyncGenerator<ModelStreamChunk>,
+    turnId: string,
+    arrival: ResponseArrival,
+    includeThoughts: boolean,
+    admissions: MediaAdmissionRelease[],
+    terminal: StreamTerminalState,
+  ): Promise<IContent> {
+    const filteredContent: IContent = {
+      ...chunk.content,
+      blocks: filterHookRestrictedBlocks(
+        chunk.content.blocks,
+        chunk.hookRestrictions?.allowedToolNames,
+      ),
+    };
+    const prefetchedChunk = takePrefetchedArrival(streamResponse, chunk);
+    const historyContent = stripProviderAttemptDiagnostics(filteredContent);
+    const historyChunk =
+      prefetchedChunk ??
+      (await admitStreamChunkForHistory(
+        this.ports,
+        { ...chunk, content: historyContent },
+        historyContent,
+        turnId,
+      ));
+    admissions.push(...streamMediaAdmissions(historyChunk, turnId));
+    const pendingArrival =
+      prefetchedChunk === undefined
+        ? appendResponseChunk(arrival, historyChunk, includeThoughts)
+        : undefined;
+    if (pendingArrival !== undefined) await pendingArrival;
+    terminal.add(historyChunk, includeThoughts);
+    await this._recordStreamAfc(historyChunk, arrival);
+    return filteredContent;
+  }
+
+  private async _recordStreamAfc(
+    chunk: ModelStreamChunk,
+    arrival: ResponseArrival,
+  ): Promise<void> {
+    const afc = chunk.afcHistory;
+    if (afc === undefined) return;
+    const start = await this.historyService.matchingCuratedPrefix(afc);
+    await arrival.replaceAfcHistory(
+      (async function* () {
+        for (let index = start; index < afc.length; index++) yield afc[index];
+      })(),
+    );
+  }
+
+  private _finalizeStreamProcessing(
+    terminal: StreamTerminalState,
+    userInput: IContent | IContent[],
+    includeThoughts: boolean,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+    preparedUserTurn: PreparedUserTurn | undefined,
+    mediaAdmissions: readonly MediaAdmissionRelease[],
+    origin?: object,
+    arrival?: ResponseArrival,
+  ): Promise<void> {
+    return finalizeStreamResponse({
+      arrival,
+      origin,
+      logger: this.logger,
+      conversationManager: this.conversationManager,
+      historyService: this.historyService,
+      compressionHandler: this.compressionHandler,
+      mediaAdmission: mediaAdmissionPort(this.ports),
+      terminal,
+      userInput,
+      includeThoughts,
+      semanticMediaPurge,
+      retryHandoff: this.currentIsResend,
+      eagerlyRecordedToolResponseCallIds:
+        this.eagerlyRecordedToolResponseCallIds,
+      preparedUserTurn,
+      mediaAdmissions,
+    });
   }
 }

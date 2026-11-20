@@ -1,3 +1,4 @@
+import { persistApprovalLifecycle } from './agenticLoop/approvalLifecycleRecording.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   runInteractiveIteration,
@@ -466,6 +467,11 @@ export class SubAgentScope implements ChildAgentScope {
             this.admission.toolExecutorContext.readExecutionPolicy(),
           toolContextInteractiveMode: true,
           ...callbacks,
+          persistApproval: (record) =>
+            persistApprovalLifecycle(
+              record,
+              this.admission.runtimeContext.history,
+            ),
         }),
       onMessage: this.onMessage,
       messageBus: this.operations.messageBus,
@@ -784,6 +790,11 @@ export class SubAgentScope implements ChildAgentScope {
             this.admission.toolExecutorContext.readExecutionPolicy(),
           toolContextInteractiveMode: false,
           ...callbacks,
+          persistApproval: (record) =>
+            persistApprovalLifecycle(
+              record,
+              this.admission.runtimeContext.history,
+            ),
         }),
       request,
       signal,

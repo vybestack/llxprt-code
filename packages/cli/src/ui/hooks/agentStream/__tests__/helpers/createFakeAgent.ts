@@ -23,6 +23,7 @@ export function createFakeAgent(
     for (const e of events) yield e;
   }
   const base = createBaseFakeAgent(gen);
+  Object.assign(base, { agentClient: { getHistoryService: () => undefined } });
   return { ...base, ...overrides } as Agent;
 }
 

@@ -41,7 +41,7 @@ export const useTestAgentStream = (
   const { bucketFailover: buckets, sessionLimits: limits } = runtime;
   return useAgentStream({
     ...input,
-    readHistory: useBound(agent, agent.getHistory),
+    readHistory: useBound(agent, agent.streamHistory),
     isCheckpointingEnabled: useBound(
       checkpoint,
       checkpoint.getCheckpointingEnabled,

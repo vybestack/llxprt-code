@@ -117,7 +117,7 @@ function createWorkflowOwner(
     providers.set(name, provider);
   }
   const store = new ProfileManager(join(directory, 'profiles'));
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
   const switchProvider: ProviderSwitcher = (name, options = {}) =>
     switchActiveProvider(
       name,

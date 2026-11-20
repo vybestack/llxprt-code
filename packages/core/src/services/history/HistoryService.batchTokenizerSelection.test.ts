@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,6 +14,7 @@
 import { describe, it, expect } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function createRecordingTokenizerSelection(): {
   readonly getTokenizer: (provider: string, model: string) => undefined;
@@ -36,7 +38,7 @@ function createServiceTargeting(
   readonly requested: string[];
 } {
   const selection = createRecordingTokenizerSelection();
-  const history = new HistoryService();
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.setTokenizerFactory(selection);
   history.setActiveTokenizationTarget(model, provider);
   return { history, requested: selection.requested };

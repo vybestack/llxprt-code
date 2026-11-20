@@ -1,3 +1,4 @@
+import { readHistory } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -38,14 +39,12 @@ export function textTurn(text: string): IContent {
 }
 
 /** Every text block of the committed history, in order. */
-export function historyTexts(history: HistoryService): string[] {
-  return history
-    .getAll()
-    .flatMap((content) =>
-      content.blocks.flatMap((block) =>
-        block.type === 'text' ? [block.text] : [],
-      ),
-    );
+export async function historyTexts(history: HistoryService): Promise<string[]> {
+  return (await readHistory(history)).flatMap((content) =>
+    content.blocks.flatMap((block) =>
+      block.type === 'text' ? [block.text] : [],
+    ),
+  );
 }
 
 /** An AI entry that a Responses backend stored and could chain from. */
@@ -86,7 +85,7 @@ export function useReliefConversation(prefix: string): ReliefConversation {
     nextFill = 1;
   });
   afterEach(async () => {
-    current?.dispose();
+    await current?.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 

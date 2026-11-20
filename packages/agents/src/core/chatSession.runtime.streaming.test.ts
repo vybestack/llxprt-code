@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
@@ -36,16 +37,21 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+
+import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
+import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { waitForCondition } from '../test-utils/eventLoop.js';
+
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { createConfigParams } from './chatSession-runtime-helpers.js';
+
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -71,15 +77,15 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   it('applies BeforeToolSelection to request-scoped streaming tools', async () => {
     const calls: GenerateChatOptions[] = [];
     const generateChatCompletionMock = vi.fn(async function* (
-      options: GenerateChatOptions | IContent[],
+      options: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
-      if (Array.isArray(options)) throw new Error('Expected request options');
+      if (!('contents' in options)) throw new Error('Expected request options');
       calls.push(options);
       yield {
         speaker: 'ai',
@@ -99,6 +105,10 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       { name: 'read_file', parametersJsonSchema: {} },
       { name: 'run_shell_command', parametersJsonSchema: {} },
     ];
+    const modelHooks = withSnapshotModelEvents({
+      fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
+      fireAfterModelEvent: async () => new AfterModelHookOutput({}),
+    });
     const hookOwner: HookExecutionOwner = {
       sessionId: () => config.getSessionId(),
       transcriptPath: () => undefined,
@@ -110,6 +120,10 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         }),
       beforeModel: async () => new BeforeModelHookOutput({}),
       afterModel: async () => new AfterModelHookOutput({}),
+      beforeModelSnapshot: (request, signal) =>
+        modelHooks.fireBeforeModelSnapshotEvent(request, signal),
+      afterModelSnapshot: (request, response, signal) =>
+        modelHooks.fireAfterModelSnapshotEvent(request, response, signal),
     };
     const hookProviderRuntime = createProviderRuntimeContext({
       runtimeId: 'test.runtime.hook-selection',
@@ -125,6 +139,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       readRuntimeSettings: fixtureRuntimePolicyReader(config, settingsService),
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
@@ -140,7 +155,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           signal,
         ),
       state: runtimeState,
-      history: new HistoryService(),
+      history: new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,
@@ -199,12 +214,15 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       // Set explicit timeout via ephemeral setting
       settingsService.set('stream-idle-timeout-ms', testTimeoutMs);
 
+      const entered = deferred();
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
-        options: GenerateChatOptions | IContent[],
+        options: GenerateChatOptions | AsyncIterable<IContent>,
       ): AsyncIterableIterator<IContent> {
-        if (Array.isArray(options)) throw new Error('Expected request options');
+        if (!('contents' in options))
+          throw new Error('Expected request options');
         capturedSignal = options.invocation?.signal;
+        entered.resolve();
         yield {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'partial' }],
@@ -234,8 +252,11 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         model: config.getModel(),
         sessionId: config.getSessionId(),
       });
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         readRuntimeSettings: fixtureRuntimePolicyReader(
           config,
           settingsService,
@@ -298,14 +319,13 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
         (error) => {
           expect(error).toMatchObject({
-            name: 'AbortError',
+            name: 'StreamIdleTimeoutError',
           });
         },
       );
 
-      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-        true,
-      );
+      await entered.promise;
+      expect(capturedSignal).toBeDefined();
       await advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
@@ -324,12 +344,15 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       // Set explicit timeout via ephemeral setting
       settingsService.set('stream-idle-timeout-ms', testTimeoutMs);
 
+      const entered = deferred();
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
-        options: GenerateChatOptions | IContent[],
+        options: GenerateChatOptions | AsyncIterable<IContent>,
       ): AsyncIterableIterator<IContent> {
-        if (Array.isArray(options)) throw new Error('Expected request options');
+        if (!('contents' in options))
+          throw new Error('Expected request options');
         capturedSignal = options.invocation?.signal;
+        entered.resolve();
         yield {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'partial direct' }],
@@ -359,8 +382,11 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         model: config.getModel(),
         sessionId: config.getSessionId(),
       });
-      const historyService = new HistoryService();
+      const historyService = new HistoryService({
+        scratchRoots: historyScratchRoots,
+      });
       const view = createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         readRuntimeSettings: fixtureRuntimePolicyReader(
           config,
           settingsService,
@@ -428,9 +454,8 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         },
       );
 
-      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-        true,
-      );
+      await entered.promise;
+      expect(capturedSignal).toBeDefined();
       await advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;

@@ -17,6 +17,9 @@
  * the provider preserves fields it does not itself interpret.
  */
 
+import type { GoogleAuthOptions } from 'google-auth-library';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
 /** Schema type discriminants, mirroring the API's `Type` enum values. */
 export const SchemaType = {
   TYPE_UNSPECIFIED: 'TYPE_UNSPECIFIED',
@@ -198,6 +201,7 @@ export interface GenerateContentResponseUsageMetadata {
 }
 
 export interface GenerateContentResponse {
+  toolArgumentDelta?: IContent['toolArgumentDelta'];
   candidates?: Candidate[];
   automaticFunctionCallingHistory?: Content[];
   usageMetadata?: GenerateContentResponseUsageMetadata;
@@ -290,14 +294,19 @@ export interface GoogleCredentialEnvironment {
  * with `httpOptions.baseUrl` selects the Generative Language endpoint.
  */
 export interface GeminiApiClientOptions {
+  requestMetadata?: Record<string, unknown>;
+  requestContents?: () => AsyncIterable<Content>;
   fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   apiKey?: string;
   credentials?: GoogleCredentialJson;
   credentialEnvironment?: GoogleCredentialEnvironment;
   vertexai?: boolean;
+  googleAuthOptions?: GoogleAuthOptions;
   project?: string;
   location?: string;
   httpOptions?: HttpOptions;
+  /** Called with the byte length of each JSON request body just before it is posted. */
+  onRequestBytes?: (bytes: number) => void;
 }
 
 /**

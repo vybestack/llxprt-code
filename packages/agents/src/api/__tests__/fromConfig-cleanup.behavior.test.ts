@@ -237,7 +237,7 @@ describe('adoption cleanup with explicit close operations', () => {
       mcp.workspacePaths,
       settingsOwner,
       createRuntimeContentGeneratorFactory(),
-      configureProviderTokenizer(manager),
+      configureProviderTokenizer(manager, config.scratchRoots),
     );
     const file = join(directory, 'missing-remote-file');
     await writeFile(file, 'remote upload');

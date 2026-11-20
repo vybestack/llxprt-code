@@ -1,3 +1,4 @@
+import { nativeRows } from './helpers/native-session-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,7 +6,7 @@
  */
 
 import { describe, expect, it, spyOn } from 'bun:test';
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { openClientOwner } from './helpers/client-owner-session.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
@@ -88,10 +89,11 @@ describe('SessionControl startup resume when client history restoration fails', 
       );
       session = control;
       const reports: Array<{ sessionId: string; reason: string }> = [];
-      const fault = spyOn(
-        opened.client,
-        'restoreHistory',
-      ).mockRejectedValueOnce(new Error('restore failed on purpose'));
+      const history = opened.client.getHistoryService();
+      if (history === null) throw new Error('Missing startup history');
+      const fault = spyOn(history, 'adoptResumeBoot').mockRejectedValueOnce(
+        new Error('restore failed on purpose'),
+      );
       try {
         await expect(
           control.resume('latest', {
@@ -121,9 +123,9 @@ describe('SessionControl startup resume when client history restoration fails', 
       if (!fresh) throw new Error('Fresh recording path missing');
       expect(fresh).not.toBe(latestSeed);
       expect(fresh).not.toBe(olderSeed);
-      expect(await chatsFiles(chatsDir, '.jsonl')).toHaveLength(3);
+      expect(await chatsFiles(chatsDir, '.llxj')).toHaveLength(3);
       expect(await chatsFiles(chatsDir, '.lock')).toHaveLength(1);
-      expect(await readFile(latestSeed, 'utf8')).toContain(
+      expect(JSON.stringify(await nativeRows(latestSeed))).toContain(
         'latest provider-init turn',
       );
 

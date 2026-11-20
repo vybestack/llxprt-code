@@ -15,7 +15,7 @@ import { Colors } from '../colors.js';
 import { StreamingState } from '../types.js';
 import { UpdateNotification } from './UpdateNotification.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
-import type { HistoryItem } from '../types.js';
+import type { ScrollbackPagerStore } from '../stores/turn/scrollbackPager.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
@@ -33,7 +33,7 @@ const screenReaderNudgeFilePath = path.join(
 interface NotificationsProps {
   startupWarnings: string[];
   updateInfo: UpdateObject | null;
-  history: HistoryItem[];
+  pager?: ScrollbackPagerStore;
 }
 
 function useScreenReaderNudge(
@@ -104,13 +104,15 @@ const StartupWarningsBox: FC<StartupWarningsBoxProps> = ({ warnings }) => (
 
 interface InitErrorBoxProps {
   initError: string;
-  history: HistoryItem[];
+  pager?: ScrollbackPagerStore;
 }
 
-const InitErrorBox: FC<InitErrorBoxProps> = ({ initError, history }) => {
-  const matchingHistoryError = history.find(
-    (item) => item.type === 'error' && item.text.includes(initError),
-  );
+const InitErrorBox: FC<InitErrorBoxProps> = ({ initError, pager }) => {
+  const matchingHistoryError = pager
+    ?.getState()
+    .rows.find(
+      (row) => row.item.type === 'error' && row.item.text.includes(initError),
+    )?.item;
 
   if (matchingHistoryError?.text) {
     return (
@@ -144,7 +146,7 @@ const InitErrorBox: FC<InitErrorBoxProps> = ({ initError, history }) => {
 export const Notifications: FC<NotificationsProps> = ({
   startupWarnings,
   updateInfo,
-  history,
+  pager,
 }) => {
   const settingsStore = useSettingsProfileStore();
   const turnStore = useTurnStore();
@@ -178,9 +180,7 @@ export const Notifications: FC<NotificationsProps> = ({
       {showScreenReaderNudge && <ScreenReaderNudge />}
       {updateInfo && <UpdateNotification message={updateInfo.message} />}
       {showStartupWarnings && <StartupWarningsBox warnings={startupWarnings} />}
-      {showInitError && (
-        <InitErrorBox initError={initError} history={history} />
-      )}
+      {showInitError && <InitErrorBox initError={initError} pager={pager} />}
     </>
   );
 };

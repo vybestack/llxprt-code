@@ -1,3 +1,4 @@
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -35,7 +36,8 @@ describe('isolated ACP session fixtures', () => {
   const emptyChatsLister: ChatSessionFileLister = async () => [];
   function recordedFilesLister(...sessionIds: string[]): ChatSessionFileLister {
     const names = sessionIds.map(
-      (id) => `session-2026-07-11T10-00-00-${id.substring(0, 12)}.jsonl`,
+      (id) =>
+        `session-2026-07-11T10-00-00-${id.substring(0, 12)}${SESSION_FILE_EXTENSION}`,
     );
     return async () => names;
   }
@@ -58,7 +60,9 @@ describe('isolated ACP session fixtures', () => {
       if (options.resumeError !== undefined) {
         throw options.resumeError;
       }
-      return options.resumeHistory ?? [];
+      return (async function* (): AsyncIterable<IContent> {
+        yield* options.resumeHistory ?? [];
+      })();
     });
     const setRecording = vi.fn(async () => {
       if (options.recordingError !== undefined) {
@@ -84,6 +88,10 @@ describe('isolated ACP session fixtures', () => {
       setApprovalMode: vi.fn(),
       dispose,
       getHistory,
+      async *streamHistory(signal?: AbortSignal) {
+        signal?.throwIfAborted();
+        yield* await getHistory();
+      },
       async *stream() {
         if (streamText !== undefined) {
           yield { type: 'text', text: streamText };

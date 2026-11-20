@@ -190,8 +190,7 @@ export async function generateContent(
       temperature: configToUse.temperature,
       topP: configToUse.topP,
       maxOutputTokens: configToUse.maxOutputTokens,
-      systemInstruction:
-        typeof systemInstruction === 'string' ? systemInstruction : undefined,
+      systemInstruction: configToUse.systemInstruction ?? systemInstruction,
     };
 
     const request = {

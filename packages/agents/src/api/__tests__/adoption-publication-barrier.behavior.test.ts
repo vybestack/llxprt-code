@@ -206,7 +206,7 @@ describe('adoption publication barrier', () => {
       expect(agent.workspace.getDirectories()).toContain(
         built.route.filesystem.paths.directories()[0],
       );
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await agent.session.getHistory()).toStrictEqual([]);
       expect(agent.listTools().length).toBeGreaterThan(0);
       await admitMedia(agent);
       expect(await liveMediaStores(built.route.config)).toHaveLength(1);

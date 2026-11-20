@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { callerOwnedProviderRequest } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { randomUUID } from 'node:crypto';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
@@ -36,8 +37,9 @@ import type {
 } from './reviewTypes.js';
 import { parseReviewReply } from './reviewVerdict.js';
 import {
-  buildReviewWindow,
+  openReviewWindow,
   pendingEditsOf,
+  ReviewWindowTooLarge,
   type ReviewWindow,
 } from './reviewWindow.js';
 import { applyReviewedRewrite } from './rewriteApplier.js';
@@ -150,6 +152,23 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
     return (await this.begin(request)).run();
   }
 
+  private async windowWithinBudget(
+    history: HistoryService,
+    request: ReviewRequest,
+    contextLimit: number,
+  ): Promise<ReviewWindow | string> {
+    try {
+      return await openReviewWindow(
+        history,
+        request.pending?.userContents ?? [],
+        contextLimit,
+      );
+    } catch (error) {
+      if (!(error instanceof ReviewWindowTooLarge)) throw error;
+      return error.message;
+    }
+  }
+
   private async callAndApply(
     request: ReviewRequest,
     resolved: CompressionProviderResult,
@@ -157,10 +176,18 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
     modelParameters: AdmittedModelParameters | undefined,
   ): Promise<ReviewRun> {
     const history = this.deps.history();
-    const window = buildReviewWindow(
-      history.getAll(),
-      request.pending?.userContents,
+    const contextLimit = reviewerContextLimit({
+      model: reviewer.model,
+      profileLimit: resolved.invocation?.getEphemeral('context-limit'),
+      providerLimit: resolved.provider.getContextLimit?.(),
+    });
+    const window = await this.windowWithinBudget(
+      history,
+      request,
+      contextLimit,
     );
+    if (typeof window === 'string')
+      return this.stopped('context-too-large', 'error', reviewer, window);
     const data = buildReviewData(
       window,
       request.attempt,
@@ -171,15 +198,7 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
       request.keepLiterals === undefined
         ? undefined
         : buildKeepLiteralsFeedback(request.keepLiterals);
-    const shortfall = reviewBudgetShortfall(
-      data,
-      reviewerContextLimit({
-        model: reviewer.model,
-        profileLimit: resolved.invocation?.getEphemeral('context-limit'),
-        providerLimit: resolved.provider.getContextLimit?.(),
-      }),
-      feedback,
-    );
+    const shortfall = reviewBudgetShortfall(data, contextLimit, feedback);
     if (shortfall !== undefined) {
       return this.stopped(
         'context-too-large',
@@ -330,23 +349,34 @@ export class HistoryRefusalReviewer implements RefusalReviewer {
     modelParameters: AdmittedModelParameters | undefined,
     feedback: string | undefined,
   ): Promise<ReviewCallResult> {
-    const options = await buildCompressionChatOptions({
-      contents: reviewContents(data, feedback),
-      providerRuntime: resolved.runtime,
-      resolvedConfig: resolved.config,
-      fallbackConfig: this.deps.config(),
-      resolvedOptions: resolved.resolved,
-      invocation: resolved.invocation,
-      fallbackModel: this.deps.runtimeState.model,
-      runtimeState: this.deps.runtimeState,
-      provider: resolved.provider,
-      modelParameters,
-      source: 'RefusalReviewer.callProvider',
-    });
-    return callReviewProvider(resolved.provider, options, {
-      timeoutMs: this.deps.timeoutMs ?? REVIEW_TIMEOUT_MS,
-      signal: request.signal,
-    });
+    const rows = await callerOwnedProviderRequest(
+      reviewContents(data, feedback),
+      [],
+      {
+        signal: request.signal,
+      },
+    );
+    try {
+      const options = await buildCompressionChatOptions({
+        requestRows: rows,
+        providerRuntime: resolved.runtime,
+        resolvedConfig: resolved.config,
+        fallbackConfig: this.deps.config(),
+        resolvedOptions: resolved.resolved,
+        invocation: resolved.invocation,
+        fallbackModel: this.deps.runtimeState.model,
+        runtimeState: this.deps.runtimeState,
+        provider: resolved.provider,
+        modelParameters,
+        source: 'RefusalReviewer.callProvider',
+      });
+      return await callReviewProvider(resolved.provider, options, {
+        timeoutMs: this.deps.timeoutMs ?? REVIEW_TIMEOUT_MS,
+        signal: request.signal,
+      });
+    } finally {
+      await rows.close();
+    }
   }
 
   private stopped(

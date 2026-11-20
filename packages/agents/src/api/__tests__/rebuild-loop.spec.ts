@@ -71,27 +71,27 @@ describe('public Agent loop replacement contract', () => {
     expect((await agent.chat('Continue after model change')).text).toContain(
       'turn two reply',
     );
-    const history = JSON.stringify(await agent.getHistory());
+    const history = JSON.stringify(await agent.session.getHistory());
     expect(history).toContain('Keep original conversation');
     expect(history).toContain('Continue after model change');
   });
   it('starts a fresh conversation on the same Agent and still executes the newly selected client loop', async () => {
     await agent.chat('Old conversation marker');
-    expect(JSON.stringify(await agent.getHistory())).toContain(
+    expect(JSON.stringify(await agent.session.getHistory())).toContain(
       'Old conversation marker',
     );
     await agent.session.startNewSession();
-    expect(await agent.getHistory()).toStrictEqual([]);
+    expect(await agent.session.getHistory()).toStrictEqual([]);
     expect((await agent.chat('New conversation marker')).text).toContain(
       'reply',
     );
-    const history = JSON.stringify(await agent.getHistory());
+    const history = JSON.stringify(await agent.session.getHistory());
     expect(history).toContain('New conversation marker');
     expect(history).not.toContain('Old conversation marker');
   });
   it('keeps the existing conversation runnable when a candidate provider cannot be acquired', async () => {
     await agent.chat('Preserve before rejected profile');
-    const history = structuredClone(await agent.getHistory());
+    const history = structuredClone(await agent.session.getHistory());
     await expect(
       agent.profiles.applySnapshot({
         version: 1,
@@ -103,7 +103,7 @@ describe('public Agent loop replacement contract', () => {
     ).rejects.toThrow(/unregistered-loop-provider/);
     expect(agent.getProvider()).toBe('fake');
     expect(agent.getModel()).toBe('original-model');
-    expect(await agent.getHistory()).toStrictEqual(history);
+    expect(await agent.session.getHistory()).toStrictEqual(history);
     expect(
       (await agent.chat('Continue after candidate failure')).text,
     ).toContain('reply');

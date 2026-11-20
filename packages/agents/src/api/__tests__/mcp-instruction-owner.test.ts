@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,6 +27,7 @@ import {
   type OpenedClientOwner,
 } from './helpers/client-owner-session.js';
 import { awaitMcpDiscoveryReady } from './helpers/mcp-discovery-ready.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 const CHILD_TURN = 'Run the child.';
 const CHILD_GOAL = 'Return the requested text.';
@@ -213,7 +215,9 @@ describe('MCP instruction ownership', () => {
     }
     const owners: Owner[] = [];
     let auxiliaryTransport: ContentGenerator | undefined;
-    const tokenizerFactory = createRuntimeTokenizerFactory();
+    const tokenizerFactory = createRuntimeTokenizerFactory(
+      tokenizerScratchRoots,
+    );
     const profiles = new ProfileManager(join(configHome, 'profiles'));
     await profiles.saveProfile('child-profile', {
       version: 1,

@@ -1,8 +1,11 @@
+import { journalFileRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import {
   SettingsService,
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
@@ -19,10 +22,18 @@ import {
 import { serveZedConnection } from './runZedIntegration.js';
 import * as acp from '@agentclientprotocol/sdk';
 
+async function readRecording(path: string): Promise<string> {
+  const facts = await readJournalFileFacts(path);
+  const rows: string[] = [JSON.stringify(facts)];
+  for await (const row of journalFileRows(path)) rows.push(JSON.stringify(row));
+  return rows.join('\n');
+}
+
 interface ZedConnection {
   readonly route: RouteBPreflight;
   readonly client: acp.ClientSideConnection;
   readonly close: () => Promise<void>;
+  readonly updates: acp.SessionUpdate[];
 }
 
 function selectedModel(settings: SettingsService): unknown {
@@ -97,12 +108,15 @@ describe('Zed ACP provider ownership', () => {
           modelParams: {},
           ephemeralSettings: {},
         });
+      const updates: acp.SessionUpdate[] = [];
       const client = new acp.ClientSideConnection(
         () => ({
           requestPermission: async () => ({
             outcome: { outcome: 'cancelled' },
           }),
-          sessionUpdate: async () => {},
+          sessionUpdate: async ({ update }) => {
+            updates.push(update);
+          },
         }),
         acp.ndJsonStream(fromClient.writable, fromAgent.readable),
       );
@@ -129,7 +143,7 @@ describe('Zed ACP provider ownership', () => {
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: {},
       });
-      return { route, client, close };
+      return { route, client, close, updates };
     } catch (primary) {
       await close();
       throw primary;
@@ -179,6 +193,158 @@ describe('Zed ACP provider ownership', () => {
     } finally {
       await second.close();
       await sibling.dispose();
+    }
+  });
+  it('supports successive connections with the same owner label', async () => {
+    const first = await openZedConnection(
+      'repeat-label',
+      firstCredentials().authority,
+    );
+    await first.client.authenticate({ methodId: 'alpha' });
+    await first.close();
+    const next = await openZedConnection(
+      'repeat-label',
+      firstCredentials().authority,
+    );
+    try {
+      await next.client.authenticate({ methodId: 'beta' });
+      expect(selectedModel(next.route.settings)).toBe('beta-model');
+    } finally {
+      await next.close();
+    }
+  });
+  it('closes one session without disposing another session or the connection owner', async () => {
+    const owner = await openZedConnection(
+      'one-connection',
+      firstCredentials().authority,
+    );
+    try {
+      await owner.client.authenticate({ methodId: 'alpha' });
+      const first = await owner.client.newSession({
+        cwd: owner.route.directory,
+        mcpServers: [],
+      });
+      const second = await owner.client.newSession({
+        cwd: owner.route.directory,
+        mcpServers: [],
+      });
+      await owner.client.closeSession({ sessionId: first.sessionId });
+      await owner.client.closeSession({ sessionId: first.sessionId });
+      expect(owner.route.preflight.getCurrentProfileName()).toBe('alpha');
+      expect(
+        (
+          await owner.client.prompt({
+            sessionId: second.sessionId,
+            prompt: [{ type: 'text', text: 'surviving-session-marker' }],
+          })
+        ).stopReason,
+      ).toBe('end_turn');
+      const journalNames = await readdir(owner.route.config.projectChatsDir);
+      const journals = await Promise.all(
+        journalNames
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
+          .map((name) =>
+            readRecording(join(owner.route.config.projectChatsDir, name)),
+          ),
+      );
+      expect(journals.join('\n')).toContain('surviving-session-marker');
+    } finally {
+      await owner.close();
+    }
+  });
+
+  it('drives two real ACP sessions and prompts with equal labels while one connection closes', async () => {
+    const first = await openZedConnection(
+      'same-label',
+      firstCredentials().authority,
+    );
+    const second = await openZedConnection(
+      'same-label',
+      secondCredentials().authority,
+    );
+    let firstClosed = false;
+    try {
+      await first.client.authenticate({ methodId: 'alpha' });
+      await second.client.authenticate({ methodId: 'beta' });
+      const sessionA = await first.client.newSession({
+        cwd: first.route.directory,
+        mcpServers: [],
+      });
+      const sessionB = await second.client.newSession({
+        cwd: second.route.directory,
+        mcpServers: [],
+      });
+      const promptA = await first.client.prompt({
+        sessionId: sessionA.sessionId,
+        prompt: [{ type: 'text', text: 'first-owner-marker' }],
+      });
+      const promptB = await second.client.prompt({
+        sessionId: sessionB.sessionId,
+        prompt: [{ type: 'text', text: 'second-owner-marker' }],
+      });
+      expect(promptA.stopReason).toBe('end_turn');
+      expect(promptB.stopReason).toBe('end_turn');
+      expect(first.updates.length).toBeGreaterThan(1);
+      expect(second.updates.length).toBeGreaterThan(1);
+      const firstJournals = await readdir(first.route.config.projectChatsDir);
+      const secondJournals = await readdir(second.route.config.projectChatsDir);
+      expect(
+        firstJournals.some((name) => name.endsWith(SESSION_FILE_EXTENSION)),
+      ).toBe(true);
+      expect(
+        secondJournals.some((name) => name.endsWith(SESSION_FILE_EXTENSION)),
+      ).toBe(true);
+      const firstRecording = await Promise.all(
+        firstJournals
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
+          .map((name) =>
+            readRecording(join(first.route.config.projectChatsDir, name)),
+          ),
+      );
+      expect(firstRecording.join('\n')).toContain(sessionA.sessionId);
+      expect(firstRecording.join('\n')).toContain('first-owner-marker');
+      expect(firstRecording.join('\n')).not.toContain('second-owner-marker');
+      await first.close();
+      firstClosed = true;
+      await second.route.trust.setTrustedFolderLive(false);
+      expect(second.route.trust.isTrustedFolder()).toBe(false);
+      expect(first.route.trust.isTrustedFolder()).toBe(true);
+      await expect(
+        second.client.setSessionMode({
+          sessionId: sessionB.sessionId,
+          modeId: 'yolo',
+        }),
+      ).rejects.toThrow('Internal error');
+      await second.route.trust.setTrustedFolderLive(true);
+      expect(second.route.trust.isTrustedFolder()).toBe(true);
+      await second.client.authenticate({ methodId: 'alpha' });
+      await second.client.prompt({
+        sessionId: sessionB.sessionId,
+        prompt: [{ type: 'text', text: 'surviving-owner-marker' }],
+      });
+      const secondRecording = await Promise.all(
+        secondJournals
+          .filter((name) => name.endsWith(SESSION_FILE_EXTENSION))
+          .map((name) =>
+            readRecording(join(second.route.config.projectChatsDir, name)),
+          ),
+      );
+      expect(secondRecording.join('\n')).toContain(sessionB.sessionId);
+      expect(secondRecording.join('\n')).toContain('surviving-owner-marker');
+      expect(secondRecording.join('\n')).not.toContain('first-owner-marker');
+      expect(first.route.preflight).not.toBe(second.route.preflight);
+      await second.client.closeSession({ sessionId: sessionB.sessionId });
+      await second.client.closeSession({ sessionId: sessionB.sessionId });
+      expect(second.route.preflight.getCurrentProfileName()).toBe('alpha');
+      await expect(
+        second.client.prompt({
+          sessionId: sessionB.sessionId,
+          prompt: [{ type: 'text', text: 'closed-owner-marker' }],
+        }),
+      ).rejects.toThrow('Internal error');
+    } finally {
+      if (!firstClosed) await first.close();
+      await second.close();
     }
   });
 });

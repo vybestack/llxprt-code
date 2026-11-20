@@ -22,15 +22,33 @@
 
 export * from './types.js';
 export {
-  SessionRecordingService,
-  SESSION_FILE_ID_PREFIX_LENGTH,
-} from './SessionRecordingService.js';
+  RecordingFailureReport,
+  RecordingFailureNotice,
+  RecordingFailureStorageError,
+  type RecordingFailureDetail,
+} from './recording-failure-report.js';
 export {
-  replaySession,
-  readSessionHeader,
-  replaySessionThroughSequence,
-  foldCheckpointMetadata,
-} from './ReplayEngine.js';
+  withRecordingFailureReport,
+  type RecordingFailureSink,
+} from './recording-failure-consumer.js';
+export {
+  createRowCounters,
+  type JournalReadCounters,
+  type JournalReadStats,
+  type RowCounters,
+} from './journalCounters.js';
+export { SESSION_FILE_ID_PREFIX_LENGTH } from './sessionFileName.js';
+export type { SessionRecordingPort } from './recordingPort.js';
+export {
+  createLockedSessionRecorder,
+  createSessionRecorder,
+} from './sessionRecorderFactory.js';
+export { allocateChildSessionId } from './childSessionIds.js';
+export {
+  createChildSessionJournal,
+  type ChildSessionJournal,
+  type ChildSessionJournalOptions,
+} from './childJournal.js';
 export {
   SessionLockManager,
   SessionLockedError,
@@ -59,6 +77,7 @@ export {
 export {
   resumeSession,
   CONTINUE_LATEST,
+  type ResumeBootHandle,
   type ResumeRequest,
   type ResumeResult,
   type ResumeError,
@@ -82,17 +101,16 @@ export {
   type DeleteSessionError,
   type DeleteSessionOutcome,
 } from './sessionManagement.js';
-export { CheckpointService, CheckpointLockError } from './CheckpointService.js';
+export { CheckpointLockError } from './checkpointNaming.js';
+export {
+  createCheckpointService,
+  type CheckpointServicePort,
+} from './checkpointServiceFactory.js';
 export {
   SessionTransitionService,
   type ForkResult,
   type ForkError,
 } from './SessionTransitionService.js';
-export {
-  HistoryMutationService,
-  type HistoryMutationResult,
-  type HistoryMutationError,
-} from './HistoryMutationService.js';
 export {
   emptyResult,
   resolveRetentionConfig,

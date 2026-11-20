@@ -1,0 +1,99 @@
+{
+  "name": "merge",
+  "description": "merge appends rows from a second service, keeping its markers",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 3,
+        "prefix": "row"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "e9d155801963ef95e9d85b9e9175aa77faf676e9660c495f1ee67ea77e447b10",
+          "tags": ["bda346ed0c238faf", "21ceaa072194aeb9", "2fe521d61900adad"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "e9d155801963ef95e9d85b9e9175aa77faf676e9660c495f1ee67ea77e447b10",
+          "tags": ["bda346ed0c238faf", "21ceaa072194aeb9", "2fe521d61900adad"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "merge",
+        "rows": [
+          {
+            "speaker": "human",
+            "text": "other-1"
+          },
+          {
+            "speaker": "ai",
+            "text": "other-2"
+          }
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 5,
+          "digest": "1494d379128d59becc084d8b9c745610bf18c19da4c32bcefc625bbf021e1eba",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "9adaf351256ac0eb",
+            "720e9eb72ddfee77"
+          ]
+        },
+        "resumed": {
+          "length": 5,
+          "digest": "1494d379128d59becc084d8b9c745610bf18c19da4c32bcefc625bbf021e1eba",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "9adaf351256ac0eb",
+            "720e9eb72ddfee77"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "after-merge"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 6,
+          "digest": "3e817693d1171a3f26448364eb73e3d73517b0324fb0a8b4cd781c69ca33a9aa",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "9adaf351256ac0eb",
+            "720e9eb72ddfee77",
+            "acf8971cb221a708"
+          ]
+        },
+        "resumed": {
+          "length": 6,
+          "digest": "3e817693d1171a3f26448364eb73e3d73517b0324fb0a8b4cd781c69ca33a9aa",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "9adaf351256ac0eb",
+            "720e9eb72ddfee77",
+            "acf8971cb221a708"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { ExportResultCode, type ExportResult } from '@opentelemetry/core';
+import { ExportAcknowledgementMissingError } from './artifact-exporter.js';
 import type { RootTelemetryTransports } from './root-telemetry.js';
 
 export function trackTransportOutcomes(selected: RootTelemetryTransports): {
@@ -25,7 +26,10 @@ export function trackTransportOutcomes(selected: RootTelemetryTransports): {
     pending.add(accepted);
     try {
       send(data, (result) => {
-        if (result.code === ExportResultCode.FAILED)
+        if (
+          result.code === ExportResultCode.FAILED &&
+          !(result.error instanceof ExportAcknowledgementMissingError)
+        )
           failures.push(result.error ?? new Error('Telemetry export failed'));
         pending.delete(accepted);
         finish();

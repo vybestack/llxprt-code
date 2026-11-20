@@ -1,3 +1,4 @@
+import { StartupStdinContext } from '../ui/contexts/startup-stdin-context.js';
 import type { InteractiveApplicationInputs } from './interactiveApplicationInputs.js';
 import { ObservationContext } from '../observation/ObservationContext.js';
 import type { ObservationCallbacks } from '../observation/jspWiring.js';
@@ -10,9 +11,9 @@ import {
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
-  type SessionRecordingService,
+  type SessionRecordingPort,
   type RecordingIntegration,
-  type IContent,
+  type ResumeBootHandle,
   type LockHandle,
   type TelemetrySettings,
   resolvePerfSettings,
@@ -243,8 +244,8 @@ function buildRenderElement(
   startupWarnings: string[],
   version: string,
   recordingIntegration: RecordingIntegration | undefined,
-  resumedHistory: IContent[] | undefined,
-  initialRecordingService: SessionRecordingService | undefined,
+  resumedBoot: Pick<ResumeBootHandle, 'streamRows'> | undefined,
+  initialRecordingService: SessionRecordingPort | undefined,
   initialLockHandle: LockHandle | null | undefined,
   suppressStartupWelcome: boolean | undefined,
   perfOwner: InteractivePerfRuntime | null,
@@ -275,6 +276,7 @@ function buildRenderElement(
         layoutRuntime: commandPorts.layoutRuntime,
         dialogsRuntime: commandPorts.dialogsRuntime,
         ...bindApplicationOperations(agent),
+        ...bindJournalOperations(agent),
         renderRuntime: contextHost.renderRuntime,
         detectProviderQuota: contextHost.detectProviderQuota,
         fetch: contextHost.fetch,
@@ -299,11 +301,11 @@ function buildRenderElement(
         terminalBackgroundColor:
           commandPorts.containerTerminal.getTerminalBackground(),
         ...(recordingOwner === 'agent'
-          ? { recordingOwner, resumedHistory, suppressStartupWelcome }
+          ? { recordingOwner, resumedBoot, suppressStartupWelcome }
           : {
               recordingIntegration,
               recordingOwner,
-              resumedHistory,
+              resumedBoot,
               initialRecordingService,
               initialLockHandle,
               suppressStartupWelcome,
@@ -359,7 +361,7 @@ export interface OwnerInteractiveStartup {
     'list' | 'find' | 'reload' | 'isAdminEnabled'
   >;
   readonly recordingOwner: 'agent';
-  readonly resumedHistory?: IContent[];
+  readonly resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   readonly suppressStartupWelcome?: boolean;
 }
 
@@ -372,8 +374,8 @@ export interface RawInteractiveStartup {
   readonly runtimeSettings: SessionSettingsOperations;
   readonly sessionPersistence: CliSessionPersistencePort | undefined;
   readonly recordingIntegration?: RecordingIntegration;
-  readonly resumedHistory?: IContent[];
-  readonly initialRecordingService?: SessionRecordingService;
+  readonly resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
+  readonly initialRecordingService?: SessionRecordingPort;
   readonly initialLockHandle?: LockHandle | null;
   readonly suppressStartupWelcome?: boolean;
 }
@@ -544,7 +546,7 @@ export type CommitInteractiveStartupArgs = {
   readonly version: string;
   readonly startupWarnings: string[];
   readonly ports?: Partial<InteractiveStartupPorts>;
-  readonly resumedHistory?: IContent[];
+  readonly resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   readonly suppressStartupWelcome?: boolean;
 } & (
   | {
@@ -556,7 +558,7 @@ export type CommitInteractiveStartupArgs = {
   | {
       readonly recordingOwner?: 'raw';
       readonly recordingIntegration?: RecordingIntegration;
-      readonly initialRecordingService?: SessionRecordingService;
+      readonly initialRecordingService?: SessionRecordingPort;
       readonly initialLockHandle?: LockHandle | null;
       readonly sessionPersistence?: CliSessionPersistencePort;
     }
@@ -692,23 +694,25 @@ export async function commitInteractiveStartup(
 
     state.instance = ports.render(
       renderInteractiveShell(
-        <ObservationContext.Provider value={args.observation}>
-          {buildRenderElement(
-            commandPorts,
-            args.agent,
-            args.runtimeSettings,
-            args.settings,
-            args.startupWarnings,
-            args.version,
-            args.recordingIntegration,
-            args.resumedHistory,
-            args.initialRecordingService,
-            args.initialLockHandle,
-            args.suppressStartupWelcome,
-            args.perfOwner,
-            args.recordingOwner,
-          )}
-        </ObservationContext.Provider>,
+        <StartupStdinContext.Provider value={args.terminalHost.startupStdin}>
+          <ObservationContext.Provider value={args.observation}>
+            {buildRenderElement(
+              commandPorts,
+              args.agent,
+              args.runtimeSettings,
+              args.settings,
+              args.startupWarnings,
+              args.version,
+              args.recordingIntegration,
+              args.resumedBoot,
+              args.initialRecordingService,
+              args.initialLockHandle,
+              args.suppressStartupWelcome,
+              args.perfOwner,
+              args.recordingOwner,
+            )}
+          </ObservationContext.Provider>
+        </StartupStdinContext.Provider>,
         args.settings,
         new DebugLogger('llxprt:interactive', args.debugConfiguration),
       ),
@@ -818,7 +822,7 @@ function bindApplicationOperations(
   agent: Pick<
     InteractiveApplicationInputs,
     | 'addHistory'
-    | 'getHistory'
+    | 'streamHistory'
     | 'stream'
     | 'injectSteer'
     | 'getProviderContextLimit'
@@ -854,7 +858,7 @@ function bindApplicationOperations(
 ) {
   return {
     addHistory: agent.addHistory.bind(agent),
-    getHistory: agent.getHistory.bind(agent),
+    streamHistory: agent.streamHistory.bind(agent),
     stream: agent.stream.bind(agent),
     injectSteer: agent.injectSteer.bind(agent),
     getProviderContextLimit: agent.getProviderContextLimit.bind(agent),
@@ -886,5 +890,34 @@ function bindApplicationOperations(
     mcp: agent.mcp,
     tasks: agent.tasks,
     metrics: agent.metrics,
+  };
+}
+
+function bindJournalOperations(
+  agent: Agent,
+): Pick<
+  InteractiveApplicationInputs,
+  | 'readJournal'
+  | 'subscribeContextRange'
+  | 'openDumpSnapshot'
+  | 'replaceHistoryFromSource'
+  | 'resumeHistory'
+> {
+  return {
+    readJournal: () => ({
+      appendDisplay: agent.session.appendDisplay.bind(agent.session),
+      length: agent.session.getJournalLength.bind(agent.session),
+    }),
+    subscribeContextRange: agent.session.subscribeContextRange.bind(
+      agent.session,
+    ),
+    openDumpSnapshot: agent.session.openDumpSnapshot.bind(agent.session),
+    replaceHistoryFromSource: agent.session.replaceHistoryFromSource.bind(
+      agent.session,
+    ),
+    resumeHistory: {
+      adoptResumeBoot: agent.session.adoptResumeBoot.bind(agent.session),
+      attachRecording: agent.session.attachRecording.bind(agent.session),
+    },
   };
 }

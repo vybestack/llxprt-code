@@ -1,3 +1,4 @@
+import { readJournalItems } from '../stores/turn/journal-turn-test-helpers.js';
 import { useOwnerSessionAgents } from './__tests__/owner-session-agents.js';
 import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
 import { describe, expect, it, vi } from 'bun:test';
@@ -155,7 +156,6 @@ describe('owner session browser', () => {
           target.kind === 'session'
             ? target.session.sessionId
             : target.checkpointId,
-          'allowed',
           next.session.listBrowserTargetsDetailed.bind(next.session),
         );
         return { ok: true };
@@ -218,15 +218,14 @@ describe('owner session browser', () => {
       currentSessionId: config.getSessionId(),
       ...catalog,
       onSelect: async (target) => {
-        const replay = await resumeOwnerSession(
+        await resumeOwnerSession(
           next.session.resume.bind(next.session),
           target.kind === 'session'
             ? target.session.sessionId
             : target.checkpointId,
-          'allowed',
           next.session.listBrowserTargetsDetailed.bind(next.session),
         );
-        shown = replay.uiHistory.some(
+        shown = (await readJournalItems(next)).some(
           (item) =>
             item.type === 'user' && item.text === 'browser resume source',
         );

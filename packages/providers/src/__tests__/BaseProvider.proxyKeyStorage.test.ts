@@ -29,6 +29,7 @@ import {
 } from '../BaseProvider.js';
 import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { CredentialProxyServer } from '../auth/proxy/credential-proxy-server.js';
+import { replayableContents } from '../utils/collectContents.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
@@ -179,7 +180,7 @@ function buildChatOptions(settings: SettingsService) {
     runtimeId: `proxy-aware.${Math.random().toString(36).slice(2, 10)}`,
   });
   return {
-    contents: [userMessage('hi')],
+    contents: replayableContents([userMessage('hi')]),
     invocation: captureProviderInvocation(
       {
         fetch: requestFetch,

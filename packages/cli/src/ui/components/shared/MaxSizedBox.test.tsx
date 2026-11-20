@@ -12,6 +12,43 @@ import { Colors } from '../../colors.js';
 import { describe, it, expect } from 'bun:test';
 
 describe('<MaxSizedBox />', () => {
+  describe('batched terminal rows', () => {
+    it('preserves colors, wrapping, blank rows and Unicode across output batches', () => {
+      const rows = Array.from({ length: 260 }, (_, index) => (
+        <Box key={index}>
+          <Text color="#888888">{`${index} `}</Text>
+          <Text color="#12ab34" wrap="wrap">
+            {index % 7 === 0 ? '' : '界🌍 wrapped words and more words'}
+          </Text>
+        </Box>
+      ));
+      const batched = render(
+        <OverflowProvider>
+          <MaxSizedBox maxWidth={23} maxHeight={undefined}>
+            {rows}
+          </MaxSizedBox>
+        </OverflowProvider>,
+      );
+      const individual = render(
+        <OverflowProvider>
+          <MaxSizedBox maxWidth={23} maxHeight={undefined}>
+            {Array.from({ length: 260 }, (_, index) => (
+              <Box key={index}>
+                <Text color="#888888" bold={false}>{`${index} `}</Text>
+                <Text color="#12ab34" wrap="wrap" bold={false}>
+                  {index % 7 === 0 ? '' : '界🌍 wrapped words and more words'}
+                </Text>
+              </Box>
+            ))}
+          </MaxSizedBox>
+        </OverflowProvider>,
+      );
+      expect(batched.lastFrame()).toBe(individual.lastFrame());
+      expect(batched.lastFrame()).toContain('259');
+      batched.unmount();
+      individual.unmount();
+    });
+  });
   // Make sure MaxSizedBox logs errors on invalid configurations.
   // This is useful for debugging issues with the component.
   // It should be set to false in production for performance and to avoid

@@ -5,12 +5,15 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { serializeWireContentForEstimate } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { sourceTokenBlocks } from './source-token-blocks.js';
 import {
   buildInvalidContextBudgetError,
   InvalidContextBudgetError,
@@ -188,6 +191,44 @@ export async function estimatePendingTokens(
   }
 }
 
+/**
+ * The same estimate as {@link estimatePendingTokens}, read row by row from a
+ * disk selection so providers without prompt-envelope projection need no
+ * request-wide array. Each content is summed independently in both routes, so
+ * the values are identical.
+ */
+export async function estimateSourcePendingTokens(
+  rows: ProviderRequestRows,
+  historyService: HistoryService,
+  model: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  if (rows.count === 0) {
+    return 0;
+  }
+  const stream: AsyncIterable<IContent> = {
+    [Symbol.asyncIterator]: () => rows.openReader(signal),
+  };
+  try {
+    return await historyService.estimateTokensForContents(
+      rows.native === undefined
+        ? stream
+        : sourceTokenBlocks(rows.native.indexed, signal),
+      model,
+      signal,
+    );
+  } catch (error) {
+    signal?.throwIfAborted();
+    logger.debug('Falling back to local token estimate', error);
+
+    let fallback = 0;
+    for await (const content of stream) {
+      fallback += estimateFallbackContentTokens(content, logger);
+    }
+    return fallback;
+  }
+}
+
 function estimateFallbackContentTokens(
   content: IContent,
   fallbackLogger: DebugLogger,
@@ -229,6 +270,8 @@ function estimateBlockTokens(content: IContent): number {
             return block.code;
           case 'media':
             return block.caption ?? '';
+          case 'media_dropped':
+            return droppedMediaModelText(block);
           default:
             return '';
         }

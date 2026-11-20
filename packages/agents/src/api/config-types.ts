@@ -1,3 +1,7 @@
+import type {
+  NamedWriterOwnership,
+  ScratchRootOwner,
+} from '@vybestack/llxprt-code-core';
 import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
@@ -321,6 +325,8 @@ export interface AgentConfig
   readonly parentTrustPort?: WorkspaceTrustControlPort;
   readonly trustPort?: WorkspaceTrustControlPort;
   readonly idePort?: WorkspaceIdePort;
+  readonly namedWriters?: NamedWriterOwnership;
+  readonly scratchRoots?: ScratchRootOwner;
   readonly mediaOwner?: SessionMediaOwner;
   readonly provider: string;
   readonly model: string;

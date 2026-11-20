@@ -14,11 +14,16 @@
  * limitations under the License.
  */
 
+import type { RequestBodyCensus } from '../utils/requestScopedBody.js';
+
 /**
  * Provider configuration interface that provides a subset of settings
  * required by provider implementations.
  */
 export interface IProviderConfig {
+  /** Shared with request-body probes for this provider runtime. */
+  readonly requestBodyCensus?: RequestBodyCensus;
+
   /**
    * API key for authenticating with the provider.
    */

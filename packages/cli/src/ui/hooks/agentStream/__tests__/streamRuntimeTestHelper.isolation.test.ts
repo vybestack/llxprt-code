@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,6 +12,7 @@ import { join } from 'node:path';
 import {
   isMediaReferenceBlock,
   type IContent,
+  type MediaOrigin,
   type MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -19,6 +21,13 @@ import {
 } from '../../../../__tests__/stream-media-agent-fixture.js';
 
 const imageBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+// Admission stamps an origin-less image with the wall-clock read time, so
+// each runtime admitting the same paste at a different moment would record a
+// different origin. One supplied origin keeps the references comparable.
+const imageOrigin: MediaOrigin = {
+  kind: 'pasted',
+  readAt: '2026-11-19T18:00:00.000Z',
+};
 
 function imageHistory(bytes: Uint8Array): IContent[] {
   return [
@@ -30,6 +39,7 @@ function imageHistory(bytes: Uint8Array): IContent[] {
           mimeType: 'image/png',
           data: Buffer.from(bytes).toString('base64'),
           encoding: 'base64',
+          origin: imageOrigin,
         },
       ],
     },
@@ -39,7 +49,7 @@ function imageHistory(bytes: Uint8Array): IContent[] {
 async function readImage(
   fixture: StreamMediaAgentFixture,
 ): Promise<MediaReferenceBlock> {
-  const history = await fixture.agent.getHistory();
+  const history = await collectResumeRows(fixture.agent.streamHistory());
   const reference = history
     .flatMap((message) => message.blocks)
     .find(isMediaReferenceBlock);
@@ -108,7 +118,9 @@ describe('stream runtime test fixture isolation', () => {
     expect(reference.contentId).toBe(
       `sha256:${createHash('sha256').update(imageBytes).digest('hex')}`,
     );
-    expect(await second.agent.getHistory()).toStrictEqual([]);
+    expect(await collectResumeRows(second.agent.streamHistory())).toStrictEqual(
+      [],
+    );
     expect(await liveMediaStores(second)).toStrictEqual([firstStore]);
 
     await second.agent.setHistory(imageHistory(imageBytes));
@@ -125,8 +137,11 @@ describe('stream runtime test fixture isolation', () => {
     expect(await storedObject(secondStore, secondReference)).toStrictEqual(
       imageBytes,
     );
-    const survivingHistory = await second.agent.getHistory();
-    expect(survivingHistory[0]?.blocks[0]).toBe(secondReference);
+    const survivingHistory = await collectResumeRows(
+      second.agent.streamHistory(),
+    );
+    expect(survivingHistory[0]?.blocks[0]).toStrictEqual(secondReference);
+    expect(survivingHistory[0]?.blocks[0]).not.toBe(secondReference);
   });
 
   it('closing an independent stream peer preserves its sibling media and native history', async () => {
@@ -137,7 +152,9 @@ describe('stream runtime test fixture isolation', () => {
     expect(await storedObject(ownerStore, reference)).toStrictEqual(imageBytes);
 
     const peer = await createFixture();
-    expect(await peer.agent.getHistory()).toStrictEqual([]);
+    expect(await collectResumeRows(peer.agent.streamHistory())).toStrictEqual(
+      [],
+    );
     await peer.agent.setHistory(imageHistory(imageBytes));
     const peerReference = await readImage(peer);
     const peerStore = await addedMediaStore(peer, [ownerStore]);
@@ -148,8 +165,9 @@ describe('stream runtime test fixture isolation', () => {
 
     await peer.dispose();
     await expect(access(peerStore)).rejects.toThrow('ENOENT');
-    const ownerHistory = await fixture.agent.getHistory();
-    expect(ownerHistory[0]?.blocks[0]).toBe(reference);
+    const ownerHistory = await collectResumeRows(fixture.agent.streamHistory());
+    expect(ownerHistory[0]?.blocks[0]).toStrictEqual(reference);
+    expect(ownerHistory[0]?.blocks[0]).not.toBe(reference);
     expect(await storedObject(ownerStore, reference)).toStrictEqual(imageBytes);
     await fixture.dispose();
     await expect(access(ownerStore)).rejects.toThrow('ENOENT');

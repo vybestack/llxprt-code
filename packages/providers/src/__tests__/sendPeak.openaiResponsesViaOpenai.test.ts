@@ -1,0 +1,77 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Issue #854 step A2: the openai provider, Responses route.
+ *
+ * The route sends through the same disk text route as the openai-responses
+ * provider, so its peak must not grow with the body (step C1). The byte checks
+ * and the bounds checks are ordinary tests, so a crashed probe cannot pass.
+ */
+
+import { describe, expect, it } from 'bun:test';
+import { SEND_PEAK_BOUND_BYTES } from './support/sendPeakMeasurement.js';
+import { shapeRun, sharedSendPeak } from './support/sendPeakRunner.js';
+
+const TEST_TIMEOUT_MS = 170000;
+const measuredText = sharedSendPeak('openai-responses-via-openai', {
+  source: 'rows',
+  shapes: ['text-only'],
+});
+const measuredTools = sharedSendPeak('openai-responses-via-openai', {
+  source: 'rows',
+  shapes: ['tool-heavy'],
+});
+
+describe('peak memory while sending, the openai provider, Responses route', () => {
+  it(
+    'text-only: sends the bytes the route sends today with a matching content-length',
+    async () => {
+      const { verdict } = shapeRun(await measuredText(), 'text-only');
+      expect(verdict.bytesMatchOracle).toBe(true);
+      expect(verdict.contentLengthMatchesBytes).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'tool-heavy: sends the bytes the route sends today with a matching content-length',
+    async () => {
+      const { verdict } = shapeRun(await measuredTools(), 'tool-heavy');
+      expect(verdict.bytesMatchOracle).toBe(true);
+      expect(verdict.contentLengthMatchesBytes).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'text-only: bounds growth from 256 to 1536 rows and repeated-send retention by one row plus measured overhead',
+    async () => {
+      const { verdict } = shapeRun(await measuredText(), 'text-only');
+      expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.arrayBufferGrowth).toBeLessThanOrEqual(
+        SEND_PEAK_BOUND_BYTES,
+      );
+      expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.retainedGrowthWithinBound).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'tool-heavy: bounds growth from 256 to 1536 rows and repeated-send retention by one row plus measured overhead',
+    async () => {
+      const { verdict } = shapeRun(await measuredTools(), 'tool-heavy');
+      expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.arrayBufferGrowth).toBeLessThanOrEqual(
+        SEND_PEAK_BOUND_BYTES,
+      );
+      expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.retainedGrowthWithinBound).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+});

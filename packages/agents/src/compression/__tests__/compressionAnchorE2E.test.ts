@@ -1,3 +1,6 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { chatSessionPorts } from '../../core/chatSessionPorts.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
@@ -18,6 +21,7 @@ import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/p
  * IProvider port. No assertions on mock call records.
  */
 
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -29,6 +33,7 @@ import {
 } from './MiddleOutStrategy-test-helpers.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -67,9 +72,9 @@ function aiMsg(text: string): IContent {
  * whose chronology.seq === cacheAnchorSeq (exact identity, per Defect 2 fix).
  * The head is everything up to and including that entry.
  */
-function extractHeadByAnchor(hs: HistoryService): string[] {
+async function extractHeadByAnchor(hs: HistoryService): Promise<string[]> {
   const anchorSeq = hs.getCacheAnchorSeq();
-  const curated = hs.getCurated();
+  const curated = await curatedHistoryAfterCommit(hs);
   let headEnd = 0;
   if (anchorSeq > 0) {
     const anchorIndex = curated.findIndex(
@@ -115,11 +120,11 @@ function buildHandler(opts: {
       provider.name,
     ),
     provider,
-    runtime: testProviderRuntime as never,
+    runtime: runtimeContext.providerRuntime,
   };
 
   const handler = new CompressionHandler(
-    runtimeContext,
+    chatSessionPorts(runtimeContext).compression,
     undefined,
     historyService,
     undefined,
@@ -144,7 +149,9 @@ describe('E2E: CompressionHandler.performCompression keeps prefix monotonically 
   });
 
   it('serialized content prefix never shrinks across 5 append-compress cycles', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const capturedRequests: IContent[] = [];
     const handler = buildHandler({ historyService, capturedRequests });
 
@@ -175,7 +182,7 @@ describe('E2E: CompressionHandler.performCompression keeps prefix monotonically 
       // Extract the preserved head using the cache anchor: find the entry whose
       // chronology.seq === cacheAnchorSeq (exact identity, per Defect 2 fix).
       // The head is everything up to and including that entry.
-      const currentHead = extractHeadByAnchor(historyService);
+      const currentHead = await extractHeadByAnchor(historyService);
 
       // The previous head must be a COMPLETE prefix of the current head. The
       // anchor may remain fixed for a cycle, but it must never move backward,
@@ -223,7 +230,9 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
   }, 30_000);
 
   async function observeCompressionAfterPrefixDestruction() {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const capturedRequests: IContent[] = [];
     const handler = buildHandler({ historyService, capturedRequests });
 
@@ -234,13 +243,13 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
     }
 
     // Advance the anchor to simulate a prior compression having set it
-    const stamped = historyService.getRawHistory();
+    const stamped = await collectRawHistory(historyService);
     const lastSeq = stamped[stamped.length - 1].metadata?.chronology?.seq ?? 0;
     historyService.setCacheAnchorSeq(lastSeq);
 
     // Now manually simulate a prefix-destroying result by clearing history
     // and resetting the anchor (as TopDownTruncationStrategy path would do)
-    historyService.clear();
+    await historyService.clear();
     historyService.resetCacheAnchorSeq();
     const resetAnchor = historyService.getCacheAnchorSeq();
 
@@ -266,7 +275,7 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
 
 describe('Defect 6: client.restoreHistory resets the cache anchor (#3070)', () => {
   it('HistoryService.resetCacheAnchorSeq resets to 0 (the primitive restoreHistory calls)', () => {
-    const hs = new HistoryService();
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     hs.setCacheAnchorSeq(42);
     expect(hs.getCacheAnchorSeq()).toBe(42);
 
@@ -274,14 +283,14 @@ describe('Defect 6: client.restoreHistory resets the cache anchor (#3070)', () =
     expect(hs.getCacheAnchorSeq()).toBe(0);
   });
 
-  it('a wholesale history replacement via addAll after resetCacheAnchorSeq leaves the anchor at 0', () => {
-    const hs = new HistoryService();
+  it('a wholesale history replacement via addAll after resetCacheAnchorSeq leaves the anchor at 0', async () => {
+    const hs = new HistoryService({ scratchRoots: historyScratchRoots });
     hs.setCacheAnchorSeq(99);
     expect(hs.getCacheAnchorSeq()).toBe(99);
 
     // Simulate the restoreHistory flow: reset + validateAndFix + addAll
     hs.resetCacheAnchorSeq();
-    hs.validateAndFix();
+    await hs.validateAndFix();
     const newHistory: IContent[] = [];
     for (let i = 0; i < 5; i++) {
       newHistory.push(humanMsg(`restored user ${i}`));

@@ -123,7 +123,10 @@ describe('session client post-auth guard', () => {
         credentials().authority,
         release,
       );
-      const tokenizer = configureProviderTokenizer(manager);
+      const tokenizer = configureProviderTokenizer(
+        manager,
+        config.scratchRoots,
+      );
 
       let captured: unknown;
       try {

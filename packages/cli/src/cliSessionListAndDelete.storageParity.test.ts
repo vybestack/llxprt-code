@@ -34,7 +34,7 @@ import {
   writeHealthySession,
   type CliRun,
   type RecordingTarget,
-} from './cliSessionListAndDelete.testHelpers.js';
+} from './__tests__/cli-session-list-delete-helpers.js';
 
 const SUBPROCESS_TIMEOUT_MS = 90_000;
 const SESSION_ID = 'a1b2c3d4-0000-4000-8000-000000000001';

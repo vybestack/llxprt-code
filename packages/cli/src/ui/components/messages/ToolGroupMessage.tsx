@@ -7,7 +7,10 @@
 import type React from 'react';
 import { useMemo } from 'react';
 import { Box, Text } from 'ink';
-import type { IndividualToolCallDisplay } from '../../types.js';
+import type {
+  HistoryItemToolGroup,
+  IndividualToolCallDisplay,
+} from '../../types.js';
 import { ToolCallStatus } from '../../types.js';
 import type { TextEmphasis } from './ToolShared.js';
 import { ToolMessage, type ShellSessionRuntime } from './ToolMessage.js';
@@ -39,6 +42,7 @@ interface ToolGroupMessageProps {
   ) => Promise<void>;
   groupId: number;
   toolCalls: IndividualToolCallDisplay[];
+  toolPage?: HistoryItemToolGroup['toolPage'];
   agentId?: string;
   availableTerminalHeight?: number;
   terminalWidth: number;
@@ -224,7 +228,7 @@ function renderToolCallItem(
     tool.confirmationDetails !== undefined;
 
   return (
-    <Box key={tool.callId} flexDirection="column" minHeight={1}>
+    <Box key={`${index}:${tool.callId}`} flexDirection="column" minHeight={1}>
       <ToolMessage
         key={tool.callId}
         {...tool}
@@ -295,6 +299,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   subscribeIdeDiffing,
   resolveIdeDiff,
   toolCalls,
+  toolPage,
   agentId,
   availableTerminalHeight,
   terminalWidth,
@@ -305,7 +310,6 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   embeddedShellFocused,
 }) => {
   const { todos } = useTodoContext();
-  const isTodoPanelEnabled = showTodoPanel;
 
   const textualTodoOutput = useMemo(
     () => formatTodoListForDisplay(todos),
@@ -314,7 +318,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
 
   const { toolAwaitingApproval, filteredToolCalls } = useToolGroupState(
     toolCalls,
-    isTodoPanelEnabled,
+    showTodoPanel,
     todos.length,
     textualTodoOutput,
   );
@@ -325,7 +329,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
 
   const { borderColor, borderDimColor } = deriveBorderColors(filteredToolCalls);
   const staticHeight = 2 + 1;
-  const innerWidth = terminalWidth;
+  const innerWidth = Math.max(1, terminalWidth - 3);
 
   const availableTerminalHeightPerToolMessage = computeAvailableHeightPerTool(
     availableTerminalHeight,
@@ -337,12 +341,17 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
     <Box
       flexDirection="column"
       borderStyle={getBorderStyle('round')}
-      width="100%"
+      width={Math.max(1, terminalWidth - 1)}
       marginLeft={1}
       borderDimColor={borderDimColor}
       borderColor={borderColor}
       gap={1}
     >
+      {toolPage && (
+        <Text color={Colors.AccentCyan}>
+          {`Tool group ${toolPage.groupIndex}: calls ${toolPage.start + 1}-${toolPage.start + toolCalls.length} of ${toolPage.total}`}
+        </Text>
+      )}
       {agentId && agentId !== DEFAULT_AGENT_ID && (
         <Box marginLeft={1}>
           <Text color={Colors.AccentCyan}>{`Agent: ${agentId}`}</Text>

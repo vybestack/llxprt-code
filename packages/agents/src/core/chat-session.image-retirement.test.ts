@@ -17,6 +17,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMediaHistoryChat } from './__tests__/selected-chat-media-fixture.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 
 const BUDGET = 1024 * 1024;
 const IMAGE_CHARACTERS = 100_000;
@@ -37,8 +38,9 @@ function observe(contents: readonly IContent[]): RequestObservation {
         imageData.push(block.data);
       }
       if (
-        block.type === 'text' &&
-        block.text.includes('was omitted from this request')
+        block.type === 'media_dropped' ||
+        (block.type === 'text' &&
+          block.text.includes('was omitted from this request'))
       ) {
         notes += 1;
       }
@@ -68,6 +70,37 @@ function imageFor(index: number): IContent {
   };
 }
 
+/** The screenshot as admission stores it: a reference to the file it was read from. */
+async function storedImageFor(
+  store: LocalMediaStore,
+  directory: string,
+  index: number,
+): Promise<IContent> {
+  const row = imageFor(index);
+  const media = row.blocks[1];
+  if (media.type !== 'media' || media.encoding !== 'base64')
+    throw new Error('expected an inline screenshot');
+  const reference = await store.admit({
+    bytes: Buffer.from(media.data, 'base64'),
+    mimeType: media.mimeType,
+    semanticMetadata: {},
+  });
+  return {
+    ...row,
+    blocks: [
+      row.blocks[0],
+      {
+        ...reference,
+        origin: {
+          kind: 'file',
+          path: join(directory, 'screens', `screenshot-${index}.png`),
+          readAt: '2026-11-19T18:00:00.000Z',
+        },
+      },
+    ],
+  };
+}
+
 describe('ChatSession historical image retirement (issue #3984)', () => {
   const owners: SessionSettingsOwner[] = [];
   let directory = '';
@@ -84,6 +117,10 @@ describe('ChatSession historical image retirement (issue #3984)', () => {
 
   it('bounds the bytes selected per request across a long image conversation', async () => {
     const observations: RequestObservation[] = [];
+    const store = new LocalMediaStore({
+      rootDirectory: join(directory, 'media'),
+      quotaBytes: 64 * 1024 * 1024,
+    });
     const chat = createMediaHistoryChat(
       directory,
       lifecycle,
@@ -91,12 +128,12 @@ describe('ChatSession historical image retirement (issue #3984)', () => {
       async (_request, _bindings, contents) => {
         observations.push(observe(contents));
       },
-      { quotaBytes: 64 * 1024 * 1024, mediaBudgetBytes: BUDGET },
+      { mediaBudgetBytes: BUDGET, store },
     );
     const history = chat.getHistoryService();
 
     for (let index = 0; index < IMAGE_COUNT; index += 1) {
-      history.add(imageFor(index));
+      history.add(await storedImageFor(store, directory, index));
       history.add({ speaker: 'ai', blocks: [{ type: 'text', text: 'seen' }] });
       await chat.sendMessage(
         { message: `continue ${index}` },
@@ -104,6 +141,12 @@ describe('ChatSession historical image retirement (issue #3984)', () => {
       );
     }
 
+    let canonicalImages = 0;
+    for await (const content of history.streamRawHistory()) {
+      canonicalImages += content.blocks.filter(
+        (block) => block.type === 'media' || block.type === 'media_dropped',
+      ).length;
+    }
     const retiredPerRequest = observations.map((entry) => entry.notes);
     const retirementEvents = retiredPerRequest.filter(
       (count, index) => count !== (retiredPerRequest[index - 1] ?? 0),
@@ -127,10 +170,7 @@ describe('ChatSession historical image retirement (issue #3984)', () => {
             ? [block.data]
             : [],
         )[0],
-      canonicalImages: history
-        .getAll()
-        .flatMap((content) => content.blocks)
-        .filter((block) => block.type === 'media').length,
+      canonicalImages,
     }).toStrictEqual({
       requests: IMAGE_COUNT,
       everyRequestWithinBudget: true,

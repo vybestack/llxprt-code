@@ -13,7 +13,7 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { handoffCliConfig } from './test-utils/bootstrap-config.js';
+import { handoffCliConfig } from './test-utils/bootstrap-config.test-helper.js';
 import { main } from './cli.js';
 import type { LoadedSettings } from './config/settings.js';
 import { loadSettings } from './config/settings.js';

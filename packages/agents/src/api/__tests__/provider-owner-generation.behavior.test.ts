@@ -1,3 +1,6 @@
+import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { fromConfig } from '../fromConfig.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -258,6 +261,62 @@ describe('provider owner generation boundary', () => {
         restoreEnvironment(environment);
         await rm(directory, { recursive: true, force: true });
       }
+    }
+  });
+});
+
+describe('caller-owned client generation lifetime', () => {
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+  it('keeps an initialized borrowed client usable after facade shutdown', async () => {
+    const built = await buildCliStyleConfig('multi-turn-text.jsonl');
+    const client = built.agentClient;
+    await client.startChat();
+    for await (const _event of client.sendMessageStream(
+      'Borrow the initialized client',
+      new AbortController().signal,
+      'caller-owned-initial',
+    )) {
+      void _event;
+    }
+    const agent = await fromConfig(
+      built.config,
+      built.settingsService,
+      { activation: { provider: 'fake', model: 'fake-model' } },
+      new CredentialAuthority(),
+    );
+    const blocked = denyManagerDiscovery(built.config);
+    try {
+      expect(
+        await textFrom(agent.stream('Independent facade generation')),
+      ).not.toBe('');
+      await agent.dispose();
+      expect(
+        (await Array.fromAsync(client.getHistory())).flatMap((turn) =>
+          turn.blocks.flatMap((block) =>
+            block.type === 'text' ? [block.text] : [],
+          ),
+        ),
+      ).toContain('Borrow the initialized client');
+      expect(client.isInitialized()).toBe(true);
+      await client.startChat();
+      expect(client.hasChatInitialized()).toBe(true);
+      for await (const _event of client.sendMessageStream(
+        'Caller continues after facade shutdown',
+        new AbortController().signal,
+        'caller-owned-later',
+      )) {
+        void _event;
+      }
+      expect(
+        JSON.stringify(await Array.fromAsync(client.getHistory())),
+      ).toContain('Caller continues after facade shutdown');
+      expect(
+        JSON.stringify(await Array.fromAsync(client.getHistory())),
+      ).not.toContain('Independent facade generation');
+    } finally {
+      blocked();
+      await agent.dispose();
+      await built.cleanup();
     }
   });
 });

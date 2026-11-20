@@ -14,11 +14,13 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { isDeepStrictEqual } from 'node:util';
 import { HistoryRefusalReviewer } from './refusalReviewer.js';
 import type { RefusalAttempt } from './refusalTypes.js';
 import type { ReviewOutcome, ReviewRequest } from './reviewTypes.js';
@@ -35,7 +37,14 @@ class RecordingFakeProvider extends FakeProvider {
   override async *generateChatCompletion(
     options: Parameters<FakeProvider['generateChatCompletion']>[0],
   ): AsyncIterableIterator<IContent> {
-    this.requests.push(Array.isArray(options) ? options : options.contents);
+    if (Symbol.asyncIterator in options)
+      throw new Error('Reviewer requests must carry request rows');
+    const rows = options.requestRows;
+    if (rows === undefined)
+      throw new Error('Reviewer requests must carry request rows');
+    await collectRowsForAssertions(rows.openReader(), (request) => {
+      this.requests.push([...request]);
+    });
     yield* super.generateChatCompletion(options);
   }
 }
@@ -72,23 +81,6 @@ function textsOf(history: readonly IContent[]): string[] {
   );
 }
 
-/** A journal whose record preparation is where the cancel lands. */
-function journalAbortingTheRequest(
-  controller: AbortController,
-): AgentChatRecordingExecution {
-  return {
-    historyOrigin: {},
-    hookOwner: { sessionId: () => 's', transcriptPath: () => undefined },
-    transcriptPath: () => undefined,
-    persistSemanticMediaPurge: () => Promise.resolve(),
-    prepareRefusalRewrite: async () => {
-      controller.abort();
-      await Promise.resolve();
-      return { publish: () => undefined, rollback: () => undefined };
-    },
-  };
-}
-
 describe('reviewer commit (issue #4036)', () => {
   let directory: string;
 
@@ -114,9 +106,11 @@ describe('reviewer commit (issue #4036)', () => {
     readonly before: readonly IContent[];
     readonly providerRequests: readonly IContent[][];
   }> {
-    const history = new HistoryService();
+    const history = new HistoryService({
+      scratchRoots: new ScratchRootOwner(),
+    });
     await history.addBatch(seed(options.summaryText));
-    const before = history.getAll();
+    const before = await Array.fromAsync(history.streamRawHistory());
     const summaryId =
       buildReviewWindow(before).entries.find((e) => e.kind === 'summary')?.id ??
       'missing';
@@ -144,6 +138,15 @@ describe('reviewer commit (issue #4036)', () => {
     );
     const provider = new RecordingFakeProvider(fixture);
     const controller = new AbortController();
+    if (options.abortWhilePreparing === true)
+      history.setTokenizerFactory({
+        getTokenizer: () => ({
+          countTokens: async () => {
+            controller.abort();
+            return 1;
+          },
+        }),
+      });
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'reviewer-test',
       provider: 'fake',
@@ -185,10 +188,7 @@ describe('reviewer commit (issue #4036)', () => {
         attempt: ATTEMPT,
         reviewProfile: undefined,
         retriesTried: 1,
-        execution:
-          options.abortWhilePreparing === true
-            ? journalAbortingTheRequest(controller)
-            : undefined,
+        execution: undefined,
         pending: undefined,
         modelParameters: undefined,
         signal: controller.signal,
@@ -196,7 +196,7 @@ describe('reviewer commit (issue #4036)', () => {
           keepLiterals: options.keepLiterals,
         }),
       })
-      .catch(() => ({ aborted: true as const }));
+      .catch((): { readonly aborted: true } => ({ aborted: true }));
     return { outcome, history, before, providerRequests: provider.requests };
   }
 
@@ -205,7 +205,7 @@ describe('reviewer commit (issue #4036)', () => {
 
     expect({
       kind: 'kind' in outcome ? outcome.kind : 'aborted',
-      texts: textsOf(history.getAll()),
+      texts: textsOf(await Array.fromAsync(history.streamRawHistory())),
     }).toStrictEqual({
       kind: 'rewritten',
       texts: [REWRITTEN, 'Continuing from the snapshot.'],
@@ -222,7 +222,10 @@ describe('reviewer commit (issue #4036)', () => {
     expect({
       kind: 'kind' in outcome ? outcome.kind : 'aborted',
       reason: 'reason' in outcome ? outcome.reason : undefined,
-      untouched: history.getAll().every((c, i) => c === before[i]),
+      untouched: isDeepStrictEqual(
+        await Array.fromAsync(history.streamRawHistory()),
+        before,
+      ),
     }).toStrictEqual({
       kind: 'stopped',
       reason: 'context-too-large',
@@ -273,8 +276,11 @@ describe('reviewer commit (issue #4036)', () => {
 
     expect({
       aborted: 'aborted' in outcome,
-      untouched: history.getAll().every((c, i) => c === before[i]),
-      texts: textsOf(history.getAll()),
+      untouched: isDeepStrictEqual(
+        await Array.fromAsync(history.streamRawHistory()),
+        before,
+      ),
+      texts: textsOf(await Array.fromAsync(history.streamRawHistory())),
     }).toStrictEqual({
       aborted: true,
       untouched: true,
@@ -290,8 +296,11 @@ describe('reviewer commit (issue #4036)', () => {
 
     expect({
       aborted: 'aborted' in outcome,
-      untouched: history.getAll().every((c, i) => c === before[i]),
-      texts: textsOf(history.getAll()),
+      untouched: isDeepStrictEqual(
+        await Array.fromAsync(history.streamRawHistory()),
+        before,
+      ),
+      texts: textsOf(await Array.fromAsync(history.streamRawHistory())),
     }).toStrictEqual({
       aborted: true,
       untouched: true,

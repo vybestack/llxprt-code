@@ -256,7 +256,10 @@ describe('explicit session authentication lifecycle', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
+    const factoriesTokenizer = configureProviderTokenizer(
+      builtCallerManager,
+      builtCallerConfig.scratchRoots,
+    );
     const factoriesContent = createRuntimeContentGeneratorFactory();
     builtCallerTokenizer = factoriesTokenizer;
     builtCallerContent = factoriesContent;
@@ -349,7 +352,7 @@ describe('explicit session authentication lifecycle', () => {
         ]);
         process.env.GOOGLE_API_KEY = 'local-vertex-metadata-only';
         await builtCallerOwner.clients.refreshAuth();
-        const retained = await sessionClient().getHistory();
+        const retained = await Array.fromAsync(sessionClient().getHistory());
         expect(
           retained
             .flatMap((content) => content.blocks)
@@ -387,12 +390,16 @@ describe('explicit session authentication lifecycle', () => {
     await withSession(async () => {
       await sessionClient().setHistory(history);
       await builtCallerOwner.clients.refreshAuth();
-      await sessionClient().startChat(await sessionClient().getHistory());
+      await sessionClient().startChat(
+        await Array.fromAsync(sessionClient().getHistory()),
+      );
       expect(
-        (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
-          speaker,
-          blocks,
-        })),
+        (await Array.fromAsync(sessionClient().getHistory())).map(
+          ({ speaker, blocks }) => ({
+            speaker,
+            blocks,
+          }),
+        ),
       ).toStrictEqual(history);
     });
   });
@@ -403,12 +410,16 @@ describe('explicit session authentication lifecycle', () => {
       expect(sessionClient().hasChatInitialized()).toBe(false);
       await sessionClient().storeHistoryForLaterUse(history);
       await builtCallerOwner.clients.refreshAuth();
-      await sessionClient().startChat(await sessionClient().getHistory());
+      await sessionClient().startChat(
+        await Array.fromAsync(sessionClient().getHistory()),
+      );
       expect(
-        (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
-          speaker,
-          blocks,
-        })),
+        (await Array.fromAsync(sessionClient().getHistory())).map(
+          ({ speaker, blocks }) => ({
+            speaker,
+            blocks,
+          }),
+        ),
       ).toStrictEqual(history);
     });
   });
@@ -418,17 +429,21 @@ describe('explicit session authentication lifecycle', () => {
       await sessionClient().setHistory(history);
       const idleHistory = vi
         .spyOn(sessionClient(), 'getHistory')
-        .mockImplementation(async () => {
+        .mockImplementation(() => {
           throw new Error('Idle history must not be awaited');
         });
       try {
         await builtCallerOwner.clients.refreshAuth();
-        await sessionClient().startChat(await sessionClient().getHistory());
+        await sessionClient().startChat(
+          await Array.fromAsync(sessionClient().getHistory()),
+        );
         expect(
-          (await sessionClient().getHistory()).map(({ speaker, blocks }) => ({
-            speaker,
-            blocks,
-          })),
+          (await Array.fromAsync(sessionClient().getHistory())).map(
+            ({ speaker, blocks }) => ({
+              speaker,
+              blocks,
+            }),
+          ),
         ).toStrictEqual(history);
       } finally {
         idleHistory.mockRestore();

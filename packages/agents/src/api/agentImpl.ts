@@ -9,7 +9,7 @@ import type { AgentProviderFileOperations } from './provider-file-domain.js';
 
 type ConversationOperations = Pick<
   Agent,
-  | 'getHistory'
+  | 'streamHistory'
   | 'setHistory'
   | 'addHistory'
   | 'restoreHistory'
@@ -77,7 +77,7 @@ export function createAgentFacade(
     operations,
     providerFiles,
     {
-      getHistory: conversation.getHistory,
+      streamHistory: conversation.streamHistory,
       setHistory: conversation.setHistory,
       addHistory: conversation.addHistory,
       restoreHistory: conversation.restoreHistory,

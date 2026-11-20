@@ -182,13 +182,14 @@ describe('refusal audit context (REQ-4101-D1, REQ-4101-D2)', () => {
       'dedicated-summarizer-model',
     );
     expect(run.requests[6]?.model).toBe('scripted-model');
-    const compressed = run.journalRecords.find(
-      (record) => record['type'] === 'compressed',
+    // The journal records compression provenance on the summary row itself.
+    const summary = run.historyAfter.find(
+      (row) => row.metadata?.compressionProvenance !== undefined,
     );
-    expect(asRecord(compressed?.['payload'])).toMatchObject({
-      summary_author_provider: 'openai',
-      summary_author_model: 'dedicated-summarizer-model',
-      compression_strategy: 'one-shot',
+    expect(summary?.metadata?.compressionProvenance).toStrictEqual({
+      summaryAuthorProvider: 'openai',
+      summaryAuthorModel: 'dedicated-summarizer-model',
+      compressionStrategy: 'one-shot',
     });
   });
 

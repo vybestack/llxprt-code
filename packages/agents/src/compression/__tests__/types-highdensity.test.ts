@@ -20,6 +20,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { COMPRESSION_STRATEGIES } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type {
   CompressionStrategyName,
+  CompressionStrategy,
   StrategyTrigger,
   DensityResult,
   DensityResultMetadata,
@@ -28,6 +29,7 @@ import type {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
+import { compressTopDownViaDisk } from './support/topdown-disk-adapter.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import {
@@ -225,12 +227,13 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    * @requirement REQ-HD-001.4
    */
   it('MiddleOutStrategy does NOT implement optimize', () => {
-    const strategy = new MiddleOutStrategy(
+    const strategy: CompressionStrategy = new MiddleOutStrategy(
       undefined,
       undefined,
       undefined,
       undefined,
     );
+
     expect(strategy.optimize).toBeUndefined();
   });
 
@@ -238,7 +241,7 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    * @requirement REQ-HD-001.4
    */
   it('TopDownTruncationStrategy does NOT implement optimize', () => {
-    const strategy = new TopDownTruncationStrategy();
+    const strategy: CompressionStrategy = new TopDownTruncationStrategy();
     expect(strategy.optimize).toBeUndefined();
   });
 
@@ -246,12 +249,13 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    * @requirement REQ-HD-001.4
    */
   it('OneShotStrategy does NOT implement optimize', () => {
-    const strategy = new OneShotStrategy(
+    const strategy: CompressionStrategy = new OneShotStrategy(
       undefined,
       undefined,
       undefined,
       undefined,
     );
+
     expect(strategy.optimize).toBeUndefined();
   });
 });
@@ -264,40 +268,27 @@ describe('Existing strategy compress compatibility @plan PLAN-20260211-HIGHDENSI
   /**
    * @requirement REQ-HD-001.4
    */
-  it('MiddleOutStrategy.compress is a function', () => {
+  it('MiddleOutStrategy.compressDisk is a function', () => {
     const strategy = new MiddleOutStrategy(
       undefined,
       undefined,
       undefined,
       undefined,
     );
-    expect(typeof strategy.compress).toBe('function');
+    expect(typeof strategy.compressDisk).toBe('function');
   });
 
   /**
    * @requirement REQ-HD-001.4
    */
   it('TopDownTruncationStrategy.compress with empty history returns noop', async () => {
-    const strategy = new TopDownTruncationStrategy();
     const ctx = buildMinimalContext({ history: [] });
-    const result = await strategy.compress(ctx);
+    const result = await compressTopDownViaDisk(ctx);
     expect(result.kind).toBe('noop');
+    if (result.kind !== 'noop') throw new Error('Expected empty-history no-op');
     expect(result.reason).toBe('empty-history');
     expect(result.metadata.originalMessageCount).toBe(0);
     expect(result.metadata.strategyUsed).toBe('top-down-truncation');
-  });
-
-  /**
-   * @requirement REQ-HD-001.4
-   */
-  it('OneShotStrategy.compress is a function', () => {
-    const strategy = new OneShotStrategy(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
-    expect(typeof strategy.compress).toBe('function');
   });
 });
 

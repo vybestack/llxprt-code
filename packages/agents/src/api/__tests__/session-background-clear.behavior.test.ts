@@ -8,6 +8,7 @@ import { setImmediate, setTimeout as delay } from 'node:timers/promises';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { AgentBusyError } from '../loop/agentBusyError.js';
 import { deferred, deadline } from './helpers/shell-owner-gate.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { type Agent, buildAgent } from './helpers/agentHarness.js';
 
 async function startNewSessionWhenIdle(agent: Agent): Promise<void> {
@@ -45,7 +46,7 @@ describe('new sessions exclude background work', () => {
       channel.cancelAll();
       await channel.release();
       await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
     } finally {
       await channel.release();
       await cleanup();
@@ -92,7 +93,7 @@ describe('new sessions exclude background work', () => {
       await deadline(startNewSessionWhenIdle(agent), 'shell resource release');
       await setImmediate();
       expect(messages).toHaveLength(1);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
     } finally {
       unsubscribe?.();
       await unsubscribe?.drain();

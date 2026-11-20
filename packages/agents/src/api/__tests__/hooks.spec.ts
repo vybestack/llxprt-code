@@ -22,6 +22,7 @@
  *       NEXT turn reflects it (through the high-level loop).
  */
 
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { describe, it, expect } from 'bun:test';
 import {
   buildAgent,
@@ -153,7 +154,7 @@ describe('Hooks @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-015 @requiremen
       }
 
       // history captures both turns (continuity through the refresh)
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(2);
     } finally {
       await cleanup();

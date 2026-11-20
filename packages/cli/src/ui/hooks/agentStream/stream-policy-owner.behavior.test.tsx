@@ -9,7 +9,6 @@ import { createMockSettings, renderHook } from '../../../__tests__/render.js';
 import { useCommandOwners } from '../../../__tests__/command-owner-fixture.js';
 import type { HistoryItem } from '../../types.js';
 import { useStreamEventHandlers } from './useStreamEventHandlers.js';
-import { PendingResponseBuffer } from './pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './__tests__/streamRuntimeTestHelper.js';
 
 function policyInputs(owner: Agent, history: Array<Omit<HistoryItem, 'id'>>) {
@@ -43,9 +42,7 @@ function policyInputs(owner: Agent, history: Array<Omit<HistoryItem, 'id'>>) {
     onCancelSubmit: () => {},
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: () => {},
-    pendingResponse: new PendingResponseBuffer(undefined),
     pendingHistoryItemRef: { current: null },
-    thinkingBlocksRef: { current: [] },
     turnCancelledRef: { current: false },
     clearSubmissions: () => {},
     setPendingHistoryItem: () => {},

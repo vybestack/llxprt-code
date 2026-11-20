@@ -9,6 +9,8 @@ import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import { useOperationalOutput } from '../../__tests__/operational-output-fixture.js';
+import { appendJournalUiItem } from './command-journal-output.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
@@ -18,7 +20,10 @@ import { createMcpCommand } from '../commands/mcpCommand.js';
 import { createMcpAuthCommand } from '../commands/mcpAuth.js';
 import { bindMcpAuthCommandOperations } from '../commands/credentialCommandHost.js';
 import { bindMcpCommand } from '../commands/mcpCommandHost.js';
-import { processSlashCommand } from './slashCommandHandlers.js';
+import {
+  processSlashCommand,
+  type SlashCommandHandlerDeps,
+} from './slashCommandHandlers.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 
 function unused(): never {
@@ -126,7 +131,7 @@ async function dispatchFailure(
     ],
     context.signal,
   );
-  const deps = {
+  const deps: SlashCommandHandlerDeps = {
     commands: registry.getCommands(),
     config: null,
     commandContext: context,
@@ -145,30 +150,39 @@ async function dispatchFailure(
     resumeOwnedSession: null,
     isMcpDiscoveryPending: () => false,
     resumeRawSession: null,
-    replayResumedHistory: () => {},
+    refreshResumedHistory: () => {},
+    writeOutput: async (item) => {
+      await appendJournalUiItem(owner.session, owner.session, item);
+    },
     recordCommandError: bindCommandErrorRecorder(
       owner.session.recordRecordingEvent.bind(owner.session),
       'agent',
       undefined,
     ),
-    loadCommandHistory: async () => {},
   };
   await processSlashCommand(deps, `/mcp auth ${server}`);
 }
 describe('command result recording owner', () => {
   const makeOwner = useCommandOwners();
+  const operationalOutput = useOperationalOutput();
   it('records registered command failures in its owner instead of the invocation session', async () => {
     const owner = await makeOwner('owner');
     const sibling = await makeOwner('sibling');
     const ownerPath = await recordingPath(owner);
     const siblingPath = await recordingPath(sibling);
     await dispatchFailure(owner, sibling, 'owner-missing');
+    expect(operationalOutput()).toContain(
+      "[SessionRecording] error: MCP server 'owner-missing' not found.",
+    );
     expect(await readFile(ownerPath, 'utf8')).toContain(
       "MCP server 'owner-missing' not found.",
     );
     expect(await readFile(siblingPath, 'utf8')).not.toContain('owner-missing');
     await owner.dispose();
     await dispatchFailure(sibling, owner, 'sibling-missing');
+    expect(operationalOutput()).toContain(
+      "[SessionRecording] error: MCP server 'sibling-missing' not found.",
+    );
     expect(await readFile(siblingPath, 'utf8')).toContain(
       "MCP server 'sibling-missing' not found.",
     );

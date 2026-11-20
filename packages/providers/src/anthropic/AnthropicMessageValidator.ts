@@ -431,7 +431,9 @@ function ensureNotEmpty(messages: AnthropicMessage[]): AnthropicMessage[] {
 const ASSISTANT_EMPTY_PLACEHOLDER = '[No content generated]';
 const USER_EMPTY_PLACEHOLDER = '[Empty message]';
 
-function getEmptyMessagePlaceholder(role: AnthropicMessage['role']): string {
+export function getEmptyMessagePlaceholder(
+  role: AnthropicMessage['role'],
+): string {
   return role === 'assistant'
     ? ASSISTANT_EMPTY_PLACEHOLDER
     : USER_EMPTY_PLACEHOLDER;

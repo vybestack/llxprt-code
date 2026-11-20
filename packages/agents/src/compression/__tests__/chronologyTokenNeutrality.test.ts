@@ -7,9 +7,11 @@
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { HistoryService as RealHistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { setupHistoryServices } from './support/history-lifetime.js';
 import { estimatePendingTokens } from '../compressionBudgeting.js';
 import { findCompressSplitPoint } from '../../core/clientHelpers.js';
+
+const createHistory = setupHistoryServices();
 
 /**
  * Chronology markers (#1721) are client-side only and are never sent to a
@@ -79,7 +81,7 @@ const conversation: IContent[] = [
  * collaborator is substituted; the fallback estimator under test is real.
  */
 function historyServiceWithUnavailableTokenizer(): HistoryService {
-  const service = new RealHistoryService();
+  const service = createHistory();
   service.estimateTokensForContents = () =>
     Promise.reject(new Error('tokenizer unavailable'));
   return service;
@@ -88,7 +90,7 @@ function historyServiceWithUnavailableTokenizer(): HistoryService {
 describe('estimatePendingTokens chronology neutrality', () => {
   /** AC23 — tokenizer path */
   it('returns the same estimate with and without chronology markers', async () => {
-    const service = new RealHistoryService();
+    const service = createHistory();
 
     const withMarkers = await estimatePendingTokens(
       stampAll(conversation),

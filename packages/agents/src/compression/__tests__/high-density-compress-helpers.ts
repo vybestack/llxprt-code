@@ -9,11 +9,11 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  CompressionContext,
-  StrategyCompressionResult,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { HighDensityStrategy } from '../HighDensityStrategy.js';
+import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  compressHighDensityViaDisk,
+  type HighDensityDiskOutcome,
+} from './support/highdensity-disk-adapter.js';
 
 let callIdCounter = 0;
 
@@ -221,10 +221,25 @@ export function buildMixedHistory(entryCount: number): IContent[] {
   return history;
 }
 
-export function createStrategy(): HighDensityStrategy {
-  return new HighDensityStrategy();
+export function resultHistory(result: HighDensityDiskOutcome): IContent[] {
+  return result.kind === 'applied' ? result.newHistory : [];
 }
 
-export function resultHistory(result: StrategyCompressionResult): IContent[] {
-  return result.kind === 'applied' ? result.newHistory : [];
+/**
+ * Runs the disk route and reports how many times it asked for a provider.
+ * The disk outcome carries no llmCallMade flag, so the call count is the
+ * observable fact behind "no LLM call was made".
+ */
+export async function compressCountingLlmCalls(
+  context: CompressionContext,
+): Promise<{ result: HighDensityDiskOutcome; llmCalls: number }> {
+  let llmCalls = 0;
+  const result = await compressHighDensityViaDisk({
+    ...context,
+    resolveProvider: (...args) => {
+      llmCalls++;
+      return context.resolveProvider(...args);
+    },
+  });
+  return { result, llmCalls };
 }

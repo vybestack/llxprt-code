@@ -716,12 +716,6 @@
       "count": 1
     },
     {
-      "file": "packages/cli/src/ui/stores/turn/historyLedger.ts",
-      "rule": "module-mutation",
-      "declaration": "globalMessageIdCounter",
-      "count": 1
-    },
-    {
       "file": "packages/cli/src/ui/utils/ConsolePatcher.ts",
       "rule": "module-mutation",
       "declaration": "globalThis",

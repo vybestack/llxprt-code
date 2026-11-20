@@ -6,7 +6,15 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { RefusalContextTracker } from './refusalContextTracker.js';
+import {
+  RefusalContextTracker,
+  type RefusalContextRows,
+} from './refusalContextTracker.js';
+
+/** Journal request rows: committed rows carry chronology, send-time rows do not. */
+function rows(contents: readonly IContent[]): RefusalContextRows {
+  return { count: contents.length, readAt: (index) => contents[index] };
+}
 
 function entry(seq: number, text: string): IContent {
   return {
@@ -19,11 +27,13 @@ function entry(seq: number, text: string): IContent {
 }
 
 describe('RefusalContextTracker (REQ-4101-D2)', () => {
-  it('compares send-boundary content to the last successful commit and hashes rewrites', () => {
+  it('compares send-boundary content to the last successful commit and hashes rewrites', async () => {
     const tracker = new RefusalContextTracker();
     const first = entry(1, 'committed prompt');
-    expect(tracker.snapshot([first], [first]).baseline_available).toBe(false);
-    tracker.commit([first], 'p1', 0);
+    expect((await tracker.snapshot(rows([first]))).baseline_available).toBe(
+      false,
+    );
+    tracker.commit(1, 'p1', 0);
     tracker.recordCompression({
       summaryAuthorModel: 'separate-summarizer',
       summaryAuthorProvider: 'anthropic',
@@ -35,7 +45,7 @@ describe('RefusalContextTracker (REQ-4101-D2)', () => {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'next prompt' }],
     } satisfies IContent;
-    const initial = tracker.snapshot([first, added], [first, added, pending]);
+    const initial = await tracker.snapshot(rows([first, added, pending]));
     expect(initial.baseline_available).toBe(true);
     expect(initial.baseline_prompt_id).toBe('p1');
     expect(initial.added_entry_count).toBe(1);
@@ -48,10 +58,7 @@ describe('RefusalContextTracker (REQ-4101-D2)', () => {
     expect(initial.prompt_tokens).toBeNull();
 
     const rewritten = entry(2, 'rewritten tool result');
-    const revised = tracker.snapshot(
-      [first, rewritten],
-      [first, rewritten, pending],
-    );
+    const revised = await tracker.snapshot(rows([first, rewritten, pending]));
     expect(revised.added_entry_count).toBe(1);
     expect(revised.added_entries[0]?.content_hash).not.toBe(
       initial.added_entries[0]?.content_hash,
@@ -59,12 +66,14 @@ describe('RefusalContextTracker (REQ-4101-D2)', () => {
     expect(revised.digest).not.toBe(initial.digest);
   });
 
-  it('marks the baseline unavailable when the session tracker is reset', () => {
+  it('marks the baseline unavailable when the session tracker is reset', async () => {
     const tracker = new RefusalContextTracker();
-    tracker.commit([entry(1, 'previous session')], 'old-prompt', 2);
+    tracker.commit(1, 'old-prompt', 2);
 
     tracker.reset();
-    const afterReset = tracker.snapshot([entry(1, 'current session')], []);
+    const afterReset = await tracker.snapshot(
+      rows([entry(1, 'current session')]),
+    );
 
     expect(afterReset.baseline_available).toBe(false);
     expect(afterReset.baseline_prompt_id).toBeNull();
@@ -72,18 +81,17 @@ describe('RefusalContextTracker (REQ-4101-D2)', () => {
     expect(afterReset.baseline_time).toBeNull();
   });
 
-  it('keeps pending previews pending when an earlier added entry exceeds the byte budget', () => {
+  it('keeps pending previews pending when an earlier added entry exceeds the byte budget', async () => {
     const tracker = new RefusalContextTracker();
-    tracker.commit([entry(1, 'baseline')], 'p1', 0);
+    tracker.commit(1, 'p1', 0);
     const oversized = entry(2, 'x'.repeat(32 * 1024 + 1));
     const pending: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'short pending request' }],
     };
 
-    const result = tracker.snapshot(
-      [entry(1, 'baseline'), oversized],
-      [pending],
+    const result = await tracker.snapshot(
+      rows([entry(1, 'baseline'), oversized, pending]),
     );
 
     expect(result.added_entries).toHaveLength(0);
@@ -93,13 +101,15 @@ describe('RefusalContextTracker (REQ-4101-D2)', () => {
     expect(result.omitted_entry_count).toBe(1);
   });
 
-  it('advances only on commit and bounds previews under one UTF-8 budget', () => {
+  it('advances only on commit and bounds previews under one UTF-8 budget', async () => {
     const tracker = new RefusalContextTracker();
-    tracker.commit([entry(1, 'baseline')], 'p1', 0);
+    tracker.commit(1, 'p1', 0);
     const current = Array.from({ length: 130 }, (_, index) =>
       entry(index + 2, '🦀'.repeat(4096)),
     );
-    const refused = tracker.snapshot([entry(1, 'baseline'), ...current], []);
+    const refused = await tracker.snapshot(
+      rows([entry(1, 'baseline'), ...current]),
+    );
     const previewBytes = new TextEncoder().encode(
       refused.added_entries.map((item) => item.preview).join('') +
         refused.pending_entries.map((item) => item.preview).join(''),

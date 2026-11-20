@@ -36,7 +36,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
@@ -162,11 +161,11 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
     onAuthError: deps.onAuthError,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: {
       current: null,
     } as React.MutableRefObject<HistoryItemWithoutId | null>,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: { current: false },
     queuedSubmissionsRef: { current: [] },
     drainSuppressedRef: { current: false },

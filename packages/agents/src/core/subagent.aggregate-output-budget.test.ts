@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createSubagentScope } from './__tests__/helpers/create-subagent-scope.js';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
@@ -41,6 +42,7 @@ import {
   createStatelessRuntimeBundle,
   defaultModelConfig,
 } from './__tests__/subagent-test-helpers.js';
+const historyScratchRoots = createTestScratchOwner();
 
 interface ProviderTurn {
   readonly text?: string;
@@ -130,10 +132,21 @@ async function createBudgetScope(
       throw new Error('Test provider adapter has no key storage');
     },
   };
-  const runtimeBundle = createStatelessRuntimeBundle({
+  const baseBundle = createStatelessRuntimeBundle({
     providerAdapter,
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
   });
+  // The disk request path reads the live runtime config, as production runtimes provide.
+  const runtimeBundle = {
+    ...baseBundle,
+    runtimeContext: {
+      ...baseBundle.runtimeContext,
+      providerRuntime: {
+        ...baseBundle.runtimeContext.providerRuntime,
+        config,
+      },
+    },
+  };
   const { overrides } = createRuntimeOverrides(workspacePaths, {
     runtimeBundle,
   });

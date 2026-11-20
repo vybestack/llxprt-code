@@ -1,3 +1,4 @@
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -47,7 +48,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { registerStandardOAuthProviders } from '../composition/oauth-provider-registration.js';
@@ -242,7 +243,7 @@ describe('Codex request credential: one authorization result per request', () =>
     setEnv('LLXPRT_CACHE_HOME', join(root, 'cache'));
     wire = [];
     fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
-      async (_i, init) => {
+      withFetchPreconnect(async (_i, init) => {
         const h = new Headers(init?.headers);
         wire.push({
           transport: 'http',
@@ -250,7 +251,7 @@ describe('Codex request credential: one authorization result per request', () =>
           accountId: h.get('ChatGPT-Account-ID') ?? undefined,
         });
         return sse();
-      },
+      }),
     );
   });
   afterEach(async () => {

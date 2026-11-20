@@ -3,8 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
-import * as recordingFs from 'node:fs/promises';
+import { describe, expect, it } from 'bun:test';
+import {
+  nativeRecordingFiles,
+  type NativeFileControl,
+} from './helpers/native-session-fixture.js';
 import { withOwners } from './turn-revision-capture.fixture.js';
 import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import { randomUUID } from 'node:crypto';
@@ -227,7 +230,7 @@ describe('Agent.generate independent history flags', () => {
           model: 'written-model',
         }),
       ).toBe('completed answer');
-      const history = await built.agent.getHistory();
+      const history = await built.agent.session.getHistory();
       expect(history[1].blocks).toStrictEqual([
         {
           type: 'thinking',
@@ -334,7 +337,9 @@ describe('Agent.generate independent history flags', () => {
           )) {
             expect(hook.llm_request?.model).toBe('utility-model-x');
           }
-          expect(textHistory(await agent.getHistory())).toStrictEqual(seed);
+          expect(textHistory(await agent.session.getHistory())).toStrictEqual(
+            seed,
+          );
         },
       );
     } finally {
@@ -380,66 +385,63 @@ describe('Agent.generate independent history flags', () => {
       'multi-turn-text.jsonl',
       { agent: [2], peer: [1] },
       async (agent, peer) => {
-        await agent.setHistory(structuredClone(seed));
-        await peer.setHistory(structuredClone(seed));
-        await agent.session.setRecording({ enabled: true });
-        await peer.session.setRecording({ enabled: true });
-        const aPath = agent.session.getRecording().path;
-        const bPath = peer.session.getRecording().path;
-        if (aPath === undefined || bPath === undefined)
-          throw new Error('Missing facade recording');
-        const entered = generationGate();
-        const held = generationGate();
-        const append = recordingFs.appendFile;
-        const boundary = spyOn(recordingFs, 'appendFile').mockImplementation(
-          async (...args) => {
-            if (
-              args[0] === bPath &&
-              String(args[1]).includes('held B exchange')
-            ) {
-              entered.release();
-              await held.promise;
-            }
-            return append(...args);
-          },
-        );
-        const generation = peer.generate('held B exchange', {
-          writeHistory: true,
-          model: 'held-recording-model',
-        });
+        const control: NativeFileControl = {};
+        const restore = nativeRecordingFiles('', control);
         try {
-          await entered.promise;
-          const first = await Promise.race([
-            generation.then(() => 'generation-returned'),
-            readFile(bPath, 'utf8').then(() => 'append-still-held'),
-          ]);
-          expect(first).toBe('append-still-held');
-          expect(await readFile(bPath, 'utf8')).not.toContain(
-            'held B exchange',
-          );
-          expect(await readFile(aPath, 'utf8')).not.toContain(
-            'held B exchange',
-          );
-          held.release();
-          expect(await generation).toBe('turn one reply');
-          const published = await readFile(bPath, 'utf8');
-          expect(published).toContain('held B exchange');
-          expect(published).toContain('held-recording-model');
-          expect(published).toContain('turn one reply');
-          expect(await readFile(aPath, 'utf8')).not.toContain(
-            'held B exchange',
-          );
-          await peer.dispose();
-          expect(await agent.generate('primary after accepted append')).toBe(
-            'turn two reply',
-          );
-        } finally {
-          held.release();
+          await agent.setHistory(structuredClone(seed));
+          await peer.setHistory(structuredClone(seed));
+          await agent.session.setRecording({ enabled: true });
+          await peer.session.setRecording({ enabled: true });
+          const aPath = agent.session.getRecording().path;
+          const bPath = peer.session.getRecording().path;
+          if (aPath === undefined || bPath === undefined)
+            throw new Error('Missing facade recording');
+          const entered = generationGate();
+          const held = generationGate();
+          control.writeGate = async () => {
+            entered.release();
+            await held.promise;
+          };
+          const generation = peer.generate('held B exchange', {
+            writeHistory: true,
+            model: 'held-recording-model',
+          });
           try {
-            await generation;
+            await entered.promise;
+            const first = await Promise.race([
+              generation.then(() => 'generation-returned'),
+              readFile(bPath, 'utf8').then(() => 'append-still-held'),
+            ]);
+            expect(first).toBe('append-still-held');
+            expect(await readFile(bPath, 'utf8')).not.toContain(
+              'held B exchange',
+            );
+            expect(await readFile(aPath, 'utf8')).not.toContain(
+              'held B exchange',
+            );
+            held.release();
+            expect(await generation).toBe('turn one reply');
+            const published = await readFile(bPath, 'utf8');
+            expect(published).toContain('held B exchange');
+            expect(published).toContain('held-recording-model');
+            expect(published).toContain('turn one reply');
+            expect(await readFile(aPath, 'utf8')).not.toContain(
+              'held B exchange',
+            );
+            await peer.dispose();
+            expect(await agent.generate('primary after accepted append')).toBe(
+              'turn two reply',
+            );
           } finally {
-            boundary.mockRestore();
+            held.release();
+            try {
+              await generation;
+            } finally {
+              control.writeGate = undefined;
+            }
           }
+        } finally {
+          restore();
         }
       },
     );
@@ -461,7 +463,7 @@ describe('Agent.generate independent history flags', () => {
       expect(requestText.includes('seed-human')).toBe(policy.readHistory);
       expect(requestText.includes('seed-ai')).toBe(policy.readHistory);
       expect(requestText.split('new-input')).toHaveLength(2);
-      const history = await agent.getHistory();
+      const history = await agent.session.getHistory();
       expect(textHistory(history)).toStrictEqual(
         policy.writeHistory
           ? [
@@ -495,7 +497,7 @@ describe('Agent.generate independent history flags', () => {
       await agent.addHistory(unrelated);
       transport.release();
       await pending;
-      expect(textHistory(await agent.getHistory())).toStrictEqual([
+      expect(textHistory(await agent.session.getHistory())).toStrictEqual([
         ...seed,
         unrelated,
         input,

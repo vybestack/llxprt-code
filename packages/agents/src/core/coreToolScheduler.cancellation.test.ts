@@ -281,7 +281,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     });
 
     // Cancel and abort
-    scheduler.cancelAll();
+    await scheduler.cancelAll();
     abortController.abort();
     toolResolve!();
 

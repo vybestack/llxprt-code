@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from './responses-request.test-helpers.js';
 /**
  * @license
@@ -22,7 +23,6 @@ import {
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -189,7 +189,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
       } as NormalizedGenerateChatOptions['resolved'],
     });
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, deps),
       deps,
     );
@@ -218,7 +218,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
       } as NormalizedGenerateChatOptions['resolved'],
     });
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, deps),
       deps,
     );
@@ -245,7 +245,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
       } as NormalizedGenerateChatOptions['resolved'],
     });
 
-    const iterator = executeOpenAIResponsesRequest(
+    const iterator = executeResponsesTestRequest(
       captureResponsesTestRequest(options, deps),
       deps,
     );

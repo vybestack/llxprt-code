@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createProviderPopulationTarget } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
@@ -40,6 +41,7 @@ import { assembleModelSelection } from '../model-selection.js';
 
 import { switchActiveProvider } from '../provider-switch/provider-switch.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const RUNTIME_ID = 'issue3576-codex-context-limit';
 
@@ -197,6 +199,7 @@ describe('Codex effective context limit runtime integration', () => {
       },
     };
     const context = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state,
       settings: settingsOwner.readRuntimePolicy(),
       readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),

@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"child-shell","name":"run_shell_command","parameters":{"command":"printf CHILD_TOOL_COMPLETED","dir_path":"{{CWD}}","description":"Check child approval routing"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"CHILD_APPROVAL_DONE: CHILD_TOOL_COMPLETED"}]}]}

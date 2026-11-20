@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,7 +7,6 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -69,7 +69,11 @@ async function startLoopbackListener(): Promise<LoopbackListener> {
   await new Promise<void>((resolve) =>
     server.listen(0, '127.0.0.1', () => resolve()),
   );
-  const { port } = server.address() as AddressInfo;
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('Expected listening TCP server address');
+  }
+  const { port } = address;
   return { baseUrl: `http://127.0.0.1:${port}/v1`, requests, server };
 }
 
@@ -173,7 +177,9 @@ describe('providers get their transport only from their manager', () => {
     const texts: string[] = [];
 
     for await (const content of provider.generateChatCompletion({
-      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
+      contents: callerOwnedRawProviderSource([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      ]),
       systemInstruction: 'Answer briefly.',
     })) {
       for (const block of content.blocks) {

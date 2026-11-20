@@ -16,7 +16,6 @@
 
 import type {
   IContent,
-  TextBlock,
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -33,6 +32,11 @@ import {
   resolvePdfFilename,
   PDF_AGGREGATE_MAX_BYTES,
 } from '../utils/mediaUtils.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
+import {
+  droppedTextByResponse,
+  withDroppedText,
+} from '../utils/droppedMediaPlacement.js';
 import type {
   ResponsesContentPart,
   ResponsesInputItem,
@@ -51,9 +55,38 @@ export interface ResponsesInputBuildContext {
    */
   serverSideParentActive?: boolean;
   mediaPdfEnabled: boolean;
+  /**
+   * Time component of synthesized reasoning ids (`rs_<time>_<n>`). The request
+   * owner mints it once so retries and rebuilds of one request write the same
+   * bytes; when absent each id reads the clock, as the array route always did.
+   */
+  reasoningIdTime?: number;
 }
 
 const OPENAI_RESPONSES_REASONING_ID_KEY = 'openai.responses.reasoningId';
+
+export interface ResponsesToolPairs {
+  hasCall(callId: string): boolean;
+  hasResponse(callId: string): boolean;
+}
+
+export function buildOpenAIResponsesUnit(
+  unit: IContent,
+  context: ResponsesInputBuildContext,
+  pairs: ResponsesToolPairs,
+  nextReasoningId: () => string,
+): ResponsesInputItem[] {
+  const input: ResponsesInputItem[] = [];
+  appendInputForContent(
+    input,
+    unit,
+    pairs,
+    context,
+    nextReasoningId,
+    isMediaPdfEnabled(context),
+  );
+  return input;
+}
 
 export function buildOpenAIResponsesInput(
   patchedContent: IContent[],
@@ -62,17 +95,18 @@ export function buildOpenAIResponsesInput(
   const input: ResponsesInputItem[] = [];
   let reasoningIdCounter = 0;
   const nextReasoningId = () => {
-    const id = `rs_${Date.now()}_${reasoningIdCounter}`;
+    const id = `rs_${context.reasoningIdTime ?? Date.now()}_${reasoningIdCounter}`;
     reasoningIdCounter += 1;
     return id;
   };
   const mediaPdfEnabled = isMediaPdfEnabled(context);
+  const pairs = new ToolPairLookup(patchedContent);
 
   for (const item of patchedContent) {
     appendInputForContent(
       input,
       item,
-      patchedContent,
+      pairs,
       context,
       nextReasoningId,
       mediaPdfEnabled,
@@ -120,7 +154,7 @@ function enforcePdfAggregateLimit(
 function appendInputForContent(
   input: ResponsesInputItem[],
   item: IContent,
-  patchedContent: IContent[],
+  pairs: ResponsesToolPairs,
   context: ResponsesInputBuildContext,
   nextReasoningId: () => string,
   mediaPdfEnabled: boolean,
@@ -131,11 +165,11 @@ function appendInputForContent(
   }
 
   if (item.speaker === 'ai') {
-    appendAssistantInput(input, item, patchedContent, context, nextReasoningId);
+    appendAssistantInput(input, item, pairs, context, nextReasoningId);
     return;
   }
 
-  appendToolInput(input, item, patchedContent, context, mediaPdfEnabled);
+  appendToolInput(input, item, pairs, context, mediaPdfEnabled);
 }
 
 function appendHumanInput(
@@ -151,8 +185,12 @@ function appendHumanInput(
   }
 
   const text = content.blocks
-    .filter((block): block is TextBlock => block.type === 'text')
-    .map((block) => block.text)
+    .flatMap((block) => {
+      if (block.type === 'text') return [block.text];
+      return block.type === 'media_dropped'
+        ? [droppedMediaModelText(block)]
+        : [];
+    })
     .join('\n');
   if (text) input.push({ role: 'user', content: text });
 }
@@ -207,7 +245,7 @@ function appendReasoningItems(
 function appendAssistantInput(
   input: ResponsesInputItem[],
   content: IContent,
-  patchedContent: IContent[],
+  pairs: ResponsesToolPairs,
   context: ResponsesInputBuildContext,
   nextReasoningId: () => string,
 ): void {
@@ -225,7 +263,7 @@ function appendAssistantInput(
 
   for (const toolCall of toolCallBlocks) {
     const normalizedCallId = normalizeToOpenAIToolId(toolCall.id);
-    if (!hasMatchingToolResponse(patchedContent, normalizedCallId)) {
+    if (!pairs.hasResponse(normalizedCallId)) {
       context.debug(
         () =>
           `Dropping dangling function_call with call_id=${normalizedCallId} (no matching tool_response in history)`,
@@ -245,7 +283,7 @@ function appendAssistantInput(
 function appendToolInput(
   input: ResponsesInputItem[],
   content: IContent,
-  patchedContent: IContent[],
+  pairs: ResponsesToolPairs,
   context: ResponsesInputBuildContext,
   mediaPdfEnabled: boolean,
 ): void {
@@ -254,6 +292,7 @@ function appendToolInput(
   );
 
   let emittedOutput = false;
+  const droppedText = droppedTextByResponse(content);
 
   for (const toolResponseBlock of content.blocks.filter(
     (block) => block.type === 'tool_response',
@@ -264,7 +303,7 @@ function appendToolInput(
     // wrongly drop the function_call_output for the new turn.
     if (
       context.serverSideParentActive !== true &&
-      !hasMatchingToolCall(patchedContent, outputCallId)
+      !pairs.hasCall(outputCallId)
     ) {
       context.debug(
         () =>
@@ -276,7 +315,11 @@ function appendToolInput(
     input.push({
       type: 'function_call_output',
       call_id: outputCallId,
-      output: getLimitedToolOutput(toolResponseBlock, context.outputLimits),
+      output: withDroppedText(
+        getLimitedToolOutput(toolResponseBlock, context.outputLimits),
+        droppedText,
+        toolResponseBlock,
+      ),
     });
     emittedOutput = true;
   }
@@ -316,34 +359,48 @@ function getLimitedToolOutput(
   return limited.content ?? limited.message ?? '';
 }
 
-function hasMatchingToolCall(
-  patchedContent: IContent[],
-  outputCallId: string,
-): boolean {
-  return patchedContent.some(
-    (msg) =>
-      msg.speaker === 'ai' &&
-      msg.blocks.some(
-        (block) =>
-          block.type === 'tool_call' &&
-          normalizeToOpenAIToolId(block.id) === outputCallId,
-      ),
-  );
-}
+/**
+ * Normalized tool call and response ids of one history, collected in a single
+ * pass the first time a pairing question is asked. Pairing is a membership
+ * test, so scanning and normalizing every row per tool block would be
+ * quadratic in history length.
+ */
+class ToolPairLookup {
+  private calls: Set<string> | undefined;
+  private responses: Set<string> | undefined;
 
-function hasMatchingToolResponse(
-  patchedContent: IContent[],
-  callId: string,
-): boolean {
-  return patchedContent.some(
-    (msg) =>
-      msg.speaker === 'tool' &&
-      msg.blocks.some(
-        (block) =>
-          block.type === 'tool_response' &&
-          normalizeToOpenAIToolId(block.callId) === callId,
-      ),
-  );
+  constructor(private readonly history: readonly IContent[]) {}
+
+  hasCall(callId: string): boolean {
+    return this.collect().calls.has(callId);
+  }
+
+  hasResponse(callId: string): boolean {
+    return this.collect().responses.has(callId);
+  }
+
+  private collect(): { calls: Set<string>; responses: Set<string> } {
+    if (this.calls === undefined || this.responses === undefined) {
+      this.calls = new Set<string>();
+      this.responses = new Set<string>();
+      for (const msg of this.history)
+        this.record(msg, this.calls, this.responses);
+    }
+    return { calls: this.calls, responses: this.responses };
+  }
+
+  private record(
+    msg: IContent,
+    calls: Set<string>,
+    responses: Set<string>,
+  ): void {
+    for (const block of msg.blocks) {
+      if (msg.speaker === 'ai' && block.type === 'tool_call')
+        calls.add(normalizeToOpenAIToolId(block.id));
+      else if (msg.speaker === 'tool' && block.type === 'tool_response')
+        responses.add(normalizeToOpenAIToolId(block.callId));
+    }
+  }
 }
 
 function buildMediaAwareParts(
@@ -356,6 +413,8 @@ function buildMediaAwareParts(
       parts.push({ type: 'input_text', text: block.text });
     } else if (block.type === 'media') {
       parts.push(convertMediaBlock(block, mediaPdfEnabled));
+    } else if (block.type === 'media_dropped') {
+      parts.push({ type: 'input_text', text: droppedMediaModelText(block) });
     }
   }
   return parts;

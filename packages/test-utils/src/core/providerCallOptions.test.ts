@@ -7,8 +7,29 @@
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from './providerCallOptions.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 describe('createProviderCallOptions', () => {
+  it('provides lazy streamed rows for an eager fixture without changing their identity', async () => {
+    const rows: IContent[] = [{ speaker: 'human', blocks: [] }];
+    const options = createProviderCallOptions({
+      providerName: 'openai',
+      contents: rows,
+    });
+    expect(Symbol.asyncIterator in options.contents).toBe(true);
+    if (!(Symbol.asyncIterator in options.contents)) {
+      throw new Error('Provider fixture must supply a history stream');
+    }
+    const iterator = options.contents[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toBe(rows[0]);
+    expect((await iterator.next()).done).toBe(true);
+    const repeated = options.contents[Symbol.asyncIterator]();
+    expect((await repeated.next()).value).toBe(rows[0]);
+    expect((await repeated.next()).done).toBe(true);
+  });
+
   it('populates provider-specific ephemerals in the invocation snapshot', () => {
     const settings = new SettingsService();
     settings.set('global-setting', 'enabled');

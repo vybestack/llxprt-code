@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -54,7 +55,7 @@ describe('Error handling #1', () => {
       currentSessionId: 'other-session',
     });
 
-    const result = await performResume('latest', context);
+    const result = await performResume('latest', withTestNamedWriters(context));
 
     // Discovery should return empty list, so "latest" should fail
     expect(result.ok).toBe(false);

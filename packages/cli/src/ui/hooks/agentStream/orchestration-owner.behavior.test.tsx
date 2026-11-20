@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -125,23 +126,23 @@ describe('stream orchestration owner', () => {
     const path = join(owner.workspace.getWorkingDirectory(), 'request.txt');
     await writeFile(path, 'owned orchestration workspace content');
     await submitOwnedTurn(owner, sibling, '@' + path, true);
-    expect(JSON.stringify(await owner.getHistory())).toContain(
-      'owned orchestration workspace content',
-    );
-    expect(await sibling.getHistory()).toHaveLength(0);
+    expect(
+      JSON.stringify(await collectResumeRows(owner.streamHistory())),
+    ).toContain('owned orchestration workspace content');
+    expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(0);
   });
   it('streams through captured operations and preserves a sibling after owner retirement', async () => {
     const owner = await makeOwner('orchestration-owner');
     const sibling = await makeOwner('orchestration-sibling');
     await submitOwnedTurn(owner, sibling);
-    expect(JSON.stringify(await owner.getHistory())).toContain(
-      'captured orchestration turn',
-    );
-    expect(await sibling.getHistory()).toHaveLength(0);
+    expect(
+      JSON.stringify(await collectResumeRows(owner.streamHistory())),
+    ).toContain('captured orchestration turn');
+    expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(0);
     await owner.dispose();
     await submitOwnedTurn(sibling, owner);
-    expect(JSON.stringify(await sibling.getHistory())).toContain(
-      'captured orchestration turn',
-    );
+    expect(
+      JSON.stringify(await collectResumeRows(sibling.streamHistory())),
+    ).toContain('captured orchestration turn');
   });
 });

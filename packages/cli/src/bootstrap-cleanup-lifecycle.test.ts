@@ -417,7 +417,9 @@ describe('real startup activation owner cleanup', () => {
           expect(forked.captureSettingsSnapshot()).toStrictEqual(
             startup.preflight.captureSettingsSnapshot(),
           );
-          expect(await startup.preflight.captureHistory()).toStrictEqual([]);
+          expect(
+            await Array.fromAsync(startup.preflight.captureHistory()),
+          ).toStrictEqual([]);
           launched = true;
           return 0;
         }),

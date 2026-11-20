@@ -23,6 +23,7 @@ import {
   applyTerminalMetadata,
 } from './OpenAIStreamProcessorState.js';
 import { type StreamProcessorDeps } from './OpenAIStreamProcessor.js';
+import { completeChatToolArguments } from './chatToolArgumentCompletion.js';
 
 /**
  * Build pipeline tool-call blocks from the cached pipeline result.
@@ -141,7 +142,7 @@ export function* emitCombinedTerminalContent(
         hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
       },
     );
-    yield combinedContent;
+    yield* completeChatToolArguments(combinedContent, state);
   } else {
     deps.logger.debug(
       () => `[stream:terminal] skipped combined terminal content emission`,

@@ -18,9 +18,11 @@ import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
+import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
 import {
   sanitizeAnthropicContentImages,
-  sanitizeAnthropicRequestBodyImages,
+  sanitizeWireBlockImages,
   isAnthropicImageDimensionLimitError,
   parseAnthropicImageDimensionLimit,
   resolveRecoveryImageBudget,
@@ -565,7 +567,37 @@ function requireToolResultBlock(
   }
 }
 
-describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issue:3216)', () => {
+/**
+ * Runs every content block of a request body fixture through the block-level
+ * sanitizer the recovery's table pass uses, and returns the resulting body
+ * together with each block's before and after so tests can check identity.
+ */
+function sanitizeBodyBlocks(
+  body: AnthropicRequestBodyFixture,
+  budget: ImageDimensionBudget,
+): {
+  body: Record<string, unknown>;
+  replacedCount: number;
+  pairs: ReadonlyArray<{ before: unknown; after: unknown }>;
+} {
+  let replacedCount = 0;
+  const pairs: Array<{ before: unknown; after: unknown }> = [];
+  const messages = body.messages.map((message) => ({
+    ...message,
+    content: message.content.map((block) => {
+      const result = sanitizeWireBlockImages(
+        block as unknown as AnthropicMessageBlock,
+        budget,
+      );
+      replacedCount += result.replacedCount;
+      pairs.push({ before: block, after: result.block });
+      return result.block;
+    }),
+  }));
+  return { body: { ...body, messages }, replacedCount, pairs };
+}
+
+describe('sanitizeWireBlockImages nested tool_result traversal (@issue:3216)', () => {
   it('sanitizes image blocks nested in tool_result.content preserving the wrapper and pairing', async () => {
     const bigNested = await pngBase64(3000, 3000);
     const okNested = await pngBase64(1200, 1200);
@@ -616,10 +648,7 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
     };
     const original = JSON.parse(JSON.stringify(body)) as typeof body;
 
-    const result = sanitizeAnthropicRequestBodyImages(
-      body as unknown as Record<string, unknown>,
-      { maxDimension: 2000 },
-    );
+    const result = sanitizeBodyBlocks(body, { maxDimension: 2000 });
 
     expect(result.replacedCount).toBe(1);
     const userMessage = result.body['messages'] as typeof body.messages;
@@ -691,10 +720,7 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
       ],
     };
 
-    const result = sanitizeAnthropicRequestBodyImages(
-      body as unknown as Record<string, unknown>,
-      { maxDimension: 2000 },
-    );
+    const result = sanitizeBodyBlocks(body, { maxDimension: 2000 });
 
     expect(result.replacedCount).toBe(2);
     const serialized = JSON.stringify(result.body);
@@ -756,10 +782,7 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
       ],
     };
 
-    const result = sanitizeAnthropicRequestBodyImages(
-      body as unknown as Record<string, unknown>,
-      { maxDimension: 2000 },
-    );
+    const result = sanitizeBodyBlocks(body, { maxDimension: 2000 });
 
     expect(result.replacedCount).toBe(2);
     const serialized = JSON.stringify(result.body);
@@ -788,13 +811,10 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
       ],
     };
 
-    const result = sanitizeAnthropicRequestBodyImages(
-      body as unknown as Record<string, unknown>,
-      { maxDimension: 2000 },
-    );
+    const result = sanitizeBodyBlocks(body, { maxDimension: 2000 });
 
     expect(result.replacedCount).toBe(0);
-    expect(result.body).toBe(body as unknown as Record<string, unknown>);
+    for (const { before, after } of result.pairs) expect(after).toBe(before);
   });
 
   it('replaces a top-level image that only exceeds a pixel-only budget (reactive parity)', async () => {
@@ -818,10 +838,7 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
       ],
     };
 
-    const result = sanitizeAnthropicRequestBodyImages(
-      body as unknown as Record<string, unknown>,
-      { maxPixels: 1_000_000 },
-    );
+    const result = sanitizeBodyBlocks(body, { maxPixels: 1_000_000 });
 
     expect(result.replacedCount).toBe(1);
     expect(JSON.stringify(result.body)).not.toContain(tall);
@@ -853,14 +870,11 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
     };
     const original = JSON.parse(JSON.stringify(body)) as typeof body;
 
-    const result = sanitizeAnthropicRequestBodyImages(
-      body as unknown as Record<string, unknown>,
-      { maxDimension: 2000 },
-    );
+    const result = sanitizeBodyBlocks(body, { maxDimension: 2000 });
 
     expect(result.replacedCount).toBe(0);
-    // No replacements: the SAME body object is returned (identity).
-    expect(result.body).toBe(body as unknown as Record<string, unknown>);
+    // No replacements: every block comes back as the SAME object (identity).
+    for (const { before, after } of result.pairs) expect(after).toBe(before);
     expect(body).toStrictEqual(original);
   });
 
@@ -889,21 +903,15 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
         },
       ],
     };
-    const messagesBefore = body.messages;
     const contentBefore = body.messages[0].content;
     const toolResultBefore = contentBefore[0] as AnthropicToolResultBlock;
     const nestedBefore = toolResultBefore.content as readonly unknown[];
 
-    const result = sanitizeAnthropicRequestBodyImages(
-      body as unknown as Record<string, unknown>,
-      { maxDimension: 2000 },
-    );
+    const result = sanitizeBodyBlocks(body, { maxDimension: 2000 });
 
     expect(result.replacedCount).toBe(1);
-    // New containers at every level.
-    expect(result.body['messages']).not.toBe(messagesBefore);
+    // A new wrapper and a new content array.
     const newMessages = result.body['messages'] as typeof body.messages;
-    expect(newMessages[0].content).not.toBe(contentBefore);
     const newToolResult = newMessages[0].content[0] as AnthropicToolResultBlock;
     expect(newToolResult).not.toBe(toolResultBefore);
     expect(newToolResult.content).not.toBe(nestedBefore);

@@ -1,5 +1,6 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,8 +20,13 @@ import { LoadBalancerFailoverError, RetriesExhaustedError } from '../errors.js';
 import { MAX_PUBLIC_PROVIDER_MESSAGE_LENGTH } from '../providerErrorObservation.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
+
+const requestContents = replayableContents([
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
+]);
 
 async function* generateNestedFailoverThenSuccess(
   recordCall: () => number,
@@ -85,32 +91,36 @@ async function* generateCapturedFailoverResponse(
     error.status = 429;
     throw error;
   }
-  yield { role: 'model', parts: [{ text: 'response' }] };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] };
 }
 
-describe('LoadBalancingProvider - Failover Strategy', () => {
-  let settingsService: SettingsService;
-  let config: Config;
-  let providerManager: ProviderManager;
+function createNestedPartialFailure(): LoadBalancerFailoverError {
+  return new LoadBalancerFailoverError('nested-profile', [
+    {
+      profile: 'nested-primary',
+      error: Object.assign(new Error('nested primary unavailable'), {
+        status: 503,
+      }),
+    },
+    {
+      profile: 'nested-secondary',
+      error: Object.assign(new Error('nested secondary unavailable'), {
+        status: 503,
+      }),
+    },
+  ]);
+}
 
-  beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
-      undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
-    );
-  });
+type TestContext = {
+  providerManager: ProviderManager;
+  settingsService: SettingsService;
+  config: Config;
+};
 
-  describe('Aggregated Error When All Backends Fail', () => {
+function registerAggregatedCase1(getContext: () => TestContext): void {
+  describe('nested retryable error', () => {
     it('fails over to the next backend after a retryable nested load balancer failure', async () => {
+      const { providerManager } = getContext();
       const transientFailure = Object.assign(new Error('nested unavailable'), {
         status: 503,
       });
@@ -158,7 +168,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       for await (const chunk of provider.generateChatCompletion({
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
+        contents: replayableContents([]),
       })) {
         chunks.push(chunk);
       }
@@ -168,22 +178,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       ]);
       expect(calls).toBe(2);
     });
+  });
+}
 
+function registerAggregatedCase2(getContext: () => TestContext): void {
+  describe('nested partial response', () => {
     it('propagates a retryable nested load balancer failure after yielding content', async () => {
-      const nestedFailure = new LoadBalancerFailoverError('nested-profile', [
-        {
-          profile: 'nested-primary',
-          error: Object.assign(new Error('nested primary unavailable'), {
-            status: 503,
-          }),
-        },
-        {
-          profile: 'nested-secondary',
-          error: Object.assign(new Error('nested secondary unavailable'), {
-            status: 503,
-          }),
-        },
-      ]);
+      const { providerManager } = getContext();
+      const nestedFailure = createNestedPartialFailure();
       const content: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'partial response' }],
@@ -243,7 +245,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       try {
         for await (const chunk of provider.generateChatCompletion({
           invocation: makeLoadBalancerInvocation(),
-          contents: [],
+          contents: replayableContents([]),
         })) {
           chunks.push(chunk);
         }
@@ -256,8 +258,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(primaryCalls).toBe(1);
       expect(secondaryCalls).toBe(0);
     });
+  });
+}
 
+function registerAggregatedCase3(getContext: () => TestContext): void {
+  describe('terminal retries exhausted', () => {
     it('does not fail over after a terminal retries-exhausted failure', async () => {
+      const { providerManager } = getContext();
       const terminalFailure = new RetriesExhaustedError(
         'transport retries exhausted',
         'server_error',
@@ -303,7 +310,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         (async () => {
           for await (const _chunk of provider.generateChatCompletion({
             invocation: makeLoadBalancerInvocation(),
-            contents: [],
+            contents: replayableContents([]),
           })) {
             await Promise.resolve();
           }
@@ -311,8 +318,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       ).rejects.toBe(terminalFailure);
       expect(calls).toBe(1);
     });
+  });
+}
 
+function registerAggregatedCase4(getContext: () => TestContext): void {
+  describe('reused request observation', () => {
     it('observes the same backend error once per reused request lifecycle', async () => {
+      const { providerManager } = getContext();
       const sharedFailure = new Error('shared backend failure');
       const noContent: IContent[] = [];
       const delegate: IProvider = {
@@ -351,7 +363,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const observed: unknown[] = [];
       const options: GenerateChatOptions = {
         invocation: makeLoadBalancerInvocation(),
-        contents: [],
+        contents: replayableContents([]),
         onProviderError: (error) => observed.push(error),
       };
 
@@ -369,8 +381,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(observed).toHaveLength(2);
     });
+  });
+}
 
+function registerAggregatedCase5(getContext: () => TestContext): void {
+  describe('all backends fail', () => {
     it('should throw LoadBalancerFailoverError when all backends fail', async () => {
+      const { providerManager } = getContext();
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
@@ -407,8 +424,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
         invocation: makeLoadBalancerInvocation(),
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+
+        contents: requestContents,
       };
 
       await expect(
@@ -420,8 +437,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         })(),
       ).rejects.toThrow(/failover/i);
     });
+  });
+}
 
+function registerAggregatedCase6(getContext: () => TestContext): void {
+  describe('profile name', () => {
     it('should include profile name in error message', async () => {
+      const { providerManager } = getContext();
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
@@ -458,8 +480,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
         invocation: makeLoadBalancerInvocation(),
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+
+        contents: requestContents,
       };
 
       await expect(
@@ -471,8 +493,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         })(),
       ).rejects.toThrow(/my-test-profile/i);
     });
+  });
+}
 
+function registerAggregatedCase7(getContext: () => TestContext): void {
+  describe('backend names', () => {
     it('should include all backend names that failed', async () => {
+      const { providerManager } = getContext();
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
@@ -509,8 +536,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
         invocation: makeLoadBalancerInvocation(),
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+
+        contents: requestContents,
       };
 
       await expect(
@@ -522,8 +549,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         })(),
       ).rejects.toThrow(/(backend-one|backend-two)/i);
     });
+  });
+}
 
+function registerAggregatedCase8(getContext: () => TestContext): void {
+  describe('backend messages', () => {
     it('includes per-backend failure messages when multiple backends fail', async () => {
+      const { providerManager } = getContext();
       let callCount = 0;
       const mockProvider: IProvider = {
         name: 'test-provider',
@@ -560,8 +592,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
         invocation: makeLoadBalancerInvocation(),
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+
+        contents: requestContents,
       };
 
       await expect(
@@ -575,8 +607,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         'zai: rate limited by vendor; glm51: authentication failed',
       );
     });
+  });
+}
 
+function registerAggregatedCase9(getContext: () => TestContext): void {
+  describe('backend statuses', () => {
     it('includes HTTP status codes in per-backend summary when available', async () => {
+      const { providerManager } = getContext();
       let callCount = 0;
       const mockProvider: IProvider = {
         name: 'test-provider',
@@ -613,8 +650,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
         invocation: makeLoadBalancerInvocation(),
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+
+        contents: requestContents,
       };
 
       await expect(
@@ -628,7 +665,11 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         'zai: Unauthorized (status: 401); glm51: Rate limit (status: 429)',
       );
     });
+  });
+}
 
+function registerAggregatedCase10(): void {
+  describe('single failure', () => {
     it('preserves single-failure message format for backward compatibility', () => {
       // Test the error class directly since failover requires 2+ backends.
       // When only one failure is recorded, the error message should be the
@@ -642,14 +683,22 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(error.message).toContain('test-profile');
       expect(error.message).toContain('sole');
     });
+  });
+}
 
+function registerAggregatedCase11(): void {
+  describe('no attempts', () => {
     it('uses diagnostic fallback when no backend attempts were recorded', () => {
       const error = new LoadBalancerFailoverError('test-profile', []);
 
       expect(error.message).toContain('no backend attempts were recorded');
       expect(error.message).toContain('(tried: none)');
     });
+  });
+}
 
+function registerAggregatedCase12(): void {
+  describe('bounded summaries', () => {
     it('keeps public summaries bounded while preserving every structured failure', () => {
       const failures = Array.from({ length: 5 }, (_, index) => ({
         profile: `backend-${index + 1}`,
@@ -666,46 +715,58 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(error.failures).toStrictEqual(failures);
     });
   });
-  describe('ResolvedSubProfile settings propagation', () => {
-    it('applies sub-profile ephemerals and modelParams on the failover path', async () => {
-      const provider = new LoadBalancingProvider(
+}
+
+function createSettingsFailoverProvider(
+  providerManager: ProviderManager,
+): LoadBalancingProvider {
+  return new LoadBalancingProvider(
+    {
+      profileName: 'failover-settings-test',
+      strategy: 'failover',
+      subProfiles: [
         {
-          profileName: 'failover-settings-test',
-          strategy: 'failover',
-          subProfiles: [
-            {
-              name: 'primary',
-              providerName: 'gemini',
-              model: 'gemini-flash',
-              baseURL: 'https://primary.example.com',
-              authToken: 'primary-token',
-              ephemeralSettings: {
-                temperature: 0.2,
-                'reasoning.enabled': true,
-              },
-              modelParams: { topP: 0.8 },
-            },
-            {
-              name: 'secondary',
-              providerName: 'gemini',
-              model: 'gemini-pro',
-              ephemeralSettings: {},
-              modelParams: {},
-            },
-          ],
-          lbProfileEphemeralSettings: { failover_retry_count: 1 },
-          lbProfileModelParams: { topK: 40 },
+          name: 'primary',
+          providerName: 'gemini',
+          model: 'gemini-flash',
+          baseURL: 'https://primary.example.com',
+          authToken: 'primary-token',
+          ephemeralSettings: {
+            temperature: 0.2,
+            'reasoning.enabled': true,
+          },
+          modelParams: { topP: 0.8 },
         },
-        providerManager,
-      );
+        {
+          name: 'secondary',
+          providerName: 'gemini',
+          model: 'gemini-pro',
+          ephemeralSettings: {},
+          modelParams: {},
+        },
+      ],
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
+      lbProfileModelParams: { topK: 40 },
+    },
+    providerManager,
+  );
+}
+
+function registerSettingsCase1(getContext: () => TestContext): void {
+  describe('sub-profile propagation', () => {
+    it('applies sub-profile ephemerals and modelParams on the failover path', async () => {
+      const { providerManager } = getContext();
+      const provider = createSettingsFailoverProvider(providerManager);
 
       let capturedOptions: GenerateChatOptions | undefined;
       let invocationCount = 0;
       const mockProvider = {
         name: 'gemini',
-        generateChatCompletion: (options: GenerateChatOptions) =>
+        generateChatCompletion: (
+          options: GenerateChatOptions | AsyncIterable<IContent>,
+        ) =>
           generateCapturedFailoverResponse(
-            options,
+            optionsOnly(options),
             () => ++invocationCount,
             (receivedOptions) => {
               capturedOptions = receivedOptions;
@@ -717,15 +778,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const originalGetProvider =
         providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = () => mockProvider as IProvider;
+      providerManager.getProviderByName = () => mockProvider;
 
       try {
         const iterator = provider.generateChatCompletion({
           invocation: makeLoadBalancerInvocation(),
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
-          settings: settingsService,
-          config,
-          runtime: {},
+          contents: replayableContents([
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ]),
         });
         for await (const _chunk of iterator) {
           // Consume
@@ -752,4 +812,58 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
     });
   });
+}
+
+describe('LoadBalancingProvider - Failover Strategy', () => {
+  let settingsService: SettingsService;
+  let config: Config;
+  let providerManager: ProviderManager;
+
+  const getContext = (): TestContext => ({
+    providerManager,
+    settingsService,
+    config,
+  });
+
+  beforeEach(() => {
+    settingsService = new SettingsService();
+    config = createRuntimeConfigStub(settingsService);
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+      undefined,
+      undefined,
+      borrowedSettings(config, settingsService),
+    );
+  });
+
+  describe('Aggregated Error When All Backends Fail', () => {
+    registerAggregatedCase1(getContext);
+    registerAggregatedCase2(getContext);
+    registerAggregatedCase3(getContext);
+    registerAggregatedCase4(getContext);
+    registerAggregatedCase5(getContext);
+    registerAggregatedCase6(getContext);
+    registerAggregatedCase7(getContext);
+    registerAggregatedCase8(getContext);
+    registerAggregatedCase9(getContext);
+    registerAggregatedCase10();
+    registerAggregatedCase11();
+    registerAggregatedCase12();
+  });
+  describe('ResolvedSubProfile settings propagation', () => {
+    registerSettingsCase1(getContext);
+  });
 });
+
+function optionsOnly(
+  options: GenerateChatOptions | AsyncIterable<IContent>,
+): GenerateChatOptions {
+  if (Symbol.asyncIterator in options)
+    throw new Error('Expected request options');
+  return options;
+}

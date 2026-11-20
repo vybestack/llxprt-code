@@ -1,3 +1,11 @@
+import {
+  generateSignalAwareResponse,
+  captureResolvedAuthToken,
+  captureResolvedBaseUrl,
+  optionsOnly,
+} from './helpers/load-balancing-settings.js';
+import { replayableContents } from '../utils/collectContents.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -6,7 +14,6 @@
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -15,42 +22,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
+  type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-
-async function* generateSignalAwareResponse(
-  options: GenerateChatOptions,
-  captureSignal: (signal: AbortSignal) => void,
-): AsyncGenerator<IContent> {
-  const signal = options.invocation?.signal;
-  if (signal === undefined) {
-    throw new Error('Delegate invocation signal is required');
-  }
-  captureSignal(signal);
-  await new Promise<void>((resolve) => {
-    signal.addEventListener('abort', () => resolve(), { once: true });
-  });
-  yield { role: 'model', parts: [{ text: 'response' }] };
-}
-
-function captureResolvedAuthToken(
-  options: GenerateChatOptions,
-  capturedAuthTokens: string[],
-): void {
-  if (options.resolved?.authToken != null) {
-    capturedAuthTokens.push(options.resolved.authToken);
-  }
-}
-
-function captureResolvedBaseUrl(
-  options: GenerateChatOptions,
-  capturedBaseUrls: string[],
-): void {
-  if (options.resolved?.baseURL != null) {
-    capturedBaseUrls.push(options.resolved.baseURL);
-  }
-}
 
 describe('LoadBalancingProvider', () => {
   let settingsService: SettingsService;
@@ -67,6 +42,9 @@ describe('LoadBalancingProvider', () => {
       undefined,
       settingsService,
       config,
+      undefined,
+      undefined,
+      undefined,
     );
   });
 
@@ -110,7 +88,10 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'gemini',
           async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
@@ -134,14 +115,19 @@ describe('LoadBalancingProvider', () => {
           return selected;
         };
 
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           // Make 4 requests to verify round-robin cycling
           for (let i = 0; i < 4; i++) {
             const iterator = provider.generateChatCompletion({
               invocation: makeLoadBalancerInvocation(),
-              contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
+              contents: replayableContents([
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: `test ${i}` }],
+                },
+              ]),
             });
             for await (const _chunk of iterator) {
               // Consume
@@ -186,10 +172,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'gemini',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             capturedOptions = options;
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
@@ -197,12 +187,14 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           const iterator = provider.generateChatCompletion({
             invocation: makeLoadBalancerInvocation(),
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: replayableContents([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ]),
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -250,10 +242,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'gemini',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             capturedOptions = options;
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
@@ -261,12 +257,14 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           const iterator = provider.generateChatCompletion({
             invocation: makeLoadBalancerInvocation(),
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: replayableContents([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ]),
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -316,10 +314,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'gemini',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             capturedOptions = options;
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
@@ -327,15 +329,14 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           const iterator = provider.generateChatCompletion({
             invocation: makeLoadBalancerInvocation(),
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
-            settings: settingsService,
-            config,
-            runtime: {},
+            contents: replayableContents([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ]),
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -406,10 +407,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'anthropic',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             capturedOptions = options;
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'claude-opus-4-8',
@@ -417,15 +422,14 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           const iterator = provider.generateChatCompletion({
             invocation: makeLoadBalancerInvocation(),
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
-            settings: settingsService,
-            config,
-            runtime: {},
+            contents: replayableContents([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ]),
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -475,8 +479,10 @@ describe('LoadBalancingProvider', () => {
         let capturedSignal: AbortSignal | undefined;
         const delegate: IProvider = {
           name: 'anthropic',
-          generateChatCompletion: (options: GenerateChatOptions) =>
-            generateSignalAwareResponse(options, (signal) => {
+          generateChatCompletion: (
+            options: GenerateChatOptions | AsyncIterable<IContent>,
+          ) =>
+            generateSignalAwareResponse(optionsOnly(options), (signal) => {
               capturedSignal = signal;
             }),
           getModels: async () => [],
@@ -490,10 +496,10 @@ describe('LoadBalancingProvider', () => {
           const completion = (async () => {
             for await (const _chunk of provider.generateChatCompletion({
               invocation: makeLoadBalancerInvocation(),
-              contents: [{ role: 'user', parts: [{ text: 'test' }] }],
-              settings: settingsService,
-              config,
-              runtime: {},
+              contents: replayableContents([
+                { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+              ]),
+
               metadata: { abortSignal: controller.signal },
             })) {
               void _chunk;
@@ -542,10 +548,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'gemini',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             capturedOptions = options;
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
@@ -553,12 +563,14 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           const iterator = provider.generateChatCompletion({
             invocation: makeLoadBalancerInvocation(),
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: replayableContents([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ]),
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -606,10 +618,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'gemini',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             capturedOptions = options;
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
@@ -617,12 +633,14 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           const iterator = provider.generateChatCompletion({
             invocation: makeLoadBalancerInvocation(),
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: replayableContents([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ]),
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -670,10 +688,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'gemini',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             capturedOptions = options;
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
@@ -681,12 +703,14 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           const iterator = provider.generateChatCompletion({
             invocation: makeLoadBalancerInvocation(),
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: replayableContents([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ]),
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -740,10 +764,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'gemini',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             captureResolvedAuthToken(options, capturedAuthTokens);
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
@@ -751,14 +779,19 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           // Make 4 requests to cycle through both auth tokens twice
           for (let i = 0; i < 4; i++) {
             const iterator = provider.generateChatCompletion({
               invocation: makeLoadBalancerInvocation(),
-              contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
+              contents: replayableContents([
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: `test ${i}` }],
+                },
+              ]),
             });
             for await (const _chunk of iterator) {
               // Consume
@@ -808,10 +841,14 @@ describe('LoadBalancingProvider', () => {
         const mockProvider = {
           name: 'openai',
           async *generateChatCompletion(
-            options: GenerateChatOptions,
+            optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
           ): AsyncIterableIterator<IContent> {
+            const options = optionsOnly(optionsOrStream);
             captureResolvedBaseUrl(options, capturedBaseURLs);
-            yield { role: 'model', parts: [{ text: 'response' }] };
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'response' }],
+            };
           },
           getModels: async () => [],
           getDefaultModel: () => 'gpt-4',
@@ -819,13 +856,18 @@ describe('LoadBalancingProvider', () => {
 
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
-        providerManager.getProviderByName = () => mockProvider as IProvider;
+        providerManager.getProviderByName = () => mockProvider;
 
         try {
           for (let i = 0; i < 4; i++) {
             const iterator = provider.generateChatCompletion({
               invocation: makeLoadBalancerInvocation(),
-              contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
+              contents: replayableContents([
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: `test ${i}` }],
+                },
+              ]),
             });
             for await (const _chunk of iterator) {
               // Consume

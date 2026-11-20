@@ -10,10 +10,61 @@
  * signal.aborted rather than merely recording a call.
  */
 
-import { describe, it, expect } from 'bun:test';
-import { createSlashCommandCancellation } from './useSlashCommandCancellation.js';
+import { describe, it, expect, vi } from 'bun:test';
+import { createDeps } from './slash-command-handler-deps-test-helpers.js';
+import { createCommands } from '../../__tests__/command-history-result-fixture.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
+import { MessageType, type HistoryItemWithoutId } from '../types.js';
+import {
+  createSlashCommandCancellation,
+  useSlashCommandCancellation,
+} from './useSlashCommandCancellation.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 
 describe('slash-command cancellation registry', () => {
+  it('aborts outstanding commands when their UI owner unmounts', () => {
+    const hook = renderHook(() => useSlashCommandCancellation());
+    const controller = hook.result.current.beginSlashCommandAction();
+    expect(controller.signal.aborted).toBe(false);
+
+    hook.unmount();
+
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it('owns result publication until it settles and stops error publication after cancellation', async () => {
+    const registry = createSlashCommandCancellation();
+    const deps = createDeps(vi.fn(), registry);
+    let rejectPublication: ((error: Error) => void) | undefined;
+    const written: HistoryItemWithoutId[] = [];
+    deps.writeOutput = async (item) => {
+      written.push(item);
+      if (item.type === MessageType.INFO) {
+        await new Promise<void>((_resolve, reject) => {
+          rejectPublication = reject;
+        });
+      }
+    };
+    deps.commands = createCommands(() => ({
+      type: 'message',
+      messageType: 'info',
+      content: 'profile saved',
+    }));
+    const pending = processSlashCommand(deps, '/help');
+    await waitFor(() => expect(rejectPublication).toBeDefined());
+    const cancelled = registry.cancelActiveSlashCommand();
+    rejectPublication?.(new Error('Session disposed'));
+    const outcome = await pending;
+
+    expect(cancelled).toBe(true);
+    expect(outcome).toStrictEqual({ type: 'handled' });
+    expect(written.map((item) => item.type)).toStrictEqual([
+      MessageType.USER,
+      MessageType.INFO,
+    ]);
+    expect(registry.cancelActiveSlashCommand()).toBe(false);
+  });
+
   it('reports nothing to cancel before any action starts', () => {
     const registry = createSlashCommandCancellation();
 

@@ -1,8 +1,10 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { collectResumeRows } from './resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -65,12 +67,13 @@ describe('Core resume flow #3', () => {
       currentSessionId: 'other-session',
     });
 
-    const result = await performResume(targetId, context);
+    const result = await performResume(targetId, withTestNamedWriters(context));
 
     expect(result.ok).toBe(true);
     assertTruthy(result.ok);
+    const restoredRows = await collectResumeRows(result.history);
     expect(result.metadata.sessionId).toBe(targetId);
-    expect(result.history[0].blocks[0]).toMatchObject({
+    expect(restoredRows[0].blocks[0]).toMatchObject({
       type: 'text',
       text: 'target content',
     });

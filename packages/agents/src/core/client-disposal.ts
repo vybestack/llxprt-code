@@ -1,4 +1,3 @@
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,9 +6,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 export async function finishClientDisposal(
   auxiliary: Promise<void>,
   releaseListeners: () => unknown[],
-  previousHistory: readonly IContent[] | undefined,
-  clearMediaHistory: () => Promise<void> | undefined,
-  retireChat: () => void,
+  releaseJournal: () => Promise<void>,
   releaseHistory: () => Promise<readonly unknown[]>,
   forgetReleasedHistory: () => void,
 ): Promise<void> {
@@ -20,22 +17,11 @@ export async function finishClientDisposal(
       result.status === 'rejected' ? [result.reason] : [],
     ),
   );
-  const media = await Promise.allSettled([
-    Promise.resolve().then(async () => {
-      if (
-        previousHistory?.some((content) =>
-          content.blocks.some(
-            (block) => block.type === 'media' && block.encoding === 'reference',
-          ),
-        ) === true
-      ) {
-        await clearMediaHistory();
-        retireChat();
-      }
-    }),
+  const journal = await Promise.allSettled([
+    Promise.resolve().then(releaseJournal),
   ]);
   failures.push(
-    ...media.flatMap((result) =>
+    ...journal.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     ),
   );

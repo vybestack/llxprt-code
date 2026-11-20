@@ -1,3 +1,4 @@
+import { withTestNamedWriters } from './support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,6 +19,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertTruthy } from '../__tests__/assertions.js';
 import fc from 'fast-check';
+import { disposeResumeContext } from './dispose-resume-context.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -48,13 +50,6 @@ async function createIndexedSessions(
   return sessionIds;
 }
 
-async function releaseCurrentLock(
-  context: ReturnType<typeof makeResumeContext>,
-): Promise<void> {
-  const newLock = context.recordingCallbacks.getCurrentLockHandle();
-  if (newLock) await newLock.release();
-}
-
 describe('Property-based tests #1', () => {
   let state: SessionBrowserTestState;
 
@@ -83,6 +78,9 @@ describe('Property-based tests #1', () => {
         );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
+        const context = makeResumeContext(localChatsDir, {
+          currentSessionId: 'other-session',
+        });
 
         try {
           // Create N sessions
@@ -94,21 +92,22 @@ describe('Property-based tests #1', () => {
           // Pick a random valid index
           const validIndex = Math.floor(Math.random() * sessionCount) + 1;
 
-          const context = makeResumeContext(localChatsDir, {
-            currentSessionId: 'other-session',
-          });
-
-          const result = await performResume(String(validIndex), context);
+          const result = await performResume(
+            String(validIndex),
+            withTestNamedWriters(context),
+          );
 
           expect(result.ok).toBe(true);
           assertTruthy(result.ok);
           // Index is 1-based, newest first
           const expectedSessionId = sessionIds[sessionCount - validIndex];
           expect(result.metadata.sessionId).toBe(expectedSessionId);
-
-          await releaseCurrentLock(context);
         } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
+          try {
+            await disposeResumeContext(context);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
         }
       }),
       { numRuns: 5 },

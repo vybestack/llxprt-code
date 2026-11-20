@@ -1,5 +1,6 @@
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
-const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const borrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -17,13 +18,19 @@ import {
 } from '../LoadBalancingProvider.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
+
+const requestContents = replayableContents([
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
+]);
 
 async function* generateUniqueChunkAfterInitialFailure(
   recordCall: () => number,
 ): AsyncGenerator<IContent> {
   if (recordCall() === 1) throw new Error('first attempt failed');
-  yield { type: 'text' as const, content: 'unique-chunk' };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unique-chunk' }] };
 }
 
 async function* generateRateLimitedThenNumberedResponse(
@@ -35,7 +42,10 @@ async function* generateRateLimitedThenNumberedResponse(
     error.status = 429;
     throw error;
   }
-  yield { type: 'text' as const, content: `response-${callCount}` };
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: `response-${callCount}` }],
+  };
 }
 
 async function* generateSuccessfulSameBackendRetry(
@@ -46,91 +56,89 @@ async function* generateSuccessfulSameBackendRetry(
     error.status = 429;
     throw error;
   }
-  yield { type: 'text' as const, content: 'success' };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
 }
 
 async function* generateSuccessAfterNonStatusFailure(
   recordCall: () => number,
 ): AsyncGenerator<IContent> {
   if (recordCall() === 1) throw new Error('Backend error without status');
-  yield { type: 'text' as const, content: 'success' };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
 }
 
 async function* generatePartialResponseThenRateLimit(
   recordCall: () => number,
 ): AsyncGenerator<IContent> {
   if (recordCall() === 1) {
-    yield { type: 'text' as const, content: 'partial-response' };
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'partial-response' }],
+    };
     const error = new Error('Rate limited mid-stream') as Error & {
       status: number;
     };
     error.status = 429;
     throw error;
   }
-  yield { type: 'text' as const, content: 'backend2-response' };
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'backend2-response' }],
+  };
 }
 
-describe('LoadBalancingProvider - Failover Strategy', () => {
-  let settingsService: SettingsService;
-  let config: Config;
-  let providerManager: ProviderManager;
+function createSuccessfulStreamingProvider(
+  providerManager: ProviderManager,
+): LoadBalancingProvider {
+  const mockProvider: IProvider = {
+    name: 'test-provider',
+    async *generateChatCompletion(): AsyncGenerator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'chunk1' }] };
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'chunk2' }] };
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'chunk3' }] };
+    },
+    getModels: async () => [],
+    getDefaultModel: () => 'test-model',
+  };
+  providerManager.registerProvider(mockProvider);
 
-  beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
-      undefined,
-      fixtureOwnersBorrowedSettings(config, settingsService),
-    );
-  });
+  const lbConfig: LoadBalancingProviderConfig = {
+    profileName: 'test-streaming',
+    strategy: 'failover',
+    subProfiles: [
+      {
+        name: 'sub1',
+        providerName: 'test-provider',
+        modelId: 'model1',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-1',
+      },
+      {
+        name: 'sub2',
+        providerName: 'test-provider',
+        modelId: 'model2',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-2',
+      },
+    ],
+  };
+  return new LoadBalancingProvider(lbConfig, providerManager);
+}
 
-  describe('Streaming Behavior', () => {
+type TestContext = {
+  providerManager: ProviderManager;
+  settingsService: SettingsService;
+  config: Config;
+};
+
+function registerStreamingCase1(getContext: () => TestContext): void {
+  describe('successful stream', () => {
     it('should yield all chunks from successful backend', async () => {
-      const mockProvider: IProvider = {
-        name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'chunk1' };
-          yield { type: 'text' as const, content: 'chunk2' };
-          yield { type: 'text' as const, content: 'chunk3' };
-        },
-        getModels: async () => [],
-        getDefaultModel: () => 'test-model',
-      };
-
-      providerManager.registerProvider(mockProvider);
-
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-streaming',
-        strategy: 'failover',
-        subProfiles: [
-          {
-            name: 'sub1',
-            providerName: 'test-provider',
-            modelId: 'model1',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-1',
-          },
-          {
-            name: 'sub2',
-            providerName: 'test-provider',
-            modelId: 'model2',
-            baseURL: 'https://api.test.com',
-            authToken: 'test-token-2',
-          },
-        ],
-      };
-
-      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const { providerManager } = getContext();
+      const provider = createSuccessfulStreamingProvider(providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -139,12 +147,26 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(3);
-      expect(results[0]).toStrictEqual({ type: 'text', content: 'chunk1' });
-      expect(results[1]).toStrictEqual({ type: 'text', content: 'chunk2' });
-      expect(results[2]).toStrictEqual({ type: 'text', content: 'chunk3' });
+      expect(results[0]).toStrictEqual({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'chunk1' }],
+      });
+      expect(results[1]).toStrictEqual({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'chunk2' }],
+      });
+      expect(results[2]).toStrictEqual({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'chunk3' }],
+      });
     });
+  });
+}
 
+function registerStreamingCase2(getContext: () => TestContext): void {
+  describe('initial retry', () => {
     it('should not duplicate chunks on retry of initial connection', async () => {
+      const { providerManager } = getContext();
       let callCount = 0;
 
       const mockProvider: IProvider = {
@@ -180,8 +202,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -191,13 +214,17 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0]).toStrictEqual({
-        type: 'text',
-        content: 'unique-chunk',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'unique-chunk' }],
       });
     });
   });
-  describe('Sticky Failover Behavior - Issue #902', () => {
+}
+
+function registerStickyCase1(getContext: () => TestContext): void {
+  describe('sticky index after failover', () => {
     it('should track failover across requests via currentFailoverIndex', async () => {
+      const { providerManager } = getContext();
       // This test verifies sticky behavior by checking getCurrentFailoverIndex()
       // after a failover. On success, it stays on the working backend. On 429
       // immediate failover, it advances to the next index.
@@ -237,8 +264,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       // Request: backend1 fails with 429, failover to backend2, succeeds
@@ -250,8 +278,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(callCount).toBe(2); // backend1 failed, backend2 succeeded
       expect(provider.getCurrentFailoverIndex()).toBe(1);
     });
+  });
+}
 
+function registerStickyCase2(getContext: () => TestContext): void {
+  describe('sticky index after success', () => {
     it('should keep currentFailoverIndex on the successful backend', async () => {
+      const { providerManager } = getContext();
       let callCount = 0;
 
       const mockProvider: IProvider = {
@@ -288,8 +321,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       // First request: fails on backend1, succeeds on backend2
@@ -299,8 +333,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(provider.getCurrentFailoverIndex()).toBe(1);
     });
+  });
+}
 
+function registerStickyCase3(getContext: () => TestContext): void {
+  describe('same-backend rate-limit retry', () => {
     it('retries 429 on the same backend before failing over (issue #2849)', async () => {
+      const { providerManager } = getContext();
       let callCount = 0;
 
       const mockProvider: IProvider = {
@@ -339,8 +378,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -352,8 +392,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       // 2 calls total (no failover needed).
       expect(callCount).toBe(2);
     });
+  });
+}
 
+function registerStickyCase4(getContext: () => TestContext): void {
+  describe('non-status backend error', () => {
     it('should distinguish non-status errors from immediate failover errors (429)', async () => {
+      const { providerManager } = getContext();
       // This test verifies that errors without HTTP status are handled
       // similarly to 429 with failover_retry_count: 1. Both exhaust
       // per-backend retries and fail over, but the difference is:
@@ -403,8 +448,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       const results: IContent[] = [];
@@ -415,8 +461,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       // Should have called provider twice (error on backend1, success on backend2)
       expect(callCount).toBe(2);
     });
+  });
+}
 
+function registerStickyCase5(getContext: () => TestContext): void {
+  describe('all members fail', () => {
     it('should throw LoadBalancerFailoverError when all members fail', async () => {
+      const { providerManager } = getContext();
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
@@ -452,8 +503,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       await expect(
@@ -464,8 +516,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         })(),
       ).rejects.toThrow(/failover/i);
     });
+  });
+}
 
+function registerStickyCase6(getContext: () => TestContext): void {
+  describe('finite backend attempts', () => {
     it('should not loop infinitely when all backends fail', async () => {
+      const { providerManager } = getContext();
       let totalAttempts = 0;
 
       const mockProvider: IProvider = {
@@ -512,8 +569,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       await expect(
@@ -527,8 +585,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       // Should try each backend exactly once (no infinite loop)
       expect(totalAttempts).toBe(3);
     });
+  });
+}
 
+function registerStickyCase7(getContext: () => TestContext): void {
+  describe('partial stream failure', () => {
     it('should abort and throw error if chunks were yielded before immediate failover error', async () => {
+      const { providerManager } = getContext();
       // This tests the partial-yield hazard fix: if we already sent chunks to the
       // caller before getting a 429, we should NOT failover to another backend
       // (which would produce a mixed response), but instead propagate the error.
@@ -567,8 +630,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
+        invocation: makeLoadBalancerInvocation(),
+
+        contents: requestContents,
       };
 
       const chunks: IContent[] = [];
@@ -588,12 +652,54 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       // Should have received the partial chunk before the error
       expect(chunks).toHaveLength(1);
       expect(chunks[0]).toStrictEqual({
-        type: 'text',
-        content: 'partial-response',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'partial-response' }],
       });
 
       // Backend 2 should NOT have been called (no mixed response)
       expect(callCount).toBe(1);
     });
+  });
+}
+
+describe('LoadBalancingProvider - Failover Strategy', () => {
+  let settingsService: SettingsService;
+  let config: Config;
+  let providerManager: ProviderManager;
+
+  const getContext = (): TestContext => ({
+    providerManager,
+    settingsService,
+    config,
+  });
+
+  beforeEach(() => {
+    settingsService = new SettingsService();
+    config = createRuntimeConfigStub(settingsService);
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+      undefined,
+      undefined,
+      borrowedSettings(config, settingsService),
+    );
+  });
+
+  describe('Streaming Behavior', () => {
+    registerStreamingCase1(getContext);
+    registerStreamingCase2(getContext);
+  });
+  describe('Sticky Failover Behavior - Issue #902', () => {
+    registerStickyCase1(getContext);
+    registerStickyCase2(getContext);
+    registerStickyCase3(getContext);
+    registerStickyCase4(getContext);
+    registerStickyCase5(getContext);
+    registerStickyCase6(getContext);
+    registerStickyCase7(getContext);
   });
 });

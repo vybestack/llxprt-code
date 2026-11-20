@@ -28,7 +28,7 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -94,7 +94,7 @@ describe('OpenAI transport selection parity (issue #2817)', () => {
     const perCallSettings = new SettingsService();
     perCallSettings.setProviderSetting('openai', 'responsesMode', 'responses');
 
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: 'openai',
       settings: perCallSettings,
       contents: [

@@ -54,9 +54,9 @@ import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import type React from 'react';
 import type {
   RecordingIntegration,
-  SessionRecordingService,
+  SessionRecordingPort,
   LockHandle,
-  IContent,
+  ResumeBootHandle,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
@@ -148,7 +148,6 @@ export interface AppContainerRuntimeProps
     | 'registerChatCommands'
     | 'registerSubagentCommand'
     | 'resumeOwnedCommand'
-    | 'replaceCommandHistory'
     | 'bindRawCommandResume'
     | 'recordCommandEvent'
     | 'isMcpDiscoveryPending'
@@ -177,6 +176,8 @@ export interface AppContainerRuntimeProps
   readProviderMetrics: AppBootstrapProps['readProviderMetrics'];
   readSessionTokenUsage: AppBootstrapProps['readSessionTokenUsage'];
   historyReads: RegisteredHistoryReads;
+  readJournal: AppBootstrapProps['readJournal'];
+  subscribeContextRange: DefaultAppLayoutProps['subscribeContextRange'];
   registerCredentials: CredentialCommandRegistration;
   readBuiltinCommands: ReadBuiltinCommands;
   loadRegisteredCommands: LoadRegisteredCommands;
@@ -220,10 +221,11 @@ export interface AppContainerRuntimeProps
   subagentWrites: AppDialogsParams['subagentWrites'];
   profileDefinitions: AppDialogsParams['profileDefinitions'];
   readAgentRecordingPath: () => string | undefined;
+  readAgentRecordingWatermarks?: AppBootstrapProps['readRecordingWatermarks'];
   generateSubagentPrompt: (description: string) => Promise<string>;
   settings: LoadedSettings;
   startupWarnings?: string[];
-  resumedHistory?: IContent[];
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   version: string;
   terminalBackgroundColor?: string;
   appState: AppState;
@@ -232,7 +234,7 @@ export interface AppContainerRuntimeProps
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialRecordingService?: SessionRecordingService;
+  initialRecordingService?: SessionRecordingPort;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialLockHandle?: LockHandle | null;
   suppressStartupWelcome?: boolean;
@@ -361,6 +363,7 @@ function useInputBindings(
     commands,
     setQuittingMessagesRef,
     disposeInput: props.disposeInput,
+    readJournal: props.readJournal,
     readApprovalMode: props.readApprovalMode,
     setApprovalMode: props.setApprovalMode,
     generatePromptContent: props.generatePromptContent,
@@ -411,7 +414,6 @@ function useAppInputRuntime(
     registerChatCommands: props.registerChatCommands,
     registerSubagentCommand: props.registerSubagentCommand,
     resumeOwnedCommand: props.resumeOwnedCommand,
-    replaceCommandHistory: props.replaceCommandHistory,
     bindRawCommandResume: props.bindRawCommandResume,
     recordCommandEvent: props.recordCommandEvent,
     isMcpDiscoveryPending: props.isMcpDiscoveryPending,
@@ -510,6 +512,8 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       rootUiRef={layout.rootUiRef}
       pendingHistoryItemRef={layout.pendingHistoryItemRef}
       contextFileNames={layout.contextFileNames}
+      subscribeContextRange={props.subscribeContextRange}
+      scrollbackPager={bootstrap.scrollbackPager}
       appCommands={useAppCommands(dialogs, input, layout, stores.terminalStore)}
       dialogStore={stores.dialogStore}
       terminalStore={stores.terminalStore}
@@ -546,6 +550,7 @@ function AppRuntimeView({
     <TerminalProvider store={terminalStore}>
       <TurnProvider store={turnStore}>
         <ToolResultExpansionProvider
+          pager={layoutProps.scrollbackPager?.store}
           getTranscriptFilePath={getTranscriptFilePath}
         >
           <SettingsProfileProvider store={settingsStore}>
@@ -626,7 +631,11 @@ function useApplicationBootstrap(
       readProviderMetrics: props.readProviderMetrics,
       readSessionTokenUsage: props.readSessionTokenUsage,
       subscribeHistoryTokens: props.subscribeHistoryTokens,
-      resumedHistory: props.resumedHistory,
+      resumedBoot: props.resumedBoot,
+      readJournal: props.readJournal,
+      readRecordingPath: props.readAgentRecordingPath,
+      readRecordingWatermarks: props.readAgentRecordingWatermarks,
+      settings: props.settings,
       version: props.version,
       memoryController: props.memoryController,
     },
@@ -680,10 +689,9 @@ function useInputBrowserCommands(
             target.kind === 'session'
               ? target.session.sessionId
               : target.checkpointId,
-            resolveEmojiFilterMode(config),
             session.listBrowserTargetsDetailed.bind(session),
           ),
-        turnStore.commands.loadHistory,
+        clear,
         turnStore.commands.addItem,
         close,
       );
@@ -730,7 +738,7 @@ function useInputCommandView(
   const quitHandler = useCallback((messages: HistoryItem[]) => {
     setQuittingMessagesRef.current?.(messages);
   }, []);
-  const { addItem, clearItems, loadHistory, refreshStatic, setIsProcessing } =
+  const { addItem, clearItems, refreshStatic, setIsProcessing } =
     turnStore.commands;
   const extensions = useExtensionUpdates(
     readExtensions(),
@@ -764,7 +772,6 @@ function useInputCommandView(
     settings,
     addItem,
     clearItems,
-    loadHistory,
     refreshStatic,
     setIsProcessing,
     toggleVimEnabled,

@@ -22,23 +22,23 @@
  */
 
 import {
-  describe,
-  it as itProp,
-  expect,
-  beforeEach,
   afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it as itProp,
   vi,
 } from 'bun:test';
-import * as fc from 'fast-check';
-import * as path from 'path';
-import * as os from 'os';
 import { fork, type ChildProcess } from 'child_process';
+import * as fc from 'fast-check';
+import * as fs from 'node:fs/promises';
+import * as os from 'os';
+import * as path from 'path';
 import {
   SessionLockManager,
   SessionLockedError,
   type LockHandle,
 } from './SessionLockManager.js';
-import * as fs from 'node:fs/promises';
 
 // ---------------------------------------------------------------------------
 // Helpers (mirrored from SessionLockManager.test.ts)
@@ -404,7 +404,7 @@ describe('SessionLockManager', () => {
               chatsDir,
               sessionId,
             );
-            const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
+            const jsonlPath = path.join(chatsDir, `session-${sessionId}.llxj`);
 
             expect(await fileExists(lockPath)).toBe(false);
             expect(await fileExists(jsonlPath)).toBe(false);
@@ -454,7 +454,7 @@ describe('SessionLockManager', () => {
       () =>
         fc.assert(
           fc.asyncProperty(safeSessionIdArb(), (sessionId) => {
-            const jsonlPath = path.join(chatsDir, `session-${sessionId}.jsonl`);
+            const jsonlPath = path.join(chatsDir, `session-${sessionId}.llxj`);
             const lockPath =
               SessionLockManager.getLockPathFromFilePath(jsonlPath);
             const expectedLockPath = SessionLockManager.getLockPath(

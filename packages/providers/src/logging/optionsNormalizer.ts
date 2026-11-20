@@ -11,10 +11,7 @@ import { copyProviderRequestOptions } from '../requestAdmission.js';
  * lint line budget.
  */
 
-import {
-  type IContent,
-  type UsageStats,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   captureProviderInvocation,
   type ProviderInvocationData,
@@ -39,13 +36,18 @@ export interface NormalizerContext {
 
 /** REQ-SP4-004: Normalize raw args into GenerateChatOptions, inject runtime, apply normalizer. */
 export function normalizeChatCompletionOptions(
-  contentOrOptions: IContent[] | GenerateChatOptions,
+  contentOrOptions: GenerateChatOptions,
   maybeTools: ProviderToolset | undefined,
   ctx: NormalizerContext,
 ): GenerateChatOptions {
-  let normalizedOptions: GenerateChatOptions = Array.isArray(contentOrOptions)
-    ? { contents: contentOrOptions, tools: maybeTools }
-    : copyProviderRequestOptions(contentOrOptions);
+  let normalizedOptions: GenerateChatOptions = {
+    ...copyProviderRequestOptions(contentOrOptions),
+    requestRows: contentOrOptions.requestRows,
+    contentCount:
+      contentOrOptions.requestRows?.count ?? contentOrOptions.contentCount,
+  };
+  // Positional tools have already been threaded into the stream options.
+  normalizedOptions.tools ??= maybeTools;
 
   const injectedData = ctx.readInvocationData?.(ctx.providerName);
 
@@ -91,6 +93,10 @@ export function ensureRuntimeContext(
   debug: DebugLogger,
 ): void {
   debug.log(() => `Checking admitted invocation for ${providerName}`);
+  debug.log(
+    () =>
+      `Contents length at entry: ${normalizedOptions.contentCount ?? 'unknown'}`,
+  );
   if (!normalizedOptions.invocation) {
     throw buildMissingRuntimeError(
       providerName,

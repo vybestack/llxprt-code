@@ -18,7 +18,10 @@ import {
   computeIsAwaitingSlashCommandConfirmation,
 } from './inputActivity.js';
 
-import { isEditorAvailable } from '@vybestack/llxprt-code-core';
+import {
+  isEditorAvailable,
+  isValidEditorType,
+} from '@vybestack/llxprt-code-core';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 
 import {
@@ -41,7 +44,6 @@ import { shouldClearTodos } from '../../../hooks/useTodoPausePreserver.js';
 import { type HistoryItem } from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
 import type { PromptTextGenerator } from '../../../hooks/usePromptCompletion.js';
-import type { EditorType } from '@vybestack/llxprt-code-core';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
@@ -99,6 +101,7 @@ export interface AppInputParams extends InputStreamOperations {
     typeof useInputKeybindings
   >[0]['readInteractiveShellEnabled'];
   readMcpServers: Parameters<typeof useInputKeybindings>[0]['readMcpServers'];
+  readJournal: Parameters<typeof useMemoryRefreshAction>[0]['readHistory'];
   settings: LoadedSettings;
   subagentManager?: UiSubagentManager;
   /**
@@ -165,11 +168,15 @@ function useInputCoreCallbacks(p: AppInputParams) {
   }, []);
   const getPreferredEditor = useCallback(() => {
     const editorType = settings.merged.ui.preferredEditor;
-    if (!isEditorAvailable(editorType)) {
+    if (
+      editorType === undefined ||
+      !isValidEditorType(editorType) ||
+      !isEditorAvailable(editorType)
+    ) {
       dialogs.editor.open({});
       return undefined;
     }
-    return editorType as EditorType;
+    return editorType;
   }, [settings, dialogs]);
   const onAuthError = useCallback(() => {
     settingsStore.commands.setAuthError('reauth required');
@@ -281,15 +288,16 @@ function useStreamInteraction(
   const { refreshStatic } = p.turnStore.commands;
   // The stream reads the committed transcript (checkpoint context) through a
   // narrow selector; commands come straight from the store.
-  const history = useStoreSelector(p.turnStore.store, (s) => s.history);
-  const { addItem, removeItems } = p.turnStore.commands;
+  const { addItem } = p.turnStore.commands;
   const handleSlashCommand = core.handleSlashCommand;
   const setDebugMessage = p.settingsStore.commands.setDebugMessage;
   const performMemoryRefresh = useMemoryRefreshAction({
     refreshMemory: p.refreshMemory,
     readDebugMode: p.readDebugMode,
-    settings,
     addItem,
+    origin: undefined,
+    recordingOwner: 'agent',
+    readHistory: p.readJournal,
     setLlxprtMdFileCount: p.setLlxprtMdFileCount,
   });
   const shellModeActive = useStoreSelector(
@@ -301,7 +309,6 @@ function useStreamInteraction(
   return {
     bufferSetup,
     input: {
-      history,
       addItem,
       settings,
       onDebugMessage: setDebugMessage,
@@ -316,7 +323,6 @@ function useStreamInteraction(
       terminalWidth: stdout.columns,
       terminalHeight: stdout.rows,
       onEditorOpen: noop,
-      removeItems,
       operationLifecycle: p.operationLifecycle,
       cancelActiveSlashCommand: core.cancelActiveSlashCommand,
     },
@@ -396,7 +402,10 @@ function useInputStreamWiring(
   const { submitQuery } = agentStreamResult;
   const pendingHistoryItems = useMemo(
     () => [
-      ...(core.pendingHistoryItems as HistoryItem[]),
+      ...core.pendingHistoryItems.map((item, index) => ({
+        ...item,
+        id: -index - 1,
+      })),
       ...agentStreamResult.pendingHistoryItems,
     ],
     [core.pendingHistoryItems, agentStreamResult.pendingHistoryItems],

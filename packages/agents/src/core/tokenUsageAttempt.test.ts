@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { afterEach as closeInvocationRoots } from 'bun:test';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -52,6 +53,7 @@ import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -105,7 +107,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   function buildChatSession(
@@ -121,6 +123,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
     const invocationOwner = new SessionSettingsOwner(settingsService);
     retainedInvocationOwners.push(invocationOwner);
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         invocationOwner.prepareProviderInvocation(
           runtimeState.runtimeId,
@@ -131,7 +134,8 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
           requestFetch,
         ),
       state: runtimeState,
-      history: history ?? new HistoryService(),
+      history:
+        history ?? new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,
@@ -234,7 +238,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
       const logFile = makeTempLogPath();
       let attempt = 0;
       const generateChatCompletionMock = vi.fn(async function* (
-        _options: GenerateChatOptions | IContent[],
+        _options: GenerateChatOptions | AsyncIterable<IContent>,
       ): AsyncGenerator<IContent> {
         attempt++;
         if (attempt === 1) {
@@ -333,7 +337,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
   it('records attempt_index 0 and attempt_outcome success for a normal turn', async () => {
     const logFile = makeTempLogPath();
     const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions | IContent[],
+      _options: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent> {
       yield {
         speaker: 'ai',

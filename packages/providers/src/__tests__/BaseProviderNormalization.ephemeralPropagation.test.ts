@@ -12,7 +12,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from './streamCallOptions.js';
 import { BaseProvider } from '../BaseProvider.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';

@@ -10,6 +10,7 @@ import type {
   MediaAdmissionService,
 } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   ModelOutput,
   ModelStreamChunk,
@@ -41,6 +42,42 @@ export interface PreparedUserTurn {
   readonly isTransferredToHistory: () => boolean;
 }
 
+export function withPromptContextRollback(
+  prepared: PreparedUserTurn,
+  history: HistoryService,
+): PreparedUserTurn {
+  return {
+    ...prepared,
+    releaseIfUncommitted: async () => {
+      if (prepared.isTransferredToHistory()) return;
+      const failures: unknown[] = [];
+      try {
+        for (
+          let index = prepared.userIContents.length - 1;
+          index >= 0;
+          index--
+        ) {
+          const expected = prepared.userIContents[index];
+          const tail = await history.getLastContent();
+          if (tail === undefined || tail.metadata?.id !== expected.metadata?.id)
+            break;
+          await history.removeLastIfMatches(tail);
+        }
+      } catch (error: unknown) {
+        failures.push(error);
+      }
+      try {
+        await prepared.releaseIfUncommitted();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, 'Prompt context rollback failed');
+    },
+  };
+}
+
 interface AdmittedModelOutput {
   readonly response: ModelOutput;
   readonly afcHistory: IContent[] | undefined;
@@ -56,6 +93,33 @@ export function turnMediaAdmissionContext(
     source,
     reservationOwnerScope: `turn:${turnId}:${source}`,
   };
+}
+
+export function streamMediaAdmissions(
+  chunk: ModelStreamChunk,
+  turnId: string,
+): MediaAdmissionRelease[] {
+  const mediaOnly = (contents: readonly IContent[]): IContent[] =>
+    contents.flatMap((content) => {
+      const blocks = content.blocks.filter((block) => block.type === 'media');
+      return blocks.length === 0 ? [] : [{ ...content, blocks }];
+    });
+  const output = mediaOnly([chunk.content]);
+  const afc = mediaOnly(chunk.afcHistory ?? []);
+  const admissions: MediaAdmissionRelease[] = [];
+  if (output.length > 0)
+    admissions.push({
+      contents: output,
+      context: turnMediaAdmissionContext(turnId, 'provider-stream-output'),
+      mode: 'content',
+    });
+  if (afc.length > 0)
+    admissions.push({
+      contents: afc,
+      context: turnMediaAdmissionContext(turnId, 'provider-stream-afc-history'),
+      mode: 'contents',
+    });
+  return admissions;
 }
 
 export async function admitContentAtMediaSeam(

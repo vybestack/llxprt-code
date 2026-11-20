@@ -22,7 +22,6 @@ import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 export interface StatefulConversation {
   enabled: boolean;
   parentId: string | undefined;
-  content: IContent[];
   parentRetainedTokens?: number;
 }
 
@@ -104,21 +103,40 @@ function readObservedRetainedTokens(
   return Number.isSafeInteger(retainedTokens) ? retainedTokens : undefined;
 }
 
+export type StatefulPlan =
+  | { readonly kind: 'settled'; readonly enabled: boolean }
+  | {
+      readonly kind: 'scan';
+      readonly isUsableParent: (e: IContent) => boolean;
+    };
+
+/** The newest usable stored parent row, reduced to what chaining needs. */
+export interface StatefulParentHit {
+  readonly index: number;
+  readonly id: string;
+  readonly retainedTokens: number | undefined;
+}
+
+export interface StatefulSelection {
+  readonly parentId: string | undefined;
+  /** Rows up to and including the parent are replayed server-side. */
+  readonly skipRows: number;
+  readonly parentRetainedTokens?: number;
+}
+
 /**
- * Determine whether the conversation should use OpenAI Responses server-side
- * statefulness (`store=true` + `previous_response_id`).
- *
- * When a stored parent AI turn exists in `content` (matching the endpoint),
- * the returned `content` is trimmed to just the turns AFTER that parent —
- * the server replays the parent's chain server-side. When no eligible parent
- * is found, full history is returned with `enabled: true` and no parent id,
- * starting a fresh stored chain.
+ * Decides, before any history is read, whether this turn is not stateful,
+ * stateful without a parent, or needs the history scanned for a parent
+ * (OpenAI Responses server-side statefulness: `store=true` +
+ * `previous_response_id`). When a scan finds a stored parent AI turn whose
+ * `providerBaseURL` equals `rawBaseURL`, the server replays the parent's chain,
+ * so only the rows after it are sent.
  *
  * Parameters:
- * - `rawBaseURL` — the resolved endpoint URL; an AI entry's
+ * - `rawBaseURL` -- the resolved endpoint URL; an AI entry's
  *   `metadata.providerBaseURL` must equal this to qualify as a parent, so a
  *   parent issued by one endpoint is never sent to another (#3134 Fix 2).
- * - `isRejectedParent` — reports whether a specific response id has already
+ * - `isRejectedParent` -- reports whether a specific response id has already
  *   been refused by the backend. Such an id is skipped so the scan falls
  *   through to an older parent, or to none at all (#3134 Fix 1).
  *
@@ -131,7 +149,7 @@ function readObservedRetainedTokens(
  *   lets the retry send full history once; that response becomes the newest
  *   stored turn, and because the scan takes the NEWEST eligible parent the
  *   very next turn chains from it. The chain re-establishes itself.
- * - `forceParentless` — #3446: a parent-not-found rejection over the
+ * - `forceParentless` -- #3446: a parent-not-found rejection over the
  *   WebSocket transport means every stored parent may be scoped to a dead
  *   connection, so the one-shot recovery sends full history with no parent
  *   while remaining stateful (the response is stamped stored and the newest
@@ -139,13 +157,12 @@ function readObservedRetainedTokens(
  *   required; when it would be disabled anyway the regular disabled shape is
  *   returned.
  */
-export function computeStatefulConversation(
+export function planStatefulConversation(
   options: {
     readonly invocation: {
       readonly modelBehavior: Readonly<Record<string, unknown>>;
     };
   },
-  content: IContent[],
   invocationEphemerals: Record<string, unknown>,
   explicitUserStore: boolean | undefined,
   isCodex: boolean,
@@ -154,7 +171,7 @@ export function computeStatefulConversation(
   statefulTransportSupported: boolean,
   logger: DebugLogger,
   forceParentless = false,
-): StatefulConversation {
+): StatefulPlan {
   // Codex statefulness is bound to the WebSocket transport. The ChatGPT
   // backend rejects `store: true` (400 "Store must be set to false"), so a
   // parent id only resolves on the socket that produced it; sending one over
@@ -164,7 +181,7 @@ export function computeStatefulConversation(
       () =>
         'responses-stateful skipped: the active transport cannot resolve a previous_response_id.',
     );
-    return { enabled: false, parentId: undefined, content };
+    return { kind: 'settled', enabled: false };
   }
 
   const ephemeralValue = invocationEphemerals[RESPONSES_STATEFUL_KEY];
@@ -180,7 +197,7 @@ export function computeStatefulConversation(
     ? explicitStateful !== false
     : explicitStateful === true;
   if (!requested || explicitUserStore === false) {
-    return { enabled: false, parentId: undefined, content };
+    return { kind: 'settled', enabled: false };
   }
 
   // #3446: the one-shot parent-not-found recovery over the WebSocket skips
@@ -192,55 +209,60 @@ export function computeStatefulConversation(
       () =>
         'responses-stateful recovery: sending full history with no parent (#3446).',
     );
-    return { enabled: true, parentId: undefined, content };
+    return { kind: 'settled', enabled: true };
   }
 
-  // Scan from the newest entry backwards for the most recent stored AI turn
-  // from the SAME endpoint. Capturing `parentId` inside the loop guarantees
-  // it is a non-empty string, removing the need for a `!== undefined`
-  // re-check on the trimmed return (#3134 Fix 8b).
   // A parent the backend already refused is dead, so it is not a candidate;
   // skipping it lets the scan fall through to an older parent, or to none, and
   // keeps a resumed session from re-sending it forever (#3134 Fix 1).
-  const isUsableParent = (entry: IContent): boolean =>
-    isEligibleParent(entry, rawBaseURL) &&
-    !isRejectedParent(entry.metadata!.id as string);
+  return {
+    kind: 'scan',
+    isUsableParent: (entry) =>
+      isEligibleParent(entry, rawBaseURL) &&
+      !isRejectedParent(entry.metadata!.id as string),
+  };
+}
 
-  let parentId: string | undefined = undefined;
-  let parentIndex = -1;
-  for (let index = content.length - 1; index >= 0; index -= 1) {
-    if (isUsableParent(content[index])) {
-      parentId = content[index].metadata!.id;
-      parentIndex = index;
-      break;
-    }
-  }
+export function parentHitOf(
+  entry: IContent,
+  index: number,
+  plan: Extract<StatefulPlan, { kind: 'scan' }>,
+): StatefulParentHit | undefined {
+  if (!plan.isUsableParent(entry)) return undefined;
+  return {
+    index,
+    id: entry.metadata!.id as string,
+    retainedTokens: readObservedRetainedTokens(entry),
+  };
+}
 
-  if (parentIndex === -1) {
+/** `totalRows` is the full history length the hit was found in. */
+export function selectStatefulParent(
+  hit: StatefulParentHit | undefined,
+  totalRows: number,
+  logger: DebugLogger,
+): StatefulSelection {
+  if (hit === undefined) {
     logger.debug(
       () => 'responses-stateful starting a new stored conversation.',
     );
-    return { enabled: true, parentId: undefined, content };
+    return { parentId: undefined, skipRows: 0 };
   }
-
-  const trimmedContent = content.slice(parentIndex + 1);
-  if (trimmedContent.length === 0) {
+  if (hit.index + 1 >= totalRows) {
     logger.debug(
       () =>
         'responses-stateful has no content after its parent; using full history.',
     );
-    // Fix 7: return enabled: true so store is set — the asymmetry with the
-    // no-parent branch was unjustified (both send full history, no parent
-    // id). With store=true this response can become a future parent.
-    return { enabled: true, parentId: undefined, content };
+    // Fix 7: stay enabled so store is set; with store=true this response can
+    // become a future parent.
+    return { parentId: undefined, skipRows: 0 };
   }
-
-  const parentRetainedTokens = readObservedRetainedTokens(content[parentIndex]);
   return {
-    enabled: true,
-    parentId,
-    content: trimmedContent,
-    ...(parentRetainedTokens === undefined ? {} : { parentRetainedTokens }),
+    parentId: hit.id,
+    skipRows: hit.index + 1,
+    ...(hit.retainedTokens === undefined
+      ? {}
+      : { parentRetainedTokens: hit.retainedTokens }),
   };
 }
 

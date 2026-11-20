@@ -12,6 +12,7 @@
  * on what the task published.
  */
 
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core';
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
@@ -71,7 +72,7 @@ const requestContext = {
 } as unknown as RequestContext;
 
 async function publishedFor(events: readonly AgentEvent[]): Promise<string[]> {
-  const executor = new CoderAgentExecutor();
+  const executor = new CoderAgentExecutor(new ScratchRootOwner());
   const { task, publishedText } = createScriptedTask(events);
   const internals = executor as unknown as {
     tasks: Map<

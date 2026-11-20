@@ -1388,7 +1388,11 @@ async function runBatchHarness(
   const stderrPath = join(root, 'runner.stderr');
   const child = Bun.spawn([process.execPath, harness], {
     cwd: root,
-    env: { ...process.env, LLXPRT_CORE_TEST_CONCURRENCY: '1' },
+    env: {
+      ...process.env,
+      LLXPRT_CORE_TEST_CONCURRENCY: '1',
+      LLXPRT_CLI_TEST_PARTITION: '1of1',
+    },
     stdout: Bun.file(stdoutPath),
     stderr: Bun.file(stderrPath),
   });
@@ -1407,6 +1411,7 @@ describe('core batch settlement after retry reaping', () => {
     async (retryTimesOut) => {
       const { stdout, stderr, exitCode, root, marker, later } =
         await runBatchHarness(retryTimesOut, killThenFail);
+
       expect(exitCode, stderr).toBe(1);
       expect(readFileSync(marker, 'utf8').split('attempt').length - 1).toBe(2);
       expect(existsSync(later)).toBe(false);

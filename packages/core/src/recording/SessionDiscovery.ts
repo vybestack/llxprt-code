@@ -24,31 +24,28 @@
  * for the resume flow.
  */
 
-import { createReadStream } from 'node:fs';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import * as readline from 'node:readline';
-import { readBoundedFirstLine } from './boundedHeaderReader.js';
-import {
-  SESSION_TITLE_MAX_LENGTH,
-  type ContinueResolution,
-  type ContinueTarget,
-  type SessionSummary,
-  type SessionStartPayload,
-  type UnreadableRecording,
-} from './types.js';
-import { readSessionHeader, replaySession } from './ReplayEngine.js';
-import {
-  INVALID_SESSION_START_MESSAGE,
-  isSessionStartHeader,
-} from './sessionStartHeader.js';
+import type { JournalReadCounters } from './journalCounters.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
-import { debugLogger } from '../utils/debugLogger.js';
-import { describeUnreadableRecording } from './unreadableRecordings.js';
+import {
+  SESSION_TITLE_MAX_LENGTH,
+  type ContinueResolution,
+  type ContinueTarget,
+  type SessionStartPayload,
+  type SessionSummary,
+  type UnreadableRecording,
+} from './types.js';
+
 import type { LocalMediaStore } from '../storage/local-media-store.js';
+import {
+  listJournalSessions,
+  readJournalCheckpoints,
+  readJournalFileFacts,
+  readJournalSessionHeader,
+} from './journalSessionListing.js';
+import { describeUnreadableRecording } from './unreadableRecordings.js';
 
 /**
  * Result of successfully resolving a session reference.
@@ -64,80 +61,65 @@ export interface SessionResolutionError {
   error: string;
 }
 
-type FirstLineResult =
-  | { readonly ok: true; readonly payload: object }
-  | { readonly ok: false; readonly reason: string };
-
 /**
- * Read and parse the first line of a recording with the canonical bounded
- * header reader, saying why when it is not a `session_start` event. The
- * payload is returned unvalidated; {@link isSessionStartHeader} is the
- * contract for a usable header.
- *
- * This is the single shared reader used by session discovery, resume, and the
- * session-recording janitor.  It handles UTF-8 BOM and first-line headers of
- * any size up to a documented maximum, classifying no-newline/malformed huge
- * files as unreadable without whole-file buffering.
+ * Options for the bounded continue-target discovery pass (issue #854 P05d).
+ * The counters are optional; absent means uninstrumented.
  */
-async function readSessionStartLine(
-  filePath: string,
-): Promise<FirstLineResult> {
-  const firstLine = await readBoundedFirstLine(filePath);
-  if (firstLine === null || firstLine.trim() === '') {
-    return { ok: false, reason: 'Empty file or unreadable first line' };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(firstLine);
-  } catch {
-    return {
-      ok: false,
-      reason:
-        'Missing or corrupt session_start event: first line is not valid JSON',
-    };
-  }
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    Reflect.get(parsed, 'type') !== 'session_start'
-  ) {
-    return {
-      ok: false,
-      reason:
-        'Missing or corrupt session_start event: first line is not a session_start event',
-    };
-  }
-  const payload: unknown = Reflect.get(parsed, 'payload');
-  if (typeof payload !== 'object' || payload === null) {
-    return { ok: false, reason: INVALID_SESSION_START_MESSAGE };
-  }
-  return { ok: true, payload };
+export interface BoundedDiscoveryOptions {
+  readonly counters?: JournalReadCounters;
 }
 
 /**
- * The first line's `session_start` payload, unvalidated, or null when the
- * first line is not a session_start event. Used by the session-recording
- * janitor, which applies its own retention rules to the fields.
+ * Result shape shared with `listContinueTargetsDetailed` so pickers migrate
+ * by swapping the call name.
  */
-export async function readFirstLineFromFile(
-  filePath: string,
-): Promise<SessionStartPayload | null> {
-  const result = await readSessionStartLine(filePath);
-  return result.ok ? (result.payload as SessionStartPayload) : null;
+export interface BoundedContinueTargets {
+  targets: ContinueTarget[];
+  skippedCount: number;
+  recordingErrors: readonly string[];
+  unreadableRecordings: readonly UnreadableRecording[];
 }
 
-type SessionScan = {
+interface SessionScan {
   sessions: SessionSummary[];
   unreadableRecordings: UnreadableRecording[];
-};
+}
 
-/** Sort newest-first by modification time; ids are validated strings. */
-function sortNewestFirst(summaries: SessionSummary[]): void {
-  summaries.sort((a, b) => {
-    const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
-    if (mtimeDiff !== 0) return mtimeDiff;
-    return b.sessionId.localeCompare(a.sessionId);
-  });
+async function journalContinueTargets(
+  sessions: readonly SessionSummary[],
+  unreadable: UnreadableRecording[],
+): Promise<BoundedContinueTargets> {
+  const targets: ContinueTarget[] = [];
+  const checkpoints: ContinueTarget[] = [];
+  for (const session of sessions) {
+    const sessionCheckpoints = await readJournalCheckpoints(
+      session.filePath,
+    ).catch((error: unknown) => {
+      unreadable.push({
+        sessionId: session.sessionId,
+        filePath: session.filePath,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    });
+    if (sessionCheckpoints === undefined) continue;
+    targets.push({ kind: 'session', session });
+    for (const checkpoint of sessionCheckpoints) {
+      checkpoints.push({
+        kind: 'checkpoint',
+        source: session,
+        checkpointId: checkpoint.checkpointId,
+        checkpointName: checkpoint.name,
+        sequence: checkpoint.sequence,
+      });
+    }
+  }
+  return {
+    targets: [...targets, ...checkpoints],
+    skippedCount: unreadable.length,
+    recordingErrors: unreadable.map(describeUnreadableRecording),
+    unreadableRecordings: unreadable,
+  };
 }
 
 /**
@@ -162,18 +144,20 @@ export class SessionDiscovery {
   }
 
   /**
-   * Readable continue targets. Recordings that fail replay are left out; use
-   * {@link listContinueTargetsDetailed} to learn which ones and why.
+   * Readable continue targets. Recordings that fail the metadata scan are left
+   * out; use {@link listContinueTargetsDetailed} to learn which ones and why.
    */
   static async listContinueTargets(
     chatsDir: string,
     projectHash: string,
     mediaStore?: LocalMediaStore,
+    options: BoundedDiscoveryOptions = {},
   ): Promise<ContinueTarget[]> {
     const detailed = await this.listContinueTargetsDetailed(
       chatsDir,
       projectHash,
       mediaStore,
+      options,
     );
     return detailed.targets;
   }
@@ -181,79 +165,33 @@ export class SessionDiscovery {
   static async listContinueTargetsDetailed(
     chatsDir: string,
     projectHash: string,
-    mediaStore?: LocalMediaStore,
-  ): Promise<{
-    targets: ContinueTarget[];
-    skippedCount: number;
-    recordingErrors: readonly string[];
-    unreadableRecordings: readonly UnreadableRecording[];
-  }> {
-    const detailed = await this.listSessionsDetailed(chatsDir, projectHash);
-    const sessionTargets: Array<ContinueTarget | null> = Array.from(
-      { length: detailed.sessions.length },
-      () => null,
+    _mediaStore?: LocalMediaStore,
+    options: BoundedDiscoveryOptions = {},
+  ): Promise<BoundedContinueTargets> {
+    return SessionDiscovery.listContinueTargetsDetailedBounded(
+      chatsDir,
+      projectHash,
+      options,
     );
-    const checkpointTargets: ContinueTarget[][] = Array.from(
-      { length: detailed.sessions.length },
-      () => [],
+  }
+
+  static async listContinueTargetsDetailedBounded(
+    chatsDir: string,
+    projectHash: string,
+    options: BoundedDiscoveryOptions = {},
+  ): Promise<BoundedContinueTargets> {
+    // Named-class call, not `this`: pickers and the test kit may extract and
+    // invoke this static unbound, so it must not depend on the receiver.
+    const detailed = await SessionDiscovery.listSessionsDetailed(
+      chatsDir,
+      projectHash,
+      options,
     );
-    const unreadable: Array<UnreadableRecording | null> = Array.from(
-      { length: detailed.sessions.length },
-      () => null,
-    );
-    let nextIndex = 0;
-    const worker = async (): Promise<void> => {
-      while (nextIndex < detailed.sessions.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        const summary = detailed.sessions[index];
-        const replay = await replaySession(summary.filePath, projectHash, {
-          mediaStore,
-        });
-        if (!replay.ok || replay.sequenceCorrupt) {
-          const reason = replay.ok ? 'non-monotonic sequences' : replay.error;
-          debugLogger.debug(
-            `Skipping unreadable session recording ${summary.filePath}: ${reason}`,
-          );
-          unreadable[index] = {
-            sessionId: summary.sessionId,
-            filePath: summary.filePath,
-            reason,
-          };
-          continue;
-        }
-        const namedSummary = { ...summary, name: replay.sessionName };
-        sessionTargets[index] = { kind: 'session', session: namedSummary };
-        checkpointTargets[index] = (replay.checkpoints ?? [])
-          .filter((checkpoint) => !checkpoint.deleted)
-          .map((checkpoint) => ({
-            kind: 'checkpoint',
-            source: namedSummary,
-            checkpointId: checkpoint.checkpointId,
-            checkpointName: checkpoint.name,
-            sequence: checkpoint.sequence,
-          }));
-      }
-    };
-    const workerCount = Math.min(8, detailed.sessions.length);
-    await Promise.all(Array.from({ length: workerCount }, worker));
-    const unreadableRecordings = [
+    const unreadable: UnreadableRecording[] = [
       ...detailed.unreadableRecordings,
-      ...unreadable.filter(
-        (recording): recording is UnreadableRecording => recording !== null,
-      ),
     ];
-    return {
-      targets: [
-        ...sessionTargets.filter(
-          (target): target is ContinueTarget => target !== null,
-        ),
-        ...checkpointTargets.flat(),
-      ],
-      skippedCount: unreadableRecordings.length,
-      recordingErrors: unreadableRecordings.map(describeUnreadableRecording),
-      unreadableRecordings,
-    };
+
+    return journalContinueTargets(detailed.sessions, unreadable);
   }
 
   static resolveContinueRef(
@@ -372,15 +310,14 @@ export class SessionDiscovery {
   }
 
   /**
-   * Read only the session header (first line) from a JSONL file.
-   * Delegates to the existing readSessionHeader in ReplayEngine.
+   * Read the session facts from a native journal without reading its rows.
    *
    * @pseudocode resume-flow.md header reading
    */
   static async readSessionHeader(
     filePath: string,
   ): Promise<SessionStartPayload | null> {
-    return readSessionHeader(filePath);
+    return readJournalSessionHeader(filePath);
   }
 
   /**
@@ -395,6 +332,7 @@ export class SessionDiscovery {
   static async listSessionsDetailed(
     chatsDir: string,
     projectHash: string,
+    options: BoundedDiscoveryOptions = {},
   ): Promise<{
     sessions: SessionSummary[];
     skippedCount: number;
@@ -403,6 +341,7 @@ export class SessionDiscovery {
     const { sessions, unreadableRecordings } = await scanSessions(
       chatsDir,
       projectHash,
+      options,
     );
     return {
       sessions,
@@ -419,13 +358,12 @@ export class SessionDiscovery {
    * Check if a session file contains any content events (user or assistant messages).
    * Returns false for non-existent files, empty files, or files with only session_start.
    */
-  static async hasContentEvents(filePath: string): Promise<boolean> {
-    try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      return fileContent.split('\n').some((line) => isContentEventLine(line));
-    } catch {
-      return false;
-    }
+  static async hasContentEvents(
+    filePath: string,
+    _counters?: JournalReadCounters,
+  ): Promise<boolean> {
+    const found = await readJournalFileFacts(filePath).catch(() => undefined);
+    return (found?.rows ?? 0) > 0;
   }
 
   /**
@@ -441,19 +379,8 @@ export class SessionDiscovery {
     filePath: string,
     maxLength: number = SESSION_TITLE_MAX_LENGTH,
   ): Promise<string | null> {
-    try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const lines = fileContent.split('\n');
-      for (const line of lines) {
-        const text = extractUserMessageText(line);
-        if (text !== null) {
-          return text.length > maxLength ? text.slice(0, maxLength) : text;
-        }
-      }
-      return null;
-    } catch {
-      return null;
-    }
+    const found = await readJournalFileFacts(filePath).catch(() => undefined);
+    return found?.preview?.slice(0, maxLength) ?? null;
   }
 
   /**
@@ -466,32 +393,8 @@ export class SessionDiscovery {
   static async readSessionMetadataTitle(
     filePath: string,
   ): Promise<string | null | undefined> {
-    let stream: ReturnType<typeof createReadStream> | undefined;
-    let reader: readline.Interface | undefined;
-    try {
-      stream = createReadStream(filePath, { encoding: 'utf8' });
-      reader = readline.createInterface({
-        input: stream,
-        crlfDelay: Infinity,
-      });
-      let title: string | null | undefined;
-      for await (const line of reader) {
-        const result = extractSessionMetadataTitle(line);
-        if (result !== undefined) {
-          title = result;
-        }
-      }
-      return title;
-    } catch (error) {
-      debugLogger.debug(
-        () =>
-          `readSessionMetadataTitle failed for ${filePath}: ${String(error)}`,
-      );
-      return undefined;
-    } finally {
-      reader?.close();
-      stream?.destroy();
-    }
+    const found = await readJournalFileFacts(filePath).catch(() => undefined);
+    return found?.facts.title;
   }
 }
 
@@ -503,183 +406,7 @@ export class SessionDiscovery {
 async function scanSessions(
   chatsDir: string,
   projectHash: string,
+  _options: BoundedDiscoveryOptions = {},
 ): Promise<SessionScan> {
-  let entries: string[];
-  try {
-    entries = await fs.readdir(chatsDir);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { sessions: [], unreadableRecordings: [] };
-    }
-    throw error;
-  }
-
-  const sessions: SessionSummary[] = [];
-  const unreadableRecordings: UnreadableRecording[] = [];
-  const sessionFiles = entries.filter(
-    (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
-  );
-  for (const fileName of sessionFiles) {
-    const filePath = path.join(chatsDir, fileName);
-    const result = await readSessionSummary(filePath);
-    if (!result.ok) {
-      unreadableRecordings.push(result.unreadable);
-    } else if (result.summary.projectHash === projectHash) {
-      sessions.push(result.summary);
-    }
-  }
-  sortNewestFirst(sessions);
-  return { sessions, unreadableRecordings };
-}
-
-async function readSessionSummary(
-  filePath: string,
-): Promise<
-  | { ok: true; summary: SessionSummary }
-  | { ok: false; unreadable: UnreadableRecording }
-> {
-  let stat: Awaited<ReturnType<typeof fs.stat>>;
-  try {
-    stat = await fs.stat(filePath);
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      unreadable: {
-        filePath,
-        reason: `Cannot stat recording: ${error instanceof Error ? error.message : String(error)}`,
-      },
-    };
-  }
-
-  const first = await readSessionStartLine(filePath);
-  if (!first.ok) {
-    return { ok: false, unreadable: { filePath, reason: first.reason } };
-  }
-  const header = first.payload;
-  if (!isSessionStartHeader(header)) {
-    const sessionId: unknown = Reflect.get(header, 'sessionId');
-    return {
-      ok: false,
-      unreadable: {
-        filePath,
-        reason: INVALID_SESSION_START_MESSAGE,
-        ...(typeof sessionId === 'string' && sessionId !== ''
-          ? { sessionId }
-          : {}),
-      },
-    };
-  }
-
-  return {
-    ok: true,
-    summary: {
-      sessionId: header.sessionId,
-      filePath,
-      projectHash: header.projectHash,
-      startTime: header.startTime,
-      lastModified: stat.mtime,
-      fileSize: stat.size,
-      provider: header.provider,
-      model: header.model,
-      ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
-      createdAt: header.startTime,
-    },
-  };
-}
-
-function isContentEventLine(line: string): boolean {
-  if (!line.trim()) {
-    return false;
-  }
-  try {
-    const event = JSON.parse(line) as Record<string, unknown>;
-    return event.type === 'content';
-  } catch {
-    return false;
-  }
-}
-
-function extractUserMessageText(line: string): string | null {
-  if (!line.trim()) {
-    return null;
-  }
-  let event: Record<string, unknown>;
-  try {
-    event = JSON.parse(line) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-  if (event.type !== 'content') {
-    return null;
-  }
-
-  const payload = event.payload as Record<string, unknown> | undefined;
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-
-  const contentObj = payload.content as Record<string, unknown> | undefined;
-  if (!contentObj || typeof contentObj !== 'object') {
-    return null;
-  }
-
-  if (contentObj.speaker !== 'human') {
-    return null;
-  }
-
-  const blocks = contentObj.blocks as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (!Array.isArray(blocks)) {
-    return null;
-  }
-
-  const text = blocks
-    .filter((block) => block.type === 'text' && typeof block.text === 'string')
-    .map((block) => block.text as string)
-    .join('');
-
-  return text || null;
-}
-
-/**
- * Extract the title from a `session_metadata` JSONL line.
- * Returns:
- * - `undefined` when the line is not a valid `session_metadata` event (so
- *   callers can continue scanning).
- * - `null` when title is explicitly null (untitled).
- * - `string` when a concrete title is present.
- */
-function extractSessionMetadataTitle(line: string): string | null | undefined {
-  if (!line.trim()) {
-    return undefined;
-  }
-  let event: unknown;
-  try {
-    event = JSON.parse(line);
-  } catch {
-    return undefined;
-  }
-  if (event === null || typeof event !== 'object') {
-    return undefined;
-  }
-  const record = event as Record<string, unknown>;
-  if (record.type !== 'session_metadata') {
-    return undefined;
-  }
-  const payload = record.payload as Record<string, unknown> | undefined;
-  if (!payload || typeof payload !== 'object') {
-    return undefined;
-  }
-  if (!('title' in payload)) {
-    return undefined;
-  }
-  const title = payload.title;
-  if (title === null) {
-    return null;
-  }
-  if (typeof title === 'string') {
-    return title;
-  }
-  return undefined;
+  return listJournalSessions(chatsDir, projectHash);
 }

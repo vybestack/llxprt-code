@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import {
@@ -239,12 +240,25 @@ describe('scratchpad detection on many repeated tags', () => {
 });
 
 describe('provider requests recover summaries that carry a scratchpad', () => {
-  function serviceWith(...contents: IContent[]): HistoryService {
-    const service = new HistoryService();
+  const scratchRoots = createTestScratchOwner();
+  const services: HistoryService[] = [];
+
+  afterEach(async () => {
+    for (const service of services.splice(0)) await service.dispose();
+  });
+
+  async function serviceWith(...contents: IContent[]): Promise<HistoryService> {
+    const service = new HistoryService({ scratchRoots });
+    services.push(service);
     for (const content of contents) {
       service.add(content);
     }
+    await service.waitForCommit();
     return service;
+  }
+
+  function providerRows(service: HistoryService): Promise<IContent[]> {
+    return Array.fromAsync(service.getCuratedForProviderStream());
   }
 
   const legacySummary: IContent = {
@@ -262,19 +276,19 @@ describe('provider requests recover summaries that carry a scratchpad', () => {
     },
   };
 
-  it('sends a tagged summary with its scratchpad removed and the snapshot intact', () => {
-    const service = serviceWith(legacySummary, {
+  it('sends a tagged summary with its scratchpad removed and the snapshot intact', async () => {
+    const service = await serviceWith(legacySummary, {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Continuing.' }],
     });
 
-    const [summary] = service.getCuratedForProvider();
+    const [summary] = await providerRows(service);
 
     expect(textOf(summary)).toBe(SNAPSHOT);
   });
 
-  it('sends only the real snapshot of a summary whose scratchpad names the snapshot tag', () => {
-    const service = serviceWith({
+  it('sends only the real snapshot of a summary whose scratchpad names the snapshot tag', async () => {
+    const service = await serviceWith({
       ...legacySummary,
       blocks: [
         {
@@ -284,112 +298,113 @@ describe('provider requests recover summaries that carry a scratchpad', () => {
       ],
     });
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(REAL_SNAPSHOT);
+    expect(textOf((await providerRows(service))[0])).toBe(REAL_SNAPSHOT);
   });
 
-  it('recovers summaries tagged only by the isSummary flag', () => {
-    const service = serviceWith({
+  it('recovers summaries tagged only by the isSummary flag', async () => {
+    const service = await serviceWith({
       ...legacySummary,
       blocks: [{ type: 'text', text: `<scratchpad>notes\n${SNAPSHOT}` }],
       metadata: { isSummary: true },
     });
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(SNAPSHOT);
+    expect(textOf((await providerRows(service))[0])).toBe(SNAPSHOT);
   });
 
-  it('recovers summaries tagged only by the snapshot reason', () => {
-    const service = serviceWith({
+  it('recovers summaries tagged only by the snapshot reason', async () => {
+    const service = await serviceWith({
       ...legacySummary,
       metadata: { reason: 'compression-state-snapshot' },
     });
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(SNAPSHOT);
+    expect(textOf((await providerRows(service))[0])).toBe(SNAPSHOT);
   });
 
-  it('recovers an untagged summary recorded before summaries were tagged', () => {
-    const service = serviceWith(
+  it('recovers an untagged summary recorded before summaries were tagged', async () => {
+    const service = await serviceWith(
       untaggedSummary(
         `\n  <scratchpad>old reasoning</scratchpad>\n${SNAPSHOT}`,
       ),
       { speaker: 'ai', blocks: [{ type: 'text', text: 'Got it.' }] },
     );
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(SNAPSHOT);
+    expect(textOf((await providerRows(service))[0])).toBe(SNAPSHOT);
   });
 
-  it('never alters a user message shaped like an untagged summary', () => {
+  it('never alters a user message shaped like an untagged summary', async () => {
     const userText =
       '<scratchpad>example notes</scratchpad><state_snapshot>example output</state_snapshot>';
-    const service = serviceWith({
+    const service = await serviceWith({
       speaker: 'human',
       blocks: [{ type: 'text', text: userText }],
     });
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
   });
 
-  it('never alters an untagged user message that does not open with a scratchpad', () => {
+  it('never alters an untagged user message that does not open with a scratchpad', async () => {
     const userText = `Compare this with the summary: <scratchpad>x</scratchpad>${SNAPSHOT}`;
-    const service = serviceWith({
+    const service = await serviceWith({
       speaker: 'human',
       blocks: [{ type: 'text', text: userText }],
     });
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
   });
 
-  it('never alters an untagged user message that opens with a scratchpad but has no snapshot', () => {
+  it('never alters an untagged user message that opens with a scratchpad but has no snapshot', async () => {
     const userText = '<scratchpad>is this tag allowed?</scratchpad> asking';
-    const service = serviceWith({
+    const service = await serviceWith({
       speaker: 'human',
       blocks: [{ type: 'text', text: userText }],
     });
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
   });
 
-  it('never alters an untagged user message that opens with a scratchpad and mentions the snapshot tag', () => {
+  it('never alters an untagged user message that opens with a scratchpad and mentions the snapshot tag', async () => {
     const userText =
       '<scratchpad> tags caused refusals; does the fix keep <state_snapshot> intact?';
-    const service = serviceWith({
+    const service = await serviceWith({
       speaker: 'human',
       blocks: [{ type: 'text', text: userText }],
     });
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
   });
 
-  it('leaves the stored history untouched', () => {
-    const service = serviceWith(legacySummary);
+  it('leaves the stored history untouched', async () => {
+    const service = await serviceWith(legacySummary);
 
-    service.getCuratedForProvider();
+    await providerRows(service);
 
-    expect(textOf(service.getAll()[0])).toBe(textOf(legacySummary));
+    const [stored] = await Array.fromAsync(service.streamRawHistory());
+    expect(textOf(stored)).toBe(textOf(legacySummary));
   });
 
-  it('never alters an ordinary user message that mentions a scratchpad', () => {
+  it('never alters an ordinary user message that mentions a scratchpad', async () => {
     const userText =
       'Why does the summary start with <scratchpad>notes</scratchpad>?';
-    const service = serviceWith({
+    const service = await serviceWith({
       speaker: 'human',
       blocks: [{ type: 'text', text: userText }],
     });
 
-    expect(textOf(service.getCuratedForProvider()[0])).toBe(userText);
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
   });
 
-  it('never alters an assistant reply that mentions a scratchpad', () => {
+  it('never alters an assistant reply that mentions a scratchpad', async () => {
     const aiText = '<scratchpad> is the tag the old prompt asked for.';
-    const service = serviceWith(
+    const service = await serviceWith(
       { speaker: 'human', blocks: [{ type: 'text', text: 'Explain it.' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: aiText }] },
     );
 
-    expect(textOf(service.getCuratedForProvider()[1])).toBe(aiText);
+    expect(textOf((await providerRows(service))[1])).toBe(aiText);
   });
 
-  it('drops a tagged summary that held nothing but an unterminated scratchpad', () => {
-    const service = serviceWith(
+  it('drops a tagged summary that held nothing but an unterminated scratchpad', async () => {
+    const service = await serviceWith(
       {
         ...legacySummary,
         blocks: [{ type: 'text', text: '<scratchpad>truncated reasoning' }],
@@ -397,7 +412,7 @@ describe('provider requests recover summaries that carry a scratchpad', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'Next request' }] },
     );
 
-    const contents = service.getCuratedForProvider();
+    const contents = await providerRows(service);
 
     expect(contents.map(textOf)).toStrictEqual(['Next request']);
   });

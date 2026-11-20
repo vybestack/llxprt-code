@@ -85,7 +85,7 @@ export async function createProviderSessionOwner(
       manager,
       oauth,
       createRuntimeContentGeneratorFactory(),
-      configureProviderTokenizer(manager, undefined),
+      configureProviderTokenizer(manager, config.scratchRoots, undefined),
       new ProviderFileLifecycle({
         maxFiles: 100,
         maxBytes: 512 * 1024 * 1024,

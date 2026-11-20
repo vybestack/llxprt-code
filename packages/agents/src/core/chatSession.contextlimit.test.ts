@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -24,6 +25,7 @@ import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('ChatSession Context Limit Enforcement', () => {
   let chat: ChatSession;
@@ -117,13 +119,16 @@ describe('ChatSession Context Limit Enforcement', () => {
       sessionId: 'test-session-id',
     });
 
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(40000);
     vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(
       undefined,
     );
 
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state: runtimeState,
       history: historyService,
       settings: {
@@ -190,13 +195,16 @@ describe('ChatSession Context Limit Enforcement', () => {
       sessionId: 'test-session-id',
     });
 
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(40000);
     vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(
       undefined,
     );
 
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state: runtimeState,
       history: historyService,
       settings: {
@@ -261,7 +269,9 @@ describe('ChatSession Context Limit Enforcement', () => {
       sessionId: 'test-session-id',
     });
 
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     // Reduced token counts to account for completion budget
     // Using smaller completion budget (4096) to keep total reasonable
     // Total: 10000 (history) + 5000 (pending) + 4096 (budget) = 19096
@@ -272,6 +282,7 @@ describe('ChatSession Context Limit Enforcement', () => {
     );
 
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state: runtimeState,
       history: historyService,
       settings: {

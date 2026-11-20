@@ -685,7 +685,20 @@ export async function selectGoogleCredentialClient(
   selection: GoogleCredentialSelection,
 ): Promise<AuthClient> {
   const transporter = new gaxios.Gaxios({
-    fetchImplementation: selection.fetch,
+    fetchImplementation: Object.assign(
+      (input: RequestInfo | URL, init?: RequestInit) =>
+        selection.fetch(input, init),
+      {
+        preconnect: (url: string | URL) => {
+          const preconnect: unknown = Reflect.get(
+            selection.fetch,
+            'preconnect',
+          );
+          if (typeof preconnect === 'function')
+            Reflect.apply(preconnect, selection.fetch, [url]);
+        },
+      },
+    ),
   });
   const { credentials, environment } = selection;
   if (credentials !== undefined) {

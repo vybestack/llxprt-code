@@ -1,0 +1,204 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Issue #854 steps C3 and F1: import boundary for the history-array seams.
+ *
+ * A send path must not collect the history into an `IContent[]`. The functions
+ * that do are `collectContents` (drains a stream into an array) and the
+ * transport-rows helpers `readTransportRows`, `openTransportRowsMedia` and
+ * `dropTransportRows` (read a selection into an array and resolve media over
+ * it). Product code may import them only from the files listed below, and every
+ * entry is a declared array exception (GitHub #3869):
+ *
+ * - The Vercel provider keeps its arrays and owns its copy of the transport
+ *   rows helpers.
+ * - The Gemini plugin keeps its arrays and owns its own copy of them.
+ * - `BaseProviderNormalization.ts` collects the history for a provider that is
+ *   neither on the rows route nor reads rows at its transport. In this tree
+ *   that is the Vercel provider and the Gemini plugin; the OpenAI chat, OpenAI
+ *   Responses and Anthropic providers take the rows route and never reach it.
+ *
+ * The load balancer, the Kimi file pre-pass, the Anthropic projection and the
+ * request dumps import none of them.
+ *
+ * The list may only shrink. A file that imports a banned symbol without an
+ * entry fails this test, and so does an entry whose file no longer imports one
+ * (delete the entry; do not keep it "just in case").
+ */
+
+import { describe, expect, it } from 'bun:test';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
+
+const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..');
+const SOURCE_ROOTS = [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'plugins')];
+
+const BANNED_SYMBOLS: ReadonlySet<string> = new Set([
+  'collectContents',
+  'readTransportRows',
+  'openTransportRowsMedia',
+  'dropTransportRows',
+]);
+
+const BANNED_MODULES = [
+  /(^|\/)collectContents\.js$/,
+  /(^|\/)transportRows\.js$/,
+];
+
+type Disposition = 'permanent' | 'pending';
+
+interface AllowedImporter {
+  readonly disposition: Disposition;
+  readonly reason: string;
+}
+
+const PERMANENT: AllowedImporter = {
+  disposition: 'permanent',
+  reason: 'declared array exception (GitHub #3869)',
+};
+
+/** Keys are repo-relative paths. */
+const ALLOWED_IMPORTERS: Readonly<Record<string, AllowedImporter>> = {
+  'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts': PERMANENT,
+  'plugins/google-gemini/src/gemini/GeminiProvider.ts': PERMANENT,
+  'packages/providers/src/BaseProviderNormalization.ts': PERMANENT,
+};
+
+/** No work is pending: every entry above is a declared exception. */
+const PENDING_CEILING = 0;
+
+const NAMED_IMPORT =
+  /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
+
+/** The banned symbols a source text imports, by their exported names. */
+function bannedImports(source: string): string[] {
+  const found: string[] = [];
+  for (const match of source.matchAll(NAMED_IMPORT)) {
+    const [, names, specifier] = match;
+    if (!BANNED_MODULES.some((module) => module.test(specifier))) continue;
+    for (const entry of names.split(',')) {
+      const exported = entry
+        .trim()
+        .replace(/^type\s+/, '')
+        .split(/\sas\s/)[0]
+        .trim();
+      if (BANNED_SYMBOLS.has(exported)) found.push(exported);
+    }
+  }
+  return found;
+}
+
+function isProductSource(path: string): boolean {
+  if (!path.endsWith('.ts') || path.endsWith('.d.ts')) return false;
+  if (/\.(test|spec)\.ts$/.test(path)) return false;
+  if (/\.test-helpers?\.ts$/.test(path)) return false;
+  if (/(^|\/)(__tests__|support|dist|node_modules)(\/|$)/.test(path))
+    return false;
+  // The modules that define the helpers are not importers of them.
+  return !/(^|\/)(collectContents|transportRows)\.ts$/.test(path);
+}
+
+function sourceDirs(): string[] {
+  return SOURCE_ROOTS.filter((root) => existsSync(root))
+    .flatMap((root) => readdirSync(root).map((pkg) => join(root, pkg, 'src')))
+    .filter((src) => existsSync(src));
+}
+
+function productSourceFiles(): string[] {
+  return sourceDirs().flatMap((src) =>
+    readdirSync(src, { recursive: true, encoding: 'utf8' })
+      .filter(isProductSource)
+      .map((entry) => join(src, entry)),
+  );
+}
+
+function importers(): Map<string, string[]> {
+  const result = new Map<string, string[]>();
+  for (const file of productSourceFiles()) {
+    const symbols = bannedImports(readFileSync(file, 'utf8'));
+    if (symbols.length > 0) {
+      result.set(relative(REPO_ROOT, file).split('\\').join('/'), symbols);
+    }
+  }
+  return result;
+}
+
+describe('history-array seam import boundary (issue #854 C3)', () => {
+  const actual = importers();
+
+  it('lists exactly the files that import a history-array helper', () => {
+    const allowed = new Set(Object.keys(ALLOWED_IMPORTERS));
+    const unlisted = [...actual.keys()].filter((file) => !allowed.has(file));
+    const stale = [...allowed].filter((file) => !actual.has(file));
+    expect({ unlisted, stale }).toStrictEqual({ unlisted: [], stale: [] });
+  });
+
+  it('keeps the Responses providers off every history-array helper', () => {
+    const responses = [...actual.keys()].filter((file) =>
+      file.startsWith('packages/providers/src/openai-responses/'),
+    );
+    expect(responses).toStrictEqual([]);
+  });
+
+  it('never grows the pending list', () => {
+    const pendingEntries = Object.values(ALLOWED_IMPORTERS).filter(
+      (entry) => entry.disposition === 'pending',
+    );
+    expect(pendingEntries.length).toBeLessThanOrEqual(PENDING_CEILING);
+  });
+
+  it('ends with the declared exceptions only', () => {
+    const permanent = Object.entries(ALLOWED_IMPORTERS)
+      .filter(([, entry]) => entry.disposition === 'permanent')
+      .map(([file]) => file);
+    expect(permanent).toStrictEqual([
+      'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts',
+      'plugins/google-gemini/src/gemini/GeminiProvider.ts',
+      'packages/providers/src/BaseProviderNormalization.ts',
+    ]);
+  });
+});
+
+describe('the import scanner itself', () => {
+  it('flags each banned symbol, aliased, typed and multi-line imports included', () => {
+    const source = [
+      "import { collectContents } from '../utils/collectContents.js';",
+      "import { readTransportRows as rows, type Other } from './transportRows.js';",
+      'import {',
+      '  dropTransportRows,',
+      '  openTransportRowsMedia,',
+      "} from '../utils/transportRows.js';",
+    ].join('\n');
+    expect(bannedImports(source)).toStrictEqual([
+      'collectContents',
+      'readTransportRows',
+      'dropTransportRows',
+      'openTransportRowsMedia',
+    ]);
+  });
+
+  it('flags a re-export of a banned symbol', () => {
+    expect(
+      bannedImports("export { collectContents } from './collectContents.js';"),
+    ).toStrictEqual(['collectContents']);
+  });
+
+  it('passes the neighbours the same modules export for other purposes', () => {
+    const source = [
+      "import { replayableContents } from '../utils/collectContents.js';",
+      "import { isAsyncIterableContents } from './collectContents.js';",
+      "import { collectContents } from './somewhereElse.js';",
+    ].join('\n');
+    expect(bannedImports(source)).toStrictEqual([]);
+  });
+
+  it('would catch a Responses file that collected its history', () => {
+    const trap =
+      "import { collectContents } from '../utils/collectContents.js';\n";
+    expect(bannedImports(trap)).toStrictEqual(['collectContents']);
+  });
+});

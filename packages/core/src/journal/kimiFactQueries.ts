@@ -1,0 +1,267 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalFormatError } from './errors.js';
+import { kimiDigitRange, kimiSafeCount } from './kimiDigits.js';
+import { decodeCountValue } from './idEntryCodecs.js';
+import type { IdFactDeps } from './idFactQueries.js';
+import { ID_NS, fact0Key } from './idKeys.js';
+import { KIMI_EXCEPTION_KEY, decodeDecimal } from './metaFacts.js';
+import {
+  decodeKimiCounts,
+  decodeKimiOccurrence,
+  KIMI_AI_KEY,
+  KIMI_FIELD,
+  KIMI_FLAG,
+  kimiKey,
+  type KimiCounts,
+  type KimiOccurrence,
+} from './kimiFactCodec.js';
+import type { VersionSnapshot } from './versionSnapshot.js';
+import type { KeyedMapReader } from './keyedMap.js';
+
+export async function kimiOccurrenceName(
+  source: Pick<VersionSnapshot, 'entryByLabel' | 'readBlock'>,
+  last: KimiOccurrence,
+): Promise<string> {
+  const entry = await source.entryByLabel(last.position.label);
+  if (entry === undefined)
+    throw new JournalFormatError('Kimi last eligible row is absent');
+  const block: unknown = JSON.parse(
+    Buffer.from(await source.readBlock(entry, last.block)).toString('utf8'),
+  );
+  if (typeof block !== 'object' || block === null)
+    throw new JournalFormatError('Kimi name source is not a block');
+  const reconstructed = (last.flags & KIMI_FLAG.reconstructed) !== 0;
+  let name: string;
+  if (
+    reconstructed &&
+    'toolName' in block &&
+    typeof block.toolName === 'string'
+  )
+    name = block.toolName || 'unknown_tool';
+  else if (!reconstructed && 'name' in block && typeof block.name === 'string')
+    name = block.name;
+  else throw new JournalFormatError('Kimi last eligible name is absent');
+  return Buffer.from(name, 'utf16le').toString('utf16le');
+}
+
+export interface KimiIdFact extends KimiCounts {
+  readonly writtenUses: number;
+  readonly unmappedUses: number;
+  readonly last: KimiOccurrence | undefined;
+}
+
+export function digitCount(value: number): number {
+  return String(value).length;
+}
+
+export class KimiFactQueries {
+  constructor(
+    private readonly snapshot: VersionSnapshot,
+    private readonly deps: IdFactDeps,
+    private readonly meta: KeyedMapReader,
+  ) {}
+
+  private identity(rawId: string): Uint8Array {
+    return this.deps.hasher(ID_NS.fact, fact0Key(rawId));
+  }
+
+  private async fact(identity: Uint8Array): Promise<KimiIdFact | undefined> {
+    await this.snapshot.kimiEligibleCount();
+    const bytes = await this.snapshot.facts.getEntry(
+      ID_NS.occurrence,
+      kimiKey(KIMI_FIELD.counts, 0, identity),
+    );
+    if (bytes === undefined) return undefined;
+    const counts = decodeKimiCounts(bytes);
+    const stored = await this.snapshot.facts.getEntry(
+      ID_NS.occurrence,
+      kimiKey(KIMI_FIELD.last, 0, identity),
+    );
+    const last =
+      stored === undefined || stored.length === 0
+        ? undefined
+        : decodeKimiOccurrence(stored);
+    const ai = await this.meta.get(
+      this.snapshot.version?.roots.metaRoot ?? 0,
+      KIMI_AI_KEY,
+    );
+    const hasAi = ai !== undefined && decodeCountValue(ai) > 0;
+    const responses = counts.aiResponses + counts.otherResponses;
+    const mappedResponses = last === undefined ? 0 : counts.aiResponses;
+    return {
+      ...counts,
+      last,
+      writtenUses: counts.aiCalls + (hasAi ? mappedResponses : responses),
+      unmappedUses: last === undefined ? counts.aiCalls + responses : 0,
+    };
+  }
+
+  idFact(rawId: string): Promise<KimiIdFact | undefined> {
+    return this.fact(this.identity(rawId));
+  }
+
+  async mappedId(rawId: string): Promise<string | undefined> {
+    const fact = await this.idFact(rawId);
+    if (fact?.last === undefined) return undefined;
+    const { last } = fact;
+    const name = await kimiOccurrenceName(this.snapshot, last);
+    return `functions.${name}:${await this.snapshot.kimiOrdinal(last.position.label, last.eligibleWithinRow)}`;
+  }
+
+  async *exceptions(): AsyncGenerator<KimiIdFact> {
+    await this.snapshot.kimiEligibleCount();
+    const bytes = await this.meta.get(
+      this.snapshot.version?.roots.metaRoot ?? 0,
+      KIMI_EXCEPTION_KEY,
+    );
+    const count = bytes === undefined ? 0 : Number(decodeDecimal(bytes));
+    for (let ordinal = 0; ordinal < count; ordinal++) {
+      const hash = await this.snapshot.facts.exceptionHash(ordinal);
+      if (hash === undefined)
+        throw new JournalFormatError('Missing Kimi exception identity');
+      const fact = await this.fact(hash);
+      if (fact === undefined)
+        throw new JournalFormatError('Missing Kimi exception fact');
+      yield fact;
+    }
+  }
+
+  private async hasAi(): Promise<boolean> {
+    const bytes = await this.meta.get(
+      this.snapshot.version?.roots.metaRoot ?? 0,
+      KIMI_AI_KEY,
+    );
+    return bytes !== undefined && decodeCountValue(bytes) > 0;
+  }
+
+  async unmappedWrittenCount(): Promise<number> {
+    const hasAi = await this.hasAi();
+    let total = 0;
+    for await (const fact of this.exceptions())
+      if (fact.last === undefined)
+        total = kimiSafeCount(
+          total +
+            fact.aiCalls +
+            (hasAi ? 0 : fact.aiResponses + fact.otherResponses),
+        );
+    return total;
+  }
+
+  private async droppedResponseDigits(
+    fact: KimiIdFact,
+    hash: Uint8Array,
+  ): Promise<number> {
+    let dropped = 0;
+    for (
+      let ordinal = 1;
+      ordinal <= fact.aiResponses + fact.otherResponses;
+      ordinal++
+    ) {
+      const bytes = await this.snapshot.facts.getEntry(
+        ID_NS.occurrence,
+        kimiKey(KIMI_FIELD.responses, ordinal, hash),
+      );
+      if (bytes === undefined)
+        throw new JournalFormatError('Missing Kimi fallback response');
+      dropped = kimiSafeCount(
+        dropped +
+          digitCount(
+            await this.snapshot.kimiFallbackIndex(decodeKimiOccurrence(bytes)),
+          ),
+      );
+    }
+    return dropped;
+  }
+
+  async writtenDigits(): Promise<number> {
+    const eligible = await this.snapshot.kimiEligibleCount();
+    const consumed = await this.snapshot.kimiUnmappedCount();
+    let dropped = 0;
+    if (await this.hasAi()) {
+      const bytes = await this.meta.get(
+        this.snapshot.version?.roots.metaRoot ?? 0,
+        KIMI_EXCEPTION_KEY,
+      );
+      const count = bytes === undefined ? 0 : Number(decodeDecimal(bytes));
+      for (let index = 0; index < count; index++) {
+        const hash = await this.snapshot.facts.exceptionHash(index);
+        if (hash === undefined)
+          throw new JournalFormatError('Missing Kimi exception identity');
+        const fact = await this.fact(hash);
+        if (fact === undefined)
+          throw new JournalFormatError('Missing Kimi exception fact');
+        if (fact.last !== undefined) continue;
+        dropped = kimiSafeCount(
+          dropped + (await this.droppedResponseDigits(fact, hash)),
+        );
+      }
+    }
+    return kimiSafeCount(
+      2 * kimiDigitRange(0, eligible) +
+        (await this.digitCorrection()) +
+        kimiDigitRange(eligible, consumed) -
+        dropped,
+    );
+  }
+
+  async *holders(rawId: string): AsyncGenerator<KimiOccurrence> {
+    const fact = await this.idFact(rawId);
+    if (fact === undefined) return;
+    const identity = this.identity(rawId);
+    for (const [field, count] of [
+      [KIMI_FIELD.calls, fact.callCount],
+      [KIMI_FIELD.responses, fact.aiResponses + fact.otherResponses],
+    ]) {
+      for (let ordinal = 1; ordinal <= count; ordinal++) {
+        const value = await this.snapshot.facts.getEntry(
+          ID_NS.occurrence,
+          kimiKey(field, ordinal, identity),
+        );
+        if (value === undefined)
+          throw new JournalFormatError('Missing emitted Kimi holder');
+        yield decodeKimiOccurrence(value);
+      }
+    }
+  }
+
+  async digitCorrection(): Promise<number> {
+    await this.snapshot.kimiEligibleCount();
+    const bytes = await this.meta.get(
+      this.snapshot.version?.roots.metaRoot ?? 0,
+      KIMI_EXCEPTION_KEY,
+    );
+    const count = bytes === undefined ? 0 : Number(decodeDecimal(bytes));
+    let total = 0;
+    for (let index = 0; index < count; index++) {
+      const hash = await this.snapshot.facts.exceptionHash(index);
+      if (hash === undefined)
+        throw new JournalFormatError('Missing Kimi exception identity');
+      const fact = await this.fact(hash);
+      if (fact?.last === undefined) continue;
+      const ordinal = await this.snapshot.kimiOrdinal(
+        fact.last.position.label,
+        fact.last.eligibleWithinRow,
+      );
+      total += fact.writtenUses * digitCount(ordinal);
+      for (let occurrence = 1; occurrence <= fact.callCount; occurrence++) {
+        const value = await this.snapshot.facts.getEntry(
+          ID_NS.occurrence,
+          kimiKey(KIMI_FIELD.calls, occurrence, hash),
+        );
+        if (value === undefined)
+          throw new JournalFormatError('Missing emitted Kimi call');
+        const call = decodeKimiOccurrence(value);
+        if ((call.flags & KIMI_FLAG.eligible) !== 0)
+          total -=
+            2 *
+            digitCount(
+              await this.snapshot.kimiOrdinal(
+                call.position.label,
+                call.eligibleWithinRow,
+              ),
+            );
+      }
+    }
+    return total;
+  }
+}

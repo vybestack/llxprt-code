@@ -42,7 +42,7 @@ function createSseStream(lines: string[]): ReadableStream<Uint8Array> {
   });
 }
 
-describe('parseReasoningFromSseStream — configurable field name (#2488)', () => {
+describe('parseReasoningFromSseStream — configurable field name (#2488) / field selection', () => {
   it('captures reasoning_content with default fieldName', async () => {
     const captureBuffer = createCaptureBuffer();
     const sseData = [
@@ -123,7 +123,9 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
 
     expect(captureBuffer.reasoningChunks).toStrictEqual([]);
   });
+});
 
+describe('parseReasoningFromSseStream — configurable field name (#2488) / explicit fields and malformed values', () => {
   it('does NOT auto-fallback when fieldName is explicitly "reasoning_content"', async () => {
     const captureBuffer = createCaptureBuffer('reasoning_content');
     const sseData = [
@@ -190,7 +192,9 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
     expect(captureBuffer.reasoningChunks).toStrictEqual(['standard reasoning']);
     expect(captureBuffer.actualFieldName).toBe('reasoning_content');
   });
+});
 
+describe('parseReasoningFromSseStream — configurable field name (#2488) / empty fields and whitespace', () => {
   it('preserves whitespace-only reasoning_content as usable (no fallback, #721/#2524)', async () => {
     const whitespace = '  \n\t  ';
     const captureBuffer = createCaptureBuffer();
@@ -262,7 +266,9 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
 
     await expect(result).rejects.toBeInstanceOf(ProviderStreamProtocolError);
   });
+});
 
+describe('parseReasoningFromSseStream — configurable field name (#2488) / protocol byte limits', () => {
   it('rejects retained reasoning that exceeds its byte limit', async () => {
     const captureBuffer = createCaptureBuffer();
     const fragment = 'x'.repeat(1024 * 1024);
@@ -309,7 +315,9 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
 
     expect(captureBuffer.reasoningChunks.join('')).toBe(reasoning);
   });
+});
 
+describe('parseReasoningFromSseStream — configurable field name (#2488) / large reasoning and cancellation', () => {
   it('stops the detached parser when the request signal aborts', async () => {
     const encoder = new TextEncoder();
     const response = new Response(

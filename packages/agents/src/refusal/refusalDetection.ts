@@ -10,8 +10,8 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
-  buildPartialOutputSnapshot,
   unavailableContextFingerprint,
+  type PartialOutputSnapshot,
   type RefusalContextFingerprint,
 } from './refusalAudit.js';
 import {
@@ -32,12 +32,27 @@ export function isRefusalFinishReason(
 }
 
 /**
+ * Terminal facts of one streamed attempt. The output itself is never held:
+ * the stream feeds a bounded recorder and only its snapshot reaches here.
+ */
+export type RefusalTerminal = Pick<
+  ModelOutput,
+  | 'finishReason'
+  | 'rawStopReason'
+  | 'stopDetails'
+  | 'requestId'
+  | 'dumpBaseId'
+  | 'usage'
+  | 'firstByteToRefusalMs'
+> & { partialOutput(): PartialOutputSnapshot };
+
+/**
  * Raises the typed refusal outcome for an accumulated attempt that ended in a
  * refusal. Called by the stream finalizer before response validation, history
  * commit and success accounting, so none of them see the refused output.
  */
 export function throwIfRefused(
-  accumulated: ModelOutput,
+  accumulated: RefusalTerminal,
   turnId: string,
   contextFingerprint?: RefusalContextFingerprint,
 ): void {
@@ -57,7 +72,7 @@ export function throwIfRefused(
       dumpBaseId: accumulated.dumpBaseId,
     }),
     ...(accumulated.usage !== undefined && { usage: accumulated.usage }),
-    partialOutput: buildPartialOutputSnapshot(accumulated),
+    partialOutput: accumulated.partialOutput(),
     ...(accumulated.usage !== undefined && {
       outputTokens: accumulated.usage.completionTokens,
     }),

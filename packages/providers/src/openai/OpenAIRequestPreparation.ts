@@ -14,32 +14,73 @@
  * limitations under the License.
  */
 
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { providerRowsOf } from '../utils/providerRows.js';
 import type OpenAI from 'openai';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
-import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
+import type { ChatContinuation } from './OpenAIChatContinuation.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 import { applyOpenAIChatReasoning } from './openai-chat-reasoning.js';
-import {
-  parseOutputLimits,
-  type OutputLimitConfig,
-} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { type OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { applyKimiCacheAffinity } from './kimiCacheAffinity.js';
 import {
   conservativeMediaTransportCapabilities,
   type ProviderMediaTransportCapabilities,
 } from '../providerMediaTransportCapabilities.js';
+import { wantsRequestDump } from '../utils/dumpContext.js';
+import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
+import type { ChatPromptEstimate } from './native-chat-estimate.js';
+import { prepareNativePlainRequest } from './native-chat-body.js';
+import type { ChatHttpBody } from '../utils/chat-http-body.js';
 
+/**
+ * A prepared chat request: a replayable native body and the scalars the
+ * response path needs.
+ */
 export interface RequestContext {
   model: string;
   detectedFormat: string;
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams;
-  messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[];
+  /** The lazy request body; its size is the Content-Length. */
+  spool: ChatHttpBody;
+  /** Messages in the body, the system message included. */
+  messageCount: number;
+  /**
+   * The lazy estimate projection, sharing the request row selection.
+   * The caller owns it once it has the request.
+   */
+  estimate: ChatPromptEstimate | undefined;
+  /**
+   * The body a request dump records, converted lazily from the pinned rows. Present only when the call's `dumpcontext` asks for a dump.
+   */
+  dump: StreamedDumpBody | undefined;
+  /**
+   * Builds the request that follows a reply of tool calls and no text, as a
+   * second lazy body over the same rows.
+   */
+  continuation: ChatContinuation;
+  /** Releases the body and its request-owned resources. Idempotent. */
+  release(): void | Promise<void>;
+}
+
+/**
+ * How the rows of one request are prepared. The call's own rows are always
+ * read; by default no media is resolved, and the caller supplies the media
+ * stage that resolves stored media and, for the Kimi file pre-pass, replaces
+ * uploaded blocks with their references.
+ */
+export interface ChatRowInput {
+  readonly mediaStage?: (
+    rows: AsyncIterable<IContent>,
+  ) => AsyncIterable<IContent>;
+  /** Media blocks the Kimi pre-pass replaced with provider file references. */
+  readonly uploadedMedia?: number;
 }
 
 /**
@@ -154,6 +195,7 @@ function applyRequestBodyOverrides(
       });
     }
     if (sanitizedOverrides) {
+      assertNoMessagesOverride(sanitizedOverrides);
       Object.assign(requestBody, sanitizedOverrides);
     }
   }
@@ -174,6 +216,19 @@ function applyRequestBodyOverrides(
 
   if (streamingEnabled) {
     Object.assign(requestBody, { stream_options: streamOptions });
+  }
+}
+
+/**
+ * The messages are streamed from the row selection; an override cannot replace them, because
+ * the body is written from the rows and a replacement would be dropped or sent
+ * without the conversion rules applied.
+ */
+function assertNoMessagesOverride(overrides: Record<string, unknown>): void {
+  if ('messages' in overrides) {
+    throw new Error(
+      'OpenAI chat request overrides cannot replace "messages"; the messages are written from the request rows',
+    );
   }
 }
 
@@ -206,19 +261,17 @@ function sanitizeOverridesCacheKey(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-interface OpenAIMessagePayload {
-  readonly detectedFormat: string;
+interface OpenAIToolPayload {
+  readonly detectedFormat: ToolFormat;
   readonly formattedTools: OpenAITool[] | undefined;
-  readonly messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[];
 }
 
-function prepareMessagePayload(
+function prepareToolPayload(
   options: NormalizedGenerateChatOptions,
   model: string,
-  config: OutputLimitConfig | undefined,
   logger: DebugLogger,
   providerName: string,
-): OpenAIMessagePayload {
+): OpenAIToolPayload {
   const detectedFormat = resolveToolFormat(
     model,
     providerName,
@@ -232,12 +285,6 @@ function prepareMessagePayload(
       `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
     { model, detectedFormat, provider: providerName },
   );
-  const messages = buildMessagesWithReasoning(
-    options.contents,
-    options,
-    detectedFormat,
-    config,
-  );
   return {
     detectedFormat,
     formattedTools: convertAndGuardTools(
@@ -246,10 +293,6 @@ function prepareMessagePayload(
       detectedFormat,
       logger,
     ),
-    messagesWithSystem: [
-      { role: 'system', content: options.systemInstruction ?? '' },
-      ...messages,
-    ],
   };
 }
 
@@ -264,35 +307,44 @@ export async function prepareRequest(
   logger: DebugLogger,
   providerName?: string,
   mediaTransportCapabilities: ProviderMediaTransportCapabilities = conservativeMediaTransportCapabilities(),
+  rowInput: ChatRowInput = {},
+  withEstimate = false,
 ): Promise<RequestContext> {
+  if (
+    options.requestRows?.native === undefined &&
+    options.requestRows?.index?.toolFree !== true &&
+    options.requestRows?.callerOwned !== true
+  )
+    throw new Error(
+      'OpenAI Chat requires a native or caller-owned request selection',
+    );
   const model = options.resolved.model || defaultModel;
   const ephemeralSettings = readInvocationRecord(options.invocation.ephemerals);
   const resolvedProviderName = providerName ?? 'openai';
-  const { detectedFormat, formattedTools, messagesWithSystem } =
-    prepareMessagePayload(
-      options,
-      model,
-      parseOutputLimits(options.invocation.ephemerals),
-      logger,
-      resolvedProviderName,
-    );
+  const { detectedFormat, formattedTools } = prepareToolPayload(
+    options,
+    model,
+    logger,
+    resolvedProviderName,
+  );
   const streamingEnabled = ephemeralSettings['streaming'] !== 'disabled';
 
-  // Build request
-  const requestBody: OpenAIChatRequestBody = {
+  // The envelope keeps `messages` in its key position as an empty placeholder;
+  // the native body writer replaces it with the streamed array.
+  const envelope: OpenAIChatRequestBody = {
     model,
-    messages: messagesWithSystem,
+    messages: [],
     stream: streamingEnabled,
   };
 
   if (formattedTools && formattedTools.length > 0) {
-    requestBody.tools = formattedTools;
-    requestBody.tool_choice = 'auto';
+    envelope.tools = formattedTools;
+    envelope.tool_choice = 'auto';
   }
 
   // Apply model params, reasoning, and stream-options overrides
   applyRequestBodyOverrides(
-    requestBody,
+    envelope,
     options,
     ephemeralSettings,
     model,
@@ -300,18 +352,31 @@ export async function prepareRequest(
     resolvedProviderName,
     logger,
   );
-  applyKimiCacheAffinity(requestBody, {
+  applyKimiCacheAffinity(envelope, {
     providerName: resolvedProviderName,
     runtimeId: options.invocation.runtimeId,
     cacheAffinityKey: mediaTransportCapabilities.cacheAffinityKey,
   });
 
+  const use = {
+    estimate: withEstimate,
+    dump: wantsRequestDump(ephemeralSettings['dumpcontext']),
+  };
+  const nativeRows = await providerRowsOf(options);
+  const body = await prepareNativePlainRequest(
+    envelope,
+    nativeRows,
+    options,
+    use,
+    rowInput,
+    detectedFormat,
+    resolvedProviderName,
+  );
   return {
     model,
     detectedFormat,
     formattedTools,
     streamingEnabled,
-    requestBody,
-    messagesWithSystem,
+    ...body,
   };
 }

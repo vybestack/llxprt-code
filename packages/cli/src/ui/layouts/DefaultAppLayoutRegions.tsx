@@ -19,6 +19,7 @@ import { QueuedMessagesPanel } from '../components/QueuedMessagesPanel.js';
 import { BucketAuthConfirmation } from '../components/BucketAuthConfirmation.js';
 import { DialogManager } from '../components/DialogManager.js';
 import { InlineContent } from './InlineContent.js';
+import { StartupStdinContext } from '../contexts/startup-stdin-context.js';
 import {
   FooterSection,
   useHasActiveDialog,
@@ -103,6 +104,11 @@ function ComposerContent(props: DefaultAppLayoutProps) {
 /** The dialog layer reads visibility; DialogManager selects the active request. */
 export function DialogRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const dialogsVisible = useHasActiveDialog();
+  const startupStdin = React.useContext(StartupStdinContext);
+  React.useEffect(
+    () => (dialogsVisible ? startupStdin?.acceptDialogInput() : undefined),
+    [dialogsVisible, startupStdin],
+  );
   return (
     <>
       <BucketAuthConfirmation
@@ -170,7 +176,6 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
 export function PanelsRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const terminal = useTerminalStore();
   const turn = useTurnStore();
-  const history = useStoreSelector(turn.store, (s) => s.history);
   const queued = useStoreSelector(turn.store, (s) => s.queuedSubmissions);
   const width = useStoreSelector(terminal.store, (s) => s.inputWidth);
   const todoCollapsed = useStoreSelector(
@@ -186,7 +191,7 @@ export function PanelsRegion(props: DefaultAppLayoutProps): React.ReactNode {
       <Notifications
         startupWarnings={props.startupWarnings}
         updateInfo={props.updateInfo}
-        history={history}
+        pager={props.scrollbackPager?.store}
       />
       {(props.settings.merged.ui.showTodoPanel ?? true) ? (
         <TodoPanel width={width} collapsed={todoCollapsed} />

@@ -27,10 +27,14 @@ import {
   dumpSDKErrorRequestResponse,
   type DumpOutcome,
   type RequestDumpMetadata,
+  type StreamedDumpBody,
 } from '../utils/dumpSDKContext.js';
 import { type DumpMode } from '../utils/dumpContext.js';
 import { type OpenAITool } from './schemaConverter.js';
-import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
+import {
+  withChatHttpBody,
+  type ChatHttpBody,
+} from '../utils/chat-http-body.js';
 
 import type { DumpAttemptContext } from '../utils/dumpAttemptContext.js';
 import { mapFinishReason } from './finishReasonMapping.js';
@@ -52,7 +56,10 @@ export interface OpenAIRawPostClient {
 
 export interface ApiExecutionOptions {
   client: OpenAIRawPostClient;
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams;
+  /** The sealed request body; it is streamed with Content-Length equal to its size. */
+  spool: ChatHttpBody;
+  /** What a request dump records. Required when `dumpMode` asks for a dump. */
+  dumpBody?: StreamedDumpBody | undefined;
   abortSignal: AbortSignal | undefined;
   mergedHeaders: Record<string, string> | undefined;
   dumpMode: DumpMode | undefined;
@@ -118,8 +125,8 @@ function chatDumpMetadata(
 }
 
 interface ErrorContext {
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams;
-  shouldDumpError: boolean;
+  /** Present only when error dumps are on. */
+  errorDumpBody: StreamedDumpBody | undefined;
   requestBaseId: string | undefined;
   baseURL: string | undefined;
   mergedHeaders: Record<string, string> | undefined;
@@ -141,7 +148,8 @@ async function dumpOpenAIErrorContext(
   resolvedBaseURL: string | undefined,
   ctx: ErrorContext,
 ): Promise<void> {
-  if (!ctx.shouldDumpError) {
+  const errorDumpBody = ctx.errorDumpBody;
+  if (errorDumpBody === undefined) {
     return;
   }
 
@@ -160,7 +168,7 @@ async function dumpOpenAIErrorContext(
     await dumpSDKErrorRequestResponse(
       'openai',
       '/chat/completions',
-      ctx.requestBody,
+      errorDumpBody,
       { error: dumpErrorMessage },
       resolvedBaseURL ?? 'https://api.openai.com/v1',
       dumpSDKRequestContext,
@@ -314,16 +322,17 @@ function selectOpenAIStreamingDumpOutcome(
   return selectOpenAIDumpOutcome(chunks[chunks.length - 1]);
 }
 
-export async function executeBoundedStreamingChatRequest(
+/** Posts a sealed body as a streaming chat request (also the continuation). */
+export async function executeSpooledStreamingChatRequest(
   client: OpenAIRawPostClient,
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  spool: ChatHttpBody,
   abortSignal: AbortSignal | undefined,
   mergedHeaders: Record<string, string> | undefined,
 ): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
-  const response = await withBoundedJsonHttpBody(requestBody, (body) =>
+  const response = await withChatHttpBody(spool, (stream, byteLength) =>
     client.post('/chat/completions', {
-      body: body.stream,
-      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
+      body: stream,
+      headers: boundedJsonHeaders(byteLength, mergedHeaders),
       stream: true,
       ...(abortSignal === undefined ? {} : { signal: abortSignal }),
     }),
@@ -334,16 +343,16 @@ export async function executeBoundedStreamingChatRequest(
   return response;
 }
 
-async function executeBoundedNonStreamingChatRequest(
+async function executeSpooledNonStreamingChatRequest(
   client: OpenAIRawPostClient,
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  spool: ChatHttpBody,
   abortSignal: AbortSignal | undefined,
   mergedHeaders: Record<string, string> | undefined,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  const response = await withBoundedJsonHttpBody(requestBody, (body) =>
+  const response = await withChatHttpBody(spool, (stream, byteLength) =>
     client.post('/chat/completions', {
-      body: body.stream,
-      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
+      body: stream,
+      headers: boundedJsonHeaders(byteLength, mergedHeaders),
       stream: false,
       ...(abortSignal === undefined ? {} : { signal: abortSignal }),
     }),
@@ -354,11 +363,36 @@ async function executeBoundedNonStreamingChatRequest(
   return response;
 }
 
+/** The dump body, resolved once for the success dump and for the error dump. */
+interface DumpBodies {
+  readonly success: StreamedDumpBody | undefined;
+  readonly error: StreamedDumpBody | undefined;
+}
+
+function resolveDumpBodies(opts: ApiExecutionOptions): DumpBodies {
+  const wantsSuccess = shouldDumpSDKContext(opts.dumpMode, false);
+  const wantsError = shouldDumpSDKContext(opts.dumpMode, true);
+  if (!wantsSuccess && !wantsError) {
+    return { success: undefined, error: undefined };
+  }
+  const body = opts.dumpBody;
+  if (body === undefined) {
+    throw new Error(
+      'Chat dump requested but the request was prepared without a dump form',
+    );
+  }
+  return {
+    success: wantsSuccess ? body : undefined,
+    error: wantsError ? body : undefined,
+  };
+}
+
 /**
  * Execute streaming API request with dump and error handling.
  */
 async function dumpOpenAIRequest(
   opts: ApiExecutionOptions,
+  body: StreamedDumpBody,
 ): Promise<string | undefined> {
   const result = await bestEffortDump(
     'request',
@@ -367,7 +401,7 @@ async function dumpOpenAIRequest(
       dumpSDKRequestContext(
         'openai',
         '/chat/completions',
-        opts.requestBody,
+        body,
         opts.baseURL ?? 'https://api.openai.com/v1',
         chatDumpMetadata(
           opts.mergedHeaders,
@@ -385,15 +419,10 @@ async function dumpOpenAIRequest(
 function wrapOpenAIErrorStreamingResponse(
   response: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
   opts: ApiExecutionOptions,
+  requestBody: StreamedDumpBody,
 ): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
-  const {
-    client,
-    requestBody,
-    mergedHeaders,
-    baseURL,
-    attemptContext,
-    retentionLimits,
-  } = opts;
+  const { client, mergedHeaders, baseURL, attemptContext, retentionLimits } =
+    opts;
   const metadata = chatDumpMetadata(
     mergedHeaders,
     client.apiKey,
@@ -434,20 +463,14 @@ function wrapOpenAIStreamingResponse(
   response: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
   opts: ApiExecutionOptions,
   requestBaseId: string | undefined,
-  shouldDumpSuccess: boolean,
-  shouldDumpError: boolean,
+  dump: DumpBodies,
 ): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
-  const {
-    client,
-    requestBody,
-    mergedHeaders,
-    baseURL,
-    attemptContext,
-    retentionLimits,
-  } = opts;
-  if (shouldDumpError && !shouldDumpSuccess)
-    return wrapOpenAIErrorStreamingResponse(response, opts);
-  if (shouldDumpSuccess && requestBaseId !== undefined) {
+  const { client, mergedHeaders, baseURL, attemptContext, retentionLimits } =
+    opts;
+  const { success: successBody, error: errorBody } = dump;
+  if (errorBody !== undefined && successBody === undefined)
+    return wrapOpenAIErrorStreamingResponse(response, opts, errorBody);
+  if (successBody !== undefined && requestBaseId !== undefined) {
     const correlation = chatDumpMetadata(
       mergedHeaders,
       client.apiKey,
@@ -470,12 +493,12 @@ function wrapOpenAIStreamingResponse(
           },
     );
   }
-  if (!shouldDumpError) return response;
+  if (errorBody === undefined) return response;
   return wrapStreamWithSDKErrorDump(
     response,
     'openai',
     '/chat/completions',
-    requestBody,
+    errorBody,
     baseURL ?? 'https://api.openai.com/v1',
     dumpSDKRequestContext,
     dumpSDKResponseContext,
@@ -491,36 +514,30 @@ function wrapOpenAIStreamingResponse(
 
 async function executeStreamingRequest(
   opts: ApiExecutionOptions,
-  shouldDumpSuccess: boolean,
-  shouldDumpError: boolean,
+  dump: DumpBodies,
 ): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
-  const { client, requestBody, abortSignal, mergedHeaders, baseURL } = opts;
-  const requestBaseId = shouldDumpSuccess
-    ? await dumpOpenAIRequest(opts)
-    : undefined;
+  const { client, spool, abortSignal, mergedHeaders, baseURL } = opts;
+  const { error: errorBody } = dump;
+  const requestBaseId =
+    dump.success === undefined
+      ? undefined
+      : await dumpOpenAIRequest(opts, dump.success);
 
   try {
-    const response = await executeBoundedStreamingChatRequest(
+    const response = await executeSpooledStreamingChatRequest(
       client,
-      requestBody,
+      spool,
       abortSignal,
       mergedHeaders,
     );
 
-    return wrapOpenAIStreamingResponse(
-      response,
-      opts,
-      requestBaseId,
-      shouldDumpSuccess,
-      shouldDumpError,
-    );
+    return wrapOpenAIStreamingResponse(response, opts, requestBaseId, dump);
   } catch (error) {
     const errorMessage = String(error);
     const resolvedBaseURL = opts.baseURL ?? opts.getBaseURL();
 
     const ctx: ErrorContext = {
-      requestBody,
-      shouldDumpError,
+      errorDumpBody: errorBody,
       requestBaseId,
       baseURL,
       mergedHeaders: opts.mergedHeaders,
@@ -580,27 +597,28 @@ async function dumpSuccessfulNonStreamingResponse(
  */
 async function executeNonStreamingRequest(
   opts: ApiExecutionOptions,
-  shouldDumpSuccess: boolean,
-  shouldDumpError: boolean,
+  dump: DumpBodies,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  const { client, requestBody, abortSignal, mergedHeaders, baseURL } = opts;
-  const requestBaseId = shouldDumpSuccess
-    ? await dumpOpenAIRequest(opts)
-    : undefined;
+  const { client, spool, abortSignal, mergedHeaders, baseURL } = opts;
+  const { success: successBody, error: errorBody } = dump;
+  const requestBaseId =
+    successBody === undefined
+      ? undefined
+      : await dumpOpenAIRequest(opts, successBody);
 
   try {
-    const response = await executeBoundedNonStreamingChatRequest(
+    const response = await executeSpooledNonStreamingChatRequest(
       client,
-      requestBody,
+      spool,
       abortSignal,
       mergedHeaders,
     );
 
-    if (shouldDumpError && !shouldDumpSuccess) {
-      await dumpOpenAIOutcomeResponse(response, opts);
+    if (errorBody !== undefined && successBody === undefined) {
+      await dumpOpenAIOutcomeResponse(response, opts, errorBody);
     }
 
-    if (shouldDumpSuccess && requestBaseId) {
+    if (successBody !== undefined && requestBaseId) {
       await dumpSuccessfulNonStreamingResponse(response, opts, requestBaseId);
     }
 
@@ -620,8 +638,7 @@ async function executeNonStreamingRequest(
     });
 
     const ctx: ErrorContext = {
-      requestBody,
-      shouldDumpError,
+      errorDumpBody: errorBody,
       requestBaseId,
       baseURL,
       mergedHeaders: opts.mergedHeaders,
@@ -654,6 +671,7 @@ async function executeNonStreamingRequest(
 async function dumpOpenAIOutcomeResponse(
   response: OpenAI.Chat.Completions.ChatCompletion,
   opts: ApiExecutionOptions,
+  requestBody: StreamedDumpBody,
 ): Promise<void> {
   const attempt = opts.attemptContext;
   const outcome = selectOpenAIDumpOutcome(response);
@@ -682,7 +700,7 @@ async function dumpOpenAIOutcomeResponse(
     dumpSDKRequestContext(
       'openai',
       '/chat/completions',
-      opts.requestBody,
+      requestBody,
       opts.baseURL ?? 'https://api.openai.com/v1',
       metadata,
       true,
@@ -712,13 +730,10 @@ export async function executeApiRequest(
   | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
   | OpenAI.Chat.Completions.ChatCompletion
 > {
-  const { dumpMode, streamingEnabled } = opts;
+  const dump = resolveDumpBodies(opts);
 
-  const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
-  const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
-
-  if (streamingEnabled) {
-    return executeStreamingRequest(opts, shouldDumpSuccess, shouldDumpError);
+  if (opts.streamingEnabled) {
+    return executeStreamingRequest(opts, dump);
   }
-  return executeNonStreamingRequest(opts, shouldDumpSuccess, shouldDumpError);
+  return executeNonStreamingRequest(opts, dump);
 }

@@ -98,16 +98,16 @@ describe('request-media-resolver', () => {
   }
 
   describe('request-media-resolver', () => {
+    const tempDirectory = useTempDirectory();
+
+    function store(quotaBytes = 1024): LocalMediaStore {
+      return new LocalMediaStore({
+        rootDirectory: tempDirectory(),
+        quotaBytes,
+      });
+    }
+
     describe('RequestMediaResolver', () => {
-      const tempDirectory = useTempDirectory();
-
-      function store(quotaBytes = 1024): LocalMediaStore {
-        return new LocalMediaStore({
-          rootDirectory: tempDirectory(),
-          quotaBytes,
-        });
-      }
-
       it('materializes selected references without changing block or message order', async () => {
         const mediaStore = store();
         const reference = await admittedReference(
@@ -532,6 +532,131 @@ describe('request-media-resolver', () => {
 
         expect(error.name).toBe('AbortError');
         expect(resolver.accounting().storeReadCount).toBe(0);
+        expect(await mediaStore.hasReservations(reference.contentId)).toBe(
+          false,
+        );
+      });
+    });
+
+    describe('shared request reservations', () => {
+      class FailOnceReleaseAllStore extends LocalMediaStore {
+        private failurePending = true;
+
+        override async releaseAll(
+          contentIds: readonly string[],
+          ownerId: string,
+        ): Promise<void> {
+          if (this.failurePending) {
+            this.failurePending = false;
+            throw new Error('induced batch release failure');
+          }
+          await super.releaseAll(contentIds, ownerId);
+        }
+      }
+
+      it('reserves each content id once across resolutions and releases them together', async () => {
+        const mediaStore = store();
+        const first = await admittedReference(mediaStore, new Uint8Array([1]));
+        const second = await admittedReference(mediaStore, new Uint8Array([2]));
+        const resolver = new RequestMediaResolver(mediaStore);
+        const reservations = resolver.openReservations('request-shared');
+
+        for (const reference of [first, second, first, first]) {
+          const resolved = await resolver.resolve({
+            contents: [content('turn', [reference])],
+            requestId: 'request-shared',
+            turnId: 'active-turn',
+            aggregateBudgetBytes: 8,
+            reservations,
+          });
+          expect(
+            resolved.withContents((contents) => contents[0].blocks[0]),
+          ).toMatchObject({ type: 'media', encoding: 'base64' });
+          await resolved.release();
+        }
+
+        expect(resolver.accounting()).toMatchObject({
+          activeRequestCount: 0,
+          reservedContentCount: 2,
+          storeReadCount: 4,
+        });
+        expect(await mediaStore.hasReservations(first.contentId)).toBe(true);
+        expect(await mediaStore.hasReservations(second.contentId)).toBe(true);
+
+        await reservations.release();
+
+        expect(resolver.accounting().reservedContentCount).toBe(0);
+        expect(await mediaStore.hasReservations(first.contentId)).toBe(false);
+        expect(await mediaStore.hasReservations(second.contentId)).toBe(false);
+      });
+
+      it('keeps every reservation pending when the batched release fails, then recovers', async () => {
+        const mediaStore = new FailOnceReleaseAllStore({
+          rootDirectory: tempDirectory(),
+          quotaBytes: 1024,
+        });
+        const reference = await admittedReference(
+          mediaStore,
+          new Uint8Array([7]),
+        );
+        const resolver = new RequestMediaResolver(mediaStore);
+        const reservations = resolver.openReservations('request-pending');
+        const resolved = await resolver.resolve({
+          contents: [content('turn', [reference])],
+          requestId: 'request-pending',
+          turnId: 'active-turn',
+          aggregateBudgetBytes: 8,
+          reservations,
+        });
+        await resolved.release();
+
+        const error = await capturedError(reservations.release());
+
+        expect(error).toBeInstanceOf(AggregateError);
+        expect(resolver.pendingReleaseCount()).toBe(1);
+        expect(await mediaStore.hasReservations(reference.contentId)).toBe(
+          true,
+        );
+        expect(await resolver.recoverPendingReleases()).toStrictEqual({
+          attempted: 1,
+          recovered: 1,
+          remaining: 0,
+        });
+        expect(await mediaStore.hasReservations(reference.contentId)).toBe(
+          false,
+        );
+      });
+
+      it("refuses to resolve against released reservations or another resolver's reservations", async () => {
+        const mediaStore = store();
+        const reference = await admittedReference(
+          mediaStore,
+          new Uint8Array([9]),
+        );
+        const resolver = new RequestMediaResolver(mediaStore);
+        const input = {
+          contents: [content('turn', [reference])],
+          requestId: 'request-refused',
+          turnId: 'active-turn',
+          aggregateBudgetBytes: 8,
+        };
+        const released = resolver.openReservations('request-refused');
+        await released.release();
+
+        const afterRelease = await capturedError(
+          resolver.resolve({ ...input, reservations: released }),
+        );
+        const foreign = await capturedError(
+          resolver.resolve({
+            ...input,
+            reservations: new RequestMediaResolver(mediaStore).openReservations(
+              'request-refused',
+            ),
+          }),
+        );
+
+        expect(afterRelease.message).toContain('released reservations');
+        expect(foreign.message).toContain('different resolver');
         expect(await mediaStore.hasReservations(reference.contentId)).toBe(
           false,
         );

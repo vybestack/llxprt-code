@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { toolInputArrival } from './vercelToolArguments.js';
 import type { LanguageModelUsage } from 'ai';
 
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -292,6 +293,8 @@ export function emitRemainingStreamThinking(
 export function processStreamPart(
   part: {
     type: string;
+    id?: string;
+    delta?: string;
     text?: string;
     toolCallId?: string;
     toolName?: string;
@@ -311,13 +314,28 @@ export function processStreamPart(
         state,
         logger,
       );
+    case 'tool-input-start':
+    case 'tool-input-delta':
+      return toolInputArrival(part, state);
     case 'tool-call':
       if (part.toolCallId && part.toolName) {
-        state.collectedToolCalls.push({
-          toolCallId: String(part.toolCallId),
-          toolName: String(part.toolName),
-          input: part.input,
-        });
+        const existing = state.collectedToolCalls.find(
+          (call) => call.toolCallId === part.toolCallId,
+        );
+        if (existing !== undefined) {
+          existing.input = part.input;
+          existing.argumentsComplete = true;
+          state.collectedToolCalls.splice(
+            state.collectedToolCalls.indexOf(existing),
+            1,
+          );
+          state.collectedToolCalls.push(existing);
+        } else
+          state.collectedToolCalls.push({
+            toolCallId: String(part.toolCallId),
+            toolName: String(part.toolName),
+            input: part.input,
+          });
       }
       return [];
     case 'finish':

@@ -84,7 +84,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       manager,
       oauth,
       runtimeId,
-      configureProviderTokenizer(manager),
+      configureProviderTokenizer(manager, config.scratchRoots),
       undefined,
       process.env.LLXPRT_FAKE_RESPONSES,
     );
@@ -176,7 +176,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       adoptedManager,
       oauth,
       'setRuntimeContext-adopted',
-      configureProviderTokenizer(adoptedManager),
+      configureProviderTokenizer(adoptedManager, config.scratchRoots),
       undefined,
       process.env.LLXPRT_FAKE_RESPONSES,
     );

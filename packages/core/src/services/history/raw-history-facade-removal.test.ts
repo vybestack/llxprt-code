@@ -1,0 +1,17 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
+
+describe('raw history public cursor contract', () => {
+  it('does not expose the removed raw array getter on the service', async () => {
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
+    try {
+      expect('getRawHistory' in history).toBe(false);
+      expect(typeof history.streamRawHistory).toBe('function');
+    } finally {
+      await history.dispose();
+    }
+  });
+});

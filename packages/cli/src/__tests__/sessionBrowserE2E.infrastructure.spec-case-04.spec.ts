@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import * as fs from 'node:fs/promises';
+import { readRecordedFacts } from './journal-recording.js';
 import {
   cleanupSessionBrowserTestState,
   createSessionBrowserTestState,
@@ -42,10 +42,9 @@ describe('Test infrastructure verification #4', () => {
       messages: [{ speaker: 'user', text: 'test' }],
     });
 
-    const content = await fs.readFile(filePath, 'utf-8');
-    const firstLine = JSON.parse(content.split('\n')[0]);
+    const facts = await readRecordedFacts(filePath);
 
-    expect(firstLine.payload.provider).toBe('openai');
-    expect(firstLine.payload.model).toBe('gpt-4');
+    expect(facts.provider).toBe('openai');
+    expect(facts.model).toBe('gpt-4');
   });
 });

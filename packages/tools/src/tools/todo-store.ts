@@ -145,7 +145,11 @@ export class TodoStore {
     // Ensure the base directory exists at construction so a missing root is
     // detected early. Per-operation re-evaluation happens in resolveFilePath.
     const todoDir = path.join(this.dataDirResolver(), 'todos');
-    fs.mkdirSync(todoDir, { recursive: true });
+    if (
+      fs.statSync(todoDir, { throwIfNoEntry: false })?.isDirectory() !== true
+    ) {
+      fs.mkdirSync(todoDir, { recursive: true });
+    }
   }
 
   /**

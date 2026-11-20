@@ -1,3 +1,13 @@
+import {
+  afterAll as afterRecordingTests,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { ScratchRootOwner } from '../../../core/src/storage/scratch-root.js';
+import { withTestNamedWriters } from '../__tests__/support/named-writer-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,39 +17,47 @@
  * an unreadable recording sits in the project, and names that recording when
  * the reference points at it.
  */
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
   type LockHandle,
   type SessionMetadata,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { performResume, type ResumeContext } from './performResume.js';
 
+const recordingScratchRoots = new ScratchRootOwner();
+
 const PROJECT_HASH = 'perform-resume-unreadable';
-const CORRUPT_REASON =
-  'Invalid session_start: missing or malformed required fields';
+function corruptReason(filePath: string): string {
+  return `Session file ${filePath} was recorded in the retired JSONL journal format (versions 1 and 2) and cannot be resumed. Start a new session.`;
+}
 
 async function writeHealthySession(
   chatsDir: string,
   sessionId: string,
 ): Promise<void> {
-  const recording = new SessionRecordingService({
-    chatsDir,
-    sessionId,
-    projectHash: PROJECT_HASH,
-    workspaceDirs: [chatsDir],
-    provider: 'test-provider',
-    model: 'test-model',
-  });
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      chatsDir,
+      sessionId,
+      projectHash: PROJECT_HASH,
+      workspaceDirs: [chatsDir],
+      provider: 'test-provider',
+      model: 'test-model',
+    }),
+  );
   try {
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
+      },
+    ]);
     await recording.flush();
   } finally {
     await recording.dispose();
@@ -50,33 +68,32 @@ async function writeCorruptSession(
   chatsDir: string,
   sessionId: string,
 ): Promise<string> {
-  await mkdir(chatsDir, { recursive: true });
-  const filePath = join(
-    chatsDir,
-    `session-2026-10-08T21-18-08-${sessionId}.jsonl`,
-  );
-  const header = {
-    v: 1,
-    seq: 1,
-    ts: '2026-10-08T21:18:08.000Z',
-    type: 'session_start',
-    payload: {
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      chatsDir,
       sessionId,
       projectHash: PROJECT_HASH,
-      workspaceDirs: ['/x'],
-      provider: 'anthropic',
-      model: 42,
-      startTime: '2026-10-08T21:18:08.000Z',
-    },
-  };
-  await writeFile(filePath, `${JSON.stringify(header)}\n`, 'utf-8');
+      workspaceDirs: [chatsDir],
+      provider: 'test-provider',
+      model: 'test-model',
+    }),
+  );
+  await recordRowsForTest(recording, [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'unreadable source' }] },
+  ]);
+  const filePath = recording.getFilePath();
+  if (filePath === null) throw new Error('Missing unreadable recording');
+  await recording.dispose();
+  await writeFile(filePath, '{');
   return filePath;
 }
 
 describe('performResume with an unreadable recording present (issue #3732)', () => {
+  afterRecordingTests(() => recordingScratchRoots.removeRoot());
+
   let root: string;
   let chatsDir: string;
-  let committed: SessionRecordingService | null;
+  let committed: SessionRecordingPort | null;
   let committedLock: LockHandle | null;
   let committedMetadata: SessionMetadata | null;
 
@@ -96,6 +113,7 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
 
   function resumeContext(): ResumeContext {
     return {
+      scratchRoots: recordingScratchRoots,
       chatsDir,
       projectHash: PROJECT_HASH,
       currentSessionId: 'current-session',
@@ -106,6 +124,7 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
         getCurrentRecording: () => null,
         getCurrentIntegration: () => null,
         getCurrentLockHandle: () => null,
+        getCurrentMetadata: () => null,
         setRecording: (recording, _integration, lock, metadata) => {
           committed = recording;
           committedLock = lock;
@@ -119,7 +138,10 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
     await writeHealthySession(chatsDir, 'healthy-session-0001');
     await writeCorruptSession(chatsDir, 'corrupt-session-0001');
 
-    const result = await performResume('healthy-session-0001', resumeContext());
+    const result = await performResume(
+      'healthy-session-0001',
+      withTestNamedWriters(resumeContext()),
+    );
 
     expect({
       ok: result.ok,
@@ -131,7 +153,10 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
     await writeHealthySession(chatsDir, 'healthy-session-0002');
     await writeCorruptSession(chatsDir, 'corrupt-session-0002');
 
-    const result = await performResume('latest', resumeContext());
+    const result = await performResume(
+      'latest',
+      withTestNamedWriters(resumeContext()),
+    );
 
     expect({
       ok: result.ok,
@@ -146,11 +171,14 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
       'corrupt-session-0003',
     );
 
-    const result = await performResume('corrupt-session-0003', resumeContext());
+    const result = await performResume(
+      corruptPath,
+      withTestNamedWriters(resumeContext()),
+    );
 
     expect(result).toStrictEqual({
       ok: false,
-      error: `Session not found for this project: corrupt-session-0003 (unreadable recording skipped: ${corruptPath}: ${CORRUPT_REASON})`,
+      error: `Session not found for this project: ${corruptPath} (unreadable recording skipped: ${corruptPath}: ${corruptReason(corruptPath)})`,
     });
   });
 
@@ -158,7 +186,10 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
     await writeHealthySession(chatsDir, 'healthy-session-0004');
     await writeCorruptSession(chatsDir, 'corrupt-session-0004');
 
-    const result = await performResume('no-such-session', resumeContext());
+    const result = await performResume(
+      'no-such-session',
+      withTestNamedWriters(resumeContext()),
+    );
 
     expect(result).toStrictEqual({
       ok: false,
@@ -173,10 +204,13 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
       'corrupt-session-0005',
     );
 
-    const result = await performResume('healthy-session-0005', resumeContext());
+    const result = await performResume(
+      'healthy-session-0005',
+      withTestNamedWriters(resumeContext()),
+    );
 
     expect(result.ok ? result.warnings : result.error).toStrictEqual([
-      `Skipped unreadable session recording ${corruptPath}: ${CORRUPT_REASON}`,
+      `Skipped unreadable session recording ${corruptPath}: ${corruptReason(corruptPath)}`,
     ]);
   });
 
@@ -187,10 +221,13 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
       'corrupt-session-0006',
     );
 
-    const result = await performResume('latest', resumeContext());
+    const result = await performResume(
+      'latest',
+      withTestNamedWriters(resumeContext()),
+    );
 
     expect(result.ok ? result.warnings : result.error).toStrictEqual([
-      `Skipped unreadable session recording ${corruptPath}: ${CORRUPT_REASON}`,
+      `Skipped unreadable session recording ${corruptPath}: ${corruptReason(corruptPath)}`,
     ]);
   });
 
@@ -200,11 +237,14 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
       'corrupt-session-0007',
     );
 
-    const result = await performResume('latest', resumeContext());
+    const result = await performResume(
+      'latest',
+      withTestNamedWriters(resumeContext()),
+    );
 
     expect(result).toStrictEqual({
       ok: false,
-      error: `No resumable sessions found (all locked, empty, or current). Skipped unreadable recordings: ${corruptPath}: ${CORRUPT_REASON}`,
+      error: `No resumable sessions found (all locked, empty, or current). Skipped unreadable recordings: ${corruptPath}: ${corruptReason(corruptPath)}`,
     });
   });
 });

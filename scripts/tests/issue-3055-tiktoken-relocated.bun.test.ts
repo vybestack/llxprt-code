@@ -45,6 +45,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliBundleConfig } from '../bun-build.config.ts';
+import { stageBundleRuntimeExternals } from './support/bundle-runtime-externals.js';
 import { describeOwnedChild, runOwnedChild } from './owned-child-process.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -158,6 +159,11 @@ describe('issue #3055: tiktoken resolves from a relocated node_modules', () => {
     //    install on a different machine. @dqbd/tiktoken has no dependencies of
     //    its own, so the package directory is self-contained.
     const runDir = makeTempDir('llxprt-3055-run-');
+    stageBundleRuntimeExternals(
+      repoRoot,
+      runDir,
+      cliBundleConfig.external ?? [],
+    );
     mkdirSync(join(runDir, 'node_modules', '@dqbd'), { recursive: true });
     cpSync(
       sourceTiktokenDir,

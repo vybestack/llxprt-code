@@ -4,43 +4,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import type {
-  AgentAuthControl,
-  AgentHookControl,
-} from '@vybestack/llxprt-code-agents';
-import { Box, type DOMElement, Static, Text } from 'ink';
+import React, { useEffect, useState } from 'react';
+import type { ContextRange } from '@vybestack/llxprt-code-core';
+import { Box, type DOMElement, Text } from 'ink';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
+import { Colors } from '../colors.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useTurnStore } from '../stores/turn/TurnContext.js';
 import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
+import type {
+  ScrollbackPagerStore,
+  ScrollbackViewportReporter,
+} from '../stores/turn/scrollbackPager.js';
+import { ScrollbackViewport } from '../components/ScrollbackViewport.js';
+import { SCROLLBACK_VIEWPORT_POLL_MS } from '../../constants/scrollbackLimits.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { AppHeader } from '../components/AppHeader.js';
-import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
-import { SemanticColors } from '../colors.js';
-import { ScrollableList } from '../components/shared/ScrollableList.js';
-import { SCROLL_TO_ITEM_END } from '../components/shared/VirtualizedList.js';
-import {
-  renderScrollableMainContentItem,
-  keyExtractorScrollableMainContentItem,
-  estimateScrollableMainContentItemHeight,
-  useHasActiveDialog,
-  useScrollableContent,
-  usePendingElement,
-  QuittingDisplay,
-  type LayoutRuntime,
-  type ScrollableMainContentItem,
-} from './DefaultAppLayoutHelpers.js';
+import { QuittingDisplay } from './DefaultAppLayoutHelpers.js';
 import {
   ComposerRegion,
   FooterRegion,
   DialogRegion,
   PanelsRegion,
 } from './DefaultAppLayoutRegions.js';
-import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
+import type {
+  AgentAuthControl,
+  AgentHookControl,
+} from '@vybestack/llxprt-code-agents';
+import type { LayoutRuntime } from './DefaultAppLayoutHelpers.js';
 import { themeManager } from '../themes/theme-manager.js';
+import { JournalStandardTranscript } from './journal-standard-transcript.js';
+import { QuitBoundary } from './quit-boundary.js';
+
+/**
+ * P02e: pager store paired with the reporter the viewport component shares
+ * with it; present only when the boot-time scrollback flag was on and the
+ * session journal resolved.
+ */
+export interface ScrollbackPagerLayoutBinding {
+  readonly store: ScrollbackPagerStore;
+  readonly viewport: ScrollbackViewportReporter;
+}
 
 export interface DefaultAppLayoutProps {
   readIdeMode: () => boolean;
@@ -62,6 +68,7 @@ export interface DefaultAppLayoutProps {
   disableLoadingPhrases: boolean;
   debugMode: boolean;
   layoutRuntime: LayoutRuntime;
+  subscribeContextRange: (publish: (range: ContextRange) => void) => () => void;
   settings: LoadedSettings;
   startupWarnings: string[];
   version: string;
@@ -71,6 +78,7 @@ export interface DefaultAppLayoutProps {
   pendingHistoryItemRef: React.RefObject<DOMElement | null>;
   contextFileNames: string[];
   updateInfo: UpdateObject | null;
+  scrollbackPager?: ScrollbackPagerLayoutBinding | null;
 }
 
 function usesAlternateBuffer(props: DefaultAppLayoutProps): boolean {
@@ -96,7 +104,14 @@ function QuittingBoundary({
 }: React.PropsWithChildren<DefaultAppLayoutProps>) {
   const { store } = useTurnStore();
   const quitting = useStoreSelector(store, (s) => s.quittingMessages !== null);
-  return quitting ? <QuittingRegion {...props} /> : children;
+  return (
+    <QuitBoundary
+      quitting={quitting}
+      quitDisplay={<QuittingRegion {...props} />}
+    >
+      {children}
+    </QuitBoundary>
+  );
 }
 
 function QuittingRegion(props: DefaultAppLayoutProps) {
@@ -204,272 +219,142 @@ function LayoutStructure(props: LayoutStructureProps) {
 
 const MemoizedLayoutStructure = React.memo(LayoutStructure);
 
-/** Owns transcript identity. Responsive rendering is delegated to its viewport. */
-function TranscriptRegion(props: DefaultAppLayoutProps) {
-  const { store } = useTurnStore();
-  const history = useStoreSelector(store, (s) => s.history);
-  const pendingHistoryItems = useStoreSelector(
-    store,
-    (s) => s.pendingHistoryItems,
+function TranscriptHeader(props: DefaultAppLayoutProps) {
+  const terminal = useTerminalStore();
+  const width = useStoreSelector(
+    terminal.store,
+    (state) => state.terminalWidth,
   );
-  const staticKey = useStoreSelector(store, (s) => s.staticKey);
-  return (
-    <TranscriptViewport
-      {...props}
-      history={history}
-      pendingHistoryItems={pendingHistoryItems}
-      staticKey={staticKey}
-    />
-  );
-}
-
-interface TranscriptProps extends DefaultAppLayoutProps {
-  history: HistoryItem[];
-  pendingHistoryItems: HistoryItemWithoutId[];
-  staticKey: number;
-}
-
-function useTranscriptGeometry() {
-  const { store } = useTerminalStore();
-  const settings = useSettingsProfileStore();
-  const terminalWidth = useStoreSelector(store, (s) => s.terminalWidth);
-  const terminalHeight = useStoreSelector(store, (s) => s.terminalHeight);
-  const mainAreaWidth = useStoreSelector(store, (s) => s.mainAreaWidth);
-  const constrainHeight = useStoreSelector(store, (s) => s.constrainHeight);
-  const availableHeight = useStoreSelector(
-    store,
-    (s) => s.availableTerminalHeight,
-  );
-  const activeShellPtyId = useStoreSelector(store, (s) => s.activeShellPtyId);
-  const embeddedShellFocused = useStoreSelector(
-    store,
-    (s) => s.embeddedShellFocused,
-  );
-  const slashCommands = useStoreSelector(
-    settings.store,
-    (s) => s.slashCommands,
-  );
-  return {
-    terminalWidth,
-    terminalHeight,
-    mainAreaWidth,
-    constrainHeight,
-    availableHeight,
-    activeShellPtyId,
-    embeddedShellFocused,
-    slashCommands,
-  };
-}
-
-function AlternateTranscript(props: TranscriptProps) {
-  const {
-    terminalWidth,
-    terminalHeight,
-    mainAreaWidth,
-    constrainHeight,
-    availableHeight,
-    activeShellPtyId,
-    embeddedShellFocused,
-    slashCommands,
-  } = useTranscriptGeometry();
-  const content = useScrollableContent(
-    props.readIdeMode,
-    props.readIdeDiffingEnabled,
-    props.subscribeIdeDiffing,
-    props.resolveIdeDiff,
-    props.layoutRuntime,
-    props.settings,
-    props.version,
-    props.nightly,
-    terminalWidth,
-    mainAreaWidth,
-    Math.max(terminalHeight * 4, 100),
-    constrainHeight,
-    availableHeight,
-    props.settings.merged.ui.showTodoPanel ?? true,
-    props.history,
-    props.pendingHistoryItems,
-    props.pendingHistoryItemRef,
-    slashCommands,
-    activeShellPtyId,
-    embeddedShellFocused,
-  );
-  return <TranscriptScroll data={content.listItems} />;
-}
-
-function TranscriptViewport(props: TranscriptProps) {
-  const {
-    mainAreaWidth,
-    constrainHeight,
-    availableHeight,
-    activeShellPtyId,
-    embeddedShellFocused,
-    slashCommands,
-  } = useTranscriptGeometry();
-  const pending = usePendingElement(
-    props.pendingHistoryItems,
-    props.pendingHistoryItemRef,
-    props.readIdeMode,
-    props.readIdeDiffingEnabled,
-    props.subscribeIdeDiffing,
-    props.resolveIdeDiff,
-    props.layoutRuntime,
-    mainAreaWidth,
-    constrainHeight,
-    availableHeight,
-    slashCommands,
-    props.settings.merged.ui.showTodoPanel ?? true,
-    activeShellPtyId,
-    embeddedShellFocused,
-  );
-  if (usesAlternateBuffer(props)) return <AlternateTranscript {...props} />;
-  return (
-    <>
-      <StandardStatic {...props} />
-      {pending}
-    </>
-  );
-}
-
-interface StaticSnapshot {
-  history: HistoryItem[];
-  epoch: number;
-  refresh: number;
-  truncatedItems: number;
-  chunk: number;
-}
-
-function staticDelta(
-  history: HistoryItem[],
-  committed: StaticSnapshot | null,
-  replay: boolean,
-): HistoryItem[] {
-  if (committed === null || replay) return history;
-  if (committed.history === history) return [];
-  let priorIndex = 0;
-  for (let index = 0; index < history.length; index += 1) {
-    while (
-      priorIndex < committed.history.length &&
-      committed.history[priorIndex].id !== history[index].id
-    ) {
-      priorIndex += 1;
-    }
-    if (priorIndex === committed.history.length) return history.slice(index);
-    priorIndex += 1;
-  }
-  return [];
-}
-
-function StandardStatic(props: TranscriptProps) {
-  const turn = useTurnStore();
-  const geometry = useTerminalStore().store.getState();
-  const settings = useSettingsProfileStore();
-  const epoch = useStoreSelector(turn.store, (s) => s.historyEpoch);
-  const truncatedItems = useStoreSelector(
-    turn.store,
-    (s) => s.historyTruncatedItems,
-  );
-  const previous = React.useRef<StaticSnapshot | null>(null);
-  const [, releaseChunk] = React.useReducer((n: number) => n + 1, 0);
-  const committed = previous.current;
-  const replay =
-    committed === null ||
-    committed.epoch !== epoch ||
-    committed.refresh !== props.staticKey;
-  const changed =
-    replay ||
-    committed.history !== props.history ||
-    committed.truncatedItems !== truncatedItems;
-  const delta = staticDelta(props.history, committed, replay);
-  const items: React.ReactElement[] = [];
-  if (replay && process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER !== 'true') {
-    items.push(
-      <StaticHeader
-        key="header"
-        props={props}
-        terminalWidth={geometry.terminalWidth}
-      />,
-    );
-  }
-  if (
-    changed &&
-    truncatedItems > 0 &&
-    (replay || truncatedItems !== committed.truncatedItems)
-  ) {
-    items.push(
-      <Text key="truncation" color={SemanticColors.text.secondary}>
-        [{truncatedItems} earlier messages truncated]
-      </Text>,
-    );
-  }
-  items.push(
-    ...delta.map((item) => (
-      <HistoryItemDisplay
-        key={item.id}
-        item={item}
-        isPending={false}
-        config={props.layoutRuntime}
-        readIdeMode={props.readIdeMode}
-        readIdeDiffingEnabled={props.readIdeDiffingEnabled}
-        subscribeIdeDiffing={props.subscribeIdeDiffing}
-        resolveIdeDiff={props.resolveIdeDiff}
-        terminalWidth={geometry.mainAreaWidth}
-        availableTerminalHeight={Math.max(geometry.terminalHeight * 4, 100)}
-        slashCommands={settings.store.getState().slashCommands}
-        showTodoPanel={props.settings.merged.ui.showTodoPanel ?? true}
-        activeShellPtyId={geometry.activeShellPtyId}
-        embeddedShellFocused={geometry.embeddedShellFocused}
-      />
-    )),
-  );
-  const chunk = (committed?.chunk ?? 0) + (items.length > 0 ? 1 : 0);
-  React.useLayoutEffect(() => {
-    if (!changed) return;
-    previous.current = {
-      history: props.history,
-      epoch,
-      refresh: props.staticKey,
-      truncatedItems,
-      chunk,
-    };
-    if (items.length > 0) releaseChunk();
-  });
-  return (
-    <Static key={chunk} items={items}>
-      {(item) => item}
-    </Static>
-  );
-}
-
-function TranscriptScroll({ data }: { data: ScrollableMainContentItem[] }) {
-  const dialogsVisible = useHasActiveDialog();
-  return (
-    <ScrollableList
-      hasFocus={!dialogsVisible}
-      data={data}
-      renderItem={renderScrollableMainContentItem}
-      keyExtractor={keyExtractorScrollableMainContentItem}
-      estimatedItemHeight={estimateScrollableMainContentItemHeight}
-      initialScrollIndex={SCROLL_TO_ITEM_END}
-      initialScrollOffsetInIndex={SCROLL_TO_ITEM_END}
-    />
-  );
-}
-
-function StaticHeader({
-  props: { layoutRuntime, settings, version, nightly },
-  terminalWidth,
-}: {
-  props: TranscriptProps;
-  terminalWidth: number;
-}): React.ReactNode {
   return (
     <AppHeader
-      config={layoutRuntime}
-      settings={settings}
-      version={version}
-      nightly={nightly}
-      terminalWidth={terminalWidth}
+      config={props.layoutRuntime}
+      settings={props.settings}
+      version={props.version}
+      nightly={props.nightly}
+      terminalWidth={width}
     />
   );
 }
+
+function TranscriptRegion(props: DefaultAppLayoutProps) {
+  const header = React.useMemo(
+    () =>
+      process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER !== 'true' ? (
+        <TranscriptHeader {...props} />
+      ) : null,
+    [props],
+  );
+  return <JournalTranscript {...props} header={header} />;
+}
+
+function JournalTranscript(
+  props: DefaultAppLayoutProps & { header: React.ReactNode },
+) {
+  const turn = useTurnStore();
+  const staticKey = useStoreSelector(turn.store, (state) => state.staticKey);
+  if (!props.scrollbackPager)
+    return (
+      <Box flexDirection="column">
+        {props.header}
+        <Text color={Colors.DimComment}>Opening session journal…</Text>
+      </Box>
+    );
+  if (usesAlternateBuffer(props))
+    return (
+      <Box
+        flexDirection="column"
+        flexGrow={1}
+        flexShrink={1}
+        overflow="hidden"
+        justifyContent="flex-end"
+      >
+        <MemoizedPagerTranscript
+          pager={props.scrollbackPager}
+          {...props}
+          header={props.header}
+        />
+      </Box>
+    );
+  return (
+    <JournalStandardTranscript
+      key={staticKey}
+      store={props.scrollbackPager.store}
+      viewport={props.scrollbackPager.viewport}
+      rendering={{ config: props.layoutRuntime, ...props }}
+      header={props.header}
+    />
+  );
+}
+
+function useContextRangeSnapshot(
+  subscribe: DefaultAppLayoutProps['subscribeContextRange'],
+): ContextRange | null {
+  const [range, setRange] = useState<ContextRange | null>(null);
+  useEffect(() => subscribe(setRange), [subscribe]);
+  return range;
+}
+
+function PagerTranscript({
+  pager,
+  subscribeContextRange,
+  layoutRuntime,
+  readIdeMode,
+  readIdeDiffingEnabled,
+  subscribeIdeDiffing,
+  resolveIdeDiff,
+  header,
+}: {
+  pager: ScrollbackPagerLayoutBinding;
+  subscribeContextRange: DefaultAppLayoutProps['subscribeContextRange'];
+  layoutRuntime: LayoutRuntime;
+  readIdeMode: DefaultAppLayoutProps['readIdeMode'];
+  readIdeDiffingEnabled: DefaultAppLayoutProps['readIdeDiffingEnabled'];
+  subscribeIdeDiffing: DefaultAppLayoutProps['subscribeIdeDiffing'];
+  resolveIdeDiff: DefaultAppLayoutProps['resolveIdeDiff'];
+  header: React.ReactNode;
+}) {
+  const contextRange = useContextRangeSnapshot(subscribeContextRange);
+  const turn = useTurnStore();
+  const showClearNotice = useStoreSelector(
+    turn.store,
+    (state) => state.historyEpoch > 0,
+  );
+  const pendingToolControls = useStoreSelector(
+    turn.store,
+    (s) => s.pendingHistoryItems,
+  );
+  return (
+    <PagerViewport
+      store={pager.store}
+      viewport={pager.viewport}
+      pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
+      range={contextRange ?? undefined}
+      rendering={{
+        config: layoutRuntime,
+        readIdeMode,
+        readIdeDiffingEnabled,
+        subscribeIdeDiffing,
+        resolveIdeDiff,
+      }}
+      pendingToolControls={pendingToolControls}
+      header={header}
+      showClearNotice={showClearNotice}
+    />
+  );
+}
+
+function PagerViewport(
+  props: Omit<React.ComponentProps<typeof ScrollbackViewport>, 'viewportLines'>,
+) {
+  const { store } = useTerminalStore();
+  const height = useStoreSelector(store, (s) => s.availableTerminalHeight);
+  const width = useStoreSelector(store, (s) => s.terminalWidth);
+  return (
+    <ScrollbackViewport
+      {...props}
+      viewportLines={Math.max(1, height)}
+      terminalWidth={width}
+    />
+  );
+}
+const MemoizedPagerTranscript = React.memo(PagerTranscript);

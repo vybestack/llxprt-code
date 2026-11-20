@@ -1,3 +1,4 @@
+import { readCurated } from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -178,7 +179,7 @@ describe('a declared pending item that repeats one image (issue #4000 CodeRabbit
         humanTurn([shared.reference], 'turn-now'),
         humanTurn([text('hook note')]),
       ];
-      const contents = [...session.history.getCurated(), ...fragments];
+      const contents = [...(await readCurated(session.history)), ...fragments];
 
       await session.send([original], true, {
         pending: undefined,

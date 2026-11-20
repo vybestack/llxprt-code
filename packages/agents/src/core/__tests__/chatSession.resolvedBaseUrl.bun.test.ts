@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -20,6 +21,7 @@ import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderMana
 import { ChatSession } from '../chatSession.js';
 import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -62,8 +64,9 @@ function createChatSession(options: {
     ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
   });
   const runtimeContext = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state: runtimeState,
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     settings: {
       compressionThreshold: 0.8,
       contextLimit: 128_000,

@@ -10,6 +10,7 @@ import { Colors } from '../../colors.js';
 import { getCachedStringWidth, toCodePoints } from '../../utils/textUtils.js';
 import { useOverflowActions } from '../../contexts/OverflowContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { styledTextBatches } from './styled-text-batches.js';
 
 let enableDebugLog = false;
 
@@ -540,6 +541,22 @@ function layoutInkElementAsStyledText(
   );
 }
 
+function renderStyledLine(line: StyledText[], index: number): React.ReactNode {
+  return (
+    <Box key={index}>
+      {line.length > 0 ? (
+        line.map((segment, segIndex) => (
+          <Text key={segIndex} color={Colors.Foreground} {...segment.props}>
+            {segment.text}
+          </Text>
+        ))
+      ) : (
+        <Text color={Colors.Foreground}> </Text>
+      )}
+    </Box>
+  );
+}
+
 interface MaxSizedBoxProps {
   children?: React.ReactNode;
   maxWidth?: number;
@@ -643,19 +660,9 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
   };
   const visibleStyledText = getVisibleStyledText();
 
-  const visibleLines = visibleStyledText.map((line, index) => (
-    <Box key={index}>
-      {line.length > 0 ? (
-        line.map((segment, segIndex) => (
-          <Text key={segIndex} color={Colors.Foreground} {...segment.props}>
-            {segment.text}
-          </Text>
-        ))
-      ) : (
-        <Text color={Colors.Foreground}> </Text>
-      )}
-    </Box>
-  ));
+  const visibleLines =
+    styledTextBatches(visibleStyledText) ??
+    visibleStyledText.map(renderStyledLine);
 
   return (
     <Box flexDirection="column" width={maxWidth} flexShrink={0}>

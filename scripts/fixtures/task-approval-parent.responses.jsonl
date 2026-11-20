@@ -1,0 +1,3 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"prepare-child-fixture","name":"run_shell_command","parameters":{"command":"cp scripts/fixtures/task-approval-child.responses.jsonl \"$LLXPRT_FAKE_RESPONSES\"","dir_path":"{{CWD}}","description":"Prepare the child provider fixture"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"parent-task","name":"task","parameters":{"subagent_name":"approval-child","goal_prompt":"Run the shell command then report completion.","tool_whitelist":["run_shell_command"],"timeout_seconds":60}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"TASK_APPROVAL_COMPLETE"}]}]}

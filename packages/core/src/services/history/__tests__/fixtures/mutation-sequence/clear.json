@@ -1,0 +1,155 @@
+{
+  "name": "clear",
+  "description": "clear, then a fresh history on the same journal",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 4,
+        "prefix": "row"
+      },
+      "observed": {
+        "live": {
+          "length": 4,
+          "digest": "547e891f1dcf0aa3f6463b27f2be1cac5bb1fbc0e62224ec24a70244a2ab17b3",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697"
+          ]
+        },
+        "resumed": {
+          "length": 4,
+          "digest": "547e891f1dcf0aa3f6463b27f2be1cac5bb1fbc0e62224ec24a70244a2ab17b3",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "6dd6c8be9f629697"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "clear"
+      },
+      "observed": {
+        "live": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        },
+        "resumed": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "fresh"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "c4f358a9536bb54fb9eed8b1613f893243071f07d64bd54e709565743d10fb2d",
+          "tags": ["a66e26a9b976e07c"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "c4f358a9536bb54fb9eed8b1613f893243071f07d64bd54e709565743d10fb2d",
+          "tags": ["a66e26a9b976e07c"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "addAll",
+        "rows": [
+          {
+            "speaker": "ai",
+            "text": "reply"
+          },
+          {
+            "speaker": "human",
+            "text": "again"
+          }
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "25d0a316a5c25f4fbae6ff3d0da98453b75a26f76ae385f1d0c8e9890b628129",
+          "tags": ["a66e26a9b976e07c", "c83c925003f4c001", "71bce14f1b6394ee"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "25d0a316a5c25f4fbae6ff3d0da98453b75a26f76ae385f1d0c8e9890b628129",
+          "tags": ["a66e26a9b976e07c", "c83c925003f4c001", "71bce14f1b6394ee"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "clear"
+      },
+      "observed": {
+        "live": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        },
+        "resumed": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "clear"
+      },
+      "observed": {
+        "live": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        },
+        "resumed": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "add",
+        "row": {
+          "speaker": "human",
+          "text": "last"
+        }
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "f0fcb6f4e6c0f179a8658aa7f1ae14254fe631b5d674e8dedc839c9fc06051da",
+          "tags": ["f35aed1defedb234"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "f0fcb6f4e6c0f179a8658aa7f1ae14254fe631b5d674e8dedc839c9fc06051da",
+          "tags": ["f35aed1defedb234"]
+        }
+      }
+    }
+  ]
+}

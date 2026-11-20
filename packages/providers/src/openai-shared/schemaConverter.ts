@@ -43,7 +43,7 @@ export interface OpenAIFunctionParameters {
  * format, pattern, const, ...) to be preserved verbatim.
  */
 export interface OpenAIPropertySchema {
-  type: string;
+  type?: string | string[];
   description?: string;
   enum?: string[];
   items?: OpenAIPropertySchema;
@@ -276,9 +276,12 @@ function applyHandledNormalizations(
 function normalizeSchemaNode(
   node: Record<string, unknown>,
 ): OpenAIPropertySchema {
-  const result: OpenAIPropertySchema = {
-    type: normalizeType(node.type),
-  };
+  const result: OpenAIPropertySchema = {};
+  if (node.type !== undefined) {
+    result.type = Array.isArray(node.type)
+      ? node.type.map(normalizeType)
+      : normalizeType(node.type);
+  }
 
   applyHandledNormalizations(node, result);
 

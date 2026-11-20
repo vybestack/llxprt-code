@@ -13,7 +13,6 @@ import { renderHook } from '../../../__tests__/render.js';
 import { useCommandOwners } from '../../../__tests__/command-owner-fixture.js';
 import { LoadedSettings } from '../../../config/settings.js';
 import { useStreamEventHandlers } from './useStreamEventHandlers.js';
-import { PendingResponseBuffer } from './pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './__tests__/streamRuntimeTestHelper.js';
 
 async function prepareOwnedFile(owner: Agent, decoy: Agent): Promise<string> {
@@ -53,9 +52,7 @@ async function prepareOwnedFile(owner: Agent, decoy: Agent): Promise<string> {
       onCancelSubmit: () => {},
       sanitizeContent: (text) => ({ text, blocked: false }),
       flushPendingHistoryItem: () => {},
-      pendingResponse: new PendingResponseBuffer(undefined),
       pendingHistoryItemRef: { current: null },
-      thinkingBlocksRef: { current: [] },
       turnCancelledRef: { current: false },
       clearSubmissions: () => {},
       setPendingHistoryItem: () => {},

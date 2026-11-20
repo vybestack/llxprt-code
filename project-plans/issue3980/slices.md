@@ -1329,4 +1329,3 @@ Remove exact P28 entries in baseline ledger, never regenerate an arbitrary basel
 ### PR
 
 One short-lived PR from current main. Test both paths while both exist; final cutover commit removes that host flag and old route, then verifies the remaining new path. Use `Refs #3980`, `Fixes #<this-slice-issue>`, and `Refs #4037` for baseline changes. Only P28 may also use `Fixes #3980`, after every exit criterion passes. Never merge without Andrew's explicit instruction.
-

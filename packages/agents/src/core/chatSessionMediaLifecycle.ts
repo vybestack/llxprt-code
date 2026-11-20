@@ -73,6 +73,7 @@ export function beginSemanticMediaPurge(
   runtime: SemanticPurgeRuntime,
   desiredName: string,
   execution: AgentChatRecordingExecution | undefined,
+  signal?: AbortSignal,
 ): ReturnType<SemanticMediaPurgeSession['begin']> {
   if (!purge.isEnabled()) return Promise.resolve(undefined);
   const active = runtime.provider.getActiveProvider();
@@ -91,6 +92,7 @@ export function beginSemanticMediaPurge(
       provider,
     ),
     execution?.persistSemanticMediaPurge,
+    signal,
   );
 }
 

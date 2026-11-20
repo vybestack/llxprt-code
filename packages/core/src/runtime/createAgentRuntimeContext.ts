@@ -14,7 +14,6 @@ import { buildToolGovernance } from '@vybestack/llxprt-code-tools';
  */
 
 import { HistoryService } from '../services/history/HistoryService.js';
-import { HistoryMediaOwnership } from '../storage/history-media-ownership.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeContextFactoryOptions,
@@ -436,6 +435,22 @@ function freezeProviderRuntime(
   });
 }
 
+/**
+ * Makes the history own the media references of `context.mediaStore`. The
+ * factory below is synchronous and cannot await the registration, so a context
+ * built with a `mediaStore` must be passed here before its history is used.
+ */
+export async function registerRuntimeMediaOwner(
+  context: AgentRuntimeContext,
+): Promise<void> {
+  const store = context.mediaStore;
+  if (store === undefined) return;
+  const owner = await context.history.registerRuntimeMediaOwner(store);
+  context.mediaAdmission?.bindHistoryRelease((contentId) =>
+    owner.releaseReference(contentId),
+  );
+}
+
 export function createAgentRuntimeContext(
   options: AgentRuntimeContextFactoryOptions,
 ): AgentRuntimeContext {
@@ -445,10 +460,9 @@ export function createAgentRuntimeContext(
   // any request is built, instead of on the first send.
   options.readRuntimeSettings?.();
 
-  const history = options.history ?? new HistoryService();
-  if (options.mediaStore !== undefined) {
-    history.registerMediaOwner(new HistoryMediaOwnership(options.mediaStore));
-  }
+  const history =
+    options.history ??
+    new HistoryService({ scratchRoots: options.scratchRoots });
 
   const getLiveSetting = createGetLiveSetting(options);
 
@@ -461,6 +475,7 @@ export function createAgentRuntimeContext(
   const providerRuntime = freezeProviderRuntime(options.providerRuntime);
 
   const context: AgentRuntimeContext = {
+    scratchRoots: history.scratchRoots,
     readPromptPolicy: () =>
       options.readRuntimeSettings?.().promptPolicy ??
       options.settings.promptPolicy ??

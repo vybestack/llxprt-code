@@ -18,6 +18,7 @@ import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTok
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
 import { estimateTokens as estimateTextTokens } from '../../utils/toolOutputLimiter.js';
 import { simpleTokenEstimateForText } from './historyTokenEstimation.js';
+import { countSimpleTextStream } from '../../utils/simple-text-stream.js';
 
 /** Dependencies the adapter needs to resolve tokenizers. */
 export interface TokenizerAdapterDeps {
@@ -60,6 +61,8 @@ export function getTokenizerForModel(
     if (runtimeTokenizer) {
       const adapter: ITokenizer = {
         fallbackPolicy: runtimeTokenizer.fallbackPolicy,
+        countTokenStream:
+          runtimeTokenizer.countTokenStream?.bind(runtimeTokenizer),
         countTokens: (text: string, _model?: string) =>
           Promise.resolve(runtimeTokenizer.countTokens(text)),
       };
@@ -72,6 +75,7 @@ export function getTokenizerForModel(
   // @requirement:REQ-DEP-001
   // Core fallback is estimate-only; concrete provider tokenizers are injected by CLI/providers.
   const tokenizer: ITokenizer = {
+    countTokenStream: countSimpleTextStream,
     countTokens: (content: unknown) => {
       if (typeof content === 'string') {
         return simpleTokenEstimateForText(content);

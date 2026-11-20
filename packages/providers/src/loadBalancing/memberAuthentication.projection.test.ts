@@ -6,7 +6,6 @@ const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -19,6 +18,12 @@ import type {
   ResolvedSubProfile,
 } from './loadBalancerTypes.js';
 
+import { trackedRequestRows } from '../__tests__/requestRowsTestSupport.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 const keyStorage = new CredentialAuthority().createProviderKeyStorage();
 
@@ -78,9 +83,13 @@ function createProjectionFixture(
         legacyEstimate: async () => 1,
       };
     },
-    async *generateChatCompletion(options): AsyncGenerator<IContent> {
+    async *generateChatCompletion(
+      optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
+    ): AsyncGenerator<IContent> {
       delegateRequests++;
-      if (Array.isArray(options)) throw new Error('expected delegate options');
+      if (isAsyncIterableContents(optionsOrStream))
+        throw new Error('expected delegate options');
+      const options = optionsOrStream;
       if (rotateDuringProjection) {
         expect(options.promptEnvelopeTransportToken).toStrictEqual({
           credential: options.resolved?.authToken,
@@ -128,7 +137,7 @@ function createProjectionFixture(
     member,
     projections,
     delegateRequests: () => delegateRequests,
-    options: createProviderCallOptions({
+    options: streamCallOptions({
       providerName: 'load-balancer',
       contents: [],
       settings,
@@ -226,17 +235,17 @@ describe('load balancer projection credentials', () => {
       storedKeys.set('member-key', 'before-compression');
       lb.setCompressionCallback(async () => {
         storedKeys.set('member-key', 'after-compression');
-        return [];
+        return trackedRequestRows([]);
       });
       await expect(
         consume(lb, {
           ...options,
-          contents: [
+          contents: replayableContents([
             {
               speaker: 'human',
               blocks: [{ type: 'text', text: 'long prompt '.repeat(1000) }],
             },
-          ],
+          ]),
         }),
       ).rejects.toThrow('credentials changed');
       expect(delegateRequests()).toBe(0);

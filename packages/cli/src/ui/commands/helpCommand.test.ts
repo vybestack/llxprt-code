@@ -10,6 +10,7 @@ import { createHelpCommand } from './helpCommand.js';
 
 import { MessageType } from '../types.js';
 import { assertDefined } from '../../__tests__/assertions.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 describe('helpCommand', () => {
   let helpCommand: ReturnType<typeof createHelpCommand>;
@@ -18,11 +19,11 @@ describe('helpCommand', () => {
 
   beforeEach(() => {
     mockAddItem = vi.fn();
-    mockContext = {
+    mockContext = createMockCommandContext({
       ui: {
         addItem: mockAddItem,
       },
-    } as unknown as CommandOwnerFixture;
+    });
     helpCommand = createHelpCommand(mockContext.ui.addItem);
   });
 

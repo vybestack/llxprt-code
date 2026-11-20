@@ -335,7 +335,7 @@ describe('ProxySocketClient', () => {
 
       // Respond in reverse order to test correlation
       if (pendingResponses.length === 3) {
-        const reversed = pendingResponses.toReversed();
+        const reversed = [...pendingResponses].reverse();
         for (const pending of reversed) {
           socket.write(
             encodeFrame({

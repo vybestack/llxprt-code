@@ -10,7 +10,7 @@ import { MessageType } from '../types.js';
 
 interface UseToolsDialogParams {
   addMessage: (msg: {
-    type: MessageType;
+    type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
     content: string;
     timestamp: Date;
   }) => void;
@@ -65,7 +65,7 @@ function handleEmptyToolsList(
   tools: ToolInfo[],
   action: 'enable' | 'disable',
   addMessage: (msg: {
-    type: MessageType;
+    type: MessageType.INFO | MessageType.WARNING | MessageType.ERROR;
     content: string;
     timestamp: Date;
   }) => void,

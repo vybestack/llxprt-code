@@ -47,7 +47,7 @@ describe('rollback of a failed compression keeps other writers entries (issue #4
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = historyTexts(session.history);
+    const before = await historyTexts(session.history);
     let runs = 0;
     session.useCompression(async (history) => {
       runs += 1;
@@ -60,7 +60,7 @@ describe('rollback of a failed compression keeps other writers entries (issue #4
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      history: historyTexts(session.history),
+      history: await historyTexts(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       history: [...before, INDEPENDENT],
@@ -71,7 +71,7 @@ describe('rollback of a failed compression keeps other writers entries (issue #4
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = historyTexts(session.history);
+    const before = await historyTexts(session.history);
     let runs = 0;
     let inFlight: Promise<void> = Promise.resolve();
     session.useCompression(async (history) => {
@@ -86,7 +86,7 @@ describe('rollback of a failed compression keeps other writers entries (issue #4
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      history: historyTexts(session.history),
+      history: await historyTexts(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       history: [...before, INDEPENDENT],
@@ -97,7 +97,7 @@ describe('rollback of a failed compression keeps other writers entries (issue #4
     const session = conversation.session();
     await conversation.seedImages(3);
     conversation.seedBigText();
-    const before = historyTexts(session.history);
+    const before = await historyTexts(session.history);
     let runs = 0;
     let rewrite: Promise<void> = Promise.resolve();
     session.useCompression(async (history) => {
@@ -114,7 +114,7 @@ describe('rollback of a failed compression keeps other writers entries (issue #4
 
     expect({
       contextOverflow: error instanceof ContextOverflowError,
-      history: historyTexts(session.history),
+      history: await historyTexts(session.history),
     }).toStrictEqual({
       contextOverflow: true,
       history: [...before, INDEPENDENT],

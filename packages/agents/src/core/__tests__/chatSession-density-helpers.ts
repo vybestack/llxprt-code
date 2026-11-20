@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import type { CompressionHandler } from '../../compression/CompressionHandler.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { afterEach as closePolicyFixtures } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -27,6 +29,7 @@ import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/c
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -38,7 +41,10 @@ const requestFetch: NetworkFetch = () =>
 let callIdCounter = 0;
 
 const policyRoots: SessionSettingsOwner[] = [];
+const historyRoots = new Set<HistoryService>();
 closePolicyFixtures(async () => {
+  for (const history of historyRoots) await history.dispose();
+  historyRoots.clear();
   for (const owner of policyRoots.splice(0)) await owner.dispose();
 });
 
@@ -150,8 +156,10 @@ export function buildRuntimeContext(
 
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
+  historyRoots.add(historyService);
   policyRoots.push(settingsOwner);
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
       settingsOwner.prepareProviderInvocation(
@@ -204,6 +212,7 @@ export function buildMockContentGenerator(): ContentGenerator {
 // ---------------------------------------------------------------------------
 
 export interface ChatSessionInternals {
+  readonly compressionHandler: Pick<CompressionHandler, 'performCompression'>;
   ensureDensityOptimized(): Promise<void>;
   densityDirty: boolean;
   historyService: HistoryService;
@@ -218,7 +227,7 @@ export interface ChatSessionInternals {
     promptId: string,
     provider?: unknown,
   ): Promise<void>;
-  shouldCompress(pendingTokens?: number): boolean;
+  shouldCompress(pendingTokens?: number): Promise<boolean>;
 }
 
 export function getInternals(chat: ChatSession): ChatSessionInternals {

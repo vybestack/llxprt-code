@@ -62,6 +62,7 @@ import {
 } from './config-types.js';
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
 import {
+  publishLeafFacade,
   type FacadeParsedConfig,
   type LeafFacadeValues,
 } from './agent-facade.js';
@@ -71,10 +72,7 @@ import {
   type ForegroundPreflightSettings,
   type ForegroundPreflightTransfer,
 } from './foreground-agent-assembly.js';
-import type {
-  PreflightAuthInput,
-  PreflightProviderInput,
-} from './activationPreflightState.js';
+import type { PreflightProviderInput } from './activationPreflightState.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import type {
   AdoptedMcpPort,
@@ -113,7 +111,6 @@ export interface ForegroundAdoptionView {
     transfer: ForegroundPreflightTransfer,
     settings: ForegroundPreflightSettings,
     providers: PreflightProviderInput,
-    auth: PreflightAuthInput,
   ): void;
   finishForeground(): Promise<Agent>;
 }
@@ -170,14 +167,12 @@ export class AdoptedAgentAssembly implements ForegroundAdoptionView {
     transfer: ForegroundPreflightTransfer,
     settings: ForegroundPreflightSettings,
     providers: PreflightProviderInput,
-    auth: PreflightAuthInput,
   ): void {
     this.#foreground = new ForegroundAssembly(
       this.#config,
       transfer,
       settings,
       providers,
-      auth,
       this.#construction.signal,
     );
   }
@@ -355,7 +350,7 @@ class AdoptedProviderAssembly {
         requestInteractiveAuth: undefined,
       },
     });
-    const tokenizer = configureProviderTokenizer(manager);
+    const tokenizer = configureProviderTokenizer(manager, config.scratchRoots);
     const content = createRuntimeContentGeneratorFactory();
     this.#settingsOwner = settingsOwner;
     this.#files = files;
@@ -383,8 +378,33 @@ class AdoptedProviderAssembly {
         this.adoption.credentialAuthority,
       );
       client = acquiredClient;
-      await this.#adoptInitializeSession(acquiredClient);
-      return await this.#adoptFinalize(acquiredClient);
+      const bindings = adoptedClientBindings(
+        this.#files,
+        this.#oauth,
+        this.#config.getSessionId(),
+      );
+      acquiredClient.clients.bindProviderFiles(
+        bindings.files,
+        bindings.retryOperations,
+        bindings.cleanupScope,
+      );
+      acquiredClient.bindMcpRuntime(
+        this.mcp,
+        this.mcp.profileDefinitions,
+        this.mcp.subagentDefinitions,
+      );
+      if (!acquiredClient.hasHookComposition()) acquiredClient.bindHooks();
+      await this.#adoptInitializeSession(
+        acquiredClient.initializeTools.bind(acquiredClient),
+      );
+      const foreground = this.#createForeground(acquiredClient);
+      return await this.#adoptFinalize(
+        acquiredClient.clients.refreshAuth.bind(acquiredClient.clients),
+        acquiredClient.clients.conversationBinding.isClientInitialized.bind(
+          acquiredClient.clients.conversationBinding,
+        ),
+        foreground.publish.bind(foreground),
+      );
     } catch (primary) {
       return cleanupFailedAdoption(
         primary,
@@ -398,23 +418,9 @@ class AdoptedProviderAssembly {
     }
   }
 
-  async #adoptInitializeSession(client: SessionClientOwner): Promise<void> {
-    const bindings = adoptedClientBindings(
-      this.#files,
-      this.#oauth,
-      this.#config.getSessionId(),
-    );
-    client.clients.bindProviderFiles(
-      bindings.files,
-      bindings.retryOperations,
-      bindings.cleanupScope,
-    );
-    client.bindMcpRuntime(
-      this.mcp,
-      this.mcp.profileDefinitions,
-      this.mcp.subagentDefinitions,
-    );
-    if (!client.hasHookComposition()) client.bindHooks();
+  async #adoptInitializeSession(
+    initializeTools: () => Promise<void>,
+  ): Promise<void> {
     await activateAdoptedProviders(
       this.#config,
       this.#settingsOwner,
@@ -426,14 +432,19 @@ class AdoptedProviderAssembly {
       this.runtime.fakeResponses,
     );
     await this.mcp.initialize();
-    await client.initializeTools();
+    await initializeTools();
   }
 
-  async #adoptFinalize(client: SessionClientOwner): Promise<Agent> {
+  async #adoptFinalize(
+    refreshAuth: (method?: string) => Promise<void>,
+    isClientInitialized: () => boolean,
+    publishForeground: ForegroundAssembly['publish'],
+  ): Promise<Agent> {
     await activateAdoptedSession(
       this.#config,
       this.adoption.intent,
-      client,
+      refreshAuth,
+      isClientInitialized,
       this.adoption.settingsService,
       this.#manager,
       this.#oauth,
@@ -451,9 +462,8 @@ class AdoptedProviderAssembly {
     };
     await this.#tokenizer.prepareTokenizer?.(parsed.provider, parsed.model);
     const handles: AgentSchedulerHandle[] = [];
-    const foreground = this.#createForeground(client);
     this.runtime.construction.throwIfAborted();
-    return foreground.publish({
+    return publishForeground({
       parsed,
       baseUrl: admittedEndpoint(this.adoption.settingsService, parsed.provider),
       handles,
@@ -474,13 +484,34 @@ class AdoptedProviderAssembly {
       this.#config,
       {
         mcp,
-        mediaOwner: this.runtime.media,
-        sessionClient: client,
+        session: {
+          prepareTokenizer: async (provider, model) => {
+            await this.#tokenizer.prepareTokenizer?.(provider, model);
+          },
+          bindChildExecution: (child, tasks, shell) =>
+            client.toolCatalog.bindChildExecution(child, tasks, shell),
+          initializeExecution: (...args) =>
+            client.clients.initializeExecution(...args),
+          initializeConversation: () =>
+            client.clients.conversationBinding.initializeConversation(),
+          publish: (construction, leaf) =>
+            publishLeafFacade(
+              mcp,
+              this.#config,
+              client,
+              this.#settingsOwner,
+              this.runtime.media,
+              this.adoption.settingsService,
+              manager,
+              this.#oauth,
+              construction,
+              leaf,
+            ),
+        },
         release: closeReleaseScope(this.runtime.release),
       },
       { settingsOwner: this.#settingsOwner },
       { settings: this.adoption.settingsService, manager },
-      { oauth: this.#oauth },
       this.runtime.construction,
     );
   }
@@ -610,7 +641,8 @@ async function acquireAdoptedSession(
 async function activateAdoptedSession(
   config: Config,
   intent: AgentAdoptionIntent,
-  client: SessionClientOwner,
+  refreshAuth: (method?: string) => Promise<void>,
+  isClientInitialized: () => boolean,
   settingsService: SettingsService,
   manager: RuntimeProviderManager,
   oauth: OAuthManager,
@@ -622,7 +654,7 @@ async function activateAdoptedSession(
     manager,
     oauth,
     () => 'agent',
-    () => client.clients.refreshAuth(),
+    () => refreshAuth(),
     selectedSettings,
   );
   const activation = intent.activation;
@@ -633,7 +665,7 @@ async function activateAdoptedSession(
       switchProvider,
       settingsService,
       manager,
-      (method) => client.clients.refreshAuth(method),
+      refreshAuth,
       assembleModelSelection(selectedSettings),
     );
     if (result.authFailed) {
@@ -643,8 +675,8 @@ async function activateAdoptedSession(
         { cause: underlying },
       );
     }
-  } else if (!client.clients.conversationBinding.isClientInitialized()) {
-    await client.clients.refreshAuth(undefined);
+  } else if (!isClientInitialized()) {
+    await refreshAuth(undefined);
   }
 }
 

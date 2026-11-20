@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -16,6 +17,7 @@
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolResponseBlock } from './IContent.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const REMEDY =
   'Cannot insert at line 999: exceeds file length (8). Use line_number <= 9 to append.';
@@ -26,7 +28,7 @@ function toolResponseContent(block: ToolResponseBlock): IContent {
 }
 
 function makeService(): HistoryService {
-  const svc = new HistoryService();
+  const svc = new HistoryService({ scratchRoots: historyScratchRoots });
   svc.setActiveTokenizationTarget('claude-sonnet-4-20250514', 'anthropic');
   return svc;
 }

@@ -30,8 +30,8 @@ import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/p
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
-import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
-import { OneShotStrategy } from '../OneShotStrategy.js';
+import { compressMiddleOutViaDisk } from './support/middleout-disk-adapter.js';
+import { compressOneShotViaDisk } from './support/oneshot-disk-adapter.js';
 import {
   buildContext,
   testProviderRuntime,
@@ -72,14 +72,17 @@ class RecordingProvider implements IProvider {
   generateChatCompletion(
     options: RuntimeGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
-  generateChatCompletion(content: IContent[]): AsyncIterableIterator<IContent>;
+  generateChatCompletion(
+    content: AsyncIterable<IContent>,
+  ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    optionsOrContent: RuntimeGenerateChatOptions | IContent[],
+    optionsOrContent: RuntimeGenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
-    const contents = Array.isArray(optionsOrContent)
-      ? optionsOrContent
-      : optionsOrContent.contents;
-    this.requests.push([...contents]);
+    const contents =
+      Symbol.asyncIterator in optionsOrContent
+        ? optionsOrContent
+        : optionsOrContent.contents;
+    this.requests.push(await Array.fromAsync(contents));
     const reply =
       this.replies[Math.min(this.replyIndex, this.replies.length - 1)];
     this.replyIndex += 1;
@@ -95,12 +98,25 @@ export function createRecordingProvider(
 
 export type StrategyName = 'one-shot' | 'middle-out';
 
-export function createStrategy(
+/**
+ * Runs the named summarizing strategy through its production disk route over
+ * the context's rows and returns the candidate history as a plain array.
+ */
+export type DiskCompressionResult =
+  | { readonly kind: 'applied'; readonly newHistory: IContent[] }
+  | { readonly kind: 'noop' };
+
+export async function compressViaDisk(
   name: StrategyName,
-): OneShotStrategy | MiddleOutStrategy {
-  return name === 'one-shot'
-    ? new OneShotStrategy(undefined, undefined, undefined, undefined)
-    : new MiddleOutStrategy(undefined, undefined, undefined, undefined);
+  context: CompressionContext,
+): Promise<DiskCompressionResult> {
+  const outcome =
+    name === 'one-shot'
+      ? await compressOneShotViaDisk(context)
+      : await compressMiddleOutViaDisk(context);
+  return outcome.kind === 'applied'
+    ? { kind: 'applied', newHistory: outcome.newHistory }
+    : { kind: 'noop' };
 }
 
 export function buildRecordingContext(

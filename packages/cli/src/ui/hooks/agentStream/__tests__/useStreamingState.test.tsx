@@ -106,13 +106,13 @@ describe('useStreamingState', () => {
       expect(result.current).toBe(StreamingState.Idle);
     });
 
-    it('still returns WaitingForConfirmation after cancel if a tool needs approval', () => {
+    it('returns Idle after cancel even while the approval observer is settling', () => {
       const { result } = renderStreamingState(
         false,
         [awaitingApprovalCall()],
         true,
       );
-      expect(result.current).toBe(StreamingState.WaitingForConfirmation);
+      expect(result.current).toBe(StreamingState.Idle);
     });
 
     it('returns Idle when isResponding is already false and cancel flag flips (no isResponding change)', () => {

@@ -21,7 +21,7 @@ This appears to be a leftover from an incomplete or interrupted merge process. T
   const currentLine = (r: number): string => state.lines[r] ?? '';
   const currentLineLen = (r: number): number => cpLen(currentLine(r));
 
-<<<<<<< HEAD
+// <<<<<<< HEAD (historical conflict marker)
   switch (action.type) {
 ```
 

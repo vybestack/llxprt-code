@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+import { publishReviewedRewrite } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,6 +13,8 @@ import type { RefusalAttempt } from './refusalTypes.js';
 import type { ChangedEntry, ReviewerIdentity } from './reviewTypes.js';
 import {
   applyReviewRewrites,
+  applyPendingEdits,
+  pendingEditsOf,
   type ReviewRewrite,
   type ReviewWindow,
 } from './reviewWindow.js';
@@ -76,34 +80,60 @@ export async function applyReviewedRewrite(
 ): Promise<RewriteResult> {
   request.signal?.throwIfAborted();
   const changes = changedEntries(request.window, request.rewrites);
-  const prepare = request.execution?.prepareRefusalRewrite;
   try {
-    const outcome = await request.history.replaceIfUnchanged({
-      expected: request.window.snapshot,
-      commitUnchanged: request.historyUnchanged,
+    const isCurrent = request.window.isCurrent;
+    const ordinals = request.window.sourceOrdinals;
+    if (isCurrent === undefined || ordinals === undefined)
+      throw new Error('Reviewed rewrite requires a journal version guard');
+    if (!isCurrent()) return { kind: 'history-changed' };
+    const rewritten = applyReviewRewrites(request.window, request.rewrites);
+    const replacements = new Map(
+      ordinals.flatMap((ordinal, index) =>
+        isDeepStrictEqual(rewritten[index], request.window.snapshot[index])
+          ? []
+          : [
+              [ordinal, rewritten[index]] satisfies [
+                number,
+                (typeof rewritten)[number],
+              ],
+            ],
+      ),
+    );
+    const pending = applyPendingEdits(
+      request.window.pendingSnapshot ?? [],
+      pendingEditsOf(request.window, request.rewrites),
+    );
+    for (const [index, ordinal] of request.window.pendingSourceOrdinals ?? [])
+      replacements.set(ordinal, pending[index]);
+    const payload: RefusalRewritePayload = {
+      operationId: request.operationId,
+      time: request.now.toISOString(),
+      promptId: request.attempt.promptId,
+      attemptIndex: request.attempt.attemptIndex,
+      reviewer: request.reviewer,
+      explanation: request.explanation,
+      changes,
+    };
+    const status = { stale: false };
+    await publishReviewedRewrite(request.history, replacements, {
+      assertCurrent: () => {
+        if (!isCurrent()) {
+          status.stale = true;
+          throw new Error('History changed before refusal rewrite');
+        }
+      },
       signal: request.signal,
-      rewrite: () => {
-        request.signal?.throwIfAborted();
-        return applyReviewRewrites(request.window, request.rewrites);
+      publishBatch: true,
+      audit: {
+        key: `refusal_rewrite:${request.operationId}`,
+        value: new TextEncoder().encode(JSON.stringify(payload)),
       },
-      prepareEffect: (resultingHistory) => {
-        if (prepare === undefined) return undefined;
-        const payload: RefusalRewritePayload = {
-          operationId: request.operationId,
-          time: request.now.toISOString(),
-          promptId: request.attempt.promptId,
-          attemptIndex: request.attempt.attemptIndex,
-          reviewer: request.reviewer,
-          explanation: request.explanation,
-          changes,
-          resultingHistory,
-        };
-        return prepare(payload);
-      },
+    }).catch((error: unknown) => {
+      if (!status.stale) throw error;
     });
-    return outcome === 'applied'
-      ? { kind: 'applied', changes }
-      : { kind: 'history-changed' };
+    return status.stale
+      ? { kind: 'history-changed' }
+      : { kind: 'applied', changes };
   } catch (error: unknown) {
     if (request.signal?.aborted === true) throw error;
     return {

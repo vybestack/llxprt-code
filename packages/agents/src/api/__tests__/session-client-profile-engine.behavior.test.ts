@@ -63,7 +63,9 @@ describe('Explicit session client lifetime', () => {
           ephemeralSettings: {},
         });
         expect(
-          (await agent.getHistory()).filter((item) => item.speaker === 'human'),
+          (await Array.fromAsync(agent.streamHistory())).filter(
+            (item) => item.speaker === 'human',
+          ),
         ).toHaveLength(1);
         expect(agent.getProvider()).toBe('engine-second');
         expect(agent.getModel()).toBe('engine-profile-model');
@@ -101,8 +103,8 @@ describe('Explicit session client lifetime', () => {
           {},
         );
         try {
-          await expect(route.preflight.captureHistory()).rejects.toThrow(
-            /disposed/i,
+          expect(() => route.preflight.captureHistory()).toThrow(
+            'Preflight history ownership was transferred',
           );
           await agent.setHistory([
             {
@@ -113,7 +115,7 @@ describe('Explicit session client lifetime', () => {
         } finally {
           await agent.dispose();
         }
-        await expect(agent.getHistory()).rejects.toThrow(/disposed/i);
+        expect(() => agent.streamHistory()).toThrow(/disposed/i);
       } finally {
         await route.close();
       }

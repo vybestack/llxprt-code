@@ -15,13 +15,17 @@
  */
 
 import type { CanonicalFinishReason } from '../../llm-types/finishReasons.js';
+import type { ToolArgumentDelta } from './tool-argument-delta.js';
 import type { StopDetails } from '../../llm-types/finishReasons.js';
+import type { CompressionAuditProvenance } from '../../core/compression/types.js';
 
 /**
  * Universal content representation that is provider-agnostic.
  * All conversation content is represented as blocks within a speaker's turn.
  */
 export interface IContent {
+  toolArgumentDelta?: ToolArgumentDelta;
+  responseAttemptId?: string;
   /**
    * Who is speaking in this content
    * - 'human': The user
@@ -102,6 +106,8 @@ export interface SemanticMediaPurgeCacheWriteEvidence {
 }
 
 export interface ContentMetadata {
+  /** Original submitted query, before file attachments are resolved for the model. */
+  displayText?: string;
   /** When this content was created */
   timestamp?: number;
 
@@ -143,6 +149,12 @@ export interface ContentMetadata {
 
   /** Whether this is a summary of previous messages */
   isSummary?: boolean;
+
+  /**
+   * On a compression summary row, who wrote the summary (#4101). Stored in the
+   * journal with the row so a resumed session still reports the author.
+   */
+  compressionProvenance?: CompressionAuditProvenance;
 
   /** Additional provider-specific metadata */
   providerMetadata?: Record<string, unknown>;
@@ -260,7 +272,8 @@ export type ContentBlock =
   | ToolResponseBlock
   | MediaBlock
   | ThinkingBlock
-  | CodeBlock;
+  | CodeBlock
+  | MediaDroppedBlock;
 
 /**
  * Regular text content
@@ -341,7 +354,23 @@ interface MediaBlockBase {
   caption?: string;
   filename?: string;
   providerMetadata?: Record<string, unknown>;
+  /** Where the image entered history, kept so a dropped image can name its source. */
+  readonly origin?: MediaOrigin;
 }
+
+/** How an image entered history. A file origin names the path it was read from. */
+export type MediaOriginSource =
+  | { readonly kind: 'file'; readonly path: string }
+  | {
+      readonly kind: 'tool';
+      readonly toolName: string;
+      readonly callId: string;
+    }
+  | { readonly kind: 'pasted' }
+  | { readonly kind: 'model-output' };
+
+/** Source of an admitted image plus the ISO time it was read. */
+export type MediaOrigin = MediaOriginSource & { readonly readAt: string };
 
 /** Intrinsic media dimensions when admission could determine both values. */
 export interface MediaDimensions {
@@ -412,7 +441,8 @@ export interface MediaTransformation {
 
 /**
  * Long-lived local media identity. It records replay and accounting metadata
- * without retaining inline bytes or a machine-specific source path.
+ * without retaining inline bytes. `origin` names where the image was read from
+ * so a dropped image can point back at its source.
  */
 export interface MediaReferenceBlock extends MediaBlockBase {
   encoding: 'reference';
@@ -596,6 +626,33 @@ function hasValidTransformation(value: unknown): value is MediaTransformation {
 }
 
 /** Recognizes valid legacy inline and URL media restored from external data. */
+function hasOriginSourceFields(value: Record<string, unknown>): boolean {
+  switch (value['kind']) {
+    case 'file':
+      return isNonEmptyString(value['path']);
+    case 'tool':
+      return (
+        isNonEmptyString(value['toolName']) && isNonEmptyString(value['callId'])
+      );
+    case 'pasted':
+    case 'model-output':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Validates a recorded media origin: a known source kind and an ISO read time. */
+export function isMediaOrigin(value: unknown): value is MediaOrigin {
+  if (!isRecord(value) || !hasOriginSourceFields(value)) return false;
+  const readAt = value['readAt'];
+  return isNonEmptyString(readAt) && !Number.isNaN(Date.parse(readAt));
+}
+
+function isAbsentOrMediaOrigin(value: unknown): boolean {
+  return value === undefined || isMediaOrigin(value);
+}
+
 export function isInlineMediaBlock(value: unknown): value is InlineMediaBlock {
   if (!isRecord(value) || value['type'] !== 'media') {
     return false;
@@ -624,6 +681,7 @@ export function isInlineMediaBlock(value: unknown): value is InlineMediaBlock {
   if (providerFiles !== undefined && !hasValidProviderFiles(providerFiles)) {
     return false;
   }
+  if (!isAbsentOrMediaOrigin(value['origin'])) return false;
   const sourceContentId = value['sourceContentId'];
   if (sourceContentId !== undefined && !isContentId(sourceContentId))
     return false;
@@ -741,6 +799,7 @@ export function isMediaReferenceBlock(
   if (!isMediaSemanticMetadata(value['semanticMetadata'])) {
     return false;
   }
+  if (!isAbsentOrMediaOrigin(value['origin'])) return false;
   const dimensions = value['dimensions'];
   if (dimensions !== undefined && !hasValidDimensions(dimensions)) {
     return false;
@@ -754,6 +813,36 @@ export function isMediaReferenceBlock(
   }
   const providerFiles = value['providerFiles'];
   return providerFiles === undefined || hasValidProviderFiles(providerFiles);
+}
+
+/**
+ * An image whose bytes were dropped from history. It keeps where the image was
+ * read from, so the model or the user can read it again, and the identity of
+ * the dropped bytes. It holds no bytes and no blob reservation.
+ */
+export interface MediaDroppedBlock {
+  type: 'media_dropped';
+  readonly origin: MediaOrigin;
+  readonly mimeType: string;
+  readonly byteLength: number;
+  /** `sha256:<hex>` of the dropped bytes. */
+  readonly contentId: string;
+  /** ISO time the bytes were dropped. */
+  readonly droppedAt: string;
+}
+
+/** Validates a recorded dropped-media reference. */
+export function isMediaDroppedBlock(
+  value: unknown,
+): value is MediaDroppedBlock {
+  if (!isRecord(value) || value['type'] !== 'media_dropped') return false;
+  if (!isMediaOrigin(value['origin']) || !isMimeType(value['mimeType'])) {
+    return false;
+  }
+  if (!isPositiveInteger(value['byteLength'])) return false;
+  if (!isContentId(value['contentId'])) return false;
+  const droppedAt = value['droppedAt'];
+  return isNonEmptyString(droppedAt) && !Number.isNaN(Date.parse(droppedAt));
 }
 
 /** Rejects local references before a converter attempts inline transport. */
@@ -873,6 +962,9 @@ export const ContentValidation = {
 
         // For OpenAI/Codex, either thought OR encrypted content is valid
         return hasThought || hasEncrypted;
+      }
+      if (block.type === 'media_dropped') {
+        return isMediaDroppedBlock(block);
       }
       // CodeBlock - code is always a string on this type
       return Boolean(block.code) && block.code.trim().length > 0;

@@ -1,9 +1,11 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { describe, it, expect, vi } from 'bun:test';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { ToolRegistryView } from './AgentRuntimeContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const baseState = createAgentRuntimeState({
   runtimeId: 'stateless-runtime',
@@ -16,6 +18,7 @@ describe('AgentRuntimeContext stateless enforcement', () => {
   it('should require explicit provider adapter when no provider manager supplied', () => {
     expect(() =>
       createAgentRuntimeContext({
+        scratchRoots: historyScratchRoots,
         state: baseState,
         settings: {},
         telemetry: {
@@ -34,7 +37,7 @@ describe('AgentRuntimeContext stateless enforcement', () => {
     ).toThrow(/provider adapter/i);
   });
 
-  it('should route telemetry events through injected adapter without Config access', () => {
+  it('should route telemetry events through injected adapter without Config access', async () => {
     const provider = {
       getActiveProvider: vi.fn(() => ({ name: 'stub-provider' }) as IProvider),
       setActiveProvider: vi.fn(),
@@ -53,6 +56,7 @@ describe('AgentRuntimeContext stateless enforcement', () => {
     };
 
     const context = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       state: baseState,
       settings: {},
       provider,
@@ -64,7 +68,7 @@ describe('AgentRuntimeContext stateless enforcement', () => {
     });
 
     const requestEvent = { model: 'stub-model', promptId: 'req-1' };
-    context.telemetry.logApiRequest(requestEvent);
+    await context.telemetry.logApiRequest(requestEvent);
 
     expect(telemetry.logApiRequest).toHaveBeenCalledWith(requestEvent);
     expect(context.provider.getActiveProvider()).toStrictEqual(

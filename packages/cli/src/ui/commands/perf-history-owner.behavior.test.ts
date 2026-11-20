@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -60,6 +61,6 @@ describe('registered performance history owner', () => {
     expect(result.content).toContain('read_file');
     expect(result.content).toContain('across 1 history items');
     await owner.dispose();
-    expect(await sibling.getHistory()).toStrictEqual([]);
+    expect(await collectResumeRows(sibling.streamHistory())).toStrictEqual([]);
   });
 });

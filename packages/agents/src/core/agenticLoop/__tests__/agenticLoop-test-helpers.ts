@@ -100,20 +100,35 @@ interface ScriptedClientState {
 function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
   const { history, recordedToolCalls } = state;
   return {
+    sendMessage: async (_params, promptId) => ({
+      status: 'empty',
+      promptId,
+      turnId: 'unused',
+    }),
     appendGeneration: async () => {
       throw new Error('Scripted loop does not publish detached generation');
     },
-    sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => {
       async function* emptyStream() {}
       return emptyStream();
     },
     generateDirectMessage: async () => emptyModelOutput(),
-    getHistory: () => history,
+    async *getHistory(_curated, signal) {
+      for (const row of history) {
+        signal?.throwIfAborted();
+        yield row;
+      }
+    },
+    async *streamHistory(signal) {
+      for (const row of history) {
+        signal?.throwIfAborted();
+        yield row;
+      }
+    },
     setHistory: async (nextHistory: readonly IContent[]) => {
       history.splice(0, history.length, ...nextHistory);
     },
-    clearHistory: () => {
+    clearHistory: async () => {
       history.splice(0, history.length);
     },
     getHistoryService: () => null,
@@ -157,9 +172,10 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
     isInitialized: () => true,
     hasChatInitialized: () => true,
     getChat: () => chat,
-    async getHistory() {
-      return history;
+    async *getHistory() {
+      yield* history;
     },
+    streamHistory: (signal) => chat.streamHistory(signal),
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
     prepareHistoryRebind: () => () => {},
@@ -175,7 +191,11 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
     },
     resetChat: async () => {},
     resumeChat: async () => {},
+    discardDeferredHistory: async () => {},
     setHistory: async () => {},
+    setHistoryFromSource: async () => {
+      throw new Error('Streamed history requires a real agent client');
+    },
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
     getContentGeneratorConfig: () => undefined,

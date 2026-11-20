@@ -1,0 +1,164 @@
+{
+  "group": "chat",
+  "description": "Today's output for the named counterexamples of the #854 design, phase 0. Regenerate only deliberately with FROZEN_WIRE_CORPUS_UPDATE=1; never in CI.",
+  "cases": {
+    "chat ids: Kimi human-call dropped-output case": {
+      "openai-chat-plain/raw": [
+        {
+          "length": 382,
+          "sha256": "da997c58d4097cc0b2cde5fdd3a411b08cce3ffb5a65eece763fa4c2b0923807",
+          "member": 337,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_Y\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"Y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult Y\",\"tool_call_id\":\"call_Y\"}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-plain/normalized": [
+        {
+          "length": 382,
+          "sha256": "da997c58d4097cc0b2cde5fdd3a411b08cce3ffb5a65eece763fa4c2b0923807",
+          "member": 337,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_Y\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"Y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult Y\",\"tool_call_id\":\"call_Y\"}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-kimi/raw": [
+        {
+          "length": 468,
+          "sha256": "1b164637e02a253ccbf8a346234da9c5ae33838f629f9e9d54c61074aac8a75d",
+          "member": 367,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"Y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult Y\",\"tool_call_id\":\"functions.read_file:1\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ],
+      "openai-chat-kimi/normalized": [
+        {
+          "length": 468,
+          "sha256": "1b164637e02a253ccbf8a346234da9c5ae33838f629f9e9d54c61074aac8a75d",
+          "member": 367,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.read_file:1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"Y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult Y\",\"tool_call_id\":\"functions.read_file:1\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ],
+      "openai-chat-mistral/raw": [
+        {
+          "length": 421,
+          "sha256": "dec5de02ed5e1f1bee739138e5e2bf9e27672c6d84de997fc0157c1c78639a2c",
+          "member": 362,
+          "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VcmvPag5c\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"Y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult Y\",\"tool_call_id\":\"VcmvPag5c\",\"name\":\"read_file\"}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-mistral/normalized": [
+        {
+          "length": 421,
+          "sha256": "dec5de02ed5e1f1bee739138e5e2bf9e27672c6d84de997fc0157c1c78639a2c",
+          "member": 362,
+          "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"VcmvPag5c\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"Y\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult Y\",\"tool_call_id\":\"VcmvPag5c\",\"name\":\"read_file\"}],\"stream\":false}"
+        }
+      ]
+    },
+    "chat ids: later eligible duplicate with another name": {
+      "openai-chat-kimi/raw": [
+        {
+          "length": 726,
+          "sha256": "b754392582857a0350411a2be80bd9afdf4554054a7a898a60d1eafc14a62450",
+          "member": 625,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:1\",\"type\":\"function\",\"function\":{\"name\":\"alpha\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.beta:1\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:1\",\"type\":\"function\",\"function\":{\"name\":\"beta\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.beta:1\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ],
+      "openai-chat-kimi/normalized": [
+        {
+          "length": 590,
+          "sha256": "7ece21f5cce65170dbf8eda357ec925dce934513e91e4928ab83ed89d50affe8",
+          "member": 489,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:1\",\"type\":\"function\",\"function\":{\"name\":\"alpha\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.beta:1\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:1\",\"type\":\"function\",\"function\":{\"name\":\"beta\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ]
+    },
+    "chat ids: later eligible duplicate with earlier call rows in two journal rows": {
+      "openai-chat-kimi/raw": [
+        {
+          "length": 863,
+          "sha256": "56c39323ced0c56690a3ce11272d4b6ff18e4b4ad10bd48c2dde3a1614bac3f0",
+          "member": 762,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:2\",\"type\":\"function\",\"function\":{\"name\":\"alpha\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:2\",\"type\":\"function\",\"function\":{\"name\":\"gamma\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.beta:2\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:2\",\"type\":\"function\",\"function\":{\"name\":\"beta\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.beta:2\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ],
+      "openai-chat-kimi/normalized": [
+        {
+          "length": 727,
+          "sha256": "0451ed15e5ce1ee131daccd98c7f672794d83fb19cff242f93388603eac0fcdc",
+          "member": 626,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:2\",\"type\":\"function\",\"function\":{\"name\":\"alpha\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.beta:2\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:2\",\"type\":\"function\",\"function\":{\"name\":\"gamma\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:2\",\"type\":\"function\",\"function\":{\"name\":\"beta\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ]
+    },
+    "chat ids: later eligible duplicate within one row": {
+      "openai-chat-kimi/raw": [
+        {
+          "length": 554,
+          "sha256": "aed13f904a714ae1abd0fd35f9b7ecaa87d18b595e6ab638a93ab225b8e483f1",
+          "member": 453,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:1\",\"type\":\"function\",\"function\":{\"name\":\"alpha\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}},{\"id\":\"functions.beta:1\",\"type\":\"function\",\"function\":{\"name\":\"beta\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.beta:1\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ],
+      "openai-chat-kimi/normalized": [
+        {
+          "length": 554,
+          "sha256": "aed13f904a714ae1abd0fd35f9b7ecaa87d18b595e6ab638a93ab225b8e483f1",
+          "member": 453,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.beta:1\",\"type\":\"function\",\"function\":{\"name\":\"alpha\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}},{\"id\":\"functions.beta:1\",\"type\":\"function\",\"function\":{\"name\":\"beta\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.beta:1\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ]
+    },
+    "chat ids: unnamed duplicate": {
+      "openai-chat-kimi/raw": [
+        {
+          "length": 726,
+          "sha256": "bde975235f1247f292f724fe7f5852384b3aa851a2ccf490c026f4a450352a87",
+          "member": 625,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.alpha:0\",\"type\":\"function\",\"function\":{\"name\":\"alpha\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.alpha:0\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.alpha:0\",\"type\":\"function\",\"function\":{\"name\":\"\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.alpha:0\"}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ],
+      "openai-chat-kimi/normalized": [
+        {
+          "length": 589,
+          "sha256": "b29071fe32ca9d3f5444a0170b4b3d6ca25a05f5ac979da1c7895ee0a13da067",
+          "member": 488,
+          "body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.alpha:0\",\"type\":\"function\",\"function\":{\"name\":\"alpha\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult X\",\"tool_call_id\":\"functions.alpha:0\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"functions.alpha:0\",\"type\":\"function\",\"function\":{\"name\":\"\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]}],\"stream\":false,\"prompt_cache_key\":\"wire-body-golden.openai-chat-kimi\"}"
+        }
+      ]
+    },
+    "chat ids: Mistral salt collision keeps its holder": {
+      "openai-chat-mistral/raw": [
+        {
+          "length": 743,
+          "sha256": "b98a2d2a92c2ecd9cbe501b899e54aa32466dcddee87b6b379756ff7198dd28c",
+          "member": 684,
+          "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"4SftZvDMX\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"4SftZvDMX\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult 4SftZvDMX\",\"tool_call_id\":\"4SftZvDMX\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"4Uq1sY29c\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"toolu_alpha-1\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult toolu_alpha-1\",\"tool_call_id\":\"4Uq1sY29c\",\"name\":\"read_file\"}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-mistral/normalized": [
+        {
+          "length": 743,
+          "sha256": "b98a2d2a92c2ecd9cbe501b899e54aa32466dcddee87b6b379756ff7198dd28c",
+          "member": 684,
+          "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"4SftZvDMX\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"4SftZvDMX\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult 4SftZvDMX\",\"tool_call_id\":\"4SftZvDMX\",\"name\":\"read_file\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"4Uq1sY29c\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"toolu_alpha-1\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult toolu_alpha-1\",\"tool_call_id\":\"4Uq1sY29c\",\"name\":\"read_file\"}],\"stream\":false}"
+        }
+      ]
+    },
+    "chat ids: Mistral salt collision whose first holder is removed": {
+      "openai-chat-mistral/raw": [
+        {
+          "length": 445,
+          "sha256": "bbe21ec3035bcab71ab8782172514639ffc4adc5fa7e4007f4fad68ab80e18bc",
+          "member": 386,
+          "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"4SftZvDMX\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"toolu_alpha-1\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult toolu_alpha-1\",\"tool_call_id\":\"4SftZvDMX\",\"name\":\"read_file\"}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-mistral/normalized": [
+        {
+          "length": 445,
+          "sha256": "bbe21ec3035bcab71ab8782172514639ffc4adc5fa7e4007f4fad68ab80e18bc",
+          "member": 386,
+          "body": "{\"model\":\"mistral-large-latest\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"4SftZvDMX\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"toolu_alpha-1\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nresult toolu_alpha-1\",\"tool_call_id\":\"4SftZvDMX\",\"name\":\"read_file\"}],\"stream\":false}"
+        }
+      ]
+    }
+  }
+}

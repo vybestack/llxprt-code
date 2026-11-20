@@ -4,13 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { RuntimeCompressionGuardInfo } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { RuntimeCompressionCallback } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 
-export type CompressionCallback = (
-  contents: IContent[],
-  guard?: RuntimeCompressionGuardInfo,
-) => Promise<IContent[]>;
+export type CompressionCallback = RuntimeCompressionCallback;
 
 export interface LoadBalancerSubProfile {
   name: string;

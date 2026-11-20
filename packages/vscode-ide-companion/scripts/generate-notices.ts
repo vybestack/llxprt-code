@@ -394,6 +394,17 @@ limitations under the License.`;
 }
 
 /**
+ * Read a dependency's license or notice file with LF line endings. Some
+ * packages publish CRLF files; copying them verbatim writes carriage returns
+ * into the checked-in NOTICES.txt, which the repository normalizes to LF
+ * (`* text=auto eol=lf`), so the file churns every time it is regenerated.
+ */
+async function readTextWithLfEndings(filePath: string): Promise<string> {
+  const content = await fs.readFile(filePath, 'utf-8');
+  return content.replaceAll('\r\n', '\n');
+}
+
+/**
  * Canonicalize a dependency repository URL's protocol.
  *
  * GitHub deprecated the unauthenticated git:// protocol, and npm registry
@@ -509,7 +520,7 @@ async function getDependencyLicense(
 
     if (licenseFile) {
       try {
-        licenseContent = await fs.readFile(licenseFile, 'utf-8');
+        licenseContent = await readTextWithLfEndings(licenseFile);
 
         const copyrightInfo = extractCopyrightFromLicense(licenseContent);
         if (copyrightInfo) {
@@ -586,7 +597,7 @@ async function getDependencyLicense(
 
     if (noticeFile) {
       try {
-        const noticeContent = await fs.readFile(noticeFile, 'utf-8');
+        const noticeContent = await readTextWithLfEndings(noticeFile);
         licenseContent = `${licenseContent}\n\n---\n\nNOTICE\n\n${noticeContent}`;
         console.log(`✓ Attached NOTICE file for ${depName}`);
       } catch (e) {

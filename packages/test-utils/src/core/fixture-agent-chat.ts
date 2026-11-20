@@ -16,12 +16,20 @@ export function createTestAgentChat(): AgentChatContract {
     appendGeneration: async () => {
       throw new Error('Fixture chat does not publish detached generation');
     },
-    sendMessage: async () => emptyModelOutput(),
+    sendMessage: async (_params, promptId) => ({
+      status: 'empty',
+      promptId,
+      turnId: 'unused',
+    }),
     sendMessageStream: async () => emptyChatStream(),
     generateDirectMessage: async () => emptyModelOutput(),
-    getHistory: () => [],
+    getHistory: () => emptyChatStream(),
+    async *streamHistory(signal) {
+      signal?.throwIfAborted();
+      yield* [];
+    },
     setHistory: async () => {},
-    clearHistory: () => {},
+    clearHistory: async () => {},
     getHistoryService: () => null,
     wasRecentlyCompressed: () => false,
     performCompression: async () => PerformCompressionResult.SKIPPED_EMPTY,

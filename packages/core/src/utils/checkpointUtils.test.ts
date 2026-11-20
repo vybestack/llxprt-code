@@ -4,24 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import {
   generateCheckpointFileName,
   getToolCallDataSchema,
   formatCheckpointDisplayList,
   getTruncatedCheckpointNames,
-  processRestorableToolCalls,
   getCheckpointInfoList,
   type ToolCallData,
 } from './checkpointUtils.js';
 import type { ToolCallRequestInfo } from '../core/turn.js';
-import type { GitService } from '../services/gitService.js';
-import type {
-  AgentClientContract as AgentClient,
-  ContractContent,
-} from '../core/clientContract.js';
 
-describe('checkpointUtils', () => {
+function checkpointFileNameTests(): void {
   describe('generateCheckpointFileName', () => {
     it('returns null when no file_path argument exists', () => {
       const toolCall: ToolCallRequestInfo = {
@@ -92,7 +86,9 @@ describe('checkpointUtils', () => {
       expect(result).toContain('replace');
     });
   });
+}
 
+function checkpointSchemaTests(): void {
   describe('getToolCallDataSchema', () => {
     it('validates minimal valid payload', () => {
       const schema = getToolCallDataSchema();
@@ -161,7 +157,9 @@ describe('checkpointUtils', () => {
       expect(result.success).toBe(true);
     });
   });
+}
 
+function checkpointDisplayTests(): void {
   describe('formatCheckpointDisplayList', () => {
     it('strips .json extension from filenames', () => {
       const filenames = [
@@ -189,7 +187,9 @@ describe('checkpointUtils', () => {
       expect(result).toBe('');
     });
   });
+}
 
+function checkpointTruncatedNamesTests(): void {
   describe('getTruncatedCheckpointNames', () => {
     it('strips .json extension', () => {
       const filenames = ['checkpoint1.json', 'checkpoint2.json'];
@@ -212,171 +212,9 @@ describe('checkpointUtils', () => {
       expect(result).toStrictEqual(['file.backup', 'test.old']);
     });
   });
+}
 
-  describe('processRestorableToolCalls', () => {
-    it('returns empty maps for empty input', async () => {
-      const mockGitService = {} as GitService;
-      const mockAgentClient = {
-        getHistory: vi.fn().mockResolvedValue([]),
-      } as unknown as AgentClient;
-
-      const result = await processRestorableToolCalls(
-        [],
-        mockGitService,
-        mockAgentClient,
-      );
-
-      expect(result.checkpointsToWrite.size).toBe(0);
-      expect(result.toolCallToCheckpointMap.size).toBe(0);
-      expect(result.errors.length).toBe(0);
-    });
-
-    it('collects error when git snapshot creation fails completely', async () => {
-      const toolCalls: ToolCallRequestInfo[] = [
-        {
-          callId: 'call-1',
-          name: 'write_file',
-          args: { file_path: '/test/file.ts' },
-          isClientInitiated: false,
-          prompt_id: 'prompt-1',
-        },
-      ];
-
-      const mockGitService = {
-        createFileSnapshot: vi.fn().mockRejectedValue(new Error('Git error')),
-        getCurrentCommitHash: vi.fn().mockResolvedValue(undefined),
-      } as unknown as GitService;
-
-      const mockAgentClient = {
-        getHistory: vi.fn().mockResolvedValue([]),
-      } as unknown as AgentClient;
-
-      const result = await processRestorableToolCalls(
-        toolCalls,
-        mockGitService,
-        mockAgentClient,
-      );
-
-      expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors[0]).toContain('Git error');
-      expect(result.checkpointsToWrite.size).toBe(0);
-    });
-
-    it('creates checkpoint data with commitHash and clientHistory', async () => {
-      const toolCalls: ToolCallRequestInfo[] = [
-        {
-          callId: 'call-2',
-          name: 'replace',
-          args: { file_path: '/src/app.ts' },
-          isClientInitiated: false,
-          prompt_id: 'prompt-2',
-        },
-      ];
-
-      const mockClientHistory: ContractContent[] = [
-        { role: 'user', parts: [{ text: 'test message' }] },
-      ];
-
-      const mockGitService = {
-        createFileSnapshot: vi.fn().mockResolvedValue('commit-hash-123'),
-        getCurrentCommitHash: vi.fn(),
-      } as unknown as GitService;
-
-      const mockAgentClient = {
-        getHistory: vi.fn().mockResolvedValue(mockClientHistory),
-      } as unknown as AgentClient;
-
-      const result = await processRestorableToolCalls(
-        toolCalls,
-        mockGitService,
-        mockAgentClient,
-        { customHistory: 'data' },
-      );
-
-      expect(result.checkpointsToWrite.size).toBe(1);
-      expect(result.errors.length).toBe(0);
-
-      const checkpointContent = Array.from(
-        result.checkpointsToWrite.values(),
-      )[0];
-      const parsed = JSON.parse(checkpointContent) as ToolCallData;
-
-      expect(parsed.commitHash).toBe('commit-hash-123');
-      expect(parsed.clientHistory).toStrictEqual(mockClientHistory);
-      expect(parsed.history).toStrictEqual({ customHistory: 'data' });
-      expect(parsed.messageId).toBe('prompt-2');
-    });
-
-    it('falls back to getCurrentCommitHash when snapshot creation fails', async () => {
-      const toolCalls: ToolCallRequestInfo[] = [
-        {
-          callId: 'call-3',
-          name: 'write_file',
-          args: { file_path: '/test.js' },
-          isClientInitiated: false,
-          prompt_id: 'prompt-3',
-        },
-      ];
-
-      const mockGitService = {
-        createFileSnapshot: vi
-          .fn()
-          .mockRejectedValue(new Error('Snapshot failed')),
-        getCurrentCommitHash: vi.fn().mockResolvedValue('fallback-hash'),
-      } as unknown as GitService;
-
-      const mockAgentClient = {
-        getHistory: vi.fn().mockResolvedValue([]),
-      } as unknown as AgentClient;
-
-      const result = await processRestorableToolCalls(
-        toolCalls,
-        mockGitService,
-        mockAgentClient,
-      );
-
-      expect(result.checkpointsToWrite.size).toBe(1);
-      expect(result.errors.length).toBe(1);
-      expect(result.errors[0]).toContain('Snapshot failed');
-
-      const checkpointContent = Array.from(
-        result.checkpointsToWrite.values(),
-      )[0];
-      const parsed = JSON.parse(checkpointContent) as ToolCallData;
-      expect(parsed.commitHash).toBe('fallback-hash');
-    });
-
-    it('skips tool call without file_path and logs error', async () => {
-      const toolCalls: ToolCallRequestInfo[] = [
-        {
-          callId: 'call-4',
-          name: 'some_tool',
-          args: { other_arg: 'value' },
-          isClientInitiated: false,
-          prompt_id: 'prompt-4',
-        },
-      ];
-
-      const mockGitService = {
-        createFileSnapshot: vi.fn().mockResolvedValue('hash'),
-      } as unknown as GitService;
-
-      const mockAgentClient = {
-        getHistory: vi.fn().mockResolvedValue([]),
-      } as unknown as AgentClient;
-
-      const result = await processRestorableToolCalls(
-        toolCalls,
-        mockGitService,
-        mockAgentClient,
-      );
-
-      expect(result.checkpointsToWrite.size).toBe(0);
-      expect(result.errors.length).toBe(1);
-      expect(result.errors[0]).toContain('missing file_path');
-    });
-  });
-
+function checkpointInfoTests(): void {
   describe('getCheckpointInfoList', () => {
     it('extracts messageId from valid JSON entries', () => {
       const checkpointFiles = new Map<string, string>([
@@ -453,4 +291,12 @@ describe('checkpointUtils', () => {
       expect(result).toStrictEqual([]);
     });
   });
+}
+
+describe('checkpointUtils', () => {
+  checkpointFileNameTests();
+  checkpointSchemaTests();
+  checkpointDisplayTests();
+  checkpointTruncatedNamesTests();
+  checkpointInfoTests();
 });

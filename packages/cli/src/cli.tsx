@@ -1,3 +1,4 @@
+import type { StartupStdinBuffer } from './utils/startup-stdin.js';
 import {
   createTerminalHost,
   type TerminalHost,
@@ -30,7 +31,7 @@ import {
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
-  type IContent,
+  sweepDeadScratchRoots,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
@@ -136,6 +137,7 @@ import {
   discoverCliProviderContributions,
   bootstrapRuntimeAndConfig as bootstrap,
   setupOwnerSessionRecording,
+  type OwnerResumedRows,
 } from './cliSessionBootstrap.js';
 import {
   captureBootstrapEnvPath,
@@ -230,6 +232,7 @@ function setupProcessLifecycle(): () => void {
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }
+  sweepDeadScratchRoots();
   return cleanupStdio;
 }
 
@@ -318,14 +321,15 @@ class ForegroundSessionHost {
       agent.ide.setIdeClientConnected.bind(agent.ide),
     );
     const warnings: string[] = [];
-    const { history, observation } = await setupOwnerSessionRecording(
-      this.inputs.config,
-      agent.session,
-      agent.session.listBrowserTargetsDetailed.bind(agent.session),
-      this.inputs.argv,
-      this.inputs.bootstrapSelection,
-      warnings,
-    );
+    const { resumedBoot: history, observation } =
+      await setupOwnerSessionRecording(
+        this.inputs.config,
+        agent.session,
+        agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        this.inputs.argv,
+        this.inputs.bootstrapSelection,
+        warnings,
+      );
     await recordPromptInstallerWarnings(warnings);
     const input = this.inputs.config.getQuestion();
     await dispatchInteractiveOrNonInteractive(
@@ -462,7 +466,7 @@ class ForegroundSessionHost {
   }
   private async launchInteractive(
     warnings: string[],
-    history: IContent[] | null,
+    history: OwnerResumedRows | null,
     observation: ObservationCallbacks,
   ): Promise<void> {
     const agent = await this.#foreground;
@@ -482,7 +486,7 @@ class ForegroundSessionHost {
         runtimeSettings: this.inputs.owner.runtimeSettings,
         skillOperations: this.#skillOperations,
         restartExtension: this.#restartExtension,
-        resumedHistory: history ?? undefined,
+        resumedBoot: history ?? undefined,
         suppressStartupWelcome: hasExplicitProviderProfileSelector(
           this.inputs.argv,
         ),
@@ -709,7 +713,12 @@ async function prepareConfiguredTerminalSession(
   argv: ParsedCliArgs,
   readProfile: () => string | null,
   loadProfile: AgentProfileApplication['load'],
+  startupStdin?: StartupStdinBuffer,
 ): Promise<void> {
+  if (!config.isInteractive() && startupStdin) {
+    startupStdin.dispose();
+    process.stdin.pause();
+  }
   await exitAfterSessionListOrDelete(argv, config, () => config.dispose());
   await rejectPromptInteractiveWithPipedStdin(argv);
   await prepareTerminalSession(config, settings, argv);
@@ -773,7 +782,7 @@ async function runForegroundSession(input: {
     bootstrapSelection,
   );
   await exitBeforeAgent(providerActivation.authFailed, argv, preflight);
-  await cleanupForegroundSessions(config, settings, preflight);
+  await cleanupForegroundSessions(config, settings);
   await new ForegroundSessionHost({
     config,
     settings,
@@ -792,9 +801,9 @@ async function runForegroundSession(input: {
   }).run();
 }
 
-export async function main() {
+export async function main(startupStdin?: StartupStdinBuffer) {
   const capturedEnvPath = captureBootstrapEnvPath();
-  const terminalHost = createTerminalHost();
+  const terminalHost = createTerminalHost(startupStdin);
   const debugConfiguration = configureCliDebugLogging();
   await handleVersionAndHelpFlags(process.argv.slice(2));
 
@@ -822,6 +831,7 @@ export async function main() {
       argv,
       () => preflight.getCurrentProfileName(),
       (name) => preflight.load(name),
+      startupStdin,
     );
 
     await exitAfterExtensionList(config.getListExtensions(), preflight);
@@ -868,11 +878,8 @@ export async function main() {
 function cleanupForegroundSessions(
   config: Config,
   settings: LoadedSettings,
-  preflight: Pick<AgentProfilePreflight, 'captureHistory'>,
 ): ReturnType<typeof cleanupExpiredSessions> {
-  return cleanupExpiredSessions(config, settings.merged, undefined, () =>
-    preflight.captureHistory(),
-  );
+  return cleanupExpiredSessions(config, settings.merged);
 }
 
 async function exitAfterExtensionList(

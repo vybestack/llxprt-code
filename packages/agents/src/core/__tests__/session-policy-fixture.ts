@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,6 +14,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -88,8 +90,9 @@ export function createOwnerPolicyFixture(
     sessionId: 'owner-policy-fixture',
   });
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state,
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     settings: fixture.owner.readRuntimePolicy(),
     readRuntimeSettings: fixture.readRuntimeSettings,
     prepareProviderInvocation: fixture.prepareProviderInvocation,

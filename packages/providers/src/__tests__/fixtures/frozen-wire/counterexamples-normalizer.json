@@ -1,0 +1,226 @@
+{
+  "group": "normalizer",
+  "description": "Today's output for the named counterexamples of the #854 design, phase 0. Regenerate only deliberately with FROZEN_WIRE_CORPUS_UPDATE=1; never in CI.",
+  "cases": {
+    "normalizer: [human(text q, call a), ai(call a)] answers the call in the human row": {
+      "units": {
+        "units": 3,
+        "sha256": "90c3402938d0f13b03500509832f092025ba945be262e34f4ddbfb4b96f7ac53",
+        "json": "[{\"blocks\":[{\"text\":\"q\",\"type\":\"text\"},{\"id\":\"a\",\"name\":\"read_file\",\"parameters\":{\"id\":\"a\"},\"type\":\"tool_call\"}],\"metadata\":{},\"speaker\":\"human\"},{\"blocks\":[{\"callId\":\"a\",\"error\":\"Tool call interrupted or cancelled\",\"isComplete\":true,\"result\":null,\"toolName\":\"read_file\",\"type\":\"tool_response\"}],\"metadata\":{\"reason\":\"reordered_tool_responses\",\"synthetic\":true},\"speaker\":\"tool\"},{\"blocks\":[{\"id\":\"a\",\"name\":\"read_file\",\"parameters\":{\"id\":\"a\"},\"type\":\"tool_call\"}],\"metadata\":{},\"speaker\":\"ai\"}]"
+      },
+      "openai-chat-plain/raw": [
+        {
+          "length": 256,
+          "sha256": "f877bea2f34e5e32834eec0a446f46ae750a05fef311c80493fe140cc0c4a384",
+          "member": 211,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_a\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"a\\\"}\"}}]}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-plain/normalized": [
+        {
+          "length": 256,
+          "sha256": "f877bea2f34e5e32834eec0a446f46ae750a05fef311c80493fe140cc0c4a384",
+          "member": 211,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_a\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"a\\\"}\"}}]}],\"stream\":false}"
+        }
+      ],
+      "openai-responses/raw": [
+        {
+          "length": 296,
+          "sha256": "bb31c95c6a6ae63e8c1e5bcd663d880c886d75d06ce039cfee13930009b10397",
+          "member": 218,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"},{\"type\":\"function_call\",\"call_id\":\"call_a\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"a\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_a\",\"output\":\"Tool execution cancelled by user\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 268,
+          "sha256": "9332edbca82061e718f7e81042c562e2d21fe0fda1a322a5ac5b1b1d2d03c294",
+          "member": 190,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"},{\"type\":\"function_call_output\",\"call_id\":\"call_a\",\"output\":\"null\"},{\"type\":\"function_call\",\"call_id\":\"call_a\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"a\\\"}\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "anthropic-cache-off/raw": [
+        {
+          "length": 401,
+          "sha256": "1697110c0e761981d0ff617283ca2fb49a3b9c9a549f7bc4b670156ab7af9b12",
+          "member": 269,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_a\",\"name\":\"read_file\",\"input\":{\"id\":\"a\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_a\",\"content\":\"[tool execution interrupted]\",\"is_error\":true}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ],
+      "anthropic-cache-off/normalized": [
+        {
+          "length": 386,
+          "sha256": "b4f4da906e0e5b4df0f9a899734579494e8483c7aa015c20fd1ed18462958a5b",
+          "member": 254,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_a\",\"content\":\"[no tool result]\",\"is_error\":true},{\"type\":\"text\",\"text\":\"q\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_a\",\"name\":\"read_file\",\"input\":{\"id\":\"a\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ]
+    },
+    "normalizer: [human(text q, call X), tool(response X)] keeps the tool unit": {
+      "units": {
+        "units": 2,
+        "sha256": "0b4709a0b12eb31e48636eb63bdf583e4a9af0438b76194ddc9b33476fc2b02b",
+        "json": "[{\"blocks\":[{\"text\":\"q\",\"type\":\"text\"},{\"id\":\"X\",\"name\":\"read_file\",\"parameters\":{\"id\":\"X\"},\"type\":\"tool_call\"}],\"metadata\":{},\"speaker\":\"human\"},{\"blocks\":[{\"callId\":\"X\",\"result\":\"RESULT-X\",\"toolName\":\"read_file\",\"type\":\"tool_response\"}],\"metadata\":{},\"speaker\":\"tool\"}]"
+      },
+      "openai-chat-plain/raw": [
+        {
+          "length": 251,
+          "sha256": "563cc9f3229673bca9150421536793b2c0c2057a74bce4b8d89611bbc6a19d95",
+          "member": 206,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nRESULT-X\",\"tool_call_id\":\"call_X\"}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-plain/normalized": [
+        {
+          "length": 251,
+          "sha256": "563cc9f3229673bca9150421536793b2c0c2057a74bce4b8d89611bbc6a19d95",
+          "member": 206,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nRESULT-X\",\"tool_call_id\":\"call_X\"}],\"stream\":false}"
+        }
+      ],
+      "openai-responses/raw": [
+        {
+          "length": 109,
+          "sha256": "2bf54e8b602586444baeb7942b687bf31528c36838b8307fc03198d069881fa0",
+          "member": 31,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 109,
+          "sha256": "2bf54e8b602586444baeb7942b687bf31528c36838b8307fc03198d069881fa0",
+          "member": 31,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "anthropic-cache-off/raw": [
+        {
+          "length": 163,
+          "sha256": "e8faf9ccc795ca057d2e11bb78da78f4fdb47dd093674e22fdb8e0de4064384f",
+          "member": 31,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ],
+      "anthropic-cache-off/normalized": [
+        {
+          "length": 163,
+          "sha256": "e8faf9ccc795ca057d2e11bb78da78f4fdb47dd093674e22fdb8e0de4064384f",
+          "member": 31,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ]
+    },
+    "normalizer: a call in a human row with its result in the same row": {
+      "units": {
+        "units": 2,
+        "sha256": "3b545ebdaa65ba2a33c65d63a6eac235fb2bcb0f87fc6a735cf726fb529e09c3",
+        "json": "[{\"blocks\":[{\"text\":\"q\",\"type\":\"text\"},{\"id\":\"X\",\"name\":\"read_file\",\"parameters\":{\"id\":\"X\"},\"type\":\"tool_call\"}],\"metadata\":{},\"speaker\":\"human\"},{\"blocks\":[{\"callId\":\"X\",\"result\":\"RESULT-X\",\"toolName\":\"read_file\",\"type\":\"tool_response\"}],\"metadata\":{\"reason\":\"reordered_tool_responses\",\"synthetic\":true},\"speaker\":\"tool\"}]"
+      },
+      "openai-chat-plain/raw": [
+        {
+          "length": 125,
+          "sha256": "dda7c619c7d4a6cd770e3d3f951d7a3782371b3528f700adb942b77ff3f15886",
+          "member": 80,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-plain/normalized": [
+        {
+          "length": 251,
+          "sha256": "563cc9f3229673bca9150421536793b2c0c2057a74bce4b8d89611bbc6a19d95",
+          "member": 206,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nRESULT-X\",\"tool_call_id\":\"call_X\"}],\"stream\":false}"
+        }
+      ],
+      "openai-responses/raw": [
+        {
+          "length": 109,
+          "sha256": "2bf54e8b602586444baeb7942b687bf31528c36838b8307fc03198d069881fa0",
+          "member": 31,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 109,
+          "sha256": "2bf54e8b602586444baeb7942b687bf31528c36838b8307fc03198d069881fa0",
+          "member": 31,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "anthropic-cache-off/raw": [
+        {
+          "length": 163,
+          "sha256": "e8faf9ccc795ca057d2e11bb78da78f4fdb47dd093674e22fdb8e0de4064384f",
+          "member": 31,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ],
+      "anthropic-cache-off/normalized": [
+        {
+          "length": 163,
+          "sha256": "e8faf9ccc795ca057d2e11bb78da78f4fdb47dd093674e22fdb8e0de4064384f",
+          "member": 31,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ]
+    },
+    "normalizer: a call in a tool row with its result in the same row": {
+      "units": {
+        "units": 3,
+        "sha256": "b6280372d0087a1ebc59913410b06d70cdbd2114987ba5d70f39f5f94e62bdea",
+        "json": "[{\"blocks\":[{\"text\":\"q\",\"type\":\"text\"}],\"metadata\":{},\"speaker\":\"human\"},{\"blocks\":[{\"id\":\"X\",\"name\":\"read_file\",\"parameters\":{\"id\":\"X\"},\"type\":\"tool_call\"}],\"metadata\":{\"reason\":\"extracted_tool_call_from_tool_message\",\"synthetic\":true},\"speaker\":\"ai\"},{\"blocks\":[{\"callId\":\"X\",\"result\":\"RESULT-X\",\"toolName\":\"read_file\",\"type\":\"tool_response\"}],\"metadata\":{},\"speaker\":\"tool\"}]"
+      },
+      "openai-chat-plain/raw": [
+        {
+          "length": 251,
+          "sha256": "563cc9f3229673bca9150421536793b2c0c2057a74bce4b8d89611bbc6a19d95",
+          "member": 206,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nRESULT-X\",\"tool_call_id\":\"call_X\"}],\"stream\":false}"
+        }
+      ],
+      "openai-chat-plain/normalized": [
+        {
+          "length": 382,
+          "sha256": "18f07e2974ef0d0addf234fff0410362ed8116bbfc03cdad71c36b4b26b4451c",
+          "member": 337,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_X\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"status:\\nsuccess\\n\\ntoolName:\\nread_file\\n\\nerror:\\n\\n\\noutput:\\nRESULT-X\",\"tool_call_id\":\"call_X\"}],\"stream\":false}"
+        }
+      ],
+      "openai-responses/raw": [
+        {
+          "length": 109,
+          "sha256": "2bf54e8b602586444baeb7942b687bf31528c36838b8307fc03198d069881fa0",
+          "member": 31,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "openai-responses/normalized": [
+        {
+          "length": 272,
+          "sha256": "cf48a9c7957aef3b7e99be6c4f7a7f96e69738d2a3439ad9647103fcefeba571",
+          "member": 194,
+          "body": "{\"model\":\"gpt-5.2\",\"input\":[{\"role\":\"user\",\"content\":\"q\"},{\"type\":\"function_call\",\"call_id\":\"call_X\",\"name\":\"read_file\",\"arguments\":\"{\\\"id\\\":\\\"X\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_X\",\"output\":\"RESULT-X\"}],\"stream\":true,\"instructions\":\"test system prompt\"}"
+        }
+      ],
+      "anthropic-cache-off/raw": [
+        {
+          "length": 163,
+          "sha256": "e8faf9ccc795ca057d2e11bb78da78f4fdb47dd093674e22fdb8e0de4064384f",
+          "member": 31,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ],
+      "anthropic-cache-off/normalized": [
+        {
+          "length": 365,
+          "sha256": "892d606f72452ac627d9a42acce98093cb3a0391d210a6c93163dd632ea92c52",
+          "member": 233,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_X\",\"name\":\"read_file\",\"input\":{\"id\":\"X\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_X\",\"content\":\"RESULT-X\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ]
+    }
+  }
+}

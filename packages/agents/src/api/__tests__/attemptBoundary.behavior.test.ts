@@ -83,6 +83,25 @@ function traceOf(events: readonly AgentEvent[]): string[] {
   return trace;
 }
 
+/** Streams the history and folds the text blocks of AI rows, one row at a time. */
+async function collectAiTexts(
+  rows: AsyncIterable<{
+    readonly speaker: string;
+    readonly blocks: ReadonlyArray<{ readonly type: string; text?: string }>;
+  }>,
+): Promise<string[]> {
+  const texts: string[] = [];
+  for await (const row of rows) {
+    if (row.speaker !== 'ai') continue;
+    for (const block of row.blocks) {
+      if (block.type === 'text' && block.text !== undefined) {
+        texts.push(block.text);
+      }
+    }
+  }
+  return texts;
+}
+
 describe('attempt boundaries across continuation attempts (issue #3840)', () => {
   async function run(
     turns: readonly Turn[],
@@ -96,11 +115,7 @@ describe('attempt boundaries across continuation attempts (issue #3840)', () => 
     });
     try {
       const events = await drain(agent.stream('do the work'));
-      const history = await agent.getHistory();
-      const aiTexts = history
-        .filter((message) => message.speaker === 'ai')
-        .flatMap((message) => message.blocks)
-        .flatMap((block) => (block.type === 'text' ? [block.text] : []));
+      const aiTexts = await collectAiTexts(agent.streamHistory());
       return { events, aiTexts };
     } finally {
       await cleanup();

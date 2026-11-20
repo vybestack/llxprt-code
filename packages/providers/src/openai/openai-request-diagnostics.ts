@@ -3,9 +3,9 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type OpenAI from 'openai';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { OpenAITool } from './schemaConverter.js';
 
 export function logOpenAIChatTools(
   options: Pick<NormalizedGenerateChatOptions, 'tools'>,
@@ -32,15 +32,14 @@ export function logOpenAIRequestDiagnostics(
   providerName: string,
   options: Pick<
     NormalizedGenerateChatOptions,
-    'metadata' | 'resolved' | 'contents' | 'tools'
+    'metadata' | 'resolved' | 'contents' | 'contentCount' | 'tools'
   >,
   requestContext: {
     model: string;
     detectedFormat: string;
-    formattedTools: unknown[] | undefined;
+    formattedTools: OpenAITool[] | undefined;
     streamingEnabled: boolean;
-    requestBody: OpenAI.Chat.ChatCompletionCreateParams;
-    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+    messageCount: number;
   },
   resolveBaseURL: () => string | undefined,
   logger: DebugLogger,
@@ -54,7 +53,7 @@ export function logOpenAIRequestDiagnostics(
     resolvedModel: resolved.model,
     resolvedBaseUrl: resolved.baseURL,
     authTokenPresent: Boolean(resolved.authToken),
-    messageCount: options.contents.length,
+    messageCount: options.contentCount ?? options.contents.length,
     toolCount: options.tools?.length ?? 0,
     metadataKeys: Object.keys(metadata),
   });
@@ -64,15 +63,14 @@ export function logOpenAIRequestDiagnostics(
     streamingEnabled: requestContext.streamingEnabled,
     toolCount: requestContext.formattedTools?.length ?? 0,
     hasAuthToken: Boolean(resolved.authToken),
-    messageCount: requestContext.messagesWithSystem.length,
+    messageCount: requestContext.messageCount,
   });
-  if ('tools' in requestContext.requestBody) {
+  const tools = requestContext.formattedTools;
+  if (tools !== undefined && tools.length > 0) {
     logger.debug(() => `[OpenAIProvider] Exact tools being sent to API:`, {
-      toolCount: requestContext.requestBody.tools?.length,
-      toolNames: requestContext.requestBody.tools?.map((t) =>
-        'function' in t ? t.function.name : undefined,
-      ),
-      firstTool: requestContext.requestBody.tools?.[0],
+      toolCount: tools.length,
+      toolNames: tools.map((t) => t.function.name),
+      firstTool: tools[0],
     });
   }
 }

@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -61,7 +62,7 @@ describe('registered session utility owners', () => {
     );
     expect(history).toContainEqual(expect.objectContaining({ type: 'help' }));
     await owner.dispose();
-    expect(await sibling.getHistory()).toStrictEqual([]);
+    expect(await collectResumeRows(sibling.streamHistory())).toStrictEqual([]);
   });
 
   it('summarizes registered session metrics rather than invocation metrics', async () => {

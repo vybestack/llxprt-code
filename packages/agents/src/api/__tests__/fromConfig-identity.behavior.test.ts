@@ -153,12 +153,12 @@ describe('fromConfig caller identities', () => {
     }
   });
 
-  it('T7b ownership contrast: a createAgent-created Config IS disposed by agent.dispose() — agent.getHistory() rejects as disposed after dispose @requirement:REQ-001.3 @scenario:agent-owned-config @given:a createAgent-built agent (Config owned by the agent) @when:agent.dispose() runs @then:agent.getHistory() rejects as disposed (the ownership flag differentiates createAgent from fromConfig)', async () => {
+  it('T7b ownership contrast: a createAgent-created Config IS disposed by agent.dispose() — agent.session.getHistory() rejects as disposed after dispose @requirement:REQ-001.3 @scenario:agent-owned-config @given:a createAgent-built agent (Config owned by the agent) @when:agent.dispose() runs @then:agent.session.getHistory() rejects as disposed (the ownership flag differentiates createAgent from fromConfig)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      await expect(agent.getHistory()).resolves.toStrictEqual([]);
+      await expect(agent.session.getHistory()).resolves.toStrictEqual([]);
       await agent.dispose();
-      await expect(agent.getHistory()).rejects.toThrow(/disposed/);
+      await expect(agent.session.getHistory()).rejects.toThrow(/disposed/);
     } finally {
       await cleanup();
     }

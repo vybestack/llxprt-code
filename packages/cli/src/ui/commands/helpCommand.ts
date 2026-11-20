@@ -6,7 +6,7 @@
 
 import type { SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
-import { MessageType } from '../types.js';
+import { MessageType, type HistoryItemHelp } from '../types.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 export function createHelpCommand(
@@ -19,7 +19,7 @@ export function createHelpCommand(
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
     action: async () => {
-      const helpItem = {
+      const helpItem: Omit<HistoryItemHelp, 'id'> = {
         type: MessageType.HELP,
         timestamp: new Date(),
       };

@@ -30,7 +30,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import { formatHistoryMemoryBreakdown } from './perfMemoryBreakdown.js';
+import { formatHistoryMemoryBreakdownStream } from './perfMemoryBreakdown.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   perfInspect,
@@ -131,7 +131,7 @@ export interface PerfSnapshotCapability {
 }
 
 export interface PerfCommandOptions {
-  readonly readHistory: () => readonly IContent[] | null;
+  readonly readHistory: () => AsyncIterable<IContent> | null;
   /** Injected live snapshot capability. When null/undefined, bare /perf says unavailable. */
   readonly snapshotCapability?: PerfSnapshotCapability | null;
   /** Override the perf directory for tests. Defaults to Storage.getGlobalLogDir()/perf. */
@@ -299,14 +299,14 @@ function createMemorySubCommand(
     name: 'memory',
     description: 'Show retained conversation size by block type and tool',
     kind: CommandKind.BUILT_IN,
-    action: (): MessageActionReturn => {
+    action: async (): Promise<MessageActionReturn> => {
       const history = readHistory();
       if (history === null) {
         return messageInfo(
           'History is not available. Start a conversation first.',
         );
       }
-      return messageInfo(formatHistoryMemoryBreakdown(history));
+      return messageInfo(await formatHistoryMemoryBreakdownStream(history));
     },
   };
 }

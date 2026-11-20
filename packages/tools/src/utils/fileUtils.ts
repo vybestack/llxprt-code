@@ -812,6 +812,7 @@ async function processMediaFile(
         data: outputBuffer.toString('base64'),
         mimeType: outputMimeType,
         displayName,
+        sourcePath: path.resolve(filePath),
         ...(fileType === 'image'
           ? createImageResizeSourceMetadata(
               resizeSourceBuffer,

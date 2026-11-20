@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 
@@ -29,9 +30,11 @@ import type {
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { vi } from 'bun:test';
 import { join } from 'node:path';
+import { collectHistoryFixture } from './support/collect-history-test-fixture.js';
 import { ChatSession } from '../chatSession.js';
 import { chatSessionPorts } from '../chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -58,16 +61,17 @@ function createMediaHistoryProvider(
     getDefaultModel: () => 'media-history-model',
     getModels: () => Promise.resolve([]),
     async *generateChatCompletion(
-      request: GenerateChatOptions | IContent[],
+      request: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
-      if (Array.isArray(request)) throw new Error('Expected request options');
+      if (Symbol.asyncIterator in request)
+        throw new Error('Expected request options');
       if (
         this.requestMediaResolver === undefined ||
         this.requestMediaBudgetBytes === undefined
       )
         throw new Error('Expected selected media dependencies');
       const resolved = await this.requestMediaResolver.resolve({
-        contents: request.contents,
+        contents: await collectHistoryFixture(request.contents),
         requestId: 'media-history-request',
         turnId: 'media-history-turn',
         aggregateBudgetBytes: this.requestMediaBudgetBytes,
@@ -89,6 +93,16 @@ function createMediaHistoryProvider(
   };
   return provider;
 }
+function fixtureStore(
+  directory: string,
+  quotaBytes = 1024 * 1024,
+): LocalMediaStore {
+  return new LocalMediaStore({
+    rootDirectory: join(directory, 'media'),
+    quotaBytes,
+  });
+}
+
 export function createMediaHistoryChat(
   directory: string,
   lifecycle: ProviderFileLifecycle,
@@ -97,15 +111,14 @@ export function createMediaHistoryChat(
   limits: {
     readonly quotaBytes?: number;
     readonly mediaBudgetBytes?: number;
+    /** A store the caller admits history images into. */
+    readonly store?: LocalMediaStore;
   } = {},
 ): ChatSession {
   const provider = createMediaHistoryProvider(onRequest);
   const setup = createChatSessionRuntime({ provider });
-  const history = new HistoryService();
-  const store = new LocalMediaStore({
-    rootDirectory: join(directory, 'media'),
-    quotaBytes: limits.quotaBytes ?? 1024 * 1024,
-  });
+  const history = new HistoryService({ scratchRoots: historyScratchRoots });
+  const store = limits.store ?? fixtureStore(directory, limits.quotaBytes);
   const state = createAgentRuntimeState({
     runtimeId: 'media-history-runtime',
     provider: provider.name,
@@ -115,6 +128,7 @@ export function createMediaHistoryChat(
   const invocationOwner = new SessionSettingsOwner(setup.settingsService);
   retainedInvocationOwners.push(invocationOwner);
   const runtime = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: (name, parameters, signal) =>
       invocationOwner.prepareProviderInvocation(
         state.runtimeId,

@@ -1,3 +1,5 @@
+import { captureSessionOwner } from './helpers/capture-session-owner.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/types.js';
 import { createRecordingProvider } from './helpers/recording-provider.js';
 import { createRefreshableOAuthContribution } from './helpers/refreshable-oauth-provider.js';
@@ -58,6 +60,7 @@ function transfer(operation: AgentProfilePreflight): AgentActivationBootstrap {
 }
 
 describe('post-config preflight ownership', () => {
+  let activeClient: AgentClientContract;
   const credentials = useOwnedCredentials();
   it('owns foreground workspace acquisition and leaves a same-label peer usable after retirement', async () => {
     const roots = await Promise.all(
@@ -189,14 +192,17 @@ describe('post-config preflight ownership', () => {
       });
 
       try {
-        await operation.preparePostConfiguration(
-          config,
-          filesystem,
-          memory,
-          trust,
-          () => trust.dispose(),
-          supplied,
+        const captured = await captureSessionOwner(() =>
+          operation.preparePostConfiguration(
+            config,
+            filesystem,
+            memory,
+            trust,
+            () => trust.dispose(),
+            supplied,
+          ),
         );
+        activeClient = captured.owner.clients.getAgentClient();
       } finally {
         policyObservation.mockRestore();
         managerObservation.mockRestore();
@@ -226,17 +232,16 @@ describe('post-config preflight ownership', () => {
         const activation = transfer(operation);
         const entered = gate();
         const released = gate();
-        const getHistory = AgentClient.prototype.getHistory;
-        const held = spyOn(
-          AgentClient.prototype,
-          'getHistory',
-        ).mockImplementation(async function (this: AgentClient) {
-          const history = await getHistory.call(this);
-          entered.release();
-          await released.promise;
-          return history;
-        });
-        const heldRead = activation.readHistory();
+        const getHistory = activeClient.streamHistory;
+        const held = spyOn(activeClient, 'streamHistory').mockImplementation(
+          async function* (this: AgentClient) {
+            const history = getHistory.call(this);
+            entered.release();
+            await released.promise;
+            yield* history;
+          },
+        );
+        const heldRead = readActivationHistory(activation);
         void heldRead.catch(() => undefined);
         await entered.promise;
         held.mockRestore();
@@ -264,7 +269,9 @@ describe('post-config preflight ownership', () => {
           expect(supplied?.readNamedParameter('context-limit')).toBe(
             borrowed ? 16384 : undefined,
           );
-          await expect(activation.readHistory()).rejects.toThrow('disposed');
+          await expect(readActivationHistory(activation)).rejects.toThrow(
+            'disposed',
+          );
         } finally {
           released.release();
           held.mockRestore();
@@ -331,7 +338,7 @@ describe('post-config preflight ownership', () => {
               expect(supplied?.readNamedParameter('context-limit')).toBe(
                 borrowed ? 16384 : undefined,
               );
-              await expect(activation.readHistory()).rejects.toThrow(
+              await expect(readActivationHistory(activation)).rejects.toThrow(
                 'disposed',
               );
             } finally {
@@ -381,7 +388,7 @@ describe('post-config preflight ownership', () => {
           ),
         ).rejects.toMatchObject({ name: 'AbortError' });
         expect(synchronousFailure).toMatchObject({ name: 'AbortError' });
-        expect(await activation.readHistory()).toStrictEqual([]);
+        expect(await readActivationHistory(activation)).toStrictEqual([]);
       } finally {
         observation.mockRestore();
       }
@@ -396,7 +403,7 @@ describe('post-config preflight ownership', () => {
       if (result.token === undefined)
         throw new Error('Missing activation receipt');
       const activation = transfer(operation);
-      const history = await activation.readHistory();
+      const history = await readActivationHistory(activation);
       const agent = await AgentProfilePreflight.createForegroundAgent(
         operation,
         result.token,
@@ -404,9 +411,11 @@ describe('post-config preflight ownership', () => {
         {},
       );
       try {
-        expect(await agent.getHistory()).toStrictEqual(history);
+        expect(await agent.session.getHistory()).toStrictEqual(history);
         expect(agent.listTools().length).toBeGreaterThan(0);
-        await expect(activation.readHistory()).rejects.toThrow('disposed');
+        await expect(readActivationHistory(activation)).rejects.toThrow(
+          'disposed',
+        );
       } finally {
         await agent.dispose();
       }
@@ -423,17 +432,17 @@ describe('post-config preflight ownership', () => {
       const activation = transfer(operation);
       const entered = gate();
       const released = gate();
-      const getHistory = AgentClient.prototype.getHistory;
+      const getHistory = activeClient.streamHistory;
       const observation = spyOn(
-        AgentClient.prototype,
-        'getHistory',
-      ).mockImplementation(async function (this: AgentClient) {
-        const history = await getHistory.call(this);
+        activeClient,
+        'streamHistory',
+      ).mockImplementation(async function* (this: AgentClient) {
+        const history = getHistory.call(this);
         entered.release();
         await released.promise;
-        return history;
+        yield* history;
       });
-      const history = activation.readHistory();
+      const history = readActivationHistory(activation);
       await entered.promise;
       observation.mockRestore();
       let transferred = false;
@@ -447,7 +456,7 @@ describe('post-config preflight ownership', () => {
         return agent;
       });
       void pending.catch(() => undefined);
-      const lateRead = activation.readHistory();
+      const lateRead = readActivationHistory(activation);
       void lateRead.catch(() => undefined);
       try {
         expect(transferred).toBe(false);
@@ -455,7 +464,7 @@ describe('post-config preflight ownership', () => {
         await expect(lateRead).rejects.toThrow('disposed');
         const agent = await pending;
         try {
-          expect(await agent.getHistory()).toStrictEqual(await history);
+          expect(await agent.session.getHistory()).toStrictEqual(await history);
           expect(agent.listTools().length).toBeGreaterThan(0);
         } finally {
           await agent.dispose();
@@ -476,15 +485,14 @@ describe('post-config preflight ownership', () => {
   ) {
     const entered = gate();
     const released = gate();
-    const observation = spyOn(
-      AgentClient.prototype,
-      'getHistory',
-    ).mockImplementation(async () => {
-      entered.release();
-      await released.promise;
-      throw failure;
-    });
-    const history = activation.readHistory();
+    const observation = spyOn(activeClient, 'streamHistory').mockImplementation(
+      async function* () {
+        entered.release();
+        await released.promise;
+        yield await Promise.reject(failure);
+      },
+    );
+    const history = readActivationHistory(activation);
     const seen = history.then(
       () => undefined,
       (error: unknown) => error,
@@ -551,7 +559,7 @@ describe('post-config preflight ownership', () => {
       if (result.token === undefined)
         throw new Error('Missing activation receipt');
       const activation = transfer(operation);
-      const history = await activation.readHistory();
+      const history = await readActivationHistory(activation);
       const agent = await AgentProfilePreflight.createForegroundAgent(
         operation,
         result.token,
@@ -559,9 +567,11 @@ describe('post-config preflight ownership', () => {
         {},
       );
       try {
-        expect(await agent.getHistory()).toStrictEqual(history);
+        expect(await agent.session.getHistory()).toStrictEqual(history);
         expect(agent.listTools().length).toBeGreaterThan(0);
-        await expect(activation.readHistory()).rejects.toThrow('disposed');
+        await expect(readActivationHistory(activation)).rejects.toThrow(
+          'disposed',
+        );
       } finally {
         await agent.dispose();
       }
@@ -577,7 +587,7 @@ describe('post-config preflight ownership', () => {
         if (result.token === undefined)
           throw new Error('Missing activation receipt');
         const activation = transfer(operation);
-        const history = await activation.readHistory();
+        const history = await readActivationHistory(activation);
         const agent = await AgentProfilePreflight.createForegroundAgent(
           operation,
           result.token,
@@ -585,7 +595,9 @@ describe('post-config preflight ownership', () => {
           {},
         );
         try {
-          expect((await agent.getHistory()).length - history.length).toBe(0);
+          expect(
+            (await agent.session.getHistory()).length - history.length,
+          ).toBe(0);
           expect(agent.getRuntimeId()).toBe('post-config');
           expect(agent.getProvider()).toBe('openai');
           expect(agent.getModel()).toBe('test-model');
@@ -817,3 +829,7 @@ describe('post-config preflight ownership', () => {
     });
   });
 });
+
+async function readActivationHistory(activation: AgentActivationBootstrap) {
+  return Array.fromAsync(activation.streamHistory());
+}

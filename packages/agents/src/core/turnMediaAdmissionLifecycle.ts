@@ -14,16 +14,46 @@ export async function failedTurnCleanup(
 ): Promise<readonly unknown[]> {
   const failures: unknown[] = [];
   try {
-    await prepared.releaseIfUncommitted();
-  } catch (error: unknown) {
-    failures.push(error);
-  }
-  try {
     await semanticMediaPurge?.failAfterProcessingError();
   } catch (error: unknown) {
     failures.push(error);
   }
+  try {
+    await prepared.releaseIfUncommitted();
+  } catch (error: unknown) {
+    failures.push(error);
+  }
   return failures;
+}
+
+export async function finishStreamTurn(
+  prepared: PreparedUserTurn,
+  semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+  releaseRequest: () => Promise<void>,
+  onDone: () => void,
+  primaryFailure: { readonly error: unknown } | undefined,
+): Promise<void> {
+  const cleanupFailures: unknown[] = prepared.isTransferredToHistory()
+    ? []
+    : [...(await failedTurnCleanup(prepared, semanticMediaPurge))];
+  try {
+    await releaseRequest();
+  } catch (error: unknown) {
+    cleanupFailures.push(error);
+  }
+  try {
+    onDone();
+  } catch (error: unknown) {
+    cleanupFailures.push(error);
+  }
+  if (cleanupFailures.length > 0) {
+    throw new AggregateError(
+      primaryFailure === undefined
+        ? cleanupFailures
+        : [primaryFailure.error, ...cleanupFailures],
+      'Stream turn media cleanup was incomplete',
+    );
+  }
 }
 
 export async function throwAfterFailedTurnCleanup(

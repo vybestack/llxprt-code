@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Google LLC
@@ -275,7 +276,7 @@ describe('E2E Tests', () => {
     process.chdir(workspace);
 
     const taskStore = new InMemoryTaskStore();
-    const agentExecutor = new CoderAgentExecutor(taskStore);
+    const agentExecutor = new CoderAgentExecutor(scratchRoots, taskStore);
     contextExtensions = [
       {
         name: 'test-extension',
@@ -515,3 +516,5 @@ describe('E2E Tests', () => {
     }
   });
 });
+
+const scratchRoots = new ScratchRootOwner();

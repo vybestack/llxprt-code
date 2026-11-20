@@ -32,7 +32,7 @@ import {
 } from './hooks/agentStream/useStreamOwnerCallbacks.js';
 /** The exact agent operations the stream input path binds. */
 export interface InputAgentOperations {
-  readonly readHistory: Agent['getHistory'];
+  readonly readHistory: Agent['streamHistory'];
   readonly stream: Agent['stream'];
   readonly appendHistory: Agent['addHistory'];
   readonly injectSteer: Agent['injectSteer'];

@@ -19,6 +19,10 @@ import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import {
+  compressMiddleOutViaDisk,
+  requireMiddleOutApplied,
+} from './__tests__/support/middleout-disk-adapter.js';
+import {
   buildContext,
   createCaptureProvider,
   createFakeProvider,
@@ -66,8 +70,11 @@ describe('MiddleOutStrategy media sanitization', () => {
       expect(providerTexts.some((text) => text.includes('JVBERi0xLjQ='))).toBe(
         false,
       );
-      expect(result.metadata.llmCallMade).toBe(true);
-      expect(result.metadata.strategyUsed).toBe('middle-out');
+      expect(providerTexts.length).toBeGreaterThan(0);
+      expect(
+        new MiddleOutStrategy(undefined, undefined, undefined, undefined).name,
+      ).toBe('middle-out');
+      expect(result.newHistory[result.top].metadata?.isSummary).toBe(true);
       expect(mediaBlocks).toHaveLength(0);
       expect(hasScreenshotPlaceholder).toBe(true);
       expect(hasPdfPlaceholder).toBe(true);
@@ -132,13 +139,9 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+        const result = requireMiddleOutApplied(
+          await compressMiddleOutViaDisk(ctx),
         );
-        const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
         const mediaBlocks = allBlocks.filter((b) => b.type === 'media');
@@ -158,7 +161,7 @@ describe('MiddleOutStrategy media sanitization', () => {
             t.includes('report.pdf'),
         );
 
-        const bottomCount = result.metadata.bottomPreserved!;
+        const bottomCount = result.bottom;
         const bottomMessages = result.newHistory.slice(
           result.newHistory.length - bottomCount,
         );
@@ -241,21 +244,17 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+        const result = requireMiddleOutApplied(
+          await compressMiddleOutViaDisk(ctx),
         );
-        const result = await strategy.compress(ctx);
 
-        const topCount = result.metadata.topPreserved!;
+        const topCount = result.top;
         const topMessages = result.newHistory.slice(0, topCount);
         const topMediaBlocks = topMessages.flatMap((m) =>
           m.blocks.filter((b) => b.type === 'media'),
         );
 
-        const bottomCount = result.metadata.bottomPreserved!;
+        const bottomCount = result.bottom;
         const bottomMessages = result.newHistory.slice(
           result.newHistory.length - bottomCount,
         );
@@ -288,7 +287,8 @@ describe('MiddleOutStrategy media sanitization', () => {
       expect(
         providerTexts.some((text) => text.includes('malformed-base64===')),
       ).toBe(false);
-      expect(result.metadata.llmCallMade).toBe(true);
+      expect(providerTexts.length).toBeGreaterThan(0);
+      expect(result.newHistory[result.top].metadata?.isSummary).toBe(true);
       expect(mediaBlocks).toHaveLength(0);
       expect(hasCrashPlaceholder).toBe(true);
       expect(ackMsg.speaker).toBe('ai');
@@ -343,13 +343,9 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+        const result = requireMiddleOutApplied(
+          await compressMiddleOutViaDisk(ctx),
         );
-        const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
         const mediaBlocks = allBlocks.filter((b) => b.type === 'media');
@@ -364,7 +360,7 @@ describe('MiddleOutStrategy media sanitization', () => {
             t.includes('[Attached image: crash-screenshot.png]'),
         );
 
-        const topCount = result.metadata.topPreserved!;
+        const topCount = result.top;
         const ackMsg = result.newHistory[topCount + 1];
 
         const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string })
@@ -384,7 +380,8 @@ describe('MiddleOutStrategy media sanitization', () => {
       const { result, mediaBlocks, hasDiagramPlaceholder, providerTexts } =
         await observeUsesPlaceholdersWhenTheLargeLastHumanPromptInCompressRangeIncludes();
       expect(providerTexts.some((text) => text.includes('AAAA='))).toBe(false);
-      expect(result.metadata.llmCallMade).toBe(true);
+      expect(providerTexts.length).toBeGreaterThan(0);
+      expect(result.newHistory[result.top].metadata?.isSummary).toBe(true);
       expect(mediaBlocks).toHaveLength(0);
       expect(hasDiagramPlaceholder).toBe(true);
     });
@@ -440,13 +437,9 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+        const result = requireMiddleOutApplied(
+          await compressMiddleOutViaDisk(ctx),
         );
-        const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
         const mediaBlocks = allBlocks.filter((b) => b.type === 'media');
@@ -468,7 +461,8 @@ describe('MiddleOutStrategy media sanitization', () => {
       expect(
         providerTexts.some((text) => text.includes('base64imagedata==')),
       ).toBe(false);
-      expect(result.metadata.llmCallMade).toBe(true);
+      expect(providerTexts.length).toBeGreaterThan(0);
+      expect(result.newHistory[result.top].metadata?.isSummary).toBe(true);
       expect(mediaInRequest).toHaveLength(0);
       expect(ackText).not.toContain('base64imagedata==');
     });
@@ -519,13 +513,9 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+        const result = requireMiddleOutApplied(
+          await compressMiddleOutViaDisk(ctx),
         );
-        const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
         const mediaInRequest = allBlocks.filter((b) => b.type === 'media');
@@ -533,7 +523,7 @@ describe('MiddleOutStrategy media sanitization', () => {
         const textBlocks = allBlocks.filter(isTextBlock);
         const providerTexts = textBlocks.map((block) => block.text);
 
-        const topCount = result.metadata.topPreserved!;
+        const topCount = result.top;
         const ackMsg = result.newHistory[topCount + 1];
         const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string })
           .text;
@@ -590,15 +580,11 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
+        const result = requireMiddleOutApplied(
+          await compressMiddleOutViaDisk(ctx),
         );
-        const result = await strategy.compress(ctx);
 
-        const topCount = result.metadata.topPreserved!;
+        const topCount = result.top;
         const ackMsg = result.newHistory[topCount + 1];
         const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string })
           .text;

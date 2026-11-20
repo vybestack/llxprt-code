@@ -66,6 +66,25 @@ const createSingleLineState = (
   cursorCol,
 });
 
+describe('same-chunk input reads', () => {
+  it('exposes pasted text and cursor before React commits the next render', () => {
+    const { result } = renderHook(() =>
+      useTextBuffer({ viewport, isValidPath: () => false }),
+    );
+    let submitted = '';
+    let cursor: readonly number[] = [];
+    act(() => {
+      const buffer = result.current;
+      buffer.insert('first prompt', { paste: true });
+      submitted = buffer.text;
+      cursor = buffer.cursor;
+    });
+    expect(submitted).toBe('first prompt');
+    expect(cursor).toStrictEqual([0, 12]);
+    expect(result.current.text).toBe(submitted);
+  });
+});
+
 describe('set_text action', () => {
   it('should set new text and move cursor to the end', () => {
     const action: TextBufferAction = {

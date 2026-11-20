@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { act } from 'react';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
@@ -54,6 +55,7 @@ describe('Agent-owned CLI client tools', () => {
   it('renders real model tools without rescheduling them through the client channel', async () => {
     const model = modelTurns();
     const a = await owner('model', model);
+    await a.agent.session.setRecording({ enabled: true });
     const display: unknown[] = [];
     const operations = agentStreamOperations(a.agent);
     const stream = renderHook(() =>
@@ -87,7 +89,12 @@ describe('Agent-owned CLI client tools', () => {
       });
       expect(await a.effects()).toStrictEqual(['model']);
       expect(a.completed).toStrictEqual([]);
-      expect(JSON.stringify(display)).toContain('model-call');
+      const journal = await readJournalItems(a.agent);
+      expect(
+        journal
+          .flatMap((item) => (item.type === 'tool_group' ? item.tools : []))
+          .map((tool) => [tool.callId, tool.status]),
+      ).toStrictEqual([['model-call', 'Success']]);
       expect(model.requests).toHaveLength(2);
     } finally {
       stream.unmount();

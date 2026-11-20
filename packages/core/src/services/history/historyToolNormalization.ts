@@ -15,12 +15,26 @@
  */
 
 import type { DebugLogger } from '../../debug/index.js';
+import {
+  logReconstructedCalls,
+  logUnmatchedResponse,
+} from './providerDiagnostics.js';
 import type {
   IContent,
   ToolCallBlock,
   ToolResponseBlock,
   MediaBlock,
+  MediaDroppedBlock,
 } from './IContent.js';
+
+/** Media that rides with a tool response: stored bytes or a dropped reference. */
+type ToolMediaBlock = MediaBlock | MediaDroppedBlock;
+
+function isToolMedia(
+  block: IContent['blocks'][number],
+): block is ToolMediaBlock {
+  return block.type === 'media' || block.type === 'media_dropped';
+}
 
 /** Helper predicate: checks if content has valid blocks array with at least one element. */
 function hasValidBlocks(content: IContent): boolean {
@@ -31,7 +45,7 @@ function hasValidBlocks(content: IContent): boolean {
 /** Internal accumulator for the tool-response reassignment pass. */
 interface ReassignMaps {
   responsesByToolCallIndex: Map<number, ToolResponseBlock[]>;
-  mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>;
+  mediaBlocksByToolCallIndex: Map<number, ToolMediaBlock[]>;
   keptResponseByCallId: Map<
     string,
     {
@@ -189,10 +203,7 @@ export class HistoryToolNormalization {
       description: 'Reconstructed tool call after compression',
     }));
 
-    logger.warn('Synthesizing missing tool_call for responses', {
-      callIds: reconstructedBlocks.map((block) => block.id),
-      toolNames: reconstructedBlocks.map((block) => block.name),
-    });
+    logReconstructedCalls(logger, reconstructedBlocks);
 
     for (const block of reconstructedBlocks) {
       seenToolCallIds.add(block.id);
@@ -377,9 +388,7 @@ export class HistoryToolNormalization {
       return content;
     }
 
-    const mediaBlocks = content.blocks.filter(
-      (b): b is MediaBlock => b.type === 'media',
-    );
+    const mediaBlocks = content.blocks.filter(isToolMedia);
     let mediaAssignedToIndex: number | undefined;
 
     for (const toolResponse of toolResponseBlocks) {
@@ -394,7 +403,7 @@ export class HistoryToolNormalization {
     }
 
     const remainingBlocks = content.blocks.filter(
-      (b) => b.type !== 'tool_response' && b.type !== 'media',
+      (b) => b.type !== 'tool_response' && !isToolMedia(b),
     );
 
     if (content.speaker === 'tool' || remainingBlocks.length === 0) {
@@ -412,7 +421,7 @@ export class HistoryToolNormalization {
     toolResponse: ToolResponseBlock,
     toolCallIndexById: Map<string, number>,
     maps: ReassignMaps,
-    mediaBlocks: MediaBlock[],
+    mediaBlocks: ToolMediaBlock[],
     mediaAssignedToIndex: number | undefined,
     logger: DebugLogger,
   ): number | undefined {
@@ -423,10 +432,7 @@ export class HistoryToolNormalization {
 
     const toolCallIndex = toolCallIndexById.get(callId);
     if (toolCallIndex === undefined) {
-      logger.warn('Tool response missing matching tool call', {
-        callId,
-        toolName: toolResponse.toolName,
-      });
+      logUnmatchedResponse(logger, toolResponse);
       return mediaAssignedToIndex;
     }
 
@@ -487,7 +493,7 @@ export class HistoryToolNormalization {
 
   /** Assign media blocks to a tool-call index, if not already assigned. */
   private static assignMedia(
-    mediaBlocks: MediaBlock[],
+    mediaBlocks: ToolMediaBlock[],
     mediaAssignedToIndex: number | undefined,
     toolCallIndex: number,
     maps: ReassignMaps,
@@ -516,7 +522,7 @@ export class HistoryToolNormalization {
       source.speaker !== 'tool' ||
       !hasValidBlocks(source) ||
       source.blocks.some(
-        (block) => block.type !== 'tool_response' && block.type !== 'media',
+        (block) => block.type !== 'tool_response' && !isToolMedia(block),
       )
     ) {
       return undefined;

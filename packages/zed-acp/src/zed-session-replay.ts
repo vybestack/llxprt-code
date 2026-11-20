@@ -3,6 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  historyWithTitle,
+  type SessionTitleTracker,
+} from './zed-session-info.js';
+import { wrapReplayFailure } from './zed-session-errors.js';
 
 /**
  * IContent -> ACP SessionUpdate mapping for ACP session/load (loadSession)
@@ -593,4 +598,40 @@ function asRecord(value: unknown): Dict | null {
     return value as Dict;
   }
   return null;
+}
+
+export async function* streamHistoryToSessionUpdates(
+  items: AsyncIterable<IContent> | Iterable<IContent>,
+): AsyncIterable<acp.SessionUpdate> {
+  const pending = new Map<string, acp.ToolKind>();
+  for await (const raw of items) {
+    const item = asRenderableContent(raw);
+    if (item === null) continue;
+    for (const rawBlock of item.blocks) {
+      const block = asRenderableBlock(rawBlock);
+      if (block === null) continue;
+      const updates: acp.SessionUpdate[] = [];
+      appendBlockUpdates(item.speaker, block, pending, updates);
+      yield* updates;
+    }
+  }
+  for (const [toolCallId, kind] of pending)
+    yield buildSyntheticFailedUpdate(toolCallId, kind);
+}
+
+export async function deliverHistoryUpdates(
+  items: AsyncIterable<IContent> | Iterable<IContent>,
+  tracker: SessionTitleTracker,
+  sessionId: string,
+  send: (update: acp.SessionUpdate) => Promise<void>,
+): Promise<void> {
+  try {
+    for await (const update of streamHistoryToSessionUpdates(
+      historyWithTitle(items, tracker),
+    ))
+      await send(update);
+    tracker.hydrateFromHistory([]);
+  } catch (error) {
+    throw wrapReplayFailure(sessionId, error);
+  }
 }

@@ -54,13 +54,13 @@ describe('History observer admission', () => {
       const held = spyOn(
         AgentClient.prototype,
         'getHistory',
-      ).mockImplementation(async function (this: AgentClient) {
-        const result = await read.call(this);
+      ).mockImplementation(async function* (this: AgentClient) {
+        const result = read.call(this);
         const history = this.getHistoryService();
         if (history !== null) histories.add(history);
         entered.resolve();
         await release.promise;
-        return result;
+        yield* result;
       });
       const accepted = agent.session.getHistory();
       await entered.promise;

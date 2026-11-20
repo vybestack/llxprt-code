@@ -114,7 +114,10 @@ describe('Isolated session client collaborators', () => {
       credentials().authority,
       builtRelease,
     );
-    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtTokenizer = configureProviderTokenizer(
+      builtManager,
+      builtConfig.scratchRoots,
+    );
     const builtContent = createRuntimeContentGeneratorFactory();
     const builtOAuth = acquirePreferredOAuth(
       undefined,
@@ -249,14 +252,16 @@ describe('Isolated session client collaborators', () => {
           blocks: [{ type: 'text', text: 'independent client history' }],
         });
         expect(
-          (await client.getHistory()).filter(
+          (await Array.fromAsync(client.getHistory())).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(1);
         expect(
-          (await (await currentOwnerClient(builtOwner)).getHistory()).filter(
-            (item) => item.speaker === 'human',
-          ),
+          (
+            await Array.fromAsync(
+              (await currentOwnerClient(builtOwner)).getHistory(),
+            )
+          ).filter((item) => item.speaker === 'human'),
         ).toHaveLength(0);
         await owner.dispose();
         await builtOwner.clients.refreshAuth();

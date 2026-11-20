@@ -1,3 +1,4 @@
+import { streamRecordedRows } from './__tests__/journal-recording.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import {
@@ -212,7 +213,7 @@ describe('CLI session client bootstrap ownership', () => {
         agent.session.listBrowserTargetsDetailed.bind(agent.session),
         argv,
         null,
-      ).then(({ history }) => history);
+      ).then(({ resumedBoot }) => resumedBoot);
       await agent.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'pre-agent content' }],
@@ -250,12 +251,6 @@ describe('CLI session client bootstrap ownership', () => {
     firstEvents: z.array(eventSchema).optional(),
     firstOwnerClosed: z.boolean().optional(),
   });
-  const contentSchema = z.object({
-    type: z.string(),
-    payload: z
-      .object({ content: z.object({ speaker: z.string() }) })
-      .optional(),
-  });
   const requestSchema = z.object({
     model: z.string(),
     messages: z.array(z.object({ role: z.string(), content: z.unknown() })),
@@ -292,13 +287,9 @@ describe('CLI session client bootstrap ownership', () => {
   }
 
   async function transcript(path: string) {
-    const text = await readFile(path, 'utf8');
-    const speakers = text
-      .trim()
-      .split('\n')
-      .map((line): unknown => JSON.parse(line))
-      .filter((event) => eventSchema.parse(event).type === 'content')
-      .map((event) => contentSchema.parse(event).payload?.content.speaker);
+    const rows = await Array.fromAsync(streamRecordedRows(path));
+    const text = JSON.stringify(rows);
+    const speakers = rows.map((row) => row.speaker);
     return { text, speakers };
   }
 

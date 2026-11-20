@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAnthropicApiCall } from './AnthropicApiExecution.js';
@@ -17,22 +18,27 @@ describe('Anthropic bounded HTTP transport', () => {
     let wireBody = '';
     let streamed = false;
     const contentLength: { value: string | null } = { value: null };
-    const fetchTransport: typeof fetch = async (_input, init) => {
-      streamed = init?.body instanceof ReadableStream;
-      contentLength.value = new Headers(init?.headers).get('content-length');
-      wireBody = await bodyText(init?.body);
-      return Response.json({
-        id: 'msg_test',
-        type: 'message',
-        role: 'assistant',
-        model: 'claude-test',
-        content: [{ type: 'text', text: 'ok' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: { input_tokens: 1, output_tokens: 1 },
-      });
-    };
-    const client = new Anthropic({ apiKey: 'test-key', fetch: fetchTransport });
+    const fetchTransport: typeof fetch = withFetchPreconnect(
+      async (_input, init) => {
+        streamed = init?.body instanceof ReadableStream;
+        contentLength.value = new Headers(init?.headers).get('content-length');
+        wireBody = await bodyText(init?.body);
+        return Response.json({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-test',
+          content: [{ type: 'text', text: 'ok' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        });
+      },
+    );
+    const client = new Anthropic({
+      apiKey: 'test-key',
+      fetch: withFetchPreconnect(fetchTransport),
+    });
     const requestBody: Record<string, unknown> = {
       model: 'claude-test',
       max_tokens: 32,

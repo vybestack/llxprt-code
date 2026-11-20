@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export { dumpRequestContextStream } from './dumpRequestContextStream.js';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
@@ -176,6 +177,17 @@ export function shouldDump(
   return isError;
 }
 
+/**
+ * Whether `dumpcontext` writes a request dump on success or on failure, so a
+ * prepared request must retain a lazy diagnostic view of its body.
+ */
+export function wantsRequestDump(mode: unknown): boolean {
+  return (
+    shouldDump(mode as DumpMode | undefined, false) ||
+    shouldDump(mode as DumpMode | undefined, true)
+  );
+}
+
 export interface DumpRequestResult {
   baseId: string;
   requestFilename: string;
@@ -198,6 +210,55 @@ async function writeDumpFile(filepath: string, data: unknown): Promise<void> {
     mode: 0o600,
   });
   await fs.rename(temporary, filepath);
+}
+
+/** Attempt correlation fields written beside `request` in a dump file. */
+export function dumpCorrelationFields(
+  correlation: DumpAttemptCorrelation | undefined,
+): Partial<
+  Pick<DumpData, 'promptId' | 'attemptIndex' | 'runtimeId' | 'outcome'>
+> {
+  if (correlation === undefined) return {};
+  return {
+    promptId: correlation.promptId,
+    attemptIndex: correlation.attemptIndex,
+    runtimeId: correlation.runtimeId,
+    ...(correlation.outcome === undefined
+      ? {}
+      : { outcome: correlation.outcome }),
+  };
+}
+
+/**
+ * Retention bracket shared by the in-memory and streamed request writers:
+ * deferred groups are marked active before the write so pruning cannot remove
+ * a refused request before its pair is published; immediate dumps prune after.
+ */
+export async function beginRequestDumpRetention(
+  dumpDir: string,
+  baseId: string,
+  correlation: DumpAttemptCorrelation | undefined,
+  deferRetention: boolean,
+): Promise<void> {
+  if (deferRetention)
+    await markDumpGroupActive(
+      dumpDir,
+      baseId,
+      correlation?.retentionCoordinator,
+    );
+}
+
+export async function endRequestDumpRetention(
+  dumpDir: string,
+  correlation: DumpAttemptCorrelation | undefined,
+  deferRetention: boolean,
+): Promise<void> {
+  if (!deferRetention)
+    await pruneDumpFiles(
+      dumpDir,
+      correlation?.retentionLimits,
+      correlation?.retentionCoordinator,
+    );
 }
 
 async function pruneDumpFiles(
@@ -250,30 +311,15 @@ export async function dumpRequestContext(
   const data: DumpData = {
     provider,
     timestamp: new Date().toISOString(),
-    ...(correlation === undefined
-      ? {}
-      : {
-          promptId: correlation.promptId,
-          attemptIndex: correlation.attemptIndex,
-          runtimeId: correlation.runtimeId,
-          ...(correlation.outcome === undefined
-            ? {}
-            : { outcome: correlation.outcome }),
-        }),
+    ...dumpCorrelationFields(correlation),
     request: redactedRequest,
     // Sibling of `request`, never inside `request.body` (#1721).
     ...(chronology ? { chronology } : {}),
   };
 
-  if (deferRetention)
-    await markDumpGroupActive(dumpDir, id, correlation?.retentionCoordinator);
+  await beginRequestDumpRetention(dumpDir, id, correlation, deferRetention);
   await writeDumpFile(filepath, data);
-  if (!deferRetention)
-    await pruneDumpFiles(
-      dumpDir,
-      correlation?.retentionLimits,
-      correlation?.retentionCoordinator,
-    );
+  await endRequestDumpRetention(dumpDir, correlation, deferRetention);
   logger.debug(() => `Request context dumped to: ${filepath}`);
 
   return { baseId: id, requestFilename, dumpDir };

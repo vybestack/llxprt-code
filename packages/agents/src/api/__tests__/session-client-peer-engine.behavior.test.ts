@@ -60,10 +60,12 @@ describe('Explicit session client lifetime', () => {
         blocks: [{ type: 'text', text: 'right continues' }],
       });
       expect(
-        (await b.getHistory()).filter((item) => item.speaker === 'human'),
+        (await b.session.getHistory()).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(2);
       expect(
-        (await b.getHistory())
+        (await b.session.getHistory())
           .flatMap((item) => item.blocks)
           .filter((block) => block.type === 'text')
           .map((block) => block.text),

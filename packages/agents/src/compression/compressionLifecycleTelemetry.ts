@@ -14,7 +14,6 @@ import type {
   CompressionResultMetadata,
   CompressionStrategyName,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 /**
  * Resolves the compression model and provider from the provider-resolver
@@ -62,9 +61,19 @@ export interface AppliedCompressionTelemetry {
   readonly attempts: number;
 }
 
-/** Counts strategy invocations and retains metadata from the applied result. */
+/** The part of a strategy result's metadata that telemetry reports (#4067). */
+export type AppliedStrategyReport = Pick<
+  CompressionResultMetadata,
+  'strategyUsed' | 'llmCallMade' | 'usage'
+>;
+
+/**
+ * Per-compression bookkeeping for {@link AppliedCompressionTelemetry}: counts
+ * strategy invocations and keeps the metadata of the strategy result that was
+ * applied. The handler calls `begin` at the start of each compression.
+ */
 export class CompressionRunReport {
-  private applied: CompressionResultMetadata | undefined;
+  private applied: AppliedStrategyReport | undefined;
   private attempts = 0;
 
   begin(): void {
@@ -76,7 +85,7 @@ export class CompressionRunReport {
     this.attempts += 1;
   }
 
-  recordApplied(metadata: CompressionResultMetadata): void {
+  recordApplied(metadata: AppliedStrategyReport): void {
     this.applied = metadata;
   }
 
@@ -135,7 +144,7 @@ export async function emitCompressionLifecycleEvent(
   if (!logger.isEnabled()) return;
 
   const sessionId = runtimeCtx.state.sessionId;
-  const turnMarker = findCurrentTurnMarker(history.getRawHistory());
+  const turnMarker = await history.getCurrentTurnMarker();
   const turnId = turnMarker?.turnId ?? null;
 
   const resolved =

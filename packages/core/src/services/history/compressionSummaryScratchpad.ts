@@ -292,6 +292,43 @@ export function stripScratchpadFromCompressionSummaries(
   });
 }
 
+/**
+ * Whether `header` may be a compression summary before its text is read:
+ * it carries a summary tag, or it is a human entry with summarizer usage
+ * that the legacy text shape may confirm. Rows that fail this test never
+ * need their blocks inspected for scratchpads.
+ */
+export function mayBeCompressionSummary(header: IContent): boolean {
+  return (
+    hasSummaryTag(header) ||
+    (header.speaker === 'human' && header.metadata?.usage !== undefined)
+  );
+}
+
+/**
+ * The blocks `content` is sent with: a compression summary's text blocks
+ * without scratchpad sections, every other entry's blocks as they are.
+ */
+export function compressionSummaryRequestBlocks(
+  content: IContent,
+): ContentBlock[] {
+  return isCompressionSummary(content)
+    ? stripBlocks(content.blocks)
+    : content.blocks;
+}
+
+/**
+ * A compression summary that held nothing but scratchpad sections. Such an
+ * entry stays in the stored history but is never sent to a provider.
+ */
+export function isEmptiedCompressionSummary(content: IContent): boolean {
+  if (!isCompressionSummary(content)) {
+    return false;
+  }
+  const blocks = stripBlocks(content.blocks);
+  return blocks !== content.blocks && blocks.length === 0;
+}
+
 function stripBlocks(blocks: ContentBlock[]): ContentBlock[] {
   const stripped = blocks.flatMap((block): ContentBlock[] => {
     if (block.type !== 'text') {

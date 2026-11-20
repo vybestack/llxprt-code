@@ -3,6 +3,10 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  readJournalItems,
+  withJournalTurn,
+} from '../stores/turn/journal-turn-test-helpers.js';
 
 import {
   afterEach,
@@ -14,7 +18,6 @@ import {
   type Mock,
 } from 'bun:test';
 import { act, useEffect } from 'react';
-import { createTurnStore } from '../stores/turn/turnStore.js';
 import { renderHook } from '../../__tests__/render.js';
 import { useUnconfiguredProviderGuidance } from './useUnconfiguredProviderGuidance.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
@@ -31,23 +34,24 @@ describe('useUnconfiguredProviderGuidance', () => {
     vi.clearAllMocks();
   });
 
-  it('suppresses guidance when welcome opens earlier in the same effect flush', () => {
-    const store = createDialogStore();
-    const turn = createTurnStore();
-    const { unmount } = renderHook(() => {
-      useEffect(() => {
-        store.commands.openDialog({ kind: 'welcome', payload: {} });
-      }, []);
-      useUnconfiguredProviderGuidance({
-        hasActiveProvider: false,
-        addItem: turn.commands.addItem,
-        store,
+  it('suppresses guidance when welcome opens earlier in the same effect flush', async () => {
+    await withJournalTurn(async (turn, agent) => {
+      const store = createDialogStore();
+      const { unmount } = renderHook(() => {
+        useEffect(() => {
+          store.commands.openDialog({ kind: 'welcome', payload: {} });
+        }, []);
+        useUnconfiguredProviderGuidance({
+          hasActiveProvider: false,
+          addItem: turn.commands.addItem,
+          store,
+        });
       });
+      expect(await readJournalItems(agent)).toHaveLength(0);
+      act(() => store.commands.closeDialog('welcome'));
+      expect(await readJournalItems(agent)).toHaveLength(1);
+      unmount();
     });
-    expect(turn.store.getState().history).toHaveLength(0);
-    act(() => store.commands.closeDialog('welcome'));
-    expect(turn.store.getState().history).toHaveLength(1);
-    unmount();
   });
 
   it('shows /setup guidance when no provider is active and welcome dialog is closed', () => {

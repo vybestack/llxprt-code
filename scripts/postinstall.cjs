@@ -10,11 +10,43 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { randomUUID } = require('crypto');
 const { detectInstaller } = require('./detect-installer.cjs');
 
 const lockfilePath = path.join(__dirname, '..', 'package-lock.json');
 const repoRoot = path.join(__dirname, '..');
 const PATCH_PACKAGE_TIMEOUT_MS = 120_000;
+
+function isolatePatchedFiles(patchesDir) {
+  const targets = new Set();
+  for (const entry of fs.readdirSync(patchesDir)) {
+    if (!entry.endsWith('.patch')) {
+      continue;
+    }
+    const patch = fs.readFileSync(path.join(patchesDir, entry), 'utf8');
+    for (const match of patch.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)) {
+      targets.add(match[1]);
+      targets.add(match[2]);
+    }
+  }
+
+  // Bun hardlinks installed files to its cache on Linux. In-place patch writes
+  // would poison that cache for subsequent installs, so give each target its
+  // own inode before patch-package runs.
+  for (const target of targets) {
+    const installed = path.join(repoRoot, target);
+    if (!fs.existsSync(installed)) {
+      continue;
+    }
+    const temporary = `${installed}.postinstall-${randomUUID()}`;
+    try {
+      fs.copyFileSync(installed, temporary, fs.constants.COPYFILE_EXCL);
+      fs.renameSync(temporary, installed);
+    } finally {
+      fs.rmSync(temporary, { force: true });
+    }
+  }
+}
 
 function applyDependencyPatches() {
   const patchesDir = path.join(repoRoot, 'patches');
@@ -25,6 +57,7 @@ function applyDependencyPatches() {
   const patchPackageCli = require.resolve('patch-package', {
     paths: [repoRoot],
   });
+  isolatePatchedFiles(patchesDir);
   const result = spawnSync(
     process.execPath,
     [patchPackageCli, '--error-on-fail'],

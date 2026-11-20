@@ -356,7 +356,7 @@ async function ensureProviderManagerOnConfig(
   config: Config,
   manager: RuntimeProviderManager,
 ): Promise<void> {
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
 }
 
 /**
@@ -368,7 +368,7 @@ function attachProviderManagerToContentConfig(
   config: Config,
   manager: RuntimeProviderManager,
 ): void {
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
 }
 
 // ─── authMode: 'auto' (CLI path) ────────────────────────────────────────────

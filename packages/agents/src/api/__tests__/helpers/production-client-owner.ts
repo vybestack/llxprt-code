@@ -161,7 +161,7 @@ async function acquireProviderStack(
     release,
     undefined,
   );
-  const base = configureProviderTokenizer(manager);
+  const base = configureProviderTokenizer(manager, config.scratchRoots);
   return {
     config,
     settings,

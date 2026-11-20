@@ -4,19 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import {
-  buildProviderContent,
-  type ProviderContentEnvelope,
-} from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type {
   ContentBlock,
   IContent,
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { invalidateResponsesStatefulChainForRetainedRewrite } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { RequestMediaByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { PendingMediaBudgetError } from './pendingMediaBudgetError.js';
 import { envelopeProtectedStart } from './pendingBoundary.js';
 
 /**
@@ -40,7 +34,7 @@ interface ImageSlot {
  * undefined for URL media and for blocks whose size cannot be trusted. Those
  * are neither counted nor retired so the resolver still reports them.
  */
-function countedBytes(block: ContentBlock): number | undefined {
+export function countedBytes(block: ContentBlock): number | undefined {
   if (block.type !== 'media' || block.encoding === 'url') {
     return undefined;
   }
@@ -75,7 +69,7 @@ function isReadableFilename(filename: string | undefined): filename is string {
  * showed and never offers a handle the tools cannot resolve: a re-read is
  * only suggested when the block carries a usable file name.
  */
-function retirementNote(slot: ImageSlot): string {
+export function retirementNote(slot: ImageSlot): string {
   const { block } = slot;
   const filename = isReadableFilename(block.filename)
     ? block.filename
@@ -210,13 +204,6 @@ export function retireEveryHistoricalImage(
   return renderRetirement(contents, retired);
 }
 
-/** True when any content carries media the resolver would count. */
-export function hasCountedMedia(contents: readonly IContent[]): boolean {
-  return contents.some((content) =>
-    content.blocks.some((block) => countedBytes(block) !== undefined),
-  );
-}
-
 /**
  * Request view of an already composed envelope with the oldest historical
  * images retired. The envelope's pending contents are the authority. The tail
@@ -248,134 +235,4 @@ export function retireEnvelopeImages(
     [...retired, ...tail],
     firstRewritten,
   );
-}
-
-function sameBlock(left: ContentBlock, right: ContentBlock): boolean {
-  if (left === right) return true;
-  if (left.type !== right.type) return false;
-  return (
-    left.type !== 'text' || (right.type === 'text' && left.text === right.text)
-  );
-}
-
-/**
- * Index of the first entry whose blocks differ between two compositions of the
- * same request, or 0 when they cannot be aligned. Retirement only swaps
- * blocks inside entries, so both compositions normalize identically and the
- * first difference is exactly where the request view starts to diverge from
- * what a stored Responses parent holds server-side.
- */
-function firstRewrittenIndex(
-  original: readonly IContent[],
-  rewritten: readonly IContent[],
-): number {
-  if (original.length !== rewritten.length) return 0;
-  const index = rewritten.findIndex(
-    (content, position) =>
-      content.blocks.length !== original[position].blocks.length ||
-      content.blocks.some(
-        (block, blockIndex) =>
-          !sameBlock(block, original[position].blocks[blockIndex]),
-      ),
-  );
-  return Math.max(0, index);
-}
-
-/**
- * The composed request view with Responses parents invalidated from the first
- * entry retirement rewrote. A stored parent before every retired image keeps
- * the server-side chain valid, because everything after it, retirement notes
- * included, is sent as new input. Only the view's copies lose markers.
- */
-export function invalidateParentsFromFirstRetirement(
-  original: readonly IContent[],
-  retired: IContent[],
-): IContent[] {
-  return invalidateResponsesStatefulChainForRetainedRewrite(
-    retired,
-    firstRewrittenIndex(original, retired),
-  );
-}
-
-/**
- * The provider-ready request for `curated` history and the pending region
- * with historical images retired (all of them, or oldest first to the budget).
- * Parent markers are invalidated over the fully rejoined request, pending tail
- * included, and only the request view's copies lose them. The unretired
- * composition is built only when retirement changed something.
- */
-export function composeRetiredRequest(
-  input: {
-    readonly curated: IContent[];
-    readonly pending: IContent[];
-    readonly retireAll: boolean;
-    readonly budgetBytes: number;
-  },
-  logger: DebugLogger,
-): IContent[] {
-  const { curated, pending } = input;
-  const history = input.retireAll
-    ? retireEveryHistoricalImage(curated, curated.length)
-    : retireHistoricalImages(curated, pending, input.budgetBytes);
-  const composed = buildProviderContent(history, pending, logger);
-  return history === curated
-    ? composed
-    : invalidateParentsFromFirstRetirement(
-        buildProviderContent(curated, pending, logger),
-        composed,
-      );
-}
-
-/** Encoded bytes of every media block the request resolver would count. */
-function totalCountedBytes(contents: readonly IContent[]): number {
-  return contents.reduce(
-    (total, content) =>
-      content.blocks.reduce(
-        (sum, block) => sum + (countedBytes(block) ?? 0),
-        total,
-      ),
-    0,
-  );
-}
-
-/**
- * Compression only helps with byte pressure when something other than the
- * request being sent can shrink: any body overflow, or a media overflow while
- * earlier media remains after retirement and the pending media alone fits the
- * budget the request was rejected under. Pending media is never rewritten, so
- * when it alone exceeds that budget no history change can fix the request.
- */
-export function compressionCanRelieve(
-  error: unknown,
-  contents: readonly IContent[],
-  pendingCount: number,
-): boolean {
-  if (!(error instanceof RequestMediaByteOverflowError)) {
-    return true;
-  }
-  const splitAt = Math.max(0, contents.length - pendingCount);
-  if (
-    error.budgetBytes > 0 &&
-    totalCountedBytes(contents.slice(splitAt)) > error.budgetBytes
-  ) {
-    return false;
-  }
-  return hasCountedMedia(contents.slice(0, splitAt));
-}
-
-/**
- * Names a pending-only media overflow, judged against the budget the request
- * was rejected under; any other error passes through.
- */
-export function explainPendingOverflow(
-  error: unknown,
-  pending: readonly IContent[],
-): unknown {
-  if (!(error instanceof RequestMediaByteOverflowError)) {
-    return error;
-  }
-  const pendingBytes = totalCountedBytes(pending);
-  return error.budgetBytes > 0 && pendingBytes > error.budgetBytes
-    ? new PendingMediaBudgetError(error, pendingBytes)
-    : error;
 }

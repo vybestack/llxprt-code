@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -29,7 +30,6 @@ async function prepareOwnedTurn(owner: Agent, decoy: Agent): Promise<void> {
     resetBuckets,
     () => {},
     () => {},
-    { current: [] },
     () => {},
     async () => {
       await owner.addHistory({
@@ -51,10 +51,14 @@ describe('turn preparation owner', () => {
     const owner = await makeOwner('turn-policy-owner');
     const sibling = await makeOwner('turn-policy-sibling');
     await prepareOwnedTurn(owner, sibling);
-    expect(JSON.stringify(await owner.getHistory())).toContain('primary');
-    expect(await sibling.getHistory()).toHaveLength(0);
+    expect(
+      JSON.stringify(await collectResumeRows(owner.streamHistory())),
+    ).toContain('primary');
+    expect(await collectResumeRows(sibling.streamHistory())).toHaveLength(0);
     await owner.dispose();
     await prepareOwnedTurn(sibling, owner);
-    expect(JSON.stringify(await sibling.getHistory())).toContain('primary');
+    expect(
+      JSON.stringify(await collectResumeRows(sibling.streamHistory())),
+    ).toContain('primary');
   });
 });

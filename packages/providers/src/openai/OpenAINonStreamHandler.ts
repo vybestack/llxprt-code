@@ -30,7 +30,10 @@ import {
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
-import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+import {
+  normalizeToHistoryToolId,
+  normalizeToOpenAIToolId,
+} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 import {
   coerceMessageContentToString,
@@ -38,6 +41,7 @@ import {
   extractKimiToolCallsFromText,
 } from './OpenAIResponseParser.js';
 import { mapFinishReason } from './finishReasonMapping.js';
+import type { ContinuationToolCall } from './OpenAIRequestBuilder.js';
 
 /**
  * Helper to convert token value preserving old || 0 behavior:
@@ -237,6 +241,9 @@ export async function* handleNonStreamingResponse(
   model: string,
   detectedFormat: string,
   deps: NonStreamHandlerDeps,
+  requestContinuation?: (
+    calls: ContinuationToolCall[],
+  ) => AsyncGenerator<IContent, void, unknown>,
 ): AsyncGenerator<IContent, void, unknown> {
   const completion = response;
   const choicesRuntime: unknown = completion.choices;
@@ -292,6 +299,28 @@ export async function* handleNonStreamingResponse(
   const content = yieldResponseContent(blocks, completion, finishInfo);
   if (content) {
     yield content;
+  }
+  const calls = blocks.filter(
+    (block): block is ToolCallBlock => block.type === 'tool_call',
+  );
+  if (
+    choice.finish_reason === 'stop' &&
+    calls.length > 0 &&
+    !blocks.some(
+      (block) => block.type === 'text' && block.text.trim().length > 0,
+    ) &&
+    requestContinuation !== undefined
+  ) {
+    yield* requestContinuation(
+      calls.map((call, index) => ({
+        id: call.id.trim() ? normalizeToOpenAIToolId(call.id) : `call_${index}`,
+        type: 'function',
+        function: {
+          name: call.name,
+          arguments: JSON.stringify(call.parameters),
+        },
+      })),
+    );
   }
 }
 

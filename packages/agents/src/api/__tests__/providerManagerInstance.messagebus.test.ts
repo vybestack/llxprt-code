@@ -130,7 +130,7 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
           profileId ? { profileId } : undefined,
         ),
       );
-      configureProviderTokenizer(manager);
+      configureProviderTokenizer(manager, selectedConfig.scratchRoots);
       manager.setConfig(config);
       acquisitionComplete = true;
     } catch (primary) {

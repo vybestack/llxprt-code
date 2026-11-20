@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { applyReviewRewrites, buildReviewWindow } from './reviewWindow.js';
@@ -46,9 +47,9 @@ function toolResult(callId: string, result: unknown): IContent {
 async function historyOf(
   entries: readonly IContent[],
 ): Promise<readonly IContent[]> {
-  const service = new HistoryService();
+  const service = new HistoryService({ scratchRoots: new ScratchRootOwner() });
   await service.addBatch([...entries]);
-  return service.getAll();
+  return readRows(service);
 }
 
 function texts(window: ReturnType<typeof buildReviewWindow>): string[] {
@@ -111,18 +112,20 @@ describe('review window selection', () => {
 
   it('includes a compression summary written after the last response, even at the head', async () => {
     const earlier = [human('old goal'), ai('old answer')];
-    const service = new HistoryService();
+    const service = new HistoryService({
+      scratchRoots: new ScratchRootOwner(),
+    });
     await service.addBatch(earlier);
     const tail = toolResult('c1', 'tail output');
     await service.addBatch([tail]);
+    const preserved = await readRows(service);
     await service.replaceBatch([
       summary('state snapshot after compression'),
       continuation(),
-      ...earlier.slice(1),
-      tail,
+      ...preserved.slice(1),
     ]);
 
-    const window = buildReviewWindow(service.getAll());
+    const window = buildReviewWindow(await readRows(service));
 
     expect(texts(window)).toStrictEqual([
       'state snapshot after compression',
@@ -298,3 +301,9 @@ describe('applying reviewed rewrites', () => {
     ]);
   });
 });
+
+async function readRows(service: HistoryService): Promise<IContent[]> {
+  const rows: IContent[] = [];
+  for await (const row of service.streamRawHistory()) rows.push(row);
+  return rows;
+}

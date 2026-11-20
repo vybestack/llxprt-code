@@ -129,10 +129,6 @@ async function runStreamWithLogger(
       'test-model',
       'openai',
       undefined,
-      { model: 'test-model', messages: [], stream: true },
-      [],
-      new OpenAI({ apiKey: 'test' }),
-      undefined,
       undefined,
       {
         logger,
@@ -174,10 +170,6 @@ async function runQwenStream(
       'qwen-test',
       'qwen',
       undefined,
-      { model: 'qwen-test', messages: [], stream: true },
-      [],
-      new OpenAI({ apiKey: 'test-api-key' }),
-      undefined,
       undefined,
       deps,
       async function* () {
@@ -207,10 +199,6 @@ describe('OpenAI streaming diagnostic retention', () => {
         streamChunks([createTextChunk(0, 'hello'), createChunk(1), usageChunk]),
         'test-model',
         'openai',
-        undefined,
-        { model: 'test-model', messages: [], stream: true },
-        [],
-        new OpenAI({ apiKey: 'test' }),
         undefined,
         undefined,
         {
@@ -359,17 +347,12 @@ describe('OpenAI streaming diagnostic retention', () => {
       logger,
       getBaseURL: () => undefined,
     };
-    const client = new OpenAI({ apiKey: 'test-api-key' });
 
     await collect(
       processStreamingResponse(
         createChunkStream(chunkCount),
         'test-model',
         'openai',
-        undefined,
-        { model: 'test-model', messages: [], stream: true },
-        [],
-        client,
         undefined,
         undefined,
         deps,

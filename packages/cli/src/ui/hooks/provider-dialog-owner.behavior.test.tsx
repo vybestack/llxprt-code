@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
-import { readFile } from 'node:fs/promises';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../__tests__/render.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
@@ -72,7 +72,7 @@ describe('provider dialog owner', () => {
           listProviders: () => [agent.getProvider()],
           getActiveProviderName: () => agent.getProvider(),
           setProvider: (name: string) =>
-            agent.setProvider(name, agent.getModel()),
+            agent.setProvider(name, `${agent.getModel()}-selected`),
           getActiveModelName: () => agent.getModel(),
           recordProviderSwitch: (provider: string, model: string) =>
             agent.session.recordRecordingEvent({
@@ -89,26 +89,30 @@ describe('provider dialog owner', () => {
       await act(async () => {
         await hook.result.current.handleSelect('fake');
       });
-      expect(
-        (await readFile(ownerPath, 'utf8'))
-          .split('\n')
-          .filter((line) => line.includes('provider_switch')),
-      ).toHaveLength(1);
-      expect(await readFile(ownerPath, 'utf8')).toContain(owner.getModel());
-      expect(await readFile(siblingPath, 'utf8')).not.toContain(
-        'provider_switch',
+      const ownerAfter = await readRecordedFacts(ownerPath);
+      expect(ownerAfter.provider).toBe('fake');
+      expect(ownerAfter.model).toBe(owner.getModel());
+      expect(ownerAfter.model).toBe('provider-dialog-owner-initial-selected');
+      expect((await readRecordedFacts(siblingPath)).model).toBe(
+        'provider-dialog-sibling-initial',
       );
+      expect((await readRecordedFacts(siblingPath)).provider).toBe('fake');
       await owner.dispose();
       ambientAgent = owner;
       hook.rerender({ agent: sibling, decoy: owner });
       await act(async () => {
         await hook.result.current.handleSelect('fake');
       });
-      expect(
-        (await readFile(siblingPath, 'utf8'))
-          .split('\n')
-          .filter((line) => line.includes('provider_switch')),
-      ).toHaveLength(1);
+      const siblingAfter = await readRecordedFacts(siblingPath);
+      expect(siblingAfter.provider).toBe('fake');
+      expect(siblingAfter.model).toBe(sibling.getModel());
+      expect(siblingAfter.model).toBe(
+        'provider-dialog-sibling-initial-selected',
+      );
+      expect((await readRecordedFacts(ownerPath)).model).toBe(
+        'provider-dialog-owner-initial-selected',
+      );
+      expect((await readRecordedFacts(ownerPath)).provider).toBe('fake');
       expect(hook.result.current.currentProvider).toBe(sibling.getProvider());
     } finally {
       hook.unmount();

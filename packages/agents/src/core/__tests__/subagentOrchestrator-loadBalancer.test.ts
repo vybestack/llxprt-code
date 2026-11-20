@@ -1,3 +1,4 @@
+const parentSignal = new AbortController().signal;
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 import { createTestChildOrchestrator } from './child-launch-fixture.js';
@@ -42,10 +43,9 @@ import {
   createRuntimeBundle,
   fakeChildScope,
   extractRunConfig,
+  launchForTest,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
-
-const parentSignal = new AbortController().signal;
 
 describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
   const loadBalancerSubagent: SubagentConfig = {
@@ -187,12 +187,9 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     });
 
     // Before the fix this rejected with RuntimeStateError: provider.missing.
-    const result = await orchestrator.launch(
-      {
-        name: loadBalancerSubagent.name,
-      },
-      parentSignal,
-    );
+    const result = await launchForTest(orchestrator, {
+      name: loadBalancerSubagent.name,
+    });
 
     expect(runtimeLoader).toHaveBeenCalledTimes(1);
     const loaderArgs = runtimeLoader.mock.calls[0][0];
@@ -238,12 +235,9 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       messageBus: new MessageBus(),
     });
 
-    const result = await orchestrator.launch(
-      {
-        name: loadBalancerSubagent.name,
-      },
-      parentSignal,
-    );
+    const result = await launchForTest(orchestrator, {
+      name: loadBalancerSubagent.name,
+    });
 
     // The load-balancer profile is preserved so its failover routing survives.
     expect(result.profile).toBe(loadBalancerProfile);
@@ -494,10 +488,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         }),
       });
 
-      await orchestrator.launch(
-        { name: 'lb-default-turns-helper' },
-        parentSignal,
-      );
+      await launchForTest(orchestrator, { name: 'lb-default-turns-helper' });
 
       const runConfigArg = extractRunConfig(factory);
 
@@ -557,10 +548,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         }),
       });
 
-      await orchestrator.launch(
-        { name: 'lb-profile-turns-helper' },
-        parentSignal,
-      );
+      await launchForTest(orchestrator, { name: 'lb-profile-turns-helper' });
 
       const runConfigArg = extractRunConfig(factory);
       // 400 from the LB profile wins — not 7 from the member, not 55 from the

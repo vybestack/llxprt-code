@@ -7,7 +7,13 @@ import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runti
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  throwCompressionProviderFailure,
+  withCompressionRequest,
+} from './compressionAttempt.js';
 import { bindCompressionProvider } from './utils.js';
+import { summaryOutput, type SummaryOutput } from './summaryOutput.js';
+import { summarizerProvenance } from './compressionAuditProvenance.js';
 /**
  * @plan PLAN-20260211-COMPRESSION.P06
  * @plan PLAN-20260211-HIGHDENSITY.P03
@@ -35,44 +41,28 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   CompressionContext,
   CompressionProviderResult,
-  CompressionResultMetadata,
   CompressionStrategy,
-  StrategyCompressionResult,
-  StructuralNoopReason,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
-  CompressionExecutionError,
-  EmptySummaryError,
-  isTransientCompressionError,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import {
-  adjustForToolCallBoundary,
   aggregateTextFromBlocks,
-  findForwardValidSplitPoint,
-  buildTriggerInstruction,
   buildContextInjections,
-  buildLargeLastPromptInjection,
-  buildSecurityPreamble,
+  buildSummaryRequestFrame,
   runVerificationPass,
-  sanitizeHistoryForCompression,
-  mediaBlockToCompressionPlaceholder,
 } from './utils.js';
-import {
-  COMPRESSION_PROMPT_FILES,
-  loadCompressionPromptFile,
-} from '@vybestack/llxprt-code-core/core/compression/compressionPromptFiles.js';
-import {
-  stripScratchpadFromCompressionSummaries,
-  stripScratchpadSections,
-} from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
+import { stripScratchpadSections } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
-import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
-const MINIMUM_MIDDLE_MESSAGES = 4;
-const LAST_PROMPT_TOKEN_THRESHOLD = 500;
-const LAST_PROMPT_CONTEXT_MAX_LENGTH = 200;
+import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
+import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import {
+  planDiskMiddleOut,
+  diskSummaryRequestSelection,
+} from './middleOutDiskPlan.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 // ---------------------------------------------------------------------------
 // MiddleOutStrategy
@@ -110,110 +100,70 @@ export class MiddleOutStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
-  async compress(
-    context: CompressionContext,
-  ): Promise<StrategyCompressionResult> {
-    const { history } = context;
+  readonly summaryRequestOwnership = new RowOwnership();
 
-    if (history.length === 0) {
-      return this.structuralNoop(history, 'empty-history');
-    }
-
-    let { toKeepTop, toCompress, toKeepBottom } = this.computeSplit(context);
-
-    if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
-      return this.structuralNoop(history, 'too-few-compressible', {
-        toKeepTop,
-        toKeepBottom,
-        middleCompressed: toCompress.length,
-      });
-    }
-
-    const {
-      toCompress: adjustedCompress,
-      toKeepBottom: adjustedBottom,
-      lastUserPromptContext,
-      largeLastPrompt,
-    } = this.preserveLastUserPrompt(toKeepTop, toCompress, toKeepBottom);
-    toCompress = adjustedCompress;
-    toKeepBottom = adjustedBottom;
-
-    if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
-      return this.structuralNoop(history, 'shrunk-below-minimum', {
-        toKeepTop,
-        toKeepBottom,
-        middleCompressed: 0,
-      });
-    }
-
-    const compressionProfile =
-      context.runtimeContext.ephemerals.compressionProfile();
-    const providerResult = destructureProviderResult(
-      await context.resolveProvider(compressionProfile),
-    );
-
-    const compressionRequest = this.buildCompressionRequest(
-      context,
-      toCompress,
-      largeLastPrompt,
-    );
-
-    const { finalSummary, capturedUsage } = await this.compressAndVerify(
-      context,
-      compressionRequest,
-      providerResult,
-    );
-
-    const newHistory = this.assembleHistory(
-      toKeepTop,
-      finalSummary,
-      toKeepBottom,
-      context.activeTodos,
-      capturedUsage,
-      lastUserPromptContext,
-    );
-
-    const metadata = this.buildMetadata(
-      history,
-      newHistory,
-      toKeepTop,
-      toCompress,
-      toKeepBottom,
-      capturedUsage,
-      providerResult.provider.name,
-      providerResult.resolvedOptions?.model ?? null,
-    );
-
-    return { kind: 'applied', newHistory, metadata };
+  async compressDisk(
+    context: Omit<CompressionContext, 'history'> & {
+      readonly history: CompressionInputRows;
+    },
+    candidate: HistoryDensityRows,
+  ): Promise<
+    | { readonly kind: 'applied'; readonly top: number }
+    | { readonly kind: 'noop' }
+  > {
+    const result = await this.prepareDisk(context);
+    if (result.kind === 'applied')
+      for (let index = 0; index < result.candidate.length; index++)
+        candidate.append(
+          await result.candidate.readRow(index),
+          await result.candidate.sourceOrdinalAt(index),
+        );
+    return result;
   }
 
-  private buildCompressionRequest(
-    context: CompressionContext,
-    toCompress: IContent[],
-    largeLastPrompt: string | undefined,
-  ): IContent[] {
-    const prompt = loadCompressionPromptFile(
-      context,
-      COMPRESSION_PROMPT_FILES.instructions,
+  async prepareDisk(
+    context: Omit<CompressionContext, 'history'> & {
+      readonly history: CompressionInputRows;
+    },
+  ): Promise<SummaryOutput> {
+    const plan = await planDiskMiddleOut(context.history, context);
+    if (plan === undefined) return { kind: 'noop' };
+    const providerResult = destructureProviderResult(
+      await context.resolveProvider(
+        context.runtimeContext.ephemerals.compressionProfile(),
+      ),
     );
-    const triggerInstruction = buildTriggerInstruction(context, toCompress);
-    return [
-      buildSecurityPreamble(context),
-      { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
-      ...sanitizeHistoryForCompression(toCompress),
-      ...buildContextInjections(context),
-      ...(largeLastPrompt === undefined
-        ? []
-        : [buildLargeLastPromptInjection(context, largeLastPrompt)]),
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: triggerInstruction }],
-      },
-    ];
+    const { finalSummary, capturedUsage } = await this.compressAndVerify(
+      context,
+      diskSummaryRequestSelection(
+        context.history,
+        plan,
+        buildSummaryRequestFrame(context),
+        buildContextInjections(context),
+        this.summaryRequestOwnership,
+      ),
+      providerResult,
+    );
+    return summaryOutput(
+      context.history,
+      plan.top,
+      plan.bottom,
+      this.summaryRows(
+        finalSummary,
+        context.activeTodos,
+        capturedUsage,
+        plan.lastPromptContext,
+      ),
+      summarizerProvenance(
+        'middle-out',
+        providerResult.provider.name,
+        providerResult.resolvedOptions?.model ?? null,
+      ),
+    );
   }
 
   private async maybeVerifySummary(
-    context: CompressionContext,
+    context: Omit<CompressionContext, 'history'>,
     provider: IProvider,
     summary: string,
     resolvedRuntime: ProviderRequestCollaborators,
@@ -239,160 +189,13 @@ export class MiddleOutStrategy implements CompressionStrategy {
     );
   }
 
-  private buildMetadata(
-    history: readonly IContent[],
-    newHistory: IContent[],
-    toKeepTop: IContent[],
-    toCompress: IContent[],
-    toKeepBottom: IContent[],
-    capturedUsage: UsageStats | undefined,
-    summaryAuthorProvider: string,
-    summaryAuthorModel: string | null,
-  ): CompressionResultMetadata {
-    return {
-      originalMessageCount: history.length,
-      compressedMessageCount: newHistory.length,
-      strategyUsed: 'middle-out',
-      llmCallMade: true,
-      topPreserved: toKeepTop.length,
-      bottomPreserved: toKeepBottom.length,
-      middleCompressed: toCompress.length,
-      auditProvenance: {
-        summaryAuthorModel,
-        summaryAuthorProvider,
-        compressionStrategy: 'middle-out',
-      },
-      ...(capturedUsage ? { usage: capturedUsage } : {}),
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // Private helpers
-  // -------------------------------------------------------------------------
-
-  private computeSplit(context: CompressionContext): {
-    toKeepTop: IContent[];
-    toCompress: IContent[];
-    toKeepBottom: IContent[];
-  } {
-    const history = context.history as IContent[];
-    const preserveThreshold =
-      context.runtimeContext.ephemerals.preserveThreshold();
-    const topPreserveThreshold =
-      context.runtimeContext.ephemerals.topPreserveThreshold();
-
-    let topSplitIndex = this.resolveTopSplitIndex(
-      history,
-      topPreserveThreshold,
-      context.cacheAnchorSeq ?? 0,
-    );
-    const anchorFloor = topSplitIndex;
-    let bottomSplitIndex = Math.floor(history.length * (1 - preserveThreshold));
-
-    if (bottomSplitIndex - topSplitIndex < MINIMUM_MIDDLE_MESSAGES) {
-      return { toKeepTop: [...history], toCompress: [], toKeepBottom: [] };
-    }
-
-    topSplitIndex = adjustForToolCallBoundary(history, topSplitIndex);
-    // The tool-boundary adjustment can move the index BACKWARD (forward scan
-    // returns index-1; backward scan can go arbitrarily far back). If it drops
-    // below the anchor floor, search FORWARD for the next valid split point at
-    // or above the floor so the cacheable prefix invariant is never broken
-    // (#3070 Defect 4). If no valid split at or above the floor exists, return
-    // a clean structural no-op rather than silently dropping below the floor.
-    if (topSplitIndex < anchorFloor) {
-      topSplitIndex = this.findValidSplitAtOrAboveFloor(history, anchorFloor);
-      if (topSplitIndex === -1) {
-        return { toKeepTop: [...history], toCompress: [], toKeepBottom: [] };
-      }
-    }
-    bottomSplitIndex = adjustForToolCallBoundary(history, bottomSplitIndex);
-
-    if (
-      topSplitIndex >= bottomSplitIndex ||
-      bottomSplitIndex - topSplitIndex < MINIMUM_MIDDLE_MESSAGES
-    ) {
-      return { toKeepTop: [...history], toCompress: [], toKeepBottom: [] };
-    }
-
-    return {
-      toKeepTop: history.slice(0, topSplitIndex),
-      toCompress: history.slice(topSplitIndex, bottomSplitIndex),
-      toKeepBottom: history.slice(bottomSplitIndex),
-    };
-  }
-
-  /**
-   * Resolve the top (preserved-head) split index, applying the monotonic cache
-   * anchor floor so the preserved head never shrinks across successive
-   * compressions (#3070).
-   *
-   * The base index is `ceil(N * topPreserveThreshold)`. The anchor raises it to
-   * `anchorIndex + 1`, where `anchorIndex` is the index of the history entry
-   * whose chronology `seq` is EXACTLY `cacheAnchorSeq`. The match is by exact
-   * identity, not a `<=` threshold scan, because the compression rebuild
-   * re-adds preserved TAIL entries that keep their ORIGINAL low seqs while the
-   * freshly minted summary/continuation get the HIGHEST seqs and sit in the
-   * MIDDLE of the array — so the array is NOT sorted by seq and a backward
-   * `<=` scan would match a low-seq TAIL entry at a high index (#3070 Defect 2).
-   * When no entry matches exactly there is no floor; fall back to the base
-   * fractional split. An anchor at or beyond the whole history degrades to a
-   * split past the end, which the caller's structural no-op guards turn into a
-   * clean no-op.
-   */
-  private resolveTopSplitIndex(
-    history: readonly IContent[],
-    topPreserveThreshold: number,
-    cacheAnchorSeq: number,
-  ): number {
-    const baseSplitIndex = Math.ceil(history.length * topPreserveThreshold);
-
-    if (cacheAnchorSeq <= 0) {
-      return baseSplitIndex;
-    }
-
-    let anchorIndex = -1;
-    for (let i = 0; i < history.length; i++) {
-      const seq = history[i].metadata?.chronology?.seq;
-      if (seq === cacheAnchorSeq) {
-        anchorIndex = i;
-        break;
-      }
-    }
-
-    if (anchorIndex === -1) {
-      return baseSplitIndex;
-    }
-
-    return Math.max(baseSplitIndex, anchorIndex + 1);
-  }
-
-  /**
-   * Search forward from the anchor floor for the next valid split point that
-   * does not land inside a tool-call/response pair. The canonical utility may
-   * move a candidate backward, so candidates below the floor are skipped.
-   */
-  private findValidSplitAtOrAboveFloor(
-    history: readonly IContent[],
-    floor: number,
-  ): number {
-    const candidateHistory = [...history];
-    for (let candidate = floor; candidate <= history.length; candidate++) {
-      const adjusted = findForwardValidSplitPoint(candidateHistory, candidate);
-      if (adjusted >= floor) {
-        return adjusted;
-      }
-    }
-    return -1;
-  }
-
   /**
    * Calls the provider, throws EmptySummaryError with diagnostics if the
    * summary is empty, then runs the optional verification pass.
    */
   private async compressAndVerify(
-    context: CompressionContext,
-    request: IContent[],
+    context: Omit<CompressionContext, 'history'>,
+    request: ProviderRequestSelection,
     providerResult: ReturnType<typeof destructureProviderResult>,
   ): Promise<{ finalSummary: string; capturedUsage: UsageStats | undefined }> {
     const {
@@ -451,8 +254,8 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
   private async callProvider(
     provider: IProvider,
-    request: IContent[],
-    context: CompressionContext,
+    request: ProviderRequestSelection,
+    context: Omit<CompressionContext, 'history'>,
     resolvedRuntime: ProviderRequestCollaborators,
     resolvedConfig: Config | undefined,
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
@@ -475,196 +278,87 @@ export class MiddleOutStrategy implements CompressionStrategy {
     let rawStopReason: string | undefined;
     const blockTypeCounts: Record<string, number> = {};
 
-    try {
-      const stream = this.bindProvider(
-        provider,
-        resolvedConfig,
-      ).generateChatCompletion(
-        await buildCompressionChatOptions({
-          contents: request,
-          providerRuntime: resolvedRuntime,
-          resolvedConfig,
-          fallbackConfig: context.config,
-          resolvedOptions,
-          invocation,
-          fallbackModel: context.runtimeState.model,
-          runtimeState: context.runtimeState,
+    return withCompressionRequest(request, async () => {
+      try {
+        const stream = this.bindProvider(
           provider,
-          modelParameters: context.modelParameters,
-          source: 'MiddleOutStrategy.callProvider',
-        }),
-      );
-
-      for await (const chunk of stream) {
-        for (const block of chunk.blocks) {
-          blockTypeCounts[block.type] = (blockTypeCounts[block.type] ?? 0) + 1;
-        }
-        const result = aggregateTextFromBlocks(
-          chunk.blocks,
-          summary,
-          lastBlockWasNonText,
+          resolvedConfig,
+        ).generateChatCompletion(
+          await buildCompressionChatOptions({
+            requestRows: request,
+            providerRuntime: resolvedRuntime,
+            resolvedConfig,
+            fallbackConfig: context.config,
+            resolvedOptions,
+            invocation,
+            fallbackModel: context.runtimeState.model,
+            runtimeState: context.runtimeState,
+            provider,
+            modelParameters: context.modelParameters,
+            source: 'MiddleOutStrategy.callProvider',
+          }),
         );
-        summary = result.text;
-        lastBlockWasNonText = result.lastBlockWasNonText;
-        if (chunk.metadata?.usage) {
-          capturedUsage = chunk.metadata.usage;
+
+        for await (const chunk of stream) {
+          for (const block of chunk.blocks) {
+            blockTypeCounts[block.type] =
+              (blockTypeCounts[block.type] ?? 0) + 1;
+          }
+          const result = aggregateTextFromBlocks(
+            chunk.blocks,
+            summary,
+            lastBlockWasNonText,
+          );
+          summary = result.text;
+          lastBlockWasNonText = result.lastBlockWasNonText;
+          if (chunk.metadata?.usage) {
+            capturedUsage = chunk.metadata.usage;
+          }
+          if (chunk.metadata?.finishReason) {
+            finishReason = chunk.metadata.finishReason;
+          }
+          if (chunk.metadata?.rawStopReason) {
+            rawStopReason = chunk.metadata.rawStopReason;
+          }
         }
-        if (chunk.metadata?.finishReason) {
-          finishReason = chunk.metadata.finishReason;
-        }
-        if (chunk.metadata?.rawStopReason) {
-          rawStopReason = chunk.metadata.rawStopReason;
-        }
+
+        return {
+          text: summary,
+          usage: capturedUsage,
+          diagnostics: { finishReason, rawStopReason, blockTypeCounts },
+        };
+      } catch (error) {
+        throwCompressionProviderFailure(this.name, error, invocation?.signal, {
+          finishReason,
+          rawStopReason,
+          blockTypeCounts,
+        });
       }
-
-      return {
-        text: summary,
-        usage: capturedUsage,
-        diagnostics: { finishReason, rawStopReason, blockTypeCounts },
-      };
-    } catch (error) {
-      const blocksSummary =
-        Object.entries(blockTypeCounts)
-          .map(([type, count]) => `${type}:${count}`)
-          .join(',') || 'none';
-      throw new CompressionExecutionError(
-        'middle-out',
-        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${finishReason ?? 'none'}, rawStopReason=${rawStopReason ?? 'none'}, blocks=${blocksSummary}]`,
-        { isTransient: isTransientCompressionError(error) },
-      );
-    }
+    });
   }
 
-  private preserveLastUserPrompt(
-    toKeepTop: readonly IContent[],
-    toCompress: readonly IContent[],
-    toKeepBottom: readonly IContent[],
-  ): {
-    toCompress: IContent[];
-    toKeepBottom: IContent[];
-    lastUserPromptContext: string | undefined;
-    largeLastPrompt: string | undefined;
-  } {
-    const fullHistory = [...toKeepTop, ...toCompress, ...toKeepBottom];
-    const lastHumanIndex = this.findLastHumanMessageIndex(fullHistory);
-
-    if (lastHumanIndex === -1) {
-      return {
-        toCompress: [...toCompress],
-        toKeepBottom: [...toKeepBottom],
-        lastUserPromptContext: undefined,
-        largeLastPrompt: undefined,
-      };
-    }
-
-    const compressStart = toKeepTop.length;
-    const compressEnd = compressStart + toCompress.length;
-    const isInCompressRange =
-      lastHumanIndex >= compressStart && lastHumanIndex < compressEnd;
-
-    if (!isInCompressRange) {
-      const lastHumanMsg = fullHistory[lastHumanIndex];
-      const text = this.extractTextFromMessage(lastHumanMsg);
-      const context =
-        text.length > LAST_PROMPT_CONTEXT_MAX_LENGTH
-          ? text.slice(0, LAST_PROMPT_CONTEXT_MAX_LENGTH) + '...'
-          : text;
-      return {
-        toCompress: [...toCompress],
-        toKeepBottom: [...toKeepBottom],
-        lastUserPromptContext: context || undefined,
-        largeLastPrompt: undefined,
-      };
-    }
-
-    const lastHumanMsg = fullHistory[lastHumanIndex];
-    const messageText = this.extractTextFromMessage(lastHumanMsg);
-    const tokenCount = estimateTokens(messageText);
-    const indexInCompress = lastHumanIndex - compressStart;
-
-    if (tokenCount < LAST_PROMPT_TOKEN_THRESHOLD) {
-      const movedMessages = toCompress.slice(indexInCompress);
-      const remainingCompress = toCompress.slice(0, indexInCompress);
-      const context =
-        messageText.length > LAST_PROMPT_CONTEXT_MAX_LENGTH
-          ? messageText.slice(0, LAST_PROMPT_CONTEXT_MAX_LENGTH) + '...'
-          : messageText;
-      return {
-        toCompress: [...remainingCompress],
-        toKeepBottom: [...movedMessages, ...toKeepBottom],
-        lastUserPromptContext: context || undefined,
-        largeLastPrompt: undefined,
-      };
-    }
-
-    const context =
-      messageText.length > LAST_PROMPT_CONTEXT_MAX_LENGTH
-        ? messageText.slice(0, LAST_PROMPT_CONTEXT_MAX_LENGTH) + '...'
-        : messageText;
-    return {
-      toCompress: [...toCompress],
-      toKeepBottom: [...toKeepBottom],
-      lastUserPromptContext: context || undefined,
-      largeLastPrompt: messageText,
-    };
-  }
-
-  private findLastHumanMessageIndex(history: readonly IContent[]): number {
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].speaker === 'human') {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  /**
-   * The last human entry can be an older compression summary; its text is
-   * taken without scratchpad sections, as in the compressed span (#4128).
-   */
-  private extractTextFromMessage(message: IContent): string {
-    return stripScratchpadFromCompressionSummaries([message])
-      .flatMap((cleaned) => cleaned.blocks)
-      .map((block) => {
-        if (block.type === 'text') {
-          return block.text;
-        }
-        if (block.type === 'media') {
-          return mediaBlockToCompressionPlaceholder(block);
-        }
-        return '';
-      })
-      .filter((text) => text.length > 0)
-      .join(' ');
-  }
-
-  private assembleHistory(
-    toKeepTop: IContent[],
+  private summaryRows(
     summary: string,
-    toKeepBottom: IContent[],
     activeTodos?: string,
     usage?: UsageStats,
     lastUserPromptContext?: string,
   ): IContent[] {
-    const summaryEntry: IContent = {
-      speaker: 'human' as const,
-      blocks: [{ type: 'text' as const, text: summary }],
-      metadata: {
-        isSummary: true,
-        synthetic: true,
-        reason: 'compression-state-snapshot',
-        ...(usage ? { usage } : {}),
-      },
-    };
-
     return [
-      ...toKeepTop,
-      summaryEntry,
       {
-        speaker: 'ai' as const,
+        speaker: 'human',
+        blocks: [{ type: 'text', text: summary }],
+        metadata: {
+          isSummary: true,
+          synthetic: true,
+          reason: 'compression-state-snapshot',
+          ...(usage ? { usage } : {}),
+        },
+      },
+      {
+        speaker: 'ai',
         blocks: [
           {
-            type: 'text' as const,
+            type: 'text',
             text: buildContinuationDirective(
               activeTodos,
               lastUserPromptContext,
@@ -676,31 +370,6 @@ export class MiddleOutStrategy implements CompressionStrategy {
           reason: 'compression-continuation',
         },
       },
-      ...toKeepBottom,
     ];
-  }
-
-  private structuralNoop(
-    history: readonly IContent[],
-    reason: StructuralNoopReason,
-    split?: {
-      toKeepTop: readonly IContent[];
-      toKeepBottom: readonly IContent[];
-      middleCompressed: number;
-    },
-  ): StrategyCompressionResult {
-    return {
-      kind: 'noop',
-      reason,
-      metadata: {
-        originalMessageCount: history.length,
-        compressedMessageCount: history.length,
-        strategyUsed: 'middle-out',
-        llmCallMade: false,
-        topPreserved: split?.toKeepTop.length ?? 0,
-        bottomPreserved: split?.toKeepBottom.length ?? 0,
-        middleCompressed: split?.middleCompressed ?? 0,
-      },
-    };
   }
 }

@@ -22,7 +22,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions as createProviderCallOptions } from '../__tests__/streamCallOptions.js';
 import { readRawPostTestBody } from '../__tests__/rawPostTestAdapters.js';
 
 const originalFetch = global.fetch;

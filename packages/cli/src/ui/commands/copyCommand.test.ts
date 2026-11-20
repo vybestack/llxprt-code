@@ -3,165 +3,209 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { createCopyCommand } from './copyCommand.js';
+import { bindCopyCommandHistoryRead } from './copyCommandHost.js';
+import type { IContent } from '@vybestack/llxprt-code-core';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { PublicCursorHistory } from '../../__tests__/public-history-cursor.js';
 
-import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import type { Mock } from 'bun:test';
-import { copyToClipboard } from '../utils/commandUtils.js';
-import { createCopyCommand, type CopyCommandOutput } from './copyCommand.js';
+const writes: string[] = [];
+let clipboardError: unknown;
+async function copyToClipboard(text: string): Promise<void> {
+  if (clipboardError !== undefined) throw clipboardError;
+  writes.push(text);
+}
+function noChatCopy() {
+  return createCopyCommand(
+    bindCopyCommandHistoryRead(
+      () => false,
+      async function* () {},
+    ),
+    copyToClipboard,
+  ).action();
+}
 
-void vi.mock('../utils/commandUtils.js', () => ({
-  copyToClipboard: vi.fn(),
-}));
+function resetClipboard(): void {
+  writes.length = 0;
+  clipboardError = undefined;
+}
 
-describe('copyCommand', () => {
-  let mockCopyToClipboard: Mock<typeof copyToClipboard>;
-  let latestOutput: CopyCommandOutput;
-  let copyCommand: ReturnType<typeof createCopyCommand>;
+function message(speaker: IContent['speaker'], ...texts: string[]): IContent {
+  return { speaker, blocks: texts.map((text) => ({ type: 'text', text })) };
+}
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockCopyToClipboard = copyToClipboard as Mock<typeof copyToClipboard>;
-    latestOutput = { kind: 'no-chat' };
-    copyCommand = createCopyCommand(async () => latestOutput, copyToClipboard);
-  });
+async function copyRows(rows: readonly IContent[]): Promise<unknown> {
+  return withSuffixFixture(
+    rows.length,
+    async (history) =>
+      createCopyCommand(
+        bindCopyCommandHistoryRead(
+          () => true,
+          () => history.streamRawHistory(),
+        ),
+        copyToClipboard,
+      ).action(),
+    0,
+    (index) => rows[index],
+    undefined,
+    (options) => new PublicCursorHistory(options),
+  );
+}
 
-  it('should return info message when no history is available', async () => {
-    latestOutput = { kind: 'no-chat' };
-    const result = await copyCommand.action();
-
-    expect(result).toStrictEqual({
+describe('copyCommand absent output', () => {
+  beforeEach(resetClipboard);
+  it('returns info when no chat has been initialized', async () => {
+    expect(await noChatCopy()).toStrictEqual({
       type: 'message',
-      messageType: 'info',
       content: 'No chat history available yet',
+      messageType: 'info',
     });
-    expect(mockCopyToClipboard).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
   });
 
-  it('should return info message when history is empty', async () => {
-    latestOutput = { kind: 'no-output' };
-    const result = await copyCommand.action();
-
-    expect(result).toStrictEqual({
+  it('returns info when history is empty', async () => {
+    expect(await copyRows([])).toStrictEqual({
       type: 'message',
-      messageType: 'info',
       content: 'No output in history',
+      messageType: 'info',
     });
-    expect(mockCopyToClipboard).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
   });
 
-  it('should return info message when no AI messages are found in history', async () => {
-    latestOutput = { kind: 'no-output' };
-    const result = await copyCommand.action();
-
-    expect(result).toStrictEqual({
+  it('returns info when history has only human messages', async () => {
+    expect(await copyRows([message('human', 'Hello')])).toStrictEqual({
       type: 'message',
-      messageType: 'info',
       content: 'No output in history',
+      messageType: 'info',
     });
-    expect(mockCopyToClipboard).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
   });
 
-  it('should copy the last AI message to the clipboard successfully', async () => {
-    latestOutput = { kind: 'text', text: 'Hi there! How can I help you?' };
-    mockCopyToClipboard.mockResolvedValue(undefined);
-    const result = await copyCommand.action();
+  it('returns info when the config service is unavailable', async () => {
+    expect(await noChatCopy()).toStrictEqual({
+      type: 'message',
+      content: 'No chat history available yet',
+      messageType: 'info',
+    });
+    expect(writes).toHaveLength(0);
+  });
+});
 
+describe('copyCommand text selection', () => {
+  beforeEach(resetClipboard);
+  it('copies the last AI text and ignores a later human message', async () => {
+    const result = await copyRows([
+      message('human', 'Hello'),
+      message('ai', 'Hi', ' there!'),
+      message('human', 'Next'),
+    ]);
+    expect(writes).toStrictEqual(['Hi there!']);
     expect(result).toStrictEqual({
       type: 'message',
-      messageType: 'info',
       content: 'Last output copied to the clipboard',
-    });
-    expect(mockCopyToClipboard).toHaveBeenCalledWith(
-      'Hi there! How can I help you?',
-    );
-  });
-
-  it('should handle multiple text parts in the latest output', async () => {
-    latestOutput = { kind: 'text', text: 'Part 1: Part 2: Part 3' };
-    mockCopyToClipboard.mockResolvedValue(undefined);
-    const result = await copyCommand.action();
-
-    expect(mockCopyToClipboard).toHaveBeenCalledWith('Part 1: Part 2: Part 3');
-    expect(result).toStrictEqual({
-      type: 'message',
       messageType: 'info',
-      content: 'Last output copied to the clipboard',
     });
   });
 
-  it('should copy text extracted from output containing non-text blocks', async () => {
-    latestOutput = { kind: 'text', text: 'Text part more text' };
-    mockCopyToClipboard.mockResolvedValue(undefined);
-    const result = await copyCommand.action();
-
-    expect(mockCopyToClipboard).toHaveBeenCalledWith('Text part more text');
-    expect(result).toStrictEqual({
-      type: 'message',
-      messageType: 'info',
-      content: 'Last output copied to the clipboard',
-    });
-  });
-
-  it('should copy the latest AI output when multiple AI messages exist', async () => {
-    latestOutput = { kind: 'text', text: 'Second AI response' };
-    mockCopyToClipboard.mockResolvedValue(undefined);
-    const result = await copyCommand.action();
-
-    expect(mockCopyToClipboard).toHaveBeenCalledWith('Second AI response');
+  it('concatenates all text parts without inserting separators', async () => {
+    const result = await copyRows([
+      message('ai', 'Part 1: ', 'Part 2: ', 'Part 3'),
+    ]);
+    expect(writes).toStrictEqual(['Part 1: Part 2: Part 3']);
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Last output copied to the clipboard',
     });
   });
+});
 
-  it('should handle clipboard copy error', async () => {
-    latestOutput = { kind: 'text', text: 'AI response' };
-    const clipboardError = new Error('Clipboard access denied');
-    mockCopyToClipboard.mockRejectedValue(clipboardError);
-    const result = await copyCommand.action();
-
-    expect(result).toStrictEqual({
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to copy to the clipboard. ${clipboardError.message}`,
-    });
-  });
-
-  it('should handle non-Error clipboard errors', async () => {
-    latestOutput = { kind: 'text', text: 'AI response' };
-    const rejectedValue = 'String error';
-    mockCopyToClipboard.mockRejectedValue(rejectedValue);
-    const result = await copyCommand.action();
-
-    expect(result).toStrictEqual({
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to copy to the clipboard. ${rejectedValue}`,
-    });
-  });
-
-  it('should return info message when no text parts exist in the AI output', async () => {
-    latestOutput = { kind: 'empty' };
-    const result = await copyCommand.action();
-
+describe('copyCommand mixed-block selection', () => {
+  beforeEach(resetClipboard);
+  it('ignores media, thinking and tool blocks between text parts', async () => {
+    const result = await copyRows([
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'Text part' },
+          {
+            type: 'media',
+            mimeType: 'image/jpeg',
+            encoding: 'base64',
+            data: 'base64data',
+          },
+          { type: 'thinking', thought: 'hidden' },
+          { type: 'tool_call', id: 'call', name: 'read_file', parameters: {} },
+          { type: 'text', text: ' more text' },
+        ],
+      },
+    ]);
+    expect(writes).toStrictEqual(['Text part more text']);
     expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
+      content: 'Last output copied to the clipboard',
+    });
+  });
+
+  it('replaces earlier AI output with the last AI message', async () => {
+    const result = await copyRows([
+      message('ai', 'First response'),
+      message('human', 'Next'),
+      message('ai', 'Second ', 'response'),
+    ]);
+    expect(writes).toStrictEqual(['Second response']);
+    expect(result).toStrictEqual({
+      type: 'message',
+      messageType: 'info',
+      content: 'Last output copied to the clipboard',
+    });
+  });
+
+  it('does not fall back to an earlier text message when the last AI row is media-only', async () => {
+    const result = await copyRows([
+      message('ai', 'Old output'),
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'image/jpeg',
+            encoding: 'base64',
+            data: 'base64data',
+          },
+        ],
+      },
+    ]);
+    expect(result).toStrictEqual({
+      type: 'message',
       content: 'Last AI output contains no text to copy.',
+      messageType: 'info',
     });
-    expect(mockCopyToClipboard).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
+  });
+});
+
+describe('copyCommand clipboard failures', () => {
+  beforeEach(resetClipboard);
+  it('reports an Error from clipboard infrastructure', async () => {
+    clipboardError = new Error('Clipboard access denied');
+    expect(await copyRows([message('ai', 'AI ', 'response')])).toStrictEqual({
+      type: 'message',
+      content: 'Failed to copy to the clipboard. Clipboard access denied',
+      messageType: 'error',
+    });
+    expect(writes).toHaveLength(0);
   });
 
-  it('should report when the registered owner has no chat', async () => {
-    latestOutput = { kind: 'no-chat' };
-    const result = await copyCommand.action();
-
-    expect(result).toStrictEqual({
+  it('reports non-Error clipboard failures', async () => {
+    clipboardError = 'String error';
+    expect(await copyRows([message('ai', 'AI ', 'response')])).toStrictEqual({
       type: 'message',
-      messageType: 'info',
-      content: 'No chat history available yet',
+      content: 'Failed to copy to the clipboard. String error',
+      messageType: 'error',
     });
-    expect(mockCopyToClipboard).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
   });
 });

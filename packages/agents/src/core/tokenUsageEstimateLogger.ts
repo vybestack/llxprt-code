@@ -9,14 +9,14 @@ import type {
   TokenUsageLogger,
   TokenEstimatorType,
 } from './TokenUsageLogger.js';
-import type { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
 import type { TokenUsageTurnContext } from './tokenUsageRecords.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { RequestShapeResult } from './tokenUsageRequestShape.js';
 import { extractSystemInstructionText } from './streamRequestHelpers.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
@@ -107,13 +107,13 @@ export function recordFinalizedPromptEnvelopeEstimate(
  *
  * @issue #3130
  */
-export function recordTurnJoinContext(
+export async function recordTurnJoinContext(
   usageLogger: TokenUsageLogger | null | undefined,
   promptId: string,
   runtimeState: AgentRuntimeState,
   historyService: HistoryService,
   turnId: string | null,
-): void {
+): Promise<void> {
   if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
 
@@ -122,7 +122,7 @@ export function recordTurnJoinContext(
   // this send, not something derived from history; deriving it here would name
   // the previous turn. `userTurn`/`step` describe the conversation position
   // the request was built from, which is the newest persisted marker.
-  const priorMarker = findCurrentTurnMarker(historyService.getRawHistory());
+  const priorMarker = await historyService.getCurrentTurnMarker();
 
   const context: TokenUsageTurnContext = {
     sessionId: runtimeState.sessionId,
@@ -183,7 +183,41 @@ export function recordRequestShapeContext(
     includeFingerprint: debug,
   });
 
-  const context: TokenUsageTurnContext = {
+  usageLogger.attachTurnContext(promptId, shapeContext(result, debug));
+}
+
+export async function recordSourceRequestShapeContext(
+  usageLogger: TokenUsageLogger | null | undefined,
+  promptId: string,
+  requestRows: ProviderRequestRows,
+  tools: unknown,
+  instructionsText: string | undefined,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (usageLogger === undefined || usageLogger === null) return;
+  if (!usageLogger.isEnabled()) return;
+  // #4068: see recordRequestShapeContext.
+  const debug = usageLogger.getLevel() === 'debug';
+  const result = await usageLogger.getShapeMemory().recordSourceRequestShape({
+    requestRows,
+    tools,
+    instructionsText,
+    countTokens: estimateTokens,
+    signal,
+    includeFingerprint: debug,
+  });
+  usageLogger.attachTurnContext(promptId, shapeContext(result, debug));
+}
+
+type RecordedShape = RequestShapeResult & {
+  readonly newVsCarriedKnown: boolean;
+};
+
+function shapeContext(
+  result: RecordedShape,
+  debug: boolean,
+): TokenUsageTurnContext {
+  return {
     ...newVsCarriedContext(result, debug),
     instructionsTokens: result.instructionsTokens,
     toolsSchemaTokens: result.toolsSchemaTokens,
@@ -195,8 +229,6 @@ export function recordRequestShapeContext(
       prefixFingerprintChanged: result.prefixFingerprintChanged,
     }),
   };
-
-  usageLogger.attachTurnContext(promptId, context);
 }
 
 /**
@@ -206,7 +238,7 @@ export function recordRequestShapeContext(
  * cannot inherit an earlier attempt's split through the context merge.
  */
 function newVsCarriedContext(
-  result: ReturnType<RequestShapeSessionMemory['recordRequestShape']>,
+  result: RecordedShape,
   debug: boolean,
 ): Partial<TokenUsageTurnContext> {
   if (!result.newVsCarriedKnown) {
@@ -250,7 +282,46 @@ export interface SendSeamTelemetryInput {
   turnId: string | null;
 }
 
-export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
+/** Source-route seam input: request rows are read from disk, never an array. */
+export interface SourceSendSeamTelemetryInput
+  extends Omit<SendSeamTelemetryInput, 'requestContents'> {
+  readonly requestRows: ProviderRequestRows;
+  readonly signal?: AbortSignal;
+}
+
+export function recordSendSeamTelemetry(
+  input: SendSeamTelemetryInput,
+): Promise<void> {
+  return observeSendSeam(input, () =>
+    recordRequestShapeContext(
+      input.usageLogger,
+      input.promptId,
+      input.requestContents,
+      input.tools,
+      extractSystemInstructionText(input.systemInstruction),
+    ),
+  );
+}
+
+export function recordSourceSendSeamTelemetry(
+  input: SourceSendSeamTelemetryInput,
+): Promise<void> {
+  return observeSendSeam(input, () =>
+    recordSourceRequestShapeContext(
+      input.usageLogger,
+      input.promptId,
+      input.requestRows,
+      input.tools,
+      extractSystemInstructionText(input.systemInstruction),
+      input.signal,
+    ),
+  );
+}
+
+async function observeSendSeam(
+  input: Omit<SendSeamTelemetryInput, 'requestContents'>,
+  recordShape: () => void | Promise<void>,
+): Promise<void> {
   // #4068: at `off` nothing below may run, including the system-instruction
   // extraction that only feeds the request-shape split. The level is the one
   // the processor applied with `beginRequest` for this request.
@@ -265,20 +336,14 @@ export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
       input.promptId,
       input.estimate,
     );
-    recordTurnJoinContext(
+    await recordTurnJoinContext(
       input.usageLogger,
       input.promptId,
       input.runtimeState,
       input.historyService,
       input.turnId,
     );
-    recordRequestShapeContext(
-      input.usageLogger,
-      input.promptId,
-      input.requestContents,
-      input.tools,
-      extractSystemInstructionText(input.systemInstruction),
-    );
+    await recordShape();
     recordProviderOrModelSwitch(
       input.usageLogger,
       input.runtimeState,

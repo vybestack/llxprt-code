@@ -4,43 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ResponseArrival } from '@vybestack/llxprt-code-core/services/history/history-response-arrival.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
-import type {
-  IContent,
-  ModelOutput,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { IContent } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
-import type {
-  MediaAdmissionPort,
-  ReasoningInclusionPolicy,
-} from './runtimePorts.js';
+import type { MediaAdmissionPort } from './runtimePorts.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import type { PreparedUserTurn } from './mediaAdmissionSeam.js';
-import {
-  analyzeBlocksOutcome,
-  extractResponseTextFromBlocks,
-  recordHistoryWithUsage,
-  validateStreamCompletion,
-} from './streamValidationHelpers.js';
+import type { StreamTerminalState } from './streamTerminalState.js';
+import { validateStreamCompletion } from './streamValidationHelpers.js';
+import { settleStreamUsage } from './streamUsageSettlement.js';
 import {
   clearMatchedEagerToolResponseCallIds,
-  consolidateTextBlocks,
-  isMissingFinishReason,
   prepareHistoryUserInput,
 } from './streamResponseHelpers.js';
 
 interface FinalizeStreamResponseOptions {
+  readonly arrival?: ResponseArrival;
   readonly origin?: object;
   readonly logger: DebugLogger;
   readonly conversationManager: ConversationManager;
   readonly historyService: HistoryService;
   readonly compressionHandler: CompressionHandler;
   readonly mediaAdmission: MediaAdmissionPort | undefined;
-  readonly reasoningInclusion: ReasoningInclusionPolicy;
-  readonly accumulated: ModelOutput;
+  readonly terminal: StreamTerminalState;
   readonly userInput: IContent | IContent[];
   readonly includeThoughts: boolean;
   readonly semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
@@ -90,30 +80,34 @@ async function settlePublishedStreamAdmissions(
 
 async function commitFinalizedStreamHistory(
   options: FinalizeStreamResponseOptions,
-  acc: ModelOutput,
-  preparedHistoryUserInput: ReturnType<typeof prepareHistoryUserInput>,
 ): Promise<void> {
-  const historyOptions = {
-    ...preparedHistoryUserInput.userInputFlags,
-    responseId: acc.responseId ?? acc.content.metadata?.id ?? null,
-    responsesStored: acc.content.metadata?.responsesStored ?? null,
-  };
+  const { terminal, arrival } = options;
+  if (arrival === undefined) throw new Error('Missing response arrival');
+  const prepared = prepareHistoryUserInput(
+    options.userInput,
+    options.eagerlyRecordedToolResponseCallIds,
+  );
   try {
-    await recordHistoryWithUsage(
-      options.logger,
-      options.conversationManager,
-      options.historyService,
-      options.compressionHandler,
-      options.reasoningInclusion,
-      preparedHistoryUserInput.historyUserInput,
-      acc,
-      historyOptions,
-      () => settlePublishedStreamAdmissions(options),
+    await options.conversationManager.recordHistory(
+      [],
+      [],
+      undefined,
+      terminal.usage,
+      { ...prepared.userInputFlags, responseAlreadyRecorded: true },
+      undefined,
       options.origin,
+    );
+    await arrival.seal(terminal.metadata());
+    await settleStreamUsage(
+      options.historyService,
+      options.logger,
+      terminal.usage?.promptTokens ?? null,
+      options.compressionHandler.lastPromptTokenCount,
+      () => settlePublishedStreamAdmissions(options),
     );
   } finally {
     clearMatchedEagerToolResponseCallIds(
-      preparedHistoryUserInput.filteredResults,
+      prepared.filteredResults,
       options.eagerlyRecordedToolResponseCallIds,
     );
   }
@@ -122,62 +116,26 @@ async function commitFinalizedStreamHistory(
 export async function finalizeStreamResponse(
   options: FinalizeStreamResponseOptions,
 ): Promise<void> {
-  const acc = options.accumulated;
-  acc.content = {
-    ...acc.content,
-    blocks: consolidateTextBlocks(acc.content.blocks),
-  };
-  const finishReason = acc.finishReason;
-  const responseText = extractResponseTextFromBlocks(acc.content.blocks);
-  const outcome = analyzeBlocksOutcome(
-    acc.content.blocks,
-    options.includeThoughts,
-  );
-
-  if (isMissingFinishReason(finishReason)) {
-    options.logger.debug(
-      () =>
-        `[stream:terminal] stream ended without finishReason (hasToolCall=${String(outcome.hasToolCalls)}, hasTextResponse=${String(outcome.hasVisibleText)}, hasThinkingResponse=${String(outcome.hasThinking)}, responseTextLength=${responseText.length})`,
-    );
-  } else {
-    options.logger.debug(
-      () => `[stream:terminal] finalized stream with finishReason`,
-      {
-        finishReason,
-        hasToolCall: outcome.hasToolCalls,
-        hasTextResponse: outcome.hasVisibleText,
-        hasThinkingResponse: outcome.hasThinking,
-        responseTextLength: responseText.length,
-      },
-    );
-  }
-
+  const terminal = options.terminal;
+  options.logger.debug(() => '[stream:terminal] finalized journal response', {
+    finishReason: terminal.finishReason,
+    ...terminal.outcome,
+    responseTextLength: terminal.responseTextLength,
+  });
   validateStreamCompletion(
     options.logger,
     options.userInput,
-    outcome,
-    finishReason,
-    responseText,
-    acc.rawStopReason,
+    terminal.outcome,
+    terminal.finishReason,
+    terminal.responseTextLength,
+    terminal.rawStopReason,
   );
-
-  const preparedHistoryUserInput = prepareHistoryUserInput(
-    options.userInput,
-    options.eagerlyRecordedToolResponseCallIds,
-  );
-  if (acc.afcHistory !== undefined) {
-    acc.afcHistory = acc.afcHistory.filter(
-      (content) => content.blocks.length > 0,
-    );
-  }
-
   await options.semanticMediaPurge?.complete({
     status: 'success',
-    usage: acc.usage,
-    cacheWriteEvidence: acc.semanticMediaPurgeCacheWriteEvidence,
+    usage: terminal.usage,
+    cacheWriteEvidence: terminal.semanticMediaPurgeCacheWriteEvidence,
     retryHandoff: options.retryHandoff,
   });
-
-  await commitFinalizedStreamHistory(options, acc, preparedHistoryUserInput);
-  options.semanticMediaPurge?.finalize();
+  await commitFinalizedStreamHistory(options);
+  await options.semanticMediaPurge?.finalize();
 }

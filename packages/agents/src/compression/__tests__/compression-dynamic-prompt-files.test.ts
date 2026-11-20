@@ -17,7 +17,7 @@ import { PromptResolutionError } from '@vybestack/llxprt-code-core/core/compress
 import {
   buildRecordingContext,
   createRecordingProvider,
-  createStrategy,
+  compressViaDisk,
   requestText,
   usePromptsDir,
   writePromptFile,
@@ -55,7 +55,7 @@ async function captureCompressionRequest(
 ): Promise<string[]> {
   const provider = createRecordingProvider(SNAPSHOT);
   const context = buildRecordingContext(provider, history, options);
-  await createStrategy(strategyName).compress(context);
+  await compressViaDisk(strategyName, context);
   const [request] = provider.requests;
   return request.flatMap((content) => requestText([content]));
 }
@@ -153,7 +153,7 @@ describe('compression request turns with runtime data can be overridden (issue #
       });
 
       await expect(
-        createStrategy(strategyName).compress(context),
+        compressViaDisk(strategyName, context),
       ).rejects.toBeInstanceOf(PromptResolutionError);
       expect(provider.requests).toHaveLength(0);
     });

@@ -90,18 +90,19 @@ function buildConfigStub(tmpDir: string): Config {
 }
 
 const settingsRoots: SessionSettingsOwner[] = [];
-describe('LoggingProviderWrapper — behavioral JSONL output', () => {
-  afterEach(async () => {
-    const results = await Promise.allSettled(
-      settingsRoots.splice(0).map((owner) => owner.dispose()),
-    );
-    const failures = results.flatMap((result) =>
-      result.status === 'rejected' ? [result.reason] : [],
-    );
-    if (failures.length > 0)
-      throw new AggregateError(failures, 'Wrapper test cleanup failed');
-  });
+async function disposeSettingsRoots(): Promise<void> {
+  const results = await Promise.allSettled(
+    settingsRoots.splice(0).map((owner) => owner.dispose()),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'Wrapper test cleanup failed');
+}
 
+describe('LoggingProviderWrapper behavioral JSONL: group 1', () => {
+  afterEach(disposeSettingsRoots);
   it('writes request and response JSONL entries to disk', async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lpw-jsonl-test-'));
     const configStub = buildConfigStub(tmpDir);
@@ -124,7 +125,7 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
 
     const inputContent: IContent[] = [
       {
-        speaker: 'user',
+        speaker: 'human',
         blocks: [{ type: 'text', text: 'hi' }],
       } as IContent,
     ];
@@ -164,6 +165,9 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     expect(requestEntry.type).toBe('request');
     expect(requestEntry.provider).toBe('fake-test-provider');
     expect(Array.isArray(requestEntry.messages)).toBe(true);
+    expect(requestEntry.messages).toStrictEqual([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+    ]);
     expect(requestEntry.context).toBeDefined();
     const reqCtx = requestEntry.context as Record<string, unknown>;
     expect(typeof reqCtx.conversationId).toBe('string');
@@ -190,11 +194,15 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     // Cleanup
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
+});
 
+describe('LoggingProviderWrapper behavioral JSONL: group 2', () => {
   it('core shim re-exports the storage writer factory', () => {
     expect(getFromCore).toBe(getConversationFileWriter);
   });
+});
 
+describe('LoggingProviderWrapper behavioral JSONL: group 3', () => {
   it('logs error to observable array when write fails', async () => {
     const errors: Array<{ message: string; context?: unknown }> = [];
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lpw-error-test-'));
@@ -220,7 +228,10 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
 
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
+});
 
+describe('LoggingProviderWrapper behavioral JSONL: group 4', () => {
+  afterEach(disposeSettingsRoots);
   it('keeps request logging failures observable while allowing provider response', async () => {
     const tmpDir = await fs.mkdtemp(
       path.join(os.tmpdir(), 'lpw-request-fail-'),
@@ -253,7 +264,9 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     try {
       const chunks: IContent[] = [];
       for await (const chunk of wrapper.generateChatCompletion({
-        contents: [{ speaker: 'user', blocks: [{ type: 'text', text: 'hi' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+        ],
         invocation: captureProviderInvocation(
           {
             fetch: requestFetch,
@@ -278,7 +291,9 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
   });
+});
 
+describe('LoggingProviderWrapper behavioral JSONL: group 5', () => {
   it('redacts credential file paths without an ESLint regex exception', () => {
     const redactor = new ConfigBasedRedactor({
       redactApiKeys: false,
@@ -299,7 +314,9 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     expect(redacted).not.toContain('id_ed25519');
     expect(redacted).not.toContain('.env.local');
   });
+});
 
+describe('LoggingProviderWrapper behavioral JSONL: group 6', () => {
   it('preserves bearer and absolute-path redaction semantics without ESLint regex exceptions', () => {
     const credentialRedactor = new ConfigBasedRedactor({
       redactApiKeys: false,
@@ -332,7 +349,9 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
       ),
     ).toContain('.ssh/id_ed25519');
   });
+});
 
+describe('LoggingProviderWrapper behavioral JSONL: group 7', () => {
   it('preserves punctuation-delimited redaction semantics without regex disables', () => {
     const fileRedactor = new ConfigBasedRedactor({
       redactApiKeys: false,

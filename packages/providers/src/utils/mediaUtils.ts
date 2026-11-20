@@ -31,23 +31,34 @@ export function classifyMediaBlock(media: MediaBlock): MediaCategory {
   if (mime.startsWith('video/')) return 'video';
   return 'unknown';
 }
+/**
+ * The media of one row that a protocol cannot carry. This is the one rule;
+ * routes that see rows one at a time call it per row.
+ */
+export function unsupportedMediaOfRow(
+  content: IContent,
+  isSupported: (block: MediaBlock, category: MediaCategory) => boolean,
+): readonly UnsupportedMediaEntry[] {
+  return content.blocks.flatMap((block) => {
+    if (block.type !== 'media') return [];
+    const category = classifyMediaBlock(block);
+    if (isSupported(block, category)) return [];
+    return [
+      {
+        kind: 'unsupported' as const,
+        reason: `${category} input is not supported by this protocol and was replaced with a text placeholder`,
+        mediaType: category,
+      },
+    ];
+  });
+}
+
 export function collectUnsupportedMedia(
   contents: readonly IContent[],
   isSupported: (block: MediaBlock, category: MediaCategory) => boolean,
 ): readonly UnsupportedMediaEntry[] {
   return contents.flatMap((content) =>
-    content.blocks.flatMap((block) => {
-      if (block.type !== 'media') return [];
-      const category = classifyMediaBlock(block);
-      if (isSupported(block, category)) return [];
-      return [
-        {
-          kind: 'unsupported' as const,
-          reason: `${category} input is not supported by this protocol and was replaced with a text placeholder`,
-          mediaType: category,
-        },
-      ];
-    }),
+    unsupportedMediaOfRow(content, isSupported),
   );
 }
 

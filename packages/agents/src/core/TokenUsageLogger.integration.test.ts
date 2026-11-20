@@ -1,3 +1,5 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
@@ -6,6 +8,9 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
   createAgentRuntimeState,
@@ -17,8 +22,7 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { assertDefined } from '@vybestack/llxprt-code-test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -29,6 +33,7 @@ import {
   TokenUsageLogger,
   type SerializedTokenUsageRecord,
 } from './TokenUsageLogger.js';
+const historyScratchRoots = createTestScratchOwner();
 
 function makeTempLogPath(): string {
   return path.join(
@@ -90,50 +95,38 @@ function readJsonl(filePath: string): SerializedTokenUsageRecord[] {
   });
 }
 
-type ProviderManagerStub = {
-  getActiveProvider: unknown;
-};
-
-/** Type predicate: the mock provider manager shape used across this file. */
-function isProviderManagerStub(
-  manager: unknown,
-): manager is ProviderManagerStub {
-  return (
-    typeof manager === 'object' &&
-    manager !== null &&
-    'getActiveProvider' in manager
-  );
-}
-
-function providerAdapterFromStub(manager: unknown) {
-  if (!isProviderManagerStub(manager)) {
-    throw new Error('provider manager stub must expose getActiveProvider()');
-  }
-  return createProviderAdapterFromManager(manager);
-}
-
 /**
  * Builds the runtime-context view every test in this file uses: a ChatSession
  * facing the given provider stub, backed by the token-sync fixture services.
  */
 function buildTokenSyncView(
   fixture: ReturnType<typeof createTokenSyncTestFixture>,
-  mockProvider: unknown,
+  mockProvider: Pick<RuntimeProvider, 'name' | 'generateChatCompletion'>,
   sessionId: string,
 ) {
   const { mockConfig, historyService, providerRuntimeSnapshot } = fixture;
+  const runtimeId = fixture.runtimeSetup.runtime.runtimeId;
+  if (runtimeId === undefined) throw new Error('Missing token-sync runtime ID');
   const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-    runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+    runtimeId,
     provider: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
     sessionId,
   });
+  const provider: RuntimeProvider = {
+    ...mockProvider,
+    getModels: async () => [],
+  };
   const providerManager = {
     setActiveProvider: () => {},
-    getProviderByName: () => mockProvider,
-    getActiveProvider: vi.fn(() => mockProvider),
+    getProviderByName: () => provider,
+    getActiveProvider: vi.fn(() => provider),
+    getProviderKeys: () => {
+      throw new Error('No provider keys in token-sync fixture');
+    },
   };
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     ...createSessionPolicyFixture(
       fixture.runtimeSetup.settingsService,
       providerRuntimeSnapshot.runtimeId,
@@ -146,7 +139,7 @@ function buildTokenSyncView(
       preserveThreshold: 0.2,
       telemetry: { enabled: true, target: null },
     },
-    provider: providerAdapterFromStub(providerManager),
+    provider: createProviderAdapterFromManager(providerManager),
     telemetry: createTelemetryAdapter(
       mockConfig,
       RootTelemetry.prepare({
@@ -247,7 +240,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
+      { message: [{ type: 'text', text: 'What is 2+2?' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -341,7 +334,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Hello there' }] },
+      { message: [{ type: 'text', text: 'Hello there' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -422,7 +415,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Say hello' }] },
+      { message: [{ type: 'text', text: 'Say hello' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -446,15 +439,17 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     // --- The join must resolve to the turn THIS send created (AC-1/AC-2) ---
     // This is the first turn of the session: there is no earlier turn the
     // record could accidentally name, so a stale or null turn_id fails here.
-    const allHistory = historyService.getAll();
-    const sentTurn = allHistory.find((c) => c.speaker === 'human');
-    expect(sentTurn).toBeDefined();
-    assertDefined(sentTurn, 'expected a human turn in history'); // usage record -> conversation turn
-    expect(record.turn_id).not.toBeNull();
-    expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
-    // conversation turn -> usage record
-    expect(sentTurn.metadata?.promptId).toBe(promptId);
-    expect(record.prompt_id).toBe(promptId);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const allHistory = rows;
+      const sentTurn = allHistory.find((c) => c.speaker === 'human');
+      expect(sentTurn).toBeDefined();
+      assertDefined(sentTurn, 'expected a human turn in history'); // usage record -> conversation turn
+      expect(record.turn_id).not.toBeNull();
+      expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
+      // conversation turn -> usage record
+      expect(sentTurn.metadata?.promptId).toBe(promptId);
+      expect(record.prompt_id).toBe(promptId);
+    });
   });
 
   // AC-12: Cached turn — provider reports Anthropic-style cache read+write.
@@ -536,7 +531,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Tell me about caching' }] },
+      { message: [{ type: 'text', text: 'Tell me about caching' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -635,7 +630,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
+      { message: [{ type: 'text', text: 'What is 2+2?' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -715,7 +710,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
+      { message: [{ type: 'text', text: 'What is 2+2?' }] },
       promptId,
     );
     // A usage-only stream fails completion validation (no response text).
@@ -822,7 +817,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     });
 
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
+      { message: [{ type: 'text', text: 'What is 2+2?' }] },
       promptId,
     );
     for await (const _event of stream) {
@@ -920,7 +915,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       tiktokenTokens: 140,
     });
     const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Say hi' }] },
+      { message: [{ type: 'text', text: 'Say hi' }] },
       promptId,
     );
     for await (const _event of stream) {

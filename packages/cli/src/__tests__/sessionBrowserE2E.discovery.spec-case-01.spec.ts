@@ -36,7 +36,7 @@ describe('Session discovery #1', () => {
     await cleanupSessionBrowserTestState(state);
   });
 
-  it('discovers JSONL session files', async () => {
+  it('discovers journal session files', async () => {
     // Create multiple session files
     await createTestSession(state.chatsDir, {
       messages: [{ speaker: 'user', text: 'Session 1' }],
@@ -54,6 +54,6 @@ describe('Session discovery #1', () => {
     );
 
     expect(sessions).toHaveLength(3);
-    expect(sessions.every((s) => s.filePath.endsWith('.jsonl'))).toBe(true);
+    expect(sessions.every((s) => s.filePath.endsWith('.llxj'))).toBe(true);
   });
 });

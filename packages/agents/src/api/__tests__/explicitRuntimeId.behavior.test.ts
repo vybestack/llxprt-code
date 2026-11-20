@@ -129,7 +129,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       firstManager,
       firstOauth,
       firstConfig.getSessionId(),
-      configureProviderTokenizer(firstManager),
+      configureProviderTokenizer(firstManager, firstConfig.scratchRoots),
       undefined,
       process.env.LLXPRT_FAKE_RESPONSES,
     );
@@ -227,7 +227,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       secondManager,
       secondOauth,
       secondConfig.getSessionId(),
-      configureProviderTokenizer(secondManager),
+      configureProviderTokenizer(secondManager, firstConfig.scratchRoots),
       undefined,
       process.env.LLXPRT_FAKE_RESPONSES,
     );

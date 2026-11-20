@@ -18,6 +18,7 @@ export const PACKAGE_VERSION = 2;
 const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
 export const SUPPORTED_PERSISTED_SESSION_VERSION = 1;
 export const RECORDING_FILE = 'session.jsonl';
+export const JOURNAL_RECORDING_FILE = 'session.llxj';
 export const MANIFEST_FILE = 'manifest.json';
 const CONTENT_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const MIME_TYPE_PATTERN =
@@ -26,10 +27,11 @@ export const PERSISTED_SESSION_PREFIX = 'persisted-session-';
 export const HASH_CHUNK_BYTES = 64 * 1024;
 export const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
 export const MAX_RECORDING_BYTES = 256 * 1024 * 1024;
+export const MAX_RECORDING_LINE_BYTES = 64 * 1024 * 1024;
 export const MAX_PERSISTED_STATES = 256;
 export const MAX_PERSISTED_STATE_BYTES = 64 * 1024 * 1024;
 export const MAX_PERSISTED_STATE_AGGREGATE_BYTES = 256 * 1024 * 1024;
-const MAX_REFERENCES = 10_000;
+export const MAX_REFERENCES = 10_000;
 const MAX_OBJECTS = 20_000;
 export const MAX_OBJECT_BYTES = 256 * 1024 * 1024;
 export const MAX_OBJECT_AGGREGATE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -53,16 +55,11 @@ export interface VerifiedPackageBlob {
   readonly sourcePath: string;
 }
 
-export interface PortableRecording {
-  readonly bytes: Uint8Array;
-  readonly sessionId: string;
-  readonly histories: readonly IContent[][];
-}
-
-export interface PortablePersistedState {
-  readonly file: string;
-  readonly serialized: string;
-  readonly history: readonly IContent[];
+/** A package file whose size and digest were fixed during validation. */
+export interface PinnedPackageFile {
+  readonly path: string;
+  readonly byteLength: number;
+  readonly sha256: string;
 }
 
 export function packageBlobPath(root: string, contentId: string): string {
@@ -95,7 +92,7 @@ export async function boundedFileSize(
   return fileStat.size;
 }
 
-function boundedReadChanged(
+export function boundedReadChanged(
   before: Stats,
   after: Stats,
   current: Stats,
@@ -225,7 +222,10 @@ export function parseManifest(serialized: string): MediaPackageManifest {
       `Unsupported session media package version ${String(parsed['version'])}`,
     );
   }
-  if (parsed['recording'] !== RECORDING_FILE) {
+  if (
+    parsed['recording'] !== RECORDING_FILE &&
+    parsed['recording'] !== JOURNAL_RECORDING_FILE
+  ) {
     throw new Error('Invalid session media package manifest');
   }
   const references = parsed['references'];
@@ -256,7 +256,7 @@ export function parseManifest(serialized: string): MediaPackageManifest {
   }
   return {
     version: PACKAGE_VERSION,
-    recording: RECORDING_FILE,
+    recording: parsed['recording'],
     persistedStates,
     references,
     objects,

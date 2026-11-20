@@ -33,6 +33,7 @@ import { Readable, Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { toAcpReadableStream } from './acp-readable-stream.js';
 
 const HOLD_EVENT_LOOP_OPEN = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -266,7 +267,7 @@ async function startServerWithRunningToolCall(
     }),
     acp.ndJsonStream(
       Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
-      Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>,
+      toAcpReadableStream(Readable.toWeb(child.stdout)),
     ),
   );
   await Promise.race([

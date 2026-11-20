@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -155,7 +156,9 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
             `You are a professional prompt engineering assistant. Complete the user's partial prompt with expert precision and clarity. User's input: "a sufficiently long prompt" Continue this prompt by adding specific, actionable details that align with the user's intent. Focus on: clear, precise language; structured requirements; professional terminology; measurable outcomes. Length Guidelines: Keep suggestions concise (ideally 10-20 characters); prioritize brevity while maintaining clarity; use essential keywords only; avoid redundant phrases. Start your response with the exact user text ("a sufficiently long prompt") followed by your completion. Provide practical, implementation-focused suggestions rather than creative interpretations. Format: Plain text only. Single completion. Match the user's language. Emphasize conciseness over elaboration.`,
           ).slice(1, -1),
         );
-        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await collectResumeRows(agent.streamHistory())).toStrictEqual(
+          [],
+        );
         expect(agent.getModel()).toBe('capture-a');
         unmount();
       },
@@ -215,7 +218,9 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
         unmount();
         expect(signals[1].aborted).toBe(true);
         expect(result.current.text).toBe('');
-        expect(await owner.getHistory()).toStrictEqual([]);
+        expect(await collectResumeRows(owner.streamHistory())).toStrictEqual(
+          [],
+        );
         provider.generating = undefined;
         expect(await owner.generate('primary remains usable', undefined)).toBe(
           'turn one reply',

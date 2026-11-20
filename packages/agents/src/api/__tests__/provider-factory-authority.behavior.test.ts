@@ -1,3 +1,4 @@
+import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.js';
 
@@ -7,7 +8,12 @@ import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  MessageBusType,
+  type ToolConfirmationRequest,
+} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
   createServer,
   type IncomingMessage,
@@ -27,7 +33,7 @@ import {
   OpenAIProvider,
 } from '@vybestack/llxprt-code-providers';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-import type { SessionClientOwner } from '../../session/session-client-owner.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import {
@@ -48,21 +54,22 @@ import {
 } from './turn-revision-capture.fixture.js';
 
 function tokenizerForBudget(scale: number): RuntimeTokenizerFactory {
-  return {
-    getTokenizer: () => ({
-      countTokens: (text) => Math.ceil(String(text).length / 4),
-    }),
-    estimatePrompt: async (request) => ({
-      count:
-        Math.ceil(JSON.stringify(request.finalizedProjection).length / 4) *
-        scale,
-      method: 'exact',
-      family: 'owner-text',
-      estimatorVersion: '1',
-      assetRevision: '1',
-      projectionRevision: request.projectionRevision,
-    }),
-  };
+  return withGpt56DiskSources(
+    {
+      getTokenizer: () => ({
+        countTokens: (text) => Math.ceil(String(text).length / 4),
+      }),
+      estimatePrompt: async (request) => ({
+        count: (await request.legacyEstimate()) * scale,
+        method: 'calibrated',
+        family: 'legacy-owner-text',
+        estimatorVersion: '1',
+        assetRevision: '1',
+        projectionRevision: request.projectionRevision,
+      }),
+    },
+    process.cwd(),
+  );
 }
 
 async function budgetWire(): Promise<{
@@ -138,19 +145,38 @@ async function adoptForBudget(
   const settingsService = new SettingsService();
   settingsService.set('context-limit', contextLimit);
   settingsService.set('maxOutputTokens', 128);
-  return fromConfig(
-    config,
-    settingsService,
-    {
-      sessionId: 'same-factory-label',
-      activation: {
-        provider,
-        model,
-        cliOverrides: { key: 'local-factory-key', baseUrl: endpoint },
+  return withBudgetTokenizer(() =>
+    fromConfig(
+      config,
+      settingsService,
+      {
+        sessionId: 'same-factory-label',
+        activation: {
+          provider,
+          model,
+          cliOverrides: { key: 'local-factory-key', baseUrl: endpoint },
+        },
       },
-    },
-    authority,
+      authority,
+    ),
   );
+}
+
+async function withBudgetTokenizer<T>(build: () => Promise<T>): Promise<T> {
+  const create = SessionClientOwner.create;
+  const captured = spyOn(SessionClientOwner, 'create').mockImplementation(
+    (workspace, providers, policy) =>
+      create(
+        workspace,
+        { ...providers, tokenizerFactory: tokenizerForBudget(1) },
+        policy,
+      ),
+  );
+  try {
+    return await build();
+  } finally {
+    captured.mockRestore();
+  }
 }
 
 async function withConfig(
@@ -198,6 +224,7 @@ const DETACHED_RECORDING = {
 
 interface SelectedGeneratorOwner {
   readonly owner: SessionClientOwner;
+  readonly policy: RuntimePolicyOwner;
   close(): Promise<void>;
 }
 
@@ -214,6 +241,7 @@ async function openSelectedGeneratorOwner(
 ): Promise<SelectedGeneratorOwner> {
   const settings = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settings);
+  settingsOwner.initializeProviderSelection('gemini', 'gpt-5.6');
   settingsOwner.bindTelemetry(config);
   const manager = new ProviderManager(
     undefined,
@@ -268,7 +296,7 @@ async function openSelectedGeneratorOwner(
   await owner.initializeTools();
   const clients = ownerClients(owner);
   await clients[clients.length - 1].startChat();
-  return { owner, close };
+  return { owner, policy, close };
 }
 
 describe('public provider factory authority', () => {
@@ -292,6 +320,60 @@ describe('public provider factory authority', () => {
     });
   });
 
+  it('uses the caller policy bus without retiring its caller authority', async () => {
+    await withConfig(async (config) => {
+      const wire = await budgetWire();
+      const opened = await openSelectedGeneratorOwner(
+        config,
+        wire.endpoint,
+        credentials().authority,
+        1,
+      );
+      const { policy, owner } = opened;
+      try {
+        await owner.clients.generateText(
+          'Return one sentence.',
+          { readHistory: true },
+          DETACHED_RECORDING,
+        );
+        let confirmation: ToolConfirmationRequest | undefined;
+        const release =
+          policy.session.messageBus.subscribe<ToolConfirmationRequest>(
+            MessageBusType.TOOL_CONFIRMATION_REQUEST,
+            (request) => {
+              confirmation = request;
+            },
+          );
+        let settled = false;
+        const pending = policy.session.messageBus.requestConfirmation(
+          { name: 'unregistered_privileged_tool' },
+          {},
+        );
+        void pending.then(() => {
+          settled = true;
+        });
+        await owner.dispose();
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        if (confirmation === undefined)
+          throw new Error('Caller confirmation was not published');
+        policy.session.messageBus.publish({
+          type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+          correlationId: confirmation.correlationId,
+          confirmed: true,
+        });
+        expect(await pending).toBe(true);
+        release();
+        expect(
+          policy.session.decisions.evaluate('read_file', {}),
+        ).toBeDefined();
+        expect(wire.models()).toStrictEqual(['gpt-5.6']);
+      } finally {
+        await opened.close();
+        wire.close();
+      }
+    });
+  });
   it('keeps tokenizer budget decisions isolated for same-label Agents sharing a Config', async () => {
     await withConfig(async (config) => {
       const firstWire = await budgetWire();
@@ -486,12 +568,12 @@ describe('public provider factory authority', () => {
               scale,
             ),
           );
-        const request = {
+        const request: { model: string; contents: IContent[] } = {
           model: 'gpt-5.6',
           contents: [
             {
-              speaker: 'human' as const,
-              blocks: [{ type: 'text' as const, text: 'sixteen letters!' }],
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'sixteen letters!' }],
             },
           ],
         };

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -19,12 +20,14 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import { chatSessionPorts, type ChatSessionPorts } from './chatSessionPorts.js';
+const historyScratchRoots = createTestScratchOwner();
 
 describe('ChatSession hook execution control', () => {
   let mockHookSystem: {
@@ -61,11 +64,21 @@ describe('ChatSession hook execution control', () => {
         .fn<NonNullable<HookExecutionOwner['beforeToolSelection']>>()
         .mockResolvedValue(undefined),
     };
+    const snapshotEvents = withSnapshotModelEvents({
+      fireBeforeModelEvent: (request) =>
+        mockHookSystem.fireBeforeModelEvent(request),
+      fireAfterModelEvent: (request, response) =>
+        mockHookSystem.fireAfterModelEvent(request, response),
+    });
     hookOwner = {
       sessionId: () => 'explicit-chat-hook',
       transcriptPath: () => undefined,
       beforeModel: mockHookSystem.fireBeforeModelEvent,
       afterModel: mockHookSystem.fireAfterModelEvent,
+      beforeModelSnapshot: (request, signal) =>
+        snapshotEvents.fireBeforeModelSnapshotEvent(request, signal),
+      afterModelSnapshot: (request, response, signal) =>
+        snapshotEvents.fireAfterModelSnapshotEvent(request, response, signal),
       beforeToolSelection: mockHookSystem.fireBeforeToolSelectionEvent,
     };
 
@@ -121,8 +134,11 @@ describe('ChatSession hook execution control', () => {
       sessionId: 'test-session',
     });
 
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({
+      scratchRoots: historyScratchRoots,
+    });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       ...createSessionPolicyFixture(
         runtimeSetup.settingsService,
         providerRuntimeSnapshot.runtimeId ?? 'hook-runtime',

@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -43,6 +44,7 @@ import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ChatSession } from './chatSession.js';
 import { chatSessionPorts } from './chatSessionPorts.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = createTestScratchOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -85,7 +87,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, config.scratchRoots);
   });
 
   function buildChatSession(provider: IProvider): ChatSession {
@@ -97,6 +99,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      scratchRoots: historyScratchRoots,
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
@@ -111,7 +114,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
           signal,
         ),
       state: runtimeState,
-      history: new HistoryService(),
+      history: new HistoryService({ scratchRoots: historyScratchRoots }),
       settings: {
         compressionThreshold: 0.8,
         contextLimit: 128000,

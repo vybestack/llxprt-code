@@ -30,7 +30,6 @@ import type {
   AgentInput,
 } from '@vybestack/llxprt-code-agents';
 import type { StructuredError } from '@vybestack/llxprt-code-core';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred, type Deferred } from './createDeferred.js';
 import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
@@ -179,7 +178,6 @@ function useOrchestration(
     [],
   );
   const addItem = React.useMemo(() => vi.fn().mockReturnValue(1), []);
-  const removeItems = React.useMemo(() => vi.fn(), []);
   const commandEffect = React.useMemo<string[]>(() => [], []);
   const handleSlashCommand = React.useMemo(
     () =>
@@ -199,16 +197,15 @@ function useOrchestration(
     ...policyOps,
     ...submissionOps,
     addItem,
-    removeItems,
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
     onAuthError: vi.fn(),
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
-    pendingResponse: new PendingResponseBuffer(undefined),
+
     pendingHistoryItemRef: state.pendingHistoryItemRef,
-    thinkingBlocksRef: { current: [] },
+
     turnCancelledRef: { current: false },
     setTurnCancelled: vi.fn(),
     drainSuppressedRef: { current: false },

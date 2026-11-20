@@ -1,3 +1,5 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { afterEach } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -14,6 +16,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -37,8 +40,9 @@ export function makeRuntimeContext(
   const owner = new SessionSettingsOwner(settingsService);
   owners.push(owner);
   return createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     state,
-    history: new HistoryService(),
+    history: new HistoryService({ scratchRoots: historyScratchRoots }),
     settings: {
       compressionThreshold: 0.8,
       contextLimit: 128000,
@@ -76,8 +80,11 @@ export function humanText(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
-export function getRecordedHistoryText(history: HistoryService): string {
-  const all = history.getAll();
+export async function getRecordedHistoryText(
+  history: HistoryService,
+): Promise<string> {
+  await history.waitForCommit();
+  const all = await collectRawHistory(history);
   return all
     .filter((c) => c.speaker === 'ai')
     .flatMap((c) => c.blocks)
@@ -86,11 +93,11 @@ export function getRecordedHistoryText(history: HistoryService): string {
     .join('');
 }
 
-export function getRecordedThinkingBlocks(
+export async function getRecordedThinkingBlocks(
   history: HistoryService,
-): Array<{ thought: string; signature?: string }> {
-  return history
-    .getAll()
+): Promise<Array<{ thought: string; signature?: string }>> {
+  await history.waitForCommit();
+  return (await collectRawHistory(history))
     .filter((c) => c.speaker === 'ai')
     .flatMap((c) => c.blocks)
     .filter((b) => b.type === 'thinking')

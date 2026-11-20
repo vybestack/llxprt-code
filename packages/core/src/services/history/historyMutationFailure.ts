@@ -49,18 +49,11 @@ export function combineMutationFailures(
  * failure. A finalizer is an effect's commit step, so none may run once an
  * earlier one failed: the mutation is about to be rolled back, and only
  * effects that never finalized can still be rolled back cleanly.
- *
- * A cancelled `signal` is honored immediately before each finalizer, so the
- * last finalizer (the caller-owned effect that holds the commit point) never
- * starts for a request that was already cancelled. Nothing is checked after
- * it: once it succeeds the mutation is committed.
  */
 export async function finalizeMutationEffects(
   effects: readonly PreparedHistoryBatchEffect[],
-  signal?: AbortSignal,
 ): Promise<void> {
   for (const effect of effects) {
-    signal?.throwIfAborted();
     await effect.finalize?.();
   }
 }

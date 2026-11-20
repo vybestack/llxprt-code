@@ -14,11 +14,27 @@
  * limitations under the License.
  */
 
+export { annotateCompressionSpanStream } from './compression-span-stream.js';
+
 import type {
   IContent,
   ChronologyMarker,
   ChronologyReplacedSpan,
 } from './IContent.js';
+import type { HistoryMutationInput } from './historyBatchContracts.js';
+
+export function stampMutationChronology(
+  stamper: ChronologyStamper,
+  input: HistoryMutationInput,
+): void {
+  const next = input.nextHistory;
+  let index = 0;
+  for (const content of next) {
+    stamper.stamp(content);
+    if ('readRow' in next) next.writeRow(index, content);
+    index++;
+  }
+}
 
 export interface ChronologyState {
   readonly nextSeq: number;
@@ -342,36 +358,37 @@ export function buildChronologyTrace(
 ): ChronologyTraceEntry[] {
   const entries: ChronologyTraceEntry[] = [];
   for (const item of history) {
-    const marker = item.metadata?.chronology;
-    if (marker === undefined) {
-      continue;
-    }
-    const blockTypes: string[] = [];
-    const toolCallIds: string[] = [];
-    const toolResponseIds: string[] = [];
-    for (const block of item.blocks) {
-      blockTypes.push(block.type);
-      if (block.type === 'tool_call') {
-        toolCallIds.push(block.id);
-      } else if (block.type === 'tool_response') {
-        toolResponseIds.push(block.callId);
-      }
-    }
-    const entry: ChronologyTraceEntry = {
-      seq: marker.seq,
-      userTurn: marker.userTurn,
-      step: marker.step,
-      recordedAt: marker.recordedAt,
-      speaker: item.speaker,
-      blockTypes,
-      toolCallIds,
-      toolResponseIds,
-      isSummary: item.metadata?.isSummary === true,
-      ...(item.metadata?.chronologyReplaced !== undefined
-        ? { replaced: item.metadata.chronologyReplaced }
-        : {}),
-    };
-    entries.push(entry);
+    const entry = projectChronologyTraceEntry(item);
+    if (entry !== undefined) entries.push(entry);
   }
   return entries;
+}
+
+export function projectChronologyTraceEntry(
+  item: IContent,
+): ChronologyTraceEntry | undefined {
+  const marker = item.metadata?.chronology;
+  if (marker === undefined) return undefined;
+  const blockTypes: string[] = [];
+  const toolCallIds: string[] = [];
+  const toolResponseIds: string[] = [];
+  for (const block of item.blocks) {
+    blockTypes.push(block.type);
+    if (block.type === 'tool_call') toolCallIds.push(block.id);
+    else if (block.type === 'tool_response') toolResponseIds.push(block.callId);
+  }
+  return {
+    seq: marker.seq,
+    userTurn: marker.userTurn,
+    step: marker.step,
+    recordedAt: marker.recordedAt,
+    speaker: item.speaker,
+    blockTypes,
+    toolCallIds,
+    toolResponseIds,
+    isSummary: item.metadata?.isSummary === true,
+    ...(item.metadata?.chronologyReplaced !== undefined
+      ? { replaced: item.metadata.chronologyReplaced }
+      : {}),
+  };
 }

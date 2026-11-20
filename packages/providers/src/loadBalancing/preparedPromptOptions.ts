@@ -13,9 +13,11 @@ import type {
 } from './loadBalancerTypes.js';
 import { estimateSelectedProviderPrompt } from './loadBalancerPromptEstimator.js';
 import {
-  estimateRequestTokens,
+  estimateRowSourceTokens,
   type EstimationResult,
 } from './loadBalancerTokenEstimator.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 import { resolveSubProfileModel } from './subProfileHelpers.js';
 
 export async function estimatePreparedPrompt(
@@ -52,12 +54,39 @@ export async function estimatePreparedPrompt(
       'configure the selected provider to expose its finalized prompt projection',
     );
   }
-  return estimateRequestTokens(
-    options.contents,
+  const { requestRows } = options;
+  if (requestRows === undefined) {
+    throw new Error('Load balancer estimation requires staged request rows');
+  }
+  // Fold the neutral selection from its repeatable reader; the request is
+  // never collected into an array just to be estimated.
+  return estimateRowSourceTokens(
+    {
+      count: requestRows.count,
+      open: () => requestRows.openReader(),
+    },
     subProfile.providerName,
     model,
     { tokenizerFactory },
   );
+}
+
+/**
+ * Options whose history is the replacement selection. The selection stays
+ * owned by whoever produced it; `contents` is its repeatable reader view bound
+ * to the request signal.
+ */
+export function optionsWithRequestRows(
+  options: GenerateChatOptions,
+  rows: ProviderRequestSelection,
+): GenerateChatOptions {
+  const signal = getRequestSignal(options);
+  return {
+    ...options,
+    contents: { [Symbol.asyncIterator]: () => rows.openReader(signal) },
+    requestRows: rows,
+    contentCount: rows.count,
+  };
 }
 
 export function optionsWithPromptProjection(

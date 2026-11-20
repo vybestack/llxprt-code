@@ -5,6 +5,7 @@
  */
 
 import type { UsageMetadata } from '../types/usage-metadata.js';
+import type { RequestArtifactDescriptor } from '../request-artifact.js';
 
 export class ApiRequestEvent {
   'event.name': 'api_request';
@@ -12,13 +13,24 @@ export class ApiRequestEvent {
   model: string;
   prompt_id: string;
   request_text?: string;
+  request_artifact?: RequestArtifactDescriptor;
+  /** Size of the serialized request body, reported by the provider that sent it. */
+  request_chars?: number;
 
-  constructor(model: string, prompt_id: string, request_text?: string) {
+  constructor(
+    model: string,
+    prompt_id: string,
+    request_text?: string,
+    request_artifact?: RequestArtifactDescriptor,
+    request_chars?: number,
+  ) {
     this['event.name'] = 'api_request';
     this['event.timestamp'] = new Date().toISOString();
     this.model = model;
     this.prompt_id = prompt_id;
     this.request_text = request_text;
+    this.request_artifact = request_artifact;
+    this.request_chars = request_chars;
   }
 }
 

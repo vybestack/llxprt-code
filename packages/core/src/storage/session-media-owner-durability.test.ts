@@ -1,25 +1,49 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import {
+  testJournalOptions,
+  withTestNamedWriters,
+} from '../journal/__tests__/support/namedWriterOwner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { SessionPersistenceService } from './SessionPersistenceService.js';
 import { describe, expect, it } from 'bun:test';
-import { link, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { link, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalMediaStore } from './local-media-store.js';
 import { stageRecordedMedia } from './recorded-media-transfer.js';
 import { SessionMediaOwner } from './session-media-owner.js';
-import { SessionRecordingService } from '../recording/SessionRecordingService.js';
-import { replaySession } from '../recording/ReplayEngine.js';
+import { createSessionRecorder } from '../recording/sessionRecorderFactory.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { hydrateRecordedMedia } from './recorded-media-transfer.js';
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
+  validateSessionMediaPackage,
 } from '../recording/session-media-package.js';
 import type { IContent } from '../services/history/IContent.js';
+const historyScratchRoots = createTestScratchOwner();
+
+async function replayRows(
+  path: string,
+  mediaStore: LocalMediaStore,
+): Promise<IContent[]> {
+  const session = await JournalSession.open(path, testJournalOptions());
+  try {
+    const history: IContent[] = [];
+    for await (const row of session.rows()) {
+      await hydrateRecordedMedia(mediaStore, [row.content]);
+      history.push(row.content);
+    }
+    return history;
+  } finally {
+    await session.close();
+  }
+}
 
 async function withOwners(
   scenario: (
@@ -50,17 +74,24 @@ async function record(
     semanticMetadata: {},
   });
   const content: IContent = { speaker: 'human', blocks: [reference] };
-  const recording = new SessionRecordingService({
-    sessionId: 'durable-owner',
-    projectHash: 'owner-project',
-    chatsDir: join(directory, 'chats'),
-    workspaceDirs: [directory],
-    provider: 'test',
-    model: 'test-model',
-    mediaStore: owner.store,
+  const recording = createSessionRecorder(
+    withTestNamedWriters({
+      sessionId: 'durable-owner',
+      projectHash: 'owner-project',
+      chatsDir: join(directory, 'chats'),
+      workspaceDirs: [directory],
+      provider: 'test',
+      model: 'test-model',
+      mediaStore: owner.store,
+    }),
+  );
+  const history = new HistoryService({
+    scratchRoots: historyScratchRoots,
+    recording,
   });
-  recording.recordContent(content);
-  await recording.flush();
+  await history.addBatch([content]);
+  await history.waitForCommit();
+  await history.dispose();
   const path = recording.getFilePath();
   await recording.dispose();
   if (path === null) throw new Error('Missing recording');
@@ -105,6 +136,8 @@ describe('session media durable transfer', () => {
         join(directory, 'second', 'chats'),
         'owner-project',
         second.store,
+        undefined,
+        testJournalOptions(),
       );
       await second.dispose();
       const fresh = new SessionMediaOwner(
@@ -112,14 +145,8 @@ describe('session media durable transfer', () => {
         1024 * 1024,
       );
       try {
-        const replay = await replaySession(
-          imported.recordingPath,
-          'owner-project',
-          { mediaStore: fresh.store },
-        );
-        expect(replay.ok).toBe(true);
-        if (!replay.ok) throw new Error(replay.error);
-        expect(replay.history[0].blocks[0]).toMatchObject({
+        const replay = await replayRows(imported.recordingPath, fresh.store);
+        expect(replay[0].blocks[0]).toMatchObject({
           encoding: 'reference',
           byteLength: 4,
         });
@@ -198,6 +225,8 @@ describe('durable import failure cleanup', () => {
             join(directory, 'limited', 'chats'),
             'owner-project',
             limited.store,
+            undefined,
+            testJournalOptions(),
           ),
         ).rejects.toThrow(/quota/i);
         expect(await limited.store.getStoredByteLength()).toBe(0);
@@ -225,29 +254,32 @@ describe('import activation durability', () => {
         'owner-project',
         second.store,
         async (imported) => {
-          const replay = await replaySession(
-            imported.recordingPath,
-            'owner-project',
-            { mediaStore: second.store },
+          const replay = await replayRows(imported.recordingPath, second.store);
+          const recording = createSessionRecorder(
+            withTestNamedWriters({
+              sessionId: 'activation-journal',
+              projectHash: 'owner-project',
+              chatsDir: join(directory, 'second', 'chats'),
+              workspaceDirs: [directory],
+              provider: 'test',
+              model: 'test',
+              mediaStore: second.store,
+            }),
           );
-          if (!replay.ok) throw new Error(replay.error);
-          const recording = new SessionRecordingService({
-            sessionId: 'activation-journal',
-            projectHash: 'owner-project',
-            chatsDir: join(directory, 'second', 'chats'),
-            workspaceDirs: [directory],
-            provider: 'test',
-            model: 'test',
-            mediaStore: second.store,
-          });
           try {
-            recording.recordContent(replay.history[0]);
-            await recording.flush();
+            const history = new HistoryService({
+              scratchRoots: historyScratchRoots,
+              recording,
+            });
+            await history.addBatch([replay[0]]);
+            await history.waitForCommit();
+            await history.dispose();
             expect(await second.store.getStoredByteLength()).toBe(4);
           } finally {
             await recording.dispose();
           }
         },
+        testJournalOptions(),
       );
     });
   }, 10000);
@@ -292,73 +324,28 @@ describe('known media admission close', () => {
   });
 });
 
-class TemporaryMediaStorage extends Storage {
-  constructor(private readonly directory: string) {
-    super(directory);
-  }
-  override getProjectTempDir(): string {
-    return this.directory;
-  }
-}
-
-describe('durable prepared snapshots', () => {
-  it('removes newly archived bytes when a published prepared snapshot rolls back', async () => {
-    await withOwners(async (directory, first) => {
-      const persistence = new SessionPersistenceService(
-        {
-          projectRoot: new TemporaryMediaStorage(
-            join(directory, 'first'),
-          ).getProjectRoot(),
-          chatsDir: new TemporaryMediaStorage(
-            join(directory, 'first'),
-          ).getProjectChatsDir(),
-        },
-        'snapshot',
-        { mediaStore: first.store },
-      );
-      const reference = await first.store.admit({
-        bytes: new Uint8Array([1, 2, 3, 4]),
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
-      const prepared = await persistence.prepareSave([
-        { speaker: 'human', blocks: [reference] },
-      ]);
-      await prepared.publish();
-      await prepared.rollback();
-      const archive = first.store.recordingArchive;
-      if (archive === undefined) throw new Error('Missing archive');
-      expect(await archive.getStoredByteLength()).toBe(0);
-    });
-  });
-
+describe('durable packaged snapshots', () => {
   it('exports media retained only in a durable snapshot through a fresh owner', async () => {
-    await withOwners(async (directory, first) => {
+    await withOwners(async (directory, first, second) => {
       const journal = await record(first, join(directory, 'first'));
-      const persistence = new SessionPersistenceService(
-        {
-          projectRoot: new TemporaryMediaStorage(
-            join(directory, 'first'),
-          ).getProjectRoot(),
-          chatsDir: new TemporaryMediaStorage(
-            join(directory, 'first'),
-          ).getProjectChatsDir(),
-        },
-        'durable-owner',
-        { mediaStore: first.store },
-      );
       const reference = await first.store.admit({
         bytes: new Uint8Array([8, 6, 4, 2]),
         mimeType: 'image/png',
         semanticMetadata: {},
       });
-      await persistence.save([{ speaker: 'human', blocks: [reference] }]);
-      const snapshotPath = persistence.getSessionFilePath();
-      const serialized = JSON.parse(await readFile(snapshotPath, 'utf8'));
+      const contents: IContent[] = [{ speaker: 'human', blocks: [reference] }];
+      const staged = await stageRecordedMedia(first.store, contents);
       await writeFile(
-        snapshotPath,
-        JSON.stringify({ ...serialized, projectHash: 'owner-project' }),
+        join(directory, 'first', 'chats', 'persisted-session-fixture.json'),
+        JSON.stringify({
+          version: 1,
+          sessionId: 'durable-owner',
+          projectHash: 'owner-project',
+          history: contents,
+        }),
       );
+      staged.commit();
+      await staged.finalize();
       await first.dispose();
       const fresh = new SessionMediaOwner(
         join(directory, 'first'),
@@ -372,6 +359,22 @@ describe('durable prepared snapshots', () => {
           join(directory, 'portable'),
         );
         expect(await fresh.store.getStoredByteLength()).toBe(8);
+        const validated = await validateSessionMediaPackage(
+          join(directory, 'portable'),
+        );
+        expect(validated.persistedStates).toHaveLength(1);
+        expect(validated.references).toHaveLength(2);
+        await importSessionMediaPackage(
+          join(directory, 'portable'),
+          join(directory, 'second', 'chats'),
+          'owner-project',
+          second.store,
+          undefined,
+          testJournalOptions(),
+        );
+        expect(await second.store.readVerified(reference)).toStrictEqual(
+          new Uint8Array([8, 6, 4, 2]),
+        );
       } finally {
         await fresh.dispose();
       }

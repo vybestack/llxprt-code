@@ -28,6 +28,7 @@ import {
   type ToolResponseBlock,
   type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import {
   getToolIdStrategy,
   type ToolIdMapper,
@@ -49,6 +50,10 @@ import {
   buildToolResponsePayload,
   formatToolResponseText,
 } from '../utils/toolResponsePayload.js';
+import {
+  droppedTextByResponse,
+  withDroppedText,
+} from '../utils/droppedMediaPlacement.js';
 
 /**
  * Normalizes tool call arguments to a consistent JSON string format.
@@ -141,9 +146,14 @@ function isForwardableKimiVideo(block: MediaBlock): boolean {
   );
 }
 
-function convertBlockToPart(block: ContentBlock): ExtendedContentPart | null {
+export function convertBlockToPart(
+  block: ContentBlock,
+): ExtendedContentPart | null {
   if (block.type === 'text' && block.text) {
     return { type: 'text', text: block.text };
+  }
+  if (block.type === 'media_dropped') {
+    return { type: 'text', text: droppedMediaModelText(block) };
   }
   if (block.type !== 'media') {
     return null;
@@ -186,7 +196,7 @@ function convertBlockToPart(block: ContentBlock): ExtendedContentPart | null {
 /**
  * Processes a user/human message block and converts it to OpenAI format.
  */
-function processUserMessage(
+export function processUserMessage(
   content: IContent,
 ): OpenAI.Chat.ChatCompletionMessageParam | null {
   const hasMedia = content.blocks.some((b) => b.type === 'media');
@@ -209,8 +219,10 @@ function processUserMessage(
     }
   } else {
     const text = content.blocks
-      .filter((b): b is TextBlock => b.type === 'text')
-      .map((b) => b.text)
+      .flatMap((b) => {
+        if (b.type === 'text') return [b.text];
+        return b.type === 'media_dropped' ? [droppedMediaModelText(b)] : [];
+      })
       .join('\n');
     if (text) {
       return {
@@ -226,7 +238,7 @@ function processUserMessage(
 /**
  * Processes an AI/assistant message block and converts it to OpenAI format.
  */
-function processAssistantMessage(
+export function processAssistantMessage(
   content: IContent,
   includeInContext: boolean,
   toolFormat: ToolFormat | undefined,
@@ -287,7 +299,7 @@ function processAssistantMessage(
 /**
  * Processes tool response blocks and converts them to OpenAI format.
  */
-function processToolResponses(
+export function processToolResponses(
   content: IContent,
   toolFormat: ToolFormat | undefined,
   resolveToolResponseId: (tr: ToolResponseBlock) => string,
@@ -325,8 +337,13 @@ function processToolResponses(
     )
     .join('\n');
 
+  const droppedText = droppedTextByResponse(content);
   for (const tr of toolResponses) {
-    let toolContent = buildResponseContent(tr, config);
+    let toolContent = withDroppedText(
+      buildResponseContent(tr, config),
+      droppedText,
+      tr,
+    );
     if (mediaFallback) {
       toolContent = toolContent + '\n' + mediaFallback;
     }
@@ -466,14 +483,14 @@ export function buildMessagesWithReasoning(
       : null;
 
   const resolveToolCallId = (tc: ToolCallBlock): string => {
-    if (toolIdMapper) {
+    if (toolIdMapper !== null) {
       return toolIdMapper.resolveToolCallId(tc);
     }
     return normalizeToOpenAIToolId(tc.id);
   };
 
   const resolveToolResponseId = (tr: ToolResponseBlock): string => {
-    if (toolIdMapper) {
+    if (toolIdMapper !== null) {
       return toolIdMapper.resolveToolResponseId(tr);
     }
     return normalizeToOpenAIToolId(tr.callId);
@@ -616,39 +633,23 @@ export function validateToolMessageSequence(
   return validatedMessages;
 }
 
+/** A tool call the continuation request acknowledges. */
+export interface ContinuationToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
 /**
- * Builds continuation messages for requesting follow-up after tool calls.
- *
- * @param toolCalls - The tool calls to acknowledge
- * @param messagesWithSystem - The message history including system prompt
- * @param toolFormat - The tool format to use for message construction
- * @returns The continuation message sequence
+ * The messages that end a continuation request: the model's tool calls, an
+ * acknowledgement for each, and the user turn that asks it to go on. They
+ * follow the conversation so far, which the request writes row by row.
  */
-export function buildContinuationMessages(
-  toolCalls: Array<{
-    id: string;
-    type: 'function';
-    function: { name: string; arguments: string };
-  }>,
-  messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[],
+export function buildContinuationTail(
+  toolCalls: ContinuationToolCall[],
   toolFormat: ToolFormat | undefined,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
-  const sanitizedHistory = messagesWithSystem.map((message) => {
-    if (message.role !== 'assistant') {
-      return message;
-    }
-
-    const sanitizedAssistant = {
-      ...message,
-    } as OpenAI.Chat.ChatCompletionAssistantMessageParam & {
-      reasoning_content?: unknown;
-    };
-    delete sanitizedAssistant.reasoning_content;
-    return sanitizedAssistant;
-  });
-
   return [
-    ...sanitizedHistory,
     {
       role: 'assistant' as const,
       tool_calls: toolCalls,
@@ -674,6 +675,39 @@ export function buildContinuationMessages(
         'The tool calls above have been registered. Please continue with your response.',
     },
   ];
+}
+
+/**
+ * The continuation messages as one array: the history without its reasoning
+ * followed by {@link buildContinuationTail}. A send does not call this (it
+ * writes the history one row at a time); it is the reference the continuation
+ * request's bytes are compared with.
+ *
+ * @param toolCalls - The tool calls to acknowledge
+ * @param messagesWithSystem - The message history including system prompt
+ * @param toolFormat - The tool format to use for message construction
+ * @returns The continuation message sequence
+ */
+export function buildContinuationMessages(
+  toolCalls: ContinuationToolCall[],
+  messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[],
+  toolFormat: ToolFormat | undefined,
+): OpenAI.Chat.ChatCompletionMessageParam[] {
+  const sanitizedHistory = messagesWithSystem.map((message) => {
+    if (message.role !== 'assistant') {
+      return message;
+    }
+
+    const sanitizedAssistant = {
+      ...message,
+    } as OpenAI.Chat.ChatCompletionAssistantMessageParam & {
+      reasoning_content?: unknown;
+    };
+    delete sanitizedAssistant.reasoning_content;
+    return sanitizedAssistant;
+  });
+
+  return [...sanitizedHistory, ...buildContinuationTail(toolCalls, toolFormat)];
 }
 
 function logOrphanedToolRemoval(

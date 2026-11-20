@@ -1,53 +1,58 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
- *
- * transformAll reads the history inside the mutation queue. Callers that must
- * decide from the latest history and replace it in one step (such as the
- * rollback of a failed compression in the agents package) rely on this:
- * every write queued before the transform has committed when it runs, and a
- * transform that throws commits nothing.
  */
 
 import { describe, expect, it } from 'bun:test';
 import { createUserMessage } from './IContent.js';
 import type { IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
+const historyScratchRoots = createTestScratchOwner();
 
-function texts(contents: readonly IContent[]): string[] {
-  return contents.flatMap((content) =>
-    content.blocks.flatMap((block) =>
-      block.type === 'text' ? [block.text] : [],
-    ),
+function texts(content: IContent): string[] {
+  return content.blocks.flatMap((block) =>
+    block.type === 'text' ? [block.text] : [],
   );
 }
 
-describe('HistoryService.transformAll', () => {
+async function historyTexts(history: HistoryService): Promise<string[]> {
+  const result: string[] = [];
+  for await (const row of history.streamRawHistory())
+    result.push(...texts(row));
+  return result;
+}
+
+describe('HistoryService detached transform serialization', () => {
   it('sees entries committed by writes queued before it', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(createUserMessage('first'));
     const queued = history.addBatch([createUserMessage('queued batch')]);
-    let seen: string[] = [];
+    const seen: string[] = [];
 
-    await history.transformAll((current) => {
-      seen = texts(current);
-      return [...current, createUserMessage('from transform')];
+    await history.detachedValues.transform(async (source, sink) => {
+      let index = 0;
+      for await (const row of source.streamRows()) {
+        seen.push(...texts(row));
+        await sink.appendDerived(index++, row);
+      }
+      await sink.appendValue(createUserMessage('from transform'));
     });
     await queued;
 
-    expect({ seen, final: texts(history.getAll()) }).toStrictEqual({
+    expect({ seen, final: await historyTexts(history) }).toStrictEqual({
       seen: ['first', 'queued batch'],
       final: ['first', 'queued batch', 'from transform'],
     });
   });
 
   it('commits nothing when the transform throws and keeps the queue usable', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ scratchRoots: historyScratchRoots });
     history.add(createUserMessage('first'));
 
-    const failure = await history
-      .transformAll(() => {
+    const failure = await history.detachedValues
+      .transform(async () => {
         throw new Error('no change wanted');
       })
       .then(
@@ -58,7 +63,7 @@ describe('HistoryService.transformAll', () => {
 
     expect({
       message: failure instanceof Error ? failure.message : undefined,
-      final: texts(history.getAll()),
+      final: await historyTexts(history),
     }).toStrictEqual({
       message: 'no change wanted',
       final: ['first', 'after failure'],

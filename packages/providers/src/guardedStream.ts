@@ -67,9 +67,8 @@ function defaultTimeoutError(timeoutMs: number): Error {
 /**
  * Guards streamed provider output with commitment, cancellation, and cleanup.
  *
- * Every emitted chunk counts as exposure. Chunks without blocks use metadata as
- * the exposure floor, including the invalid-but-defensively-handled case where
- * an adapter emits no metadata either.
+ * Recording-only argument pieces do not commit semantic output. Other chunks
+ * without blocks use metadata as the exposure floor.
  *
  * @param stream Provider stream to guard.
  * @param options Request context, attempt controller, and optional first-chunk timeout.
@@ -111,18 +110,23 @@ export async function* guardStream(
         return chunksYielded;
       }
       firstChunk = false;
-      chunksYielded = true;
-      context?.markCommitted(exposureOf(result.value));
+      const recordingOnly =
+        result.value.toolArgumentDelta !== undefined &&
+        result.value.blocks.length === 0 &&
+        result.value.metadata === undefined;
+      if (!recordingOnly) {
+        chunksYielded = true;
+        context?.markCommitted(exposureOf(result.value));
+      }
       yield result.value;
     }
   } catch (error) {
     failed = true;
-    // A failure raised while still waiting on (or racing) the FIRST next() can
-    // never follow a yielded chunk, so it stays retryable; only errors after
-    // an outward yield are marked terminal.
-    const propagatedFailure = firstChunk
-      ? error
-      : markErrorAfterStreamOutput(error);
+    // Raw argument admission leaves retry ownership with the provider until
+    // semantic output escapes.
+    const propagatedFailure = chunksYielded
+      ? markErrorAfterStreamOutput(error)
+      : error;
     failure = propagatedFailure;
     throw propagatedFailure;
   } finally {

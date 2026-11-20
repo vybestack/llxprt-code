@@ -264,7 +264,10 @@ async function assembleUiInfrastructure(
       throw new Error('UI fixture has no resource transport');
     },
   );
-  const factoriesTokenizer = configureProviderTokenizer(manager);
+  const factoriesTokenizer = configureProviderTokenizer(
+    manager,
+    config.scratchRoots,
+  );
   const factoriesContent = createRuntimeContentGeneratorFactory();
   const createClient = buildAgentClientFactory(media);
   const sessionClient = await createCapturedSessionOwner(

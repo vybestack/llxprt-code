@@ -20,18 +20,21 @@ import {
 } from '../../core/subagent-cleanup.js';
 import { useFakeResponsesReplay } from './helpers/fake-responses-replay.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
+
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
 
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { unauthoredProvenance } from '../../compression/compressionAuditProvenance.js';
+import { summaryOutput } from '../../compression/summaryOutput.js';
+import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
 
 type HookInput = {
   hook_event_name: string;
@@ -245,31 +248,24 @@ describe('borrowed facade remaining hook producers', () => {
       tmpdir(),
       `recording-remaining-hooks-${randomUUID()}.jsonl`,
     );
-    const strategy: CompressionStrategy = {
-      name: 'one-shot',
-      requiresLLM: false,
-      trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-      compress: async (context) => ({
-        kind: 'applied',
-        newHistory: [
+    const strategySpy = spyOn(
+      OneShotStrategy.prototype,
+      'prepareDisk',
+    ).mockImplementation(async (context) =>
+      summaryOutput(
+        context.history,
+        0,
+        context.history.length,
+        [
           {
             speaker: 'ai',
             blocks: [{ type: 'text', text: 'short summary' }],
             metadata: { reason: 'compression-state-snapshot' },
           },
         ],
-        metadata: {
-          originalMessageCount: context.history.length,
-          compressedMessageCount: 1,
-          strategyUsed: 'one-shot',
-          llmCallMade: false,
-        },
-      }),
-    };
-    const strategySpy = spyOn(
-      compressionFactory,
-      'getCompressionStrategy',
-    ).mockReturnValue(strategy);
+        unauthoredProvenance('one-shot'),
+      ),
+    );
     try {
       await withHookedPair(
         credentials().authority,

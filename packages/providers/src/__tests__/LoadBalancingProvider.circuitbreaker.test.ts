@@ -103,7 +103,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       try {
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -152,7 +154,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // First request - should fail backend1, succeed on backend2
       const gen1 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+        ],
       });
       for await (const _chunk of gen1) {
         // consume
@@ -162,7 +166,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Second request - should fail backend1 again, succeed on backend2
       const gen2 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+        ],
       });
       for await (const _chunk of gen2) {
         // consume
@@ -214,7 +220,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       for (let i = 0; i < 2; i++) {
         lb.resetFailoverIndex();
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: `test${i}` }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -226,7 +234,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Immediate retry should skip backend1 (still open)
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test-immediate' }] }],
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'test-immediate' }],
+          },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -279,7 +292,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       for (let i = 0; i < 2; i++) {
         lb.resetFailoverIndex();
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: `test${i}` }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -296,7 +311,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Next request should try backend1 in half-open state
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test-recovery' }] }],
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'test-recovery' }],
+          },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -350,7 +370,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       for (let i = 0; i < 2; i++) {
         lb.resetFailoverIndex();
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: `test${i}` }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -362,7 +384,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       lb.resetFailoverIndex();
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test-recovery' }] }],
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'test-recovery' }],
+          },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -409,7 +436,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       for (let i = 0; i < 2; i++) {
         lb.resetFailoverIndex();
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: `test${i}` }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -421,7 +450,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       lb.resetFailoverIndex();
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test-recovery' }] }],
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'test-recovery' }],
+          },
+        ],
       });
       for await (const _chunk of gen) {
         // consume
@@ -466,7 +500,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // First failure
       const gen1 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+        ],
       });
       for await (const _chunk of gen1) {
         // consume
@@ -479,7 +515,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Second failure (first should be pruned)
       const gen2 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+        ],
       });
       for await (const _chunk of gen2) {
         // consume
@@ -532,7 +570,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       let firstError: unknown;
       try {
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -550,7 +590,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       let secondError: unknown;
       try {
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -592,7 +634,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       providerManager.registerProvider(mockProvider1);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
       for await (const _chunk of gen) {
         // consume

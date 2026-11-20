@@ -15,6 +15,7 @@
  * JSONL file the logger writes.
  */
 
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -38,6 +39,7 @@ import {
   type StreamTimingMeasurement,
 } from './streamTelemetryLogger.js';
 
+const historyScratchRoots = createTestScratchOwner();
 const SUMMARY_KEYS = [
   'record_type',
   'schema_version',
@@ -255,10 +257,12 @@ async function runToolSession(
     model: 'gpt-6.1-sol',
     sessionId: SESSION_ID,
   });
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({
+    scratchRoots: historyScratchRoots,
+  });
 
   for (const [index, request] of REQUESTS.entries()) {
-    recordSendSeamTelemetry({
+    await recordSendSeamTelemetry({
       usageLogger: logger,
       promptId: request.promptId,
       estimate: estimateFor(14_000 + index * 900),
@@ -453,8 +457,10 @@ describe('token-usage-log levels (#4068)', () => {
     await expect(readFile(logPath, 'utf8')).rejects.toMatchObject({
       code: 'ENOENT',
     });
-    expect(logger.getShapeMemory().sentCallIdCount).toBe(0);
-    expect(logger.getShapeMemory().measurementCount).toBe(0);
+    expect(logger.getShapeMemory().snapshot()).toStrictEqual({
+      sequence: 0n,
+      fingerprint: undefined,
+    });
   });
 
   it('off returns from the send seam before reading the system instruction', async () => {
@@ -469,7 +475,7 @@ describe('token-usage-log levels (#4068)', () => {
         },
       };
       const logger = new TokenUsageLogger(level, await newLogPath());
-      recordSendSeamTelemetry({
+      await recordSendSeamTelemetry({
         usageLogger: logger,
         promptId: 'instruction-reads',
         estimate: estimateFor(14_000),
@@ -479,7 +485,9 @@ describe('token-usage-log levels (#4068)', () => {
           model: 'gpt-6.1-sol',
           sessionId: 'instruction-reads',
         }),
-        historyService: new HistoryService(),
+        historyService: new HistoryService({
+          scratchRoots: historyScratchRoots,
+        }),
         requestContents: turnOne,
         tools: TOOLS,
         systemInstruction,

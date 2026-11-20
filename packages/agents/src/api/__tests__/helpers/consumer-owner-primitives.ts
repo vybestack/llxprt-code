@@ -1,3 +1,4 @@
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 import { createCapturedSessionOwner } from './session-client-capture.js';
 /**
  * @license
@@ -29,6 +30,7 @@ import type {
 import type { SessionClientOwner } from '../../../session/session-client-owner.js';
 import { injectConfirmationForcingPolicy } from '../../confirmationForcing.js';
 import { releaseAdoptedFileScope } from '../../adoption-release.js';
+const tokenizerScratchRoots = createTestScratchOwner();
 
 export function useConsumerPromptDirectory(): void {
   let directory: string;
@@ -75,7 +77,8 @@ export function selectConsumerTokenizer(
   manager: RuntimeProviderManager,
 ): ReturnType<typeof createRuntimeTokenizerFactory> {
   const installed = manager.getTokenizerFactory?.();
-  const selected = installed ?? createRuntimeTokenizerFactory();
+  const selected =
+    installed ?? createRuntimeTokenizerFactory(tokenizerScratchRoots);
   if (selected !== installed) manager.setTokenizerFactory?.(selected);
   return selected;
 }

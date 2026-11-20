@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { PreparedSourcePromptEnvelopeSend } from './prompt-envelope-source-send.js';
 import type { ChatSessionConfig } from './chatSession.js';
 import type { ToolSelectionHookResult } from './streamRequestHelpers.js';
 
@@ -14,7 +14,7 @@ import type { ToolSelectionHookResult } from './streamRequestHelpers.js';
  * system prompt of that moment (issue #4036).
  */
 export interface ProviderReadyRequest {
-  readonly contents: IContent[];
+  readonly prepared: PreparedSourcePromptEnvelopeSend;
   readonly toolSelection: ToolSelectionHookResult;
   readonly systemInstruction: ChatSessionConfig['systemInstruction'];
 }
@@ -45,8 +45,14 @@ export class SendRequestState {
     return this.replay ? this.kept : undefined;
   }
 
-  keep(request: ProviderReadyRequest): void {
+  async keep(request: ProviderReadyRequest): Promise<void> {
+    const prior = this.kept;
     this.kept = request;
+    if (
+      prior !== undefined &&
+      prior.prepared.source !== request.prepared.source
+    )
+      await prior.prepared.source.close();
   }
 
   /** The next attempt resends the kept request unchanged. */
@@ -55,8 +61,10 @@ export class SendRequestState {
   }
 
   /** The next attempt builds its request afresh. */
-  discard(): void {
+  async discard(): Promise<void> {
+    const prior = this.kept;
     this.kept = undefined;
     this.replay = false;
+    await prior?.prepared.source.close();
   }
 }

@@ -74,9 +74,6 @@ describe('ideCommand', () => {
 
   it('should return the ide command', () => {
     (
-      mockConfig.setIdeMode as Mock<typeof mockConfig.setIdeMode>
-    ).mockReturnValue(true);
-    (
       mockConfig.readConnection as Mock<typeof mockConfig.readConnection>
     ).mockReturnValue({
       available: true,
@@ -97,9 +94,6 @@ describe('ideCommand', () => {
 
   it('should set autoExecute: true on all subcommands when disconnected', () => {
     (
-      mockConfig.setIdeMode as Mock<typeof mockConfig.setIdeMode>
-    ).mockReturnValue(true);
-    (
       mockConfig.readConnection as Mock<typeof mockConfig.readConnection>
     ).mockReturnValue({
       available: true,
@@ -117,9 +111,6 @@ describe('ideCommand', () => {
 
   it('should set autoExecute: true on all subcommands when connected', () => {
     (
-      mockConfig.setIdeMode as Mock<typeof mockConfig.setIdeMode>
-    ).mockReturnValue(true);
-    (
       mockConfig.readConnection as Mock<typeof mockConfig.readConnection>
     ).mockReturnValue({
       available: true,
@@ -136,9 +127,6 @@ describe('ideCommand', () => {
   });
 
   it('should show disable command when connected', () => {
-    (
-      mockConfig.setIdeMode as Mock<typeof mockConfig.setIdeMode>
-    ).mockReturnValue(true);
     (
       mockConfig.readConnection as Mock<typeof mockConfig.readConnection>
     ).mockReturnValue({
@@ -210,6 +198,7 @@ describe('ideCommand', () => {
     it('should show connected status', async () => {
       mockGetConnectionStatus.mockReturnValue({
         status: core.IDEConnectionStatus.Connected,
+        details: undefined,
       });
       const command = registerIdeCommand(mockConfig, mockContext);
       const result = await command!.subCommands!.find(
@@ -226,6 +215,7 @@ describe('ideCommand', () => {
     it('should show connecting status', async () => {
       mockGetConnectionStatus.mockReturnValue({
         status: core.IDEConnectionStatus.Connecting,
+        details: undefined,
       });
       const command = registerIdeCommand(mockConfig, mockContext);
       const result = await command!.subCommands!.find(
@@ -241,6 +231,7 @@ describe('ideCommand', () => {
     it('should show disconnected status', async () => {
       mockGetConnectionStatus.mockReturnValue({
         status: core.IDEConnectionStatus.Disconnected,
+        details: undefined,
       });
       const command = registerIdeCommand(mockConfig, mockContext);
       const result = await command!.subCommands!.find(
@@ -276,9 +267,6 @@ describe('ideCommand', () => {
   describe('install subcommand', () => {
     const mockInstall = vi.fn();
     beforeEach(() => {
-      (
-        mockConfig.setIdeMode as Mock<typeof mockConfig.setIdeMode>
-      ).mockReturnValue(true);
       (
         mockConfig.readConnection as Mock<typeof mockConfig.readConnection>
       ).mockReturnValue({

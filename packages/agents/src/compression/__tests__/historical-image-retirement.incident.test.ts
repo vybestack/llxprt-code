@@ -1,3 +1,7 @@
+import {
+  historyApartFromDrops,
+  readHistory,
+} from './retirement-source-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,8 +9,9 @@
  *
  * Issue #3984 incident: 25 earlier images plus a 237,140 byte newest image
  * total 15,915,624 normalized bytes, over the original 15 MiB (15,728,640)
- * request media budget. The request must still be sent, with the oldest
- * historical pixels replaced by honest text notes in the REQUEST VIEW only.
+ * request media budget. The request must still be sent; the oldest stored
+ * images are dropped to references to where they were read from (Andrew's
+ * decision on #854) and the request carries that reference text.
  * Real LocalMediaStore, HistoryService, ProviderContentEnforcer, production
  * send seam, and AnthropicProvider projection; only HTTP is stubbed.
  */
@@ -14,7 +19,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
+import { isMediaDroppedBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import { RequestMediaByteOverflowError } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   FIFTEEN_MIB,
@@ -22,6 +29,7 @@ import {
   aiTurn,
   collectImageData,
   countRetirementNotes,
+  imagePath,
   imageTurn,
   rejection,
   type AdmittedImage,
@@ -52,7 +60,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
     session = new RetirementSession(directory, undefined);
   });
   afterEach(async () => {
-    session.dispose();
+    await session.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -118,25 +126,46 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
     });
   });
 
-  it('keeps canonical history, stored originals and reservations untouched', async () => {
+  it('drops the oldest stored images to references to their source paths and releases their blobs', async () => {
+    await session.history.registerRuntimeMediaOwner(session.store);
     const { images, newest } = await seedIncident();
-    const before = JSON.stringify(session.history.getAll());
-
-    await session.send([imageTurn(newest.reference, 'latest')]);
-
+    await session.history.settleMediaOwnership();
+    const before = await historyApartFromDrops(session.history);
     if (images.length === 0) throw new Error('fixture is empty');
     const oldest = images[0];
-    const original = await session.store.readVerified(oldest.reference);
+    expect(
+      await session.store.hasReservations(oldest.reference.contentId),
+    ).toBe(true);
+
+    await session.send([imageTurn(newest.reference, 'latest')]);
+    await session.history.waitForOwnershipSettlement();
+
+    const stored = await readHistory(session.history);
+    const dropped = stored[0].blocks[1];
+    if (!isMediaDroppedBlock(dropped))
+      throw new Error('the oldest stored image was not dropped');
+    const lastSent = session.sent[session.sent.length - 1];
     expect({
-      history: JSON.stringify(session.history.getAll()) === before,
-      originalReadable: Buffer.from(original).equals(Buffer.from(oldest.bytes)),
+      history: (await historyApartFromDrops(session.history)) === before,
+      droppedPath: dropped.origin.kind === 'file' ? dropped.origin.path : '',
+      absolute:
+        dropped.origin.kind === 'file' && isAbsolute(dropped.origin.path),
+      contentId: dropped.contentId,
       activeRequests: session.resolver.accounting().activeRequestCount,
       reserved: await session.store.hasReservations(oldest.reference.contentId),
+      referenceSent: lastSent.body.includes(
+        JSON.stringify(droppedMediaModelText(dropped)).slice(1, -1),
+      ),
+      oldestBytesSent: lastSent.body.includes(oldest.base64),
     }).toStrictEqual({
       history: true,
-      originalReadable: true,
+      droppedPath: imagePath(directory, oldest.bytes.length, 1),
+      absolute: true,
+      contentId: oldest.reference.contentId,
       activeRequests: 0,
       reserved: false,
+      referenceSent: true,
+      oldestBytesSent: false,
     });
   });
 
@@ -153,7 +182,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
   });
 
   it('keeps an explicit 15 MiB-equal budget identical to the default', async () => {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(directory, FIFTEEN_MIB);
     const { images, newest } = await seedIncident();
 
@@ -164,7 +193,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
   });
 
   it('fails with the typed byte error, not silent dropping, for an explicit zero budget', async () => {
-    session.dispose();
+    await session.dispose();
     session = new RetirementSession(directory, 0);
     const { newest } = await seedIncident();
 
@@ -177,7 +206,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
 
   it('releases reservations and leaves canonical history intact when transport fails', async () => {
     const { newest } = await seedIncident();
-    const before = JSON.stringify(session.history.getAll());
+    const before = await historyApartFromDrops(session.history);
     session.transportFailure = new Error('connection reset');
 
     const error = await rejection(
@@ -186,7 +215,7 @@ describe('historical image retirement at the incident size (issue #3984)', () =>
 
     expect({
       rejected: error instanceof Error,
-      history: JSON.stringify(session.history.getAll()) === before,
+      history: (await historyApartFromDrops(session.history)) === before,
       activeRequests: session.resolver.accounting().activeRequestCount,
     }).toStrictEqual({ rejected: true, history: true, activeRequests: 0 });
   });

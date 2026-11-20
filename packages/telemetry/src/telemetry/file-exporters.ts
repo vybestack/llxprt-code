@@ -214,6 +214,8 @@ export class FileSpanExporter extends FileExporter implements SpanExporter {
 }
 
 export class FileLogExporter extends FileExporter implements LogRecordExporter {
+  readonly requestArtifactSchemaVersion = 4;
+
   export(
     logs: ReadableLogRecord[],
     resultCallback: (result: ExportResult) => void,

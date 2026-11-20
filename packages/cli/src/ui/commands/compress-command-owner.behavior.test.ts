@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -83,7 +84,7 @@ describe('registered compress command owner', () => {
     expect(compression?.compression.compressionStatus).toBe(
       CompressionStatus.NOOP,
     );
-    expect(await decoy.getHistory()).toMatchObject([
+    expect(await collectResumeRows(decoy.streamHistory())).toMatchObject([
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'decoy history remains intact' }],

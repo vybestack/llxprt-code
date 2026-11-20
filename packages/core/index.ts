@@ -1,3 +1,8 @@
+export { NamedWriterOwnership } from './src/journal/named-writer-ownership.js';
+export {
+  NativeHistoryPrefix,
+  nativeHistoryPrefixOwner,
+} from './src/services/history/native-history-prefix.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -45,3 +50,16 @@ export {
 export { WorkspaceToolCatalogOwner } from './src/services/workspace-tool-catalog-owner.js';
 export { ToolDispatchAdmission } from './src/services/tool-dispatch-admission.js';
 export { SessionSettingsOwner } from './src/session/session-settings-owner.js';
+
+export {
+  NativeJournalPageReader,
+  type NativeJournalEntry,
+  type NativeJournalReadDependencies,
+} from './src/journal/native-journal-page-reader.js';
+export { JournalSession } from './src/services/history/journalSession.js';
+export {
+  subscribeJournalCommits,
+  JournalWatermarks,
+  type JournalCommitWatermark,
+} from './src/journal/journal-watermarks.js';
+export { publishReviewedRewrite } from './src/services/history/publish-reviewed-rewrite.js';

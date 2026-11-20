@@ -25,6 +25,10 @@ import {
 } from './typed-test-helpers.ts';
 import { readRootFile, stepNamed } from './ocr-review-workflow-helpers.ts';
 import { PARTITION_ENV_VAR } from '../../packages/cli/run-bun-tests.js';
+import {
+  buildMatrix,
+  SHARD_PARTITION_COUNTS,
+} from '../affected-test-shards.ts';
 
 function loadCiWorkflow(): WorkflowDocument {
   const source = readRootFile('.github/workflows/ci.yml');
@@ -113,5 +117,47 @@ describe('Issue #3185: test_shard partition wiring', () => {
     expect(asString(testShard['if'])).toContain(
       'needs.shard_selector.outputs.has_tests',
     );
+  });
+});
+
+describe('Issue #854: shell tests run on the first scripts partition only', () => {
+  const SHELL_TESTS_STEP = 'Run shell-script behavioral tests (#2606)';
+  const FIRST_PARTITION_PREFIX = '1of';
+
+  function shellTestsCondition(): string {
+    const testShard = workflowJob(loadCiWorkflow(), 'test_shard');
+    return asString(stepNamed(testShard, SHELL_TESTS_STEP)['if']);
+  }
+
+  it('selects the first partition by index, not by a hard-coded partition count', () => {
+    const condition = shellTestsCondition();
+    expect(condition).toBe(
+      `matrix.shard == 'scripts' && startsWith(matrix.partition, '${FIRST_PARTITION_PREFIX}')`,
+    );
+    expect(condition).not.toMatch(/[0-9]of[0-9]/);
+  });
+
+  it('matches exactly one scripts row today, the first one', () => {
+    const rows = buildMatrix(['scripts']);
+    const matching = rows.filter((row) =>
+      row.partition.startsWith(FIRST_PARTITION_PREFIX),
+    );
+    expect(matching.map((row) => row.partition)).toEqual([
+      `1of${SHARD_PARTITION_COUNTS['scripts']}`,
+    ]);
+    expect(rows[0]?.partition).toBe(matching[0]?.partition);
+  });
+
+  it('matches exactly one leg whatever the partition count', () => {
+    for (let count = 1; count <= 25; count += 1) {
+      const partitions = Array.from(
+        { length: count },
+        (_, i) => `${i + 1}of${count}`,
+      );
+      const matching = partitions.filter((partition) =>
+        partition.startsWith(FIRST_PARTITION_PREFIX),
+      );
+      expect(matching).toEqual([`1of${count}`]);
+    }
   });
 });

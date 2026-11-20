@@ -4,6 +4,7 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 class HarnessProvider extends BaseProvider {
   lastNormalizedOptions: NormalizedGenerateChatOptions | undefined;
@@ -36,7 +37,9 @@ describe('BaseProvider admission guard', () => {
   const prompt: IContent = { speaker: 'human', blocks: [] };
   it('admits standalone calls with owner defaults without forwarding settings', async () => {
     const provider = new HarnessProvider();
-    await provider.generateChatCompletion({ contents: [prompt] }).next();
+    await provider
+      .generateChatCompletion({ contents: replayableContents([prompt]) })
+      .next();
     expect(provider.lastNormalizedOptions?.resolved.model).toBe(
       'harness-model',
     );
@@ -47,7 +50,10 @@ describe('BaseProvider admission guard', () => {
     const provider = new HarnessProvider();
     await expect(
       provider
-        .generateChatCompletion({ contents: [prompt], resolved: { model: '' } })
+        .generateChatCompletion({
+          contents: replayableContents([prompt]),
+          resolved: { model: '' },
+        })
         .next(),
     ).rejects.toMatchObject({
       name: 'MissingProviderRuntimeError',

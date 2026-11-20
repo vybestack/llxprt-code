@@ -10,24 +10,21 @@ import type { CopyCommandOutput } from './copyCommand.js';
 
 export function bindCopyCommandHistoryRead(
   hasChatInitialized: () => boolean,
-  getHistory: () => Promise<readonly AgentMessage[]>,
+  getHistory: () => AsyncIterable<AgentMessage>,
 ): () => Promise<CopyCommandOutput> {
   return async (): Promise<CopyCommandOutput> => {
     if (!hasChatInitialized()) return { kind: 'no-chat' };
 
-    const history = await getHistory();
-    const lastAiMessage = [...history]
-      .reverse()
-      .find((item) => item.speaker === 'ai');
-    if (lastAiMessage == null) return { kind: 'no-output' };
+    let text: string | undefined;
+    for await (const item of getHistory()) {
+      if (item.speaker !== 'ai') continue;
+      text = '';
+      for (const block of item.blocks) {
+        if (block.type === 'text') text += block.text;
+      }
+    }
+    if (text === undefined) return { kind: 'no-output' };
 
-    const text = lastAiMessage.blocks
-      .filter(
-        (block): block is { type: 'text'; text: string } =>
-          block.type === 'text',
-      )
-      .map((block) => block.text)
-      .join('');
     return text.length === 0 ? { kind: 'empty' } : { kind: 'text', text };
   };
 }

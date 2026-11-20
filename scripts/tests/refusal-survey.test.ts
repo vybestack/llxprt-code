@@ -8,13 +8,142 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { withTestNamedWriters } from '../../packages/core/src/journal/__tests__/support/namedWriterOwner.js';
+import { JournalRecordingService } from '../../packages/core/src/recording/journalRecordingService.js';
+import type { RefusalPayload } from '../../packages/core/src/recording/refusalPayload.js';
+import type { RefusalRewritePayload } from '../../packages/core/src/recording/refusalRewritePayload.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '../../packages/core/src/services/history/IContent.js';
 
 const tempDirs: string[] = [];
+const services: JournalRecordingService[] = [];
 
-afterEach(() => {
+afterEach(async () => {
+  for (const service of services.splice(0)) await service.dispose();
   for (const dir of tempDirs.splice(0))
     fs.rmSync(dir, { recursive: true, force: true });
 });
+
+/**
+ * Fixture times are offsets from a base later than the moment each journal
+ * session starts: a session's start time is its real creation time, and
+ * real rows and audits are always recorded after it.
+ */
+const BASE = Date.now() + 10 * 60_000;
+const at = (offsetMs: number): string =>
+  new Date(BASE + offsetMs).toISOString();
+
+type SessionRow = {
+  readonly at: number;
+  readonly speaker: IContent['speaker'];
+  readonly blocks: ContentBlock[];
+  readonly summaryAuthor?: {
+    readonly provider: string;
+    readonly model: string;
+  };
+};
+
+type JournalSessionFixture = {
+  readonly sessionId: string;
+  readonly cwd?: string;
+  readonly workspaceDirs?: string[];
+  readonly rows?: readonly SessionRow[];
+  readonly refusals?: readonly RefusalPayload[];
+  readonly rewrites?: readonly RefusalRewritePayload[];
+};
+
+function contentRow(row: SessionRow, seq: number): IContent {
+  const metadata: NonNullable<IContent['metadata']> = {
+    chronology: { seq, userTurn: 1, step: seq, recordedAt: BASE + row.at },
+  };
+  if (row.summaryAuthor !== undefined) {
+    metadata.isSummary = true;
+    metadata.compressionProvenance = {
+      summaryAuthorModel: row.summaryAuthor.model,
+      summaryAuthorProvider: row.summaryAuthor.provider,
+      compressionStrategy: 'one-shot',
+    };
+  }
+  return { speaker: row.speaker, blocks: row.blocks, metadata };
+}
+
+/** Records one real journal session under `<project>/chats`. */
+async function recordJournalSession(
+  project: string,
+  fixture: JournalSessionFixture,
+): Promise<void> {
+  const service = JournalRecordingService.create(
+    withTestNamedWriters({
+      sessionId: fixture.sessionId,
+      projectHash: path.basename(project),
+      chatsDir: path.join(project, 'chats'),
+      workspaceDirs: fixture.workspaceDirs ?? [],
+      ...(fixture.cwd === undefined ? {} : { cwd: fixture.cwd }),
+      provider: 'anthropic',
+      model: 'claude-opus-5-5',
+    }),
+  );
+  services.push(service);
+  const session = await service.session();
+  const rows = fixture.rows ?? [];
+  if (rows.length > 0)
+    await session.append(rows.map((row, index) => contentRow(row, index + 1)));
+  for (const refusal of fixture.refusals ?? []) service.recordRefusal(refusal);
+  await service.flush();
+  for (const rewrite of fixture.rewrites ?? []) {
+    const value = new TextEncoder().encode(JSON.stringify(rewrite));
+    await session.store.commit([
+      {
+        kind: 'prepared',
+        admission: [],
+        prepare: (group) =>
+          group.retainMetadata(
+            `refusal_rewrite:${rewrite.operationId}`,
+            value,
+            'body',
+          ),
+      },
+    ]);
+  }
+  await service.dispose();
+  services.splice(services.indexOf(service), 1);
+}
+
+function refusal(
+  promptId: string,
+  attemptIndex: number,
+  offsetMs: number,
+  extra: Partial<RefusalPayload>,
+): RefusalPayload {
+  return {
+    time: at(offsetMs),
+    provider: 'anthropic',
+    model: 'claude-opus-5-5',
+    promptId,
+    turnId: null,
+    attemptIndex,
+    finishReason: 'refusal',
+    action: 'retry',
+    ...extra,
+  };
+}
+
+const text = (value: string): ContentBlock[] => [{ type: 'text', text: value }];
+function partialOutput(value: string): RefusalPayload['partial_output'] {
+  const bytes = Buffer.byteLength(value);
+  return {
+    items: [
+      { type: 'text', text: value, original_bytes: bytes, truncated: false },
+    ],
+    truncated: false,
+    original_bytes: bytes,
+    preview_bytes: bytes,
+  };
+}
+const summaryText = text('<state_snapshot>summary</state_snapshot>');
+const summaryAuthor = { provider: 'anthropic', model: 'claude-summary' };
 
 function fixtureRoot(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refusal-survey-'));
@@ -177,12 +306,12 @@ describe('refusal survey CLI', () => {
     ]);
   });
 
-  it('joins legacy token usage by prompt prefix when session ids differ', () => {
+  it('joins legacy token usage by prompt prefix when session ids differ', async () => {
     const root = path.join(fixtureRoot(), 'logs', 'tmp');
     const project = path.join(root, 'legacy-prefix');
     writeJsonLines(path.join(project, 'token-usage', 'usage-id.jsonl'), [
       {
-        ts: '2026-11-02T10:00:00Z',
+        ts: at(0),
         prompt_id: 'legacy-session-uuid-prompt-1',
         session_id: 'usage-file-id',
         provider: 'anthropic',
@@ -191,23 +320,13 @@ describe('refusal survey CLI', () => {
         attempt_index: 0,
       },
     ]);
-    writeJsonLines(path.join(project, 'chats', 'journal.jsonl'), [
-      {
-        seq: 1,
-        ts: '2026-11-02T09:00:00Z',
-        type: 'session_start',
-        payload: {
-          sessionId: 'legacy-session-uuid',
-          workspaceDirs: ['/legacy'],
-        },
-      },
-      {
-        seq: 2,
-        ts: '2026-11-02T09:59:59.700Z',
-        type: 'compressed',
-        payload: {},
-      },
-    ]);
+    await recordJournalSession(project, {
+      sessionId: 'legacy-session-uuid',
+      workspaceDirs: ['/legacy'],
+      rows: [
+        { at: -300, speaker: 'human', blocks: summaryText, summaryAuthor },
+      ],
+    });
     const output = runSurvey(root);
     const report = JSON.parse(output.stdout) as {
       runs: Array<Record<string, unknown>>;
@@ -224,12 +343,12 @@ describe('refusal survey CLI', () => {
     });
   });
 
-  it('uses a unique timestamp-covering journal when prompt prefixes are ambiguous', () => {
+  it('uses a unique timestamp-covering journal when prompt prefixes are ambiguous', async () => {
     const root = path.join(fixtureRoot(), 'logs', 'tmp');
     const project = path.join(root, 'legacy-time');
     writeJsonLines(path.join(project, 'token-usage', 'usage.jsonl'), [
       {
-        ts: '2026-11-02T10:00:00Z',
+        ts: at(0),
         prompt_id: 'legacy-session-prompt',
         session_id: 'different-usage-id',
         provider: 'anthropic',
@@ -238,24 +357,18 @@ describe('refusal survey CLI', () => {
         attempt_index: 0,
       },
     ]);
-    writeJsonLines(path.join(project, 'chats', 'first.jsonl'), [
-      {
-        seq: 1,
-        ts: '2026-11-02T08:00:00Z',
-        type: 'session_start',
-        payload: { sessionId: 'legacy' },
-      },
-      { seq: 2, ts: '2026-11-02T08:30:00Z', type: 'compressed', payload: {} },
-    ]);
-    writeJsonLines(path.join(project, 'chats', 'second.jsonl'), [
-      {
-        seq: 1,
-        ts: '2026-11-02T09:59:00Z',
-        type: 'session_start',
-        payload: { sessionId: 'legacy-session' },
-      },
-      { seq: 2, ts: '2026-11-02T10:00:00Z', type: 'compressed', payload: {} },
-    ]);
+    // Both session ids prefix the prompt id; only the second session's
+    // recorded span reaches the refused call.
+    await recordJournalSession(project, {
+      sessionId: 'legacy',
+      rows: [
+        { at: -40_000, speaker: 'human', blocks: summaryText, summaryAuthor },
+      ],
+    });
+    await recordJournalSession(project, {
+      sessionId: 'legacy-session',
+      rows: [{ at: 0, speaker: 'human', blocks: summaryText, summaryAuthor }],
+    });
     const output = runSurvey(root);
     const report = JSON.parse(output.stdout) as {
       runs: Array<Record<string, unknown>>;
@@ -272,12 +385,12 @@ describe('refusal survey CLI', () => {
     });
   });
 
-  it('does not join a child session to its parent compression history', () => {
+  it('does not join a child session to its parent compression history', async () => {
     const root = path.join(fixtureRoot(), 'logs', 'tmp');
     const project = path.join(root, 'project-isolation');
     writeJsonLines(path.join(project, 'token-usage', 'child.jsonl'), [
       {
-        ts: '2026-11-02T10:00:00Z',
+        ts: at(0),
         prompt_id: 'same-prompt',
         session_id: 'parent::child',
         runtime_id: 'child-runtime',
@@ -288,31 +401,22 @@ describe('refusal survey CLI', () => {
         attempt_index: 0,
       },
     ]);
-    writeJsonLines(path.join(project, 'chats', 'parent.jsonl'), [
-      {
-        v: 1,
-        seq: 1,
-        ts: '2026-11-02T09:59:00Z',
-        type: 'session_start',
-        payload: { sessionId: 'parent', workspaceDirs: ['/project'] },
-      },
-      {
-        v: 1,
-        seq: 2,
-        ts: '2026-11-02T09:59:40Z',
-        type: 'compressed',
-        payload: { summary_author_model: 'parent-summary' },
-      },
-    ]);
-    writeJsonLines(path.join(project, 'chats', 'child.jsonl'), [
-      {
-        v: 1,
-        seq: 1,
-        ts: '2026-11-02T09:59:00Z',
-        type: 'session_start',
-        payload: { sessionId: 'parent::child', workspaceDirs: ['/project'] },
-      },
-    ]);
+    await recordJournalSession(project, {
+      sessionId: 'parent',
+      workspaceDirs: ['/project'],
+      rows: [
+        {
+          at: -20_000,
+          speaker: 'human',
+          blocks: summaryText,
+          summaryAuthor: { provider: 'anthropic', model: 'parent-summary' },
+        },
+      ],
+    });
+    await recordJournalSession(project, {
+      sessionId: 'parent::child',
+      workspaceDirs: ['/project'],
+    });
 
     const output = runSurvey(root);
     const report = JSON.parse(output.stdout) as {
@@ -331,13 +435,13 @@ describe('refusal survey CLI', () => {
     });
   });
 
-  it('groups refusal attempts and correlates compression, recovery, dumps and categories', () => {
+  it('groups refusal attempts and correlates compression, recovery, dumps and categories', async () => {
     const root = path.join(fixtureRoot(), 'logs', 'tmp');
     const project = path.join(root, 'project-alpha');
     const usage = path.join(project, 'token-usage', 'session-1.jsonl');
     writeJsonLines(usage, [
       {
-        ts: '2026-11-02T10:00:00Z',
+        ts: at(0),
         prompt_id: 'p-new',
         session_id: 's1',
         provider: 'anthropic',
@@ -352,7 +456,7 @@ describe('refusal survey CLI', () => {
         dump_base_id: 'dump-1',
       },
       {
-        ts: '2026-11-02T10:00:01Z',
+        ts: at(1_000),
         prompt_id: 'p-new',
         session_id: 's1',
         provider: 'anthropic',
@@ -366,7 +470,7 @@ describe('refusal survey CLI', () => {
         dump_base_id: 'dump-2',
       },
       {
-        ts: '2026-11-02T10:00:02Z',
+        ts: at(2_000),
         prompt_id: 'p-new',
         session_id: 's1',
         provider: 'anthropic',
@@ -378,7 +482,7 @@ describe('refusal survey CLI', () => {
         dump_base_id: 'dump-accepted',
       },
       {
-        ts: '2026-11-02T10:05:00Z',
+        ts: at(300_000),
         prompt_id: 'p-old',
         session_id: 's2',
         provider: 'anthropic',
@@ -388,7 +492,7 @@ describe('refusal survey CLI', () => {
         attempt_outcome: 'success',
       },
       {
-        ts: '2026-11-02T10:06:00Z',
+        ts: at(360_000),
         prompt_id: 'not-a-refusal',
         session_id: 's1',
         provider: 'openai',
@@ -396,7 +500,7 @@ describe('refusal survey CLI', () => {
         output_tokens: 0,
       },
       {
-        ts: '2026-11-02T10:07:00Z',
+        ts: at(420_000),
         prompt_id: 'modern-empty-stop',
         session_id: 's1',
         provider: 'anthropic',
@@ -407,116 +511,70 @@ describe('refusal survey CLI', () => {
       },
     ]);
     fs.appendFileSync(usage, 'not-json\n');
-    writeJsonLines(path.join(project, 'chats', 'session-1.jsonl'), [
-      {
-        v: 1,
-        seq: 1,
-        ts: '2026-11-02T09:59:00Z',
-        type: 'session_start',
-        payload: { sessionId: 's1', workspace: 'alpha-workspace' },
-      },
-      {
-        v: 1,
-        seq: 2,
-        ts: '2026-11-02T09:59:30Z',
-        type: 'content',
-        payload: {
-          content: {
-            speaker: 'user',
-            blocks: [{ type: 'text', text: 'accepted baseline' }],
-          },
+    await recordJournalSession(project, {
+      sessionId: 's1',
+      cwd: 'alpha-workspace',
+      rows: [
+        { at: -30_000, speaker: 'human', blocks: text('accepted baseline') },
+        {
+          at: -20_000,
+          speaker: 'human',
+          blocks: summaryText,
+          summaryAuthor,
         },
-      },
-      {
-        v: 1,
-        seq: 3,
-        ts: '2026-11-02T09:59:40Z',
-        type: 'compressed',
-        payload: {
-          summaryAuthor: { provider: 'anthropic', model: 'claude-summary' },
+        {
+          at: -10_000,
+          speaker: 'human',
+          blocks: text(
+            'unusual quartz topic deadbeef deadbeef123456 123456 05z run_shell_command runShellCommand tool human ai run shell command',
+          ),
         },
-      },
-      {
-        v: 1,
-        seq: 4,
-        ts: '2026-11-02T09:59:50Z',
-        type: 'content',
-        payload: {
-          content: {
-            speaker: 'user',
-            blocks: [
-              {
-                type: 'text',
-                text: 'unusual quartz topic deadbeef deadbeef123456 123456 05z run_shell_command runShellCommand tool human ai run shell command',
-              },
-            ],
-          },
+        {
+          at: -5_000,
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call-read',
+              toolName: 'read_file',
+              result: { output: 'bounded tool output' },
+            },
+          ],
         },
-      },
-      {
-        v: 1,
-        seq: 4.5,
-        ts: '2026-11-02T09:59:55Z',
-        type: 'content',
-        payload: {
-          content: {
-            speaker: 'tool',
-            blocks: [
-              {
-                type: 'tool_response',
-                toolName: 'read_file',
-                result: { output: 'bounded tool output' },
-              },
-            ],
-          },
-        },
-      },
-      {
-        v: 1,
-        seq: 5,
-        ts: '2026-11-02T10:00:00Z',
-        type: 'refusal',
-        payload: {
-          prompt_id: 'p-new',
-          attempt_index: 0,
+        { at: 2_000, speaker: 'ai', blocks: text('accepted quartz answer') },
+      ],
+      refusals: [
+        refusal('p-new', 0, 0, {
           refusal_category: null,
-          partial_output: { text: 'partial' },
+          partial_output: partialOutput('partial'),
           dump_base_id: 'dump-1',
-        },
-      },
-      {
-        v: 1,
-        seq: 6,
-        ts: '2026-11-02T10:00:01Z',
-        type: 'refusal',
-        payload: {
-          prompt_id: 'p-new',
-          attempt_index: 1,
+        }),
+        refusal('p-new', 1, 1_000, {
           refusal_category: null,
-          partial_output: { text: 'partial two' },
+          partial_output: partialOutput('partial two'),
           dump_base_id: 'dump-2',
+        }),
+      ],
+      rewrites: [
+        {
+          operationId: 'rewrite-1',
+          time: at(1_000),
+          promptId: 'p-new',
+          attemptIndex: 1,
+          reviewer: { provider: 'anthropic', model: 'claude-reviewer' },
+          explanation: 'Reworded the refused request',
+          changes: [
+            {
+              id: 'change-1',
+              role: 'human',
+              kind: 'user',
+              originalText: 'unusual quartz topic',
+              newText: 'quartz topic',
+            },
+          ],
         },
-      },
-      {
-        v: 1,
-        seq: 7,
-        ts: '2026-11-02T10:00:01Z',
-        type: 'refusal_rewrite',
-        payload: { prompt_id: 'p-new', attempt_index: 1 },
-      },
-      {
-        v: 1,
-        seq: 8,
-        ts: '2026-11-02T10:00:02Z',
-        type: 'content',
-        payload: {
-          content: {
-            speaker: 'assistant',
-            blocks: [{ type: 'text', text: 'accepted quartz answer' }],
-          },
-        },
-      },
-    ]);
+      ],
+    });
     const cacheRoot = path.join(path.dirname(path.dirname(root)), 'dumps');
     fs.mkdirSync(cacheRoot, { recursive: true });
     for (const [id, outcome, text] of [

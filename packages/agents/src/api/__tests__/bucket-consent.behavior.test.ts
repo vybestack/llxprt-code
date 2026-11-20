@@ -106,7 +106,7 @@ describe('Session owner bucket consent', () => {
       credentials().authority,
       release,
     );
-    const tokenizer = configureProviderTokenizer(manager);
+    const tokenizer = configureProviderTokenizer(manager, config.scratchRoots);
     const media = new SessionMediaOwner(config.projectTempDir, 1024 * 1024);
     const owner = await createCapturedSessionOwner(
       config,

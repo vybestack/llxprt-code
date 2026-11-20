@@ -14,30 +14,31 @@ import type {
   IContent,
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { CompressionHandlerRuntime } from '../core/chatSessionPorts.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   CompressionAuditProvenance,
-  CompressionContext,
   CompressionProviderResult,
   CompressionStrategyName,
   DensityConfig,
-  StrategyCompressionResult,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import {
-  shouldRetryCompressionError,
-  isFallbackEligibleCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   getCompressionStrategy,
   parseCompressionStrategyName,
 } from './compressionStrategyFactory.js';
 import { PendingContextWindowEnforcer } from './pendingContextWindowEnforcement.js';
-import { createCompressionApplyCallback } from './compressionApplyCallback.js';
-import { CompressionAuditState } from './CompressionAuditState.js';
-import { buildCompressionContext as buildContext } from './compressionContextBuilder.js';
+import { runDiskTruncation } from './diskTruncation.js';
+import { runDiskMiddleOut, runDiskOneShot } from './diskMiddleOut.js';
+import { runDiskHighDensity } from './diskHighDensity.js';
+import type {
+  CompressionAttemptContext,
+  buildCompressionMetadata,
+} from './compressionContextBuilder.js';
+import {
+  prepareCompressionAttempt,
+  countCompressionRows,
+} from './compressionAttempt.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
 import {
@@ -45,11 +46,8 @@ import {
   recordCompressionTelemetry,
 } from './compressionLifecycleTelemetry.js';
 import { completeCompressionAttempt } from './compressionCompletion.js';
-import {
-  applyFallbackCompressionResult as applyFallbackResult,
-  beginCompressionLifecycle,
-  endCompressionAttempt,
-} from './compressionAuditProvenance.js';
+import { unauthoredProvenance } from './compressionAuditProvenance.js';
+import { CompressionAuditState } from './CompressionAuditState.js';
 import {
   notifyCompressionCooldown,
   compressionCooldownResult,
@@ -68,28 +66,58 @@ import {
  */
 import { computeEffectiveTokenCount } from './effectiveTokenCount.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   estimatePendingTokens,
   getCompletionBudget,
 } from './compressionBudgeting.js';
+import { runGuardedCompression } from './guardedCompression.js';
 import { ProviderContentEnforcer } from './providerContentEnforcement.js';
-import {
-  attachCompressionCallback,
-  clearCompressionCallback,
-} from './providerCompressionCallback.js';
-import {
-  fireCompressionHookForAttempt,
-  type CompressionAttemptOptions,
-} from './compressionHookExecution.js';
+import { clearCompressionCallback } from './providerCompressionCallback.js';
 import {
   TOKEN_SAFETY_MARGIN,
   CONTEXT_LIMIT_FUDGE_FACTOR,
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
   computeMarginAdjustedLimit,
 } from './contextLimitPolicy.js';
+
+import { runDiskProviderFallback } from './diskProviderFallback.js';
+import { providerFallbackFailure } from './providerFallbackCandidate.js';
+import {
+  ProviderSourceEnforcer,
+  type ProviderSourceLimits,
+} from './provider-source-enforcement.js';
+import {
+  runSourceStages,
+  type SourceStageActions,
+} from './source-stage-ladder.js';
+import { SourceCandidate, type SourcePendingRows } from './source-candidate.js';
+import { createSourceCompressionCallback } from './source-compression-callback.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { truncateSourceToolResponses } from './source-tool-truncation.js';
+import {
+  executeFallbackTransaction,
+  type FallbackTransactionDeps,
+} from './providerFallbackTransaction.js';
+
+/**
+ * Session-owned collaborators a compression call needs from its caller: the
+ * transcript path source, the history publication origin, the hook execution
+ * owner and the admitted model parameters. Absent members fall back to the
+ * handler's own transcript path provider and to no origin/owner/parameters.
+ */
+export interface CompressionCallOwners {
+  readonly transcriptPathProvider?: () => string | undefined;
+  readonly historyOrigin?: object;
+  readonly hookOwner?: HookExecutionOwner;
+  readonly modelParameters?: AdmittedModelParameters;
+}
+
+const diskRunners = {
+  'top-down-truncation': runDiskTruncation,
+  'high-density': runDiskHighDensity,
+};
 
 /**
  * CompressionHandler orchestrates all compression logic for ChatSession.
@@ -163,7 +191,7 @@ export class CompressionHandler {
       compressionProfileName: string | undefined,
     ) => CompressionProviderResult | Promise<CompressionProviderResult>,
     private readonly hookTrigger: (
-      context: CompressionContext,
+      context: CompressionAttemptContext,
       owner?: HookExecutionOwner,
     ) => Promise<void>,
   ) {}
@@ -174,9 +202,11 @@ export class CompressionHandler {
    * @plan PLAN-20251202-THINKING.P15
    * @requirement REQ-THINK-005.1, REQ-THINK-005.2
    */
-  getEffectiveTokenCount(): number {
-    const reasoning = this.ports.ephemerals.reasoning;
-    return computeEffectiveTokenCount(this.historyService, reasoning);
+  getEffectiveTokenCount(): Promise<number> {
+    return computeEffectiveTokenCount(
+      this.historyService,
+      this.ports.ephemerals.reasoning,
+    );
   }
 
   /**
@@ -200,7 +230,7 @@ export class CompressionHandler {
       const strategy = this.strategy(strategyName);
 
       // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous
-      if (!strategy.optimize || strategy.trigger.mode !== 'continuous') {
+      if (!strategy.optimizeRows || strategy.trigger.mode !== 'continuous') {
         return;
       }
 
@@ -229,31 +259,12 @@ export class CompressionHandler {
         workspaceRoot: process.cwd(),
       };
 
-      // Step 3: Get raw history (REQ-HD-002.9)
-      const history = this.historyService.getRawHistory();
-
-      // Step 4: Run optimization
-      const result = strategy.optimize(history, config);
-
-      // REQ-HD-002.5: Short-circuit if no changes
-      if (result.removals.length === 0 && result.replacements.size === 0) {
-        this.logger.debug(
-          () => '[CompressionHandler] Density optimization produced no changes',
-        );
-        return;
-      }
-
-      // Step 5: Apply result (REQ-HD-002.4)
-      this.logger.debug(
-        () => '[CompressionHandler] Applying density optimization',
-        {
-          removals: result.removals.length,
-          replacements: result.replacements.size,
-          metadata: result.metadata,
-        },
+      const optimize = strategy.optimizeRows;
+      const nativePolicy = strategy.nativeDensityPolicy;
+      await this.historyService.optimizeDensityRows(
+        (source) => optimize(source, config, this.historyService.scratchRoots),
+        nativePolicy === undefined ? undefined : () => nativePolicy(config),
       );
-
-      await this.historyService.applyDensityResult(result);
       await this.historyService.waitForTokenUpdates();
     } finally {
       // REQ-HD-002.7: Always clear dirty flag, even on error or no-op
@@ -268,7 +279,7 @@ export class CompressionHandler {
    * @plan PLAN-20251028-STATELESS6.P10
    * @requirement REQ-STAT6-002.2
    */
-  shouldCompress(pendingTokens: number = 0): boolean {
+  async shouldCompress(pendingTokens: number = 0): Promise<boolean> {
     // Calculate fresh each time to respect runtime setting changes
     const threshold = this.ports.ephemerals.compressionThreshold();
     const contextLimit = this.ports.ephemerals.contextLimit();
@@ -294,7 +305,7 @@ export class CompressionHandler {
     const baseTokenCount =
       this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0
         ? this.lastPromptTokenCount
-        : this.getEffectiveTokenCount();
+        : await this.getEffectiveTokenCount();
 
     const currentTokens = baseTokenCount + Math.max(0, pendingTokens);
     const shouldCompress = currentTokens >= compressionThreshold;
@@ -338,7 +349,7 @@ export class CompressionHandler {
     // @requirement REQ-HD-002.1
     await this.ensureDensityOptimized();
 
-    if (this.shouldCompress(pendingTokens)) {
+    if (await this.shouldCompress(pendingTokens)) {
       const triggerMessage =
         source === 'stream'
           ? 'Triggering compression before message send in stream'
@@ -368,7 +379,7 @@ export class CompressionHandler {
    * Compute the baseline prompt token count for hard-limit projection.
    * Prefer API-observed prompt tokens when available (includes cache read/write).
    */
-  getProjectedPromptBaseline(): number {
+  async getProjectedPromptBaseline(): Promise<number> {
     return this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0
       ? this.lastPromptTokenCount
       : this.getEffectiveTokenCount();
@@ -377,12 +388,12 @@ export class CompressionHandler {
   /**
    * Compute the projected token count for a pending request.
    */
-  private computeProjectedTokens(
+  private async computeProjectedTokens(
     pendingTokens: number,
     completionBudget: number,
-  ): number {
+  ): Promise<number> {
     return (
-      this.getProjectedPromptBaseline() +
+      (await this.getProjectedPromptBaseline()) +
       Math.max(0, pendingTokens) +
       completionBudget
     );
@@ -437,39 +448,57 @@ export class CompressionHandler {
   }
 
   /**
-   * Public cleanup hook for callers that use enforceProviderContents and then
+   * Public cleanup hook for callers that use enforceProviderSource and then
    * invoke the provider while the compression callback remains attached.
    */
   clearProviderCompressionCallback(provider?: IProvider): void {
     clearCompressionCallback(provider, this.logger);
   }
 
-  private createProviderContentEnforcer(
-    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
-    transcriptPathProvider?: () => string | undefined,
-    historyOrigin?: object,
-    hookOwner?: HookExecutionOwner,
-    modelParameters?: AdmittedModelParameters,
-  ): ProviderContentEnforcer {
+  sourceContextLimits(provider: IProvider): ProviderSourceLimits {
     return new ProviderContentEnforcer({
-      historyService: this.historyService,
-      historyOrigin,
       runtimeContext: this.ports,
       generationConfig: this.generationConfig,
       readCompletionBudgetSetting: () =>
         this.ports.readCompletionBudgetSetting(),
+    }).sourceContextLimits(provider);
+  }
+
+  private async suppressedFallback(
+    promptId: string,
+    applyResult: Parameters<
+      FallbackTransactionDeps['performFallbackCompression']
+    >[1],
+    targetTokenCount: number | undefined,
+    owners: CompressionCallOwners | undefined,
+  ): Promise<boolean> {
+    this.pushSuppressDensityDirty();
+    try {
+      return await this.performProviderDiskFallback(
+        promptId,
+        applyResult,
+        targetTokenCount,
+        owners,
+      );
+    } finally {
+      this.popSuppressDensityDirty();
+    }
+  }
+
+  private fallbackTransactionDeps(
+    owners: CompressionCallOwners | undefined,
+  ): FallbackTransactionDeps {
+    return {
+      historyService: this.historyService,
       logger: this.logger,
-      ensureDensityOptimized: () => this.ensureDensityOptimized(),
-      performCompression: (promptId, options) =>
-        this.performCompression(promptId, {
-          ...options,
-          modelParameters,
-          transcriptPathProvider,
-          historyOrigin,
-          hookOwner,
-        }),
-      estimateFinalizedPromptTokens,
-      requestMediaBudgetBytes: this.requestMediaBudgetBytes,
+      model: this.ports.state.model,
+      performFallbackCompression: (promptId, applyResult, targetTokenCount) =>
+        this.suppressedFallback(
+          promptId,
+          applyResult,
+          targetTokenCount,
+          owners,
+        ),
       getPromptTokenBaseline: () => this.lastPromptTokenCount,
       resetPromptTokenBaseline: () => {
         this.lastPromptTokenCount = null;
@@ -477,71 +506,144 @@ export class CompressionHandler {
       restorePromptTokenBaseline: (baseline) => {
         this.lastPromptTokenCount = baseline;
       },
-      performFallbackCompression: async (
-        promptId,
-        applyResult,
-        targetTokenCount,
-      ) => {
-        this.pushSuppressDensityDirty();
-        try {
-          const context = await this.buildCompressionContext(
-            promptId,
-            { targetTokenCount, modelParameters },
-            transcriptPathProvider,
-          );
-          const outcome = await this.performFallbackCompression(
-            context,
-            new Error('Provider content fallback truncation triggered'),
-            (newHistory, _summary, _topPreserved) => applyResult(newHistory),
-            new CompressionRunReport(),
-            { swallowErrors: false },
-          );
-          return outcome === 'applied';
-        } finally {
-          this.popSuppressDensityDirty();
-        }
+    };
+  }
+
+  private sourceStageActions<S>(
+    promptId: string,
+    candidate: SourceCandidate<S>,
+    limits: ProviderSourceLimits,
+    owners: CompressionCallOwners | undefined,
+  ): SourceStageActions {
+    return {
+      optimizeDensity: async () => {
+        await this.ensureDensityOptimized();
+        await this.historyService.waitForTokenUpdates();
       },
-    });
+      compress: async () => {
+        const failure = await runGuardedCompression(
+          {
+            ...this.fallbackTransactionDeps(owners),
+            historyOrigin: owners?.historyOrigin,
+            performCompression: (id, options) =>
+              this.performCompression(id, { ...options, ...owners }),
+          },
+          promptId,
+        );
+        if (failure !== undefined) throw failure;
+        return PerformCompressionResult.COMPRESSED;
+      },
+      replaceSource: () => candidate.replace(),
+      relieveMediaPressure: () => candidate.prepareView(true),
+      checkMediaPressure: (error) => candidate.checkMediaPressure(error),
+      fallback: async (historyTarget) => {
+        const outcome = await executeFallbackTransaction(
+          this.fallbackTransactionDeps(owners),
+          promptId,
+          historyTarget,
+        );
+        await this.historyService.waitForTokenUpdates();
+        return outcome;
+      },
+      truncateToolResponses: () =>
+        truncateSourceToolResponses({
+          historyService: this.historyService,
+          logger: this.logger,
+          model: this.ports.state.model,
+          marginAdjustedLimit: limits.marginAdjustedLimit,
+          completionBudget: limits.completionBudget,
+          candidate,
+        }),
+      warn: (message, error) => this.logger.warn(() => message, error),
+    };
   }
 
   /**
-   * Enforce provider content limits and return the provider-ready contents.
-   *
-   * On success, any attached compression callback intentionally remains on the
-   * provider for the immediately following provider call. Callers must invoke
-   * clearProviderCompressionCallback(provider) in a finally block after that
-   * provider call completes. On error, this method makes a best-effort attempt
-   * to detach the callback before rethrowing the original enforcement error.
+   * Runs the full reduction ladder over disk candidates: density, compression,
+   * ineffective-compression retry, hard-limit fallback, tool-response
+   * truncation. `estimate` measures one candidate, `reopen` rebuilds the
+   * pending-aware candidate from the durable journal and `pending`. A
+   * provider-triggered compression callback runs the same ladder over the
+   * current candidate; it stays attached after success until the caller
+   * clears it once the provider call ends, and is cleared here on failure.
    */
-  async enforceProviderContents(
-    envelope: ProviderContentEnvelope,
+  async enforceProviderSource<S extends ProviderRequestSelection>(
+    provider: IProvider,
     promptId: string,
-    provider?: IProvider,
-    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
-    transcriptPathProvider?: () => string | undefined,
-    historyOrigin?: object,
-    hookOwner?: HookExecutionOwner,
-    modelParameters?: AdmittedModelParameters,
-  ): Promise<IContent[]> {
-    const enforcer = this.createProviderContentEnforcer(
-      estimateFinalizedPromptTokens,
-      transcriptPathProvider,
-      historyOrigin,
-      hookOwner,
-      modelParameters,
-    );
+    source: S,
+    estimate: (candidate: S) => Promise<number>,
+    reopen: () => Promise<S>,
+    pendingRecoverable: boolean,
+    pending: SourcePendingRows,
+    owners?: CompressionCallOwners,
+    projectView?: (
+      source: S,
+      retireAll: boolean,
+      error?: unknown,
+    ) => Promise<S>,
+  ): Promise<S> {
     try {
-      attachCompressionCallback(
-        provider,
-        promptId,
-        enforcer,
-        envelope.pendingContents,
-        this.logger,
+      await this.historyService.waitForTokenUpdates();
+      const candidate = new SourceCandidate(
+        source,
+        estimate,
+        reopen,
+        pending,
+        source.native === undefined
+          ? undefined
+          : () => this.historyService.historyMutationGuard(),
+        projectView,
       );
-      return await enforcer.enforce(envelope, promptId, provider);
+      await candidate.prepareView();
+      const limits = this.sourceContextLimits(provider);
+      const getHistoryTokens = () => this.historyService.getTotalTokens();
+      if (typeof provider.setCompressionCallback === 'function')
+        provider.setCompressionCallback(
+          createSourceCompressionCallback({
+            candidate,
+            defaultLimits: limits,
+            estimateByContents: (rows) =>
+              this.historyService.estimateTokensForContents(
+                { [Symbol.asyncIterator]: () => rows.openReader() },
+                this.ports.state.model,
+              ),
+            pendingRecoverable,
+            getHistoryTokens,
+            stageActions: (active) =>
+              this.sourceStageActions(promptId, candidate, active, owners),
+            warn: (message, error) => this.logger.warn(() => message, error),
+          }),
+        );
+      await runSourceStages(
+        new ProviderSourceEnforcer({
+          limits,
+          estimate: () => candidate.estimate(),
+          getHistoryTokens,
+        }),
+        this.sourceStageActions(promptId, candidate, limits, owners),
+        pendingRecoverable,
+      );
+      return candidate.value;
     } catch (error) {
       this.clearProviderCompressionCallback(provider);
       throw error;
+    }
+  }
+
+  private async finishCompression(
+    outcome: 'applied' | 'noop' | 'failed',
+    count: number,
+    origin?: object,
+  ): Promise<void> {
+    try {
+      await this.historyService.waitForCommit();
+    } finally {
+      this.historyService.endCompression(
+        outcome === 'noop' ? undefined : this.auditState.summary,
+        outcome === 'noop' ? undefined : count,
+        origin,
+        outcome === 'noop' ? undefined : this.auditState.provenance,
+      );
     }
   }
 
@@ -554,7 +656,6 @@ export class CompressionHandler {
     hookOwner?: HookExecutionOwner,
     modelParameters?: AdmittedModelParameters,
   ): Promise<void> {
-    const runReport = new CompressionRunReport();
     const enforcer = new PendingContextWindowEnforcer({
       historyService: this.historyService,
       historyOrigin,
@@ -574,16 +675,15 @@ export class CompressionHandler {
           historyOrigin,
           hookOwner,
         }),
-      buildCompressionContext: (activePromptId, targetTokenCount) =>
-        this.buildCompressionContext(
-          activePromptId,
-          { targetTokenCount, modelParameters },
+      performFallbackCompression: (activePromptId, install, targetTokenCount) =>
+        this.runDiskFallback(activePromptId, install, targetTokenCount, {
           transcriptPathProvider,
-        ),
-      compressWithFallbackStrategy: (context) =>
-        this.compressWithFallbackStrategy(context, runReport),
-      applyFallbackCompressionResult: (result, applyResult) =>
-        this.applyFallbackCompressionResult(result, applyResult, runReport),
+          modelParameters,
+        }),
+      getLastPromptTokenCount: () => this.lastPromptTokenCount,
+      restoreLastPromptTokenCount: (value) => {
+        this.lastPromptTokenCount = value;
+      },
       setSuppressDensityDirty: (value) => this.setSuppressDensityDirty(value),
       recordCompressionFailure: () => this.recordCompressionFailure(),
       resetLastPromptTokenCount: () => {
@@ -604,6 +704,25 @@ export class CompressionHandler {
     this.lastCompressionFailureTime = Date.now();
   }
 
+  private prepareAttempt(
+    promptId: string,
+    options: Parameters<CompressionHandler['performCompression']>[1],
+  ): Promise<boolean> {
+    return prepareCompressionAttempt(
+      (context) => this.hookTrigger(context, options?.hookOwner),
+      options?.trigger ?? 'manual',
+      promptId,
+      this.ports,
+      this.config,
+      this.historyService,
+      async (profileName) => this.providerResolver(profileName),
+      this.activeTodosProvider,
+      options?.transcriptPathProvider ?? this.transcriptPathProvider,
+      this.logger,
+      { modelParameters: options?.modelParameters },
+    );
+  }
+
   /**
    * Perform compression with retry, fallback, and cooldown logic.
    *
@@ -612,7 +731,11 @@ export class CompressionHandler {
    */
   async performCompression(
     prompt_id: string,
-    options?: CompressionAttemptOptions,
+    options?: {
+      bypassCooldown?: boolean;
+      trigger?: 'manual' | 'auto';
+      onCommitted?: () => void;
+    } & CompressionCallOwners,
   ): Promise<PerformCompressionResult> {
     // Cooldown: skip compression if we have too many recent failures
     // When bypassCooldown is true (called from enforceContextWindow), skip this check
@@ -626,24 +749,25 @@ export class CompressionHandler {
     );
     if (cooldownResult !== null) return cooldownResult;
 
-    await fireCompressionHookForAttempt(
-      this,
-      prompt_id,
-      options,
-      this.hookTrigger,
-    );
+    // Trigger PreCompress hook (fail-open) before checking history.
+    // This ensures automatic/manual compression attempts emit PreCompress hooks
+    // even when the attempt is later skipped due to empty history.
+    const hasHistory = await this.prepareAttempt(prompt_id, options);
 
-    const currentHistory = this.historyService.getCurated();
-    if (currentHistory.length === 0) {
+    // Skip compression if history is empty
+    if (!hasHistory) {
       this.logger.debug('Skipping compression — empty history');
       return PerformCompressionResult.SKIPPED_EMPTY;
     }
 
     this.logger.debug('Starting compression');
 
-    // Capture token/history counts before startCompression mutates state.
-    const { tokensBefore, itemCount: preCompressionCount } =
-      beginCompressionLifecycle(this.historyService, options?.historyOrigin);
+    // Capture the pre-compression token count for the lifecycle telemetry
+    // event (#3130 AC-7). Must be read BEFORE startCompression mutates state.
+    const tokensBefore = this.historyService.getTotalTokens();
+
+    let preCompressionCount = 0;
+    this.historyService.startCompression(options?.historyOrigin);
     // Compression outcome determined by runCompressionWithRetryAndFallback.
     // On 'noop', we must avoid history mutation, recording events, and
     // counter/timestamp changes entirely. (Issue #2602)
@@ -656,34 +780,25 @@ export class CompressionHandler {
     // Suppress densityDirty during compression rebuild (clear+add loop)
     this.setSuppressDensityDirty(true);
     try {
+      preCompressionCount = await countCompressionRows(this.historyService);
       compressionOutcome = await this.runCompressionWithRetryAndFallback(
         prompt_id,
         runReport,
-        createCompressionApplyCallback(
-          this.historyService,
-          this.ports.state.model,
-          options?.historyOrigin,
-          (summary) => {
-            this.lastPromptTokenCount = null;
-            this.auditState.setSummary(summary);
-          },
-        ),
         options?.transcriptPathProvider,
         options?.modelParameters,
+        options?.historyOrigin,
+        options?.onCommitted,
       );
     } finally {
       this.setSuppressDensityDirty(false);
       // Balance the compression lock in all cases. On 'noop' no history was
       // mutated, so flush/unlock WITHOUT summary/itemsCompressed to avoid
       // emitting a compressionEnded recording event. (Issue #2602)
-      endCompressionAttempt({
-        history: this.historyService,
-        outcome: compressionOutcome,
-        summary: this.auditState.summary,
-        itemCount: preCompressionCount,
-        origin: options?.historyOrigin,
-        provenance: this.auditState.provenance,
-      });
+      await this.finishCompression(
+        compressionOutcome,
+        preCompressionCount,
+        options?.historyOrigin,
+      );
     }
 
     return completeCompressionAttempt(
@@ -747,251 +862,107 @@ export class CompressionHandler {
   private async runCompressionWithRetryAndFallback(
     promptId: string,
     runReport: CompressionRunReport,
-    applyResult: (
-      newHistory: IContent[],
-      summary: IContent | undefined,
-      topPreserved: number,
-    ) => Promise<void>,
     transcriptPathProvider?: () => string | undefined,
     modelParameters?: AdmittedModelParameters,
+    historyOrigin?: object,
+    onCommitted?: () => void,
   ): Promise<'applied' | 'noop' | 'failed'> {
-    const context = await this.buildCompressionContext(
-      promptId,
-      { modelParameters },
-      transcriptPathProvider,
-    );
-    const configuredStrategyName = parseCompressionStrategyName(
+    const strategyName = parseCompressionStrategyName(
       this.ports.ephemerals.compressionStrategy(),
     );
-
-    const attemptPrimary = async (): Promise<StrategyCompressionResult> => {
-      runReport.countAttempt();
-      return this.strategy(configuredStrategyName).compress(context);
-    };
-
-    let primaryError: unknown;
-    try {
-      const result = await retryWithBackoff(attemptPrimary, {
-        maxAttempts: 3,
-        initialDelayMs: 2000,
-        maxDelayMs: 10000,
-        shouldRetryOnError: (err) => shouldRetryCompressionError(err),
-      });
-
-      // Structural no-op from the primary strategy. For middle-out, route to
-      // one-shot summarization of the same unchanged history; for other
-      // strategies the no-op is truthful and not re-routed. (Issue #2602)
-      if (result.kind === 'noop') {
-        return await this.handleStructuralNoop(
-          result,
-          configuredStrategyName,
-          context,
-          applyResult,
-          runReport,
-        );
-      }
-
-      await this.applyFallbackCompressionResult(result, applyResult, runReport);
-      this.logger.debug('Compression completed with primary strategy');
-      return 'applied';
-    } catch (err) {
-      primaryError = err;
-    }
-
-    // Permanent errors that are not fallback-eligible are rethrown immediately.
-    // Transient errors (already retried) and EmptySummaryError fall back to
-    // truncation instead of aborting the turn. (Issue #2333)
-    if (!isFallbackEligibleCompressionError(primaryError)) {
-      throw primaryError;
-    }
-
-    this.logger.warn(
-      'Primary compression strategy failed after retries, attempting fallback truncation',
-      primaryError,
-    );
-    const fallbackOutcome = await this.performFallbackCompression(
-      context,
-      primaryError,
-      (newHistory, summary, topPreserved) =>
-        applyResult(newHistory, summary, topPreserved),
-      runReport,
-    );
-    return fallbackOutcome;
-  }
-
-  /**
-   * Resolve a structural no-op from the primary strategy. For middle-out,
-   * route to one-shot summarization of the same unchanged history; for other
-   * strategies the no-op is truthful and not re-routed. (Issue #2602)
-   *
-   * Provider/transient/LLM/verification failures from the one-shot fallback
-   * propagate as exceptions (they are never structural no-ops).
-   */
-  private async handleStructuralNoop(
-    result: Extract<StrategyCompressionResult, { kind: 'noop' }>,
-    configuredStrategyName: CompressionStrategyName,
-    context: CompressionContext,
-    applyResult: (
-      newHistory: IContent[],
-      summary: IContent | undefined,
-      topPreserved: number,
-    ) => Promise<void>,
-    runReport: CompressionRunReport,
-  ): Promise<'applied' | 'noop'> {
-    if (configuredStrategyName !== 'middle-out') {
-      this.logger.debug(
-        `Compression was a structural no-op (${configuredStrategyName}: ${result.reason})`,
-      );
-      return 'noop';
-    }
-    const routed = await this.runOneShotFallback(context, runReport);
-    if (routed.kind === 'applied') {
-      await this.applyFallbackCompressionResult(routed, applyResult, runReport);
-      this.logger.debug(
-        'Compression completed — middle-out structural no-op routed to one-shot',
-      );
-      return 'applied';
-    }
-    this.logger.debug(
-      'Compression was a structural no-op (middle-out and one-shot)',
-    );
-    return 'noop';
-  }
-
-  /** Run one-shot for middle-out structural no-ops, propagating execution errors. */
-  private async runOneShotFallback(
-    context: CompressionContext,
-    runReport: CompressionRunReport,
-  ): Promise<StrategyCompressionResult> {
-    const oneShot = this.strategy('one-shot');
-    runReport.countAttempt();
-    return oneShot.compress(context);
-  }
-
-  /** Commit an applied strategy outcome and publish its summary and telemetry. */
-  private async applyFallbackCompressionResult(
-    result: StrategyCompressionResult,
-    applyResult: (
-      newHistory: IContent[],
-      summary: IContent | undefined,
-      topPreserved: number,
-    ) => Promise<void>,
-    runReport: CompressionRunReport,
-  ): Promise<void> {
-    await applyFallbackResult({
-      result,
-      applyResult,
-      recordApplied: (metadata) => runReport.recordApplied(metadata),
-      notifyAudit: ({ summary, provenance }) =>
-        this.auditState.record(summary, provenance),
-      notifyNoop: (reason) =>
-        this.logger.debug(
-          `applyFallbackCompressionResult received structural no-op (${reason}); not applying`,
-        ),
-      resetFailures: () => {
-        this.compressionFailureCount = 0;
-        this.lastCompressionFailureTime = null;
-        this.lastSuccessfulCompressionTime = Date.now();
-      },
-    });
-  }
-
-  private async compressWithFallbackStrategy(
-    context: CompressionContext,
-    runReport: CompressionRunReport,
-  ): Promise<StrategyCompressionResult> {
-    const fallback = this.strategy('top-down-truncation');
-    runReport.countAttempt();
-    return fallback.compress(context);
-  }
-
-  /** Run truncation fallback, swallowing errors except during hard-limit enforcement. */
-  private async performFallbackCompression(
-    context: CompressionContext,
-    primaryError: unknown,
-    applyResult: (
-      newHistory: IContent[],
-      summary: IContent | undefined,
-      topPreserved: number,
-    ) => Promise<void>,
-    runReport: CompressionRunReport,
-    options?: { swallowErrors?: boolean },
-  ): Promise<'applied' | 'noop' | 'failed'> {
-    const swallowErrors = options?.swallowErrors ?? true;
-    try {
-      // Use the strategy factory so tests can intercept
-      const result = await this.compressWithFallbackStrategy(
-        context,
-        runReport,
-      );
-      if (result.kind === 'noop') {
-        // Truthful fallback no-op: do not apply, do not reset counters.
-        this.logger.debug(
-          `Fallback (TopDownTruncation) was a structural no-op: ${result.reason}`,
-        );
-        return 'noop';
-      }
-      await this.applyFallbackCompressionResult(result, applyResult, runReport);
-      this.logger.debug(
-        'Compression completed with fallback (TopDownTruncation)',
-      );
-      return 'applied';
-    } catch (fallbackError) {
-      // Both strategies failed — track the failure
-      this.compressionFailureCount++;
-      this.lastCompressionFailureTime = Date.now();
-      if (!swallowErrors) {
-        this.logger.error(
-          'Provider truncation fallback failed during hard-limit enforcement',
-          { primaryError, fallbackError },
-        );
-        const primaryMessage =
-          primaryError instanceof Error
-            ? primaryError.message
-            : String(primaryError);
-        const fallbackMessage =
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : String(fallbackError);
-        throw new AggregateError(
-          [primaryError, fallbackError],
-          `Provider truncation fallback failed during hard-limit enforcement. Primary failure: ${primaryMessage}. Fallback failure: ${fallbackMessage}`,
-        );
-      }
-      this.logger.error(
-        'Fallback compression also failed — continuing without compression',
-        { primaryError, fallbackError },
-      );
-      return 'failed';
-    }
-  }
-
-  /**
-   * Build CompressionContext for compression strategies.
-   *
-   * @plan PLAN-20260211-COMPRESSION.P14
-   * @requirement REQ-CS-001.6
-   */
-  async buildCompressionContext(
-    promptId: string,
-    options?: {
-      targetTokenCount?: number;
-      modelParameters?: AdmittedModelParameters;
-    },
-    transcriptPathProvider: (() => string | undefined) | undefined = this
-      .transcriptPathProvider,
-  ): Promise<CompressionContext> {
-    return buildContext(
+    const args: Parameters<typeof buildCompressionMetadata> = [
       promptId,
       this.ports,
       this.config,
       this.historyService,
-      (profileName?) => Promise.resolve(this.providerResolver(profileName)),
+      (profileName) => Promise.resolve(this.providerResolver(profileName)),
       this.activeTodosProvider,
-      transcriptPathProvider,
+      transcriptPathProvider ?? this.transcriptPathProvider,
       this.logger,
-      options,
+      { modelParameters, historyOrigin, onCommitted, runReport },
+    ];
+    const transport = {
+      mediaResolver: this.mediaResolver,
+      requestMediaBudgetBytes: this.requestMediaBudgetBytes,
+      providerFileBindings: this.providerFileBindings,
+      providerFileLifecycle: this.providerFileLifecycle,
+    };
+    const run = () => {
+      if (strategyName === 'middle-out')
+        return runDiskMiddleOut(transport, ...args);
+      if (strategyName === 'one-shot')
+        return runDiskOneShot(transport, ...args);
+      return diskRunners[strategyName](...args);
+    };
+    const outcome = await run();
+    if (outcome.outcome === 'applied') {
+      this.lastPromptTokenCount = null;
+      this.auditState.record(outcome.summary, outcome.provenance);
+      this.compressionFailureCount = 0;
+      this.lastCompressionFailureTime = null;
+      this.lastSuccessfulCompressionTime = Date.now();
+    }
+    if (outcome.outcome === 'failed') this.recordCompressionFailure();
+    return outcome.outcome;
+  }
+
+  private async runDiskFallback(
+    promptId: string,
+    applyResult: Parameters<
+      FallbackTransactionDeps['performFallbackCompression']
+    >[1],
+    targetTokenCount: number | undefined,
+    owners: CompressionCallOwners | undefined,
+  ): Promise<boolean> {
+    const { outcome, summary } = await runDiskProviderFallback(
+      applyResult,
+      promptId,
+      this.ports,
+      this.config,
+      this.historyService,
+      (profileName) => Promise.resolve(this.providerResolver(profileName)),
+      this.activeTodosProvider,
+      owners?.transcriptPathProvider ?? this.transcriptPathProvider,
+      this.logger,
+      { targetTokenCount, modelParameters: owners?.modelParameters },
     );
+    if (outcome === 'noop') return false;
+    this.auditState.record(
+      summary,
+      unauthoredProvenance('top-down-truncation'),
+    );
+    this.compressionFailureCount = 0;
+    this.lastCompressionFailureTime = null;
+    this.lastSuccessfulCompressionTime = Date.now();
+    return true;
+  }
+
+  private async performProviderDiskFallback(
+    promptId: string,
+    applyResult: Parameters<
+      FallbackTransactionDeps['performFallbackCompression']
+    >[1],
+    targetTokenCount: number | undefined,
+    owners: CompressionCallOwners | undefined,
+  ): Promise<boolean> {
+    const primaryError = new Error(
+      'Provider content fallback truncation triggered',
+    );
+    try {
+      return await this.runDiskFallback(
+        promptId,
+        applyResult,
+        targetTokenCount,
+        owners,
+      );
+    } catch (fallbackError) {
+      this.recordCompressionFailure();
+      this.logger.error(
+        'Provider truncation fallback failed during hard-limit enforcement',
+        { primaryError, fallbackError },
+      );
+      throw providerFallbackFailure(primaryError, fallbackError);
+    }
   }
 
   /**

@@ -28,7 +28,6 @@ interface TodoContextValue {
 interface CommandContextInputs {
   addItem: UseHistoryManagerReturn['addItem'];
   clearItems: UseHistoryManagerReturn['clearItems'];
-  loadHistory: UseHistoryManagerReturn['loadHistory'];
   refreshStatic: () => void;
   toggleVimEnabled: () => Promise<boolean>;
   setLlxprtMdFileCount: (count: number) => void;
@@ -158,7 +157,6 @@ function buildCommandContextUi(
       }
       inputs.refreshStatic();
     },
-    loadHistory: inputs.loadHistory,
     setDebugMessage: inputs.actions.setDebugMessage,
     pendingItem: inputs.pendingItem,
     setPendingItem: inputs.setPendingItem,

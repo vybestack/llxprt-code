@@ -13,6 +13,7 @@ import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/run
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { callReviewProvider, ReviewTimeoutError } from './reviewCall.js';
 
+async function* emptyContents(): AsyncGenerator<IContent> {}
 function streamOf(chunks: readonly IContent[]) {
   return {
     async *generateChatCompletion(): AsyncGenerator<IContent> {
@@ -22,7 +23,7 @@ function streamOf(chunks: readonly IContent[]) {
   };
 }
 
-const NO_REQUEST: RuntimeGenerateChatOptions = { contents: [] };
+const NO_REQUEST: RuntimeGenerateChatOptions = { contents: emptyContents() };
 
 const NEVER_ANSWERS = {
   generateChatCompletion(): AsyncIterable<IContent> {
@@ -109,7 +110,7 @@ describe('reviewer provider call', () => {
 
   describe('abort reaches the provider request', () => {
     const REQUEST_WITH_INVOCATION: RuntimeGenerateChatOptions = {
-      contents: [],
+      contents: emptyContents(),
       invocation: createRuntimeInvocationContext({
         fetch: globalThis.fetch,
         providerName: 'openai',

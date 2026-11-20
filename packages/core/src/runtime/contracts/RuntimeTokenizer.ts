@@ -30,4 +30,5 @@ export type RuntimeTokenizerFallbackPolicy = 'allow' | 'deny';
 export interface RuntimeTokenizer {
   readonly fallbackPolicy?: RuntimeTokenizerFallbackPolicy;
   countTokens(content: unknown): number | Promise<number>;
+  countTokenStream?(parts: AsyncIterable<Uint8Array>): Promise<number>;
 }

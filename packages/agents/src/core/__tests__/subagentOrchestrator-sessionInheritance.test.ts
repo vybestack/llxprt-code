@@ -58,6 +58,25 @@ const baseProfile: Profile = {
   ephemeralSettings: { 'auth-key': 'subagent-key' },
 };
 
+const loadBalancerProfile: Profile = {
+  version: 1,
+  type: 'loadbalancer',
+  policy: 'roundrobin',
+  profiles: ['lb-member'],
+  provider: 'load-balancer',
+  model: 'load-balancer',
+  modelParams: {},
+  ephemeralSettings: {},
+};
+
+const memberProfile: Profile = {
+  version: 1,
+  provider: 'openai',
+  model: 'gpt-4o',
+  modelParams: {},
+  ephemeralSettings: { 'auth-key': 'member-key' },
+};
+
 function makeForegroundConfig(): Config {
   return new Config({
     sessionId: 'primary-session',
@@ -79,7 +98,9 @@ async function launchSubagent(
 }> {
   const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
   const loadProfile = vi.fn().mockResolvedValue(profile);
-  const runtimeLoader = vi.fn(async () => createRuntimeBundle('sess'));
+  const runtimeLoader = vi.fn(async (_options: AgentRuntimeLoaderOptions) =>
+    createRuntimeBundle('sess'),
+  );
   const scope = fakeChildScope({
     getAgentId: () => 'helper-1',
     dispose: async () => {},
@@ -118,8 +139,7 @@ async function launchSubagent(
   return {
     isolatedSettings,
     dispose: result.dispose,
-    childRuntimeId:
-      runtimeLoader.mock.calls[0][0].profile.providerRuntime.runtimeId,
+    childRuntimeId: runtimeLoader.mock.calls[0][0].profile.state.runtimeId,
   };
 }
 
@@ -187,7 +207,9 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
 
     await dispose();
   });
+});
 
+describe('SubagentOrchestrator — live dumpcontext inheritance (#3151)', () => {
   it('observes live foreground on -> off -> error changes on later reads', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
@@ -244,7 +266,9 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
 
     await dispose();
   });
+});
 
+describe('SubagentOrchestrator — dumpcontext isolation (#3151)', () => {
   it('does not inherit unrelated foreground ephemerals into the isolated service', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
@@ -278,26 +302,18 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
     await disposeA();
     await dispose();
   });
+});
 
+describe('SubagentOrchestrator — load-balancer dumpcontext inheritance (#3151)', () => {
   it('inherits the foreground dumpcontext for a load-balancer subagent', async () => {
-    const loadBalancerProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['lb-member'],
-      provider: 'load-balancer',
-      model: 'load-balancer',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    const memberProfile: Profile = {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o',
-      modelParams: {},
-      ephemeralSettings: { 'auth-key': 'member-key' },
-    };
-
+    // Launch a genuine load-balancer profile through SubagentOrchestrator.launch
+    // so the private createRuntimeBundle load-balancer branch is exercised end
+    // to end. The real LB provider/client activation (which intermittently
+    // hangs on agent client initialisation) is avoided deterministically by
+    // spying on the createIsolatedRuntimeContext seam and observing
+    // applyProfileCascade. The mocked isolated handle retains the production
+    // settingsService passed by the orchestrator, so the runtime loader
+    // receives and exposes the service constructed by production code.
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
 
@@ -359,7 +375,7 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
         const loaderProfile = runtimeLoader.mock.calls[0][0].profile;
         const invocation = () =>
           loaderProfile.prepareProviderInvocation('load-balancer');
-        expect(loaderProfile.providerManager?.getActiveProvider().name).toBe(
+        expect(loaderProfile.providerManager?.getActiveProvider()?.name).toBe(
           'load-balancer',
         );
         expect(loaderProfile.state.provider).toBe('load-balancer');

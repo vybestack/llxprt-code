@@ -60,6 +60,7 @@ import {
   stripScratchpadSections,
 } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
+import { callerOwnedProviderRequest } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -257,6 +258,39 @@ export function buildTriggerInstruction(
 }
 
 /**
+ * The fixed turns that frame a streamed summarization request: the security
+ * preamble, the compression instructions and both trigger variants. Every
+ * prompt file is read once when the request is built, so a missing or empty
+ * override fails before any journal row is streamed (#4128).
+ */
+export interface SummaryRequestFrame {
+  readonly preamble: IContent;
+  readonly instructions: IContent;
+  readonly trigger: IContent;
+  readonly triggerWithPriorSnapshot: IContent;
+}
+
+export function buildSummaryRequestFrame(
+  source: CompressionPromptSource,
+): SummaryRequestFrame {
+  return {
+    preamble: buildSecurityPreamble(source),
+    instructions: humanText(
+      loadCompressionPromptFile(source, COMPRESSION_PROMPT_FILES.instructions),
+    ),
+    trigger: humanText(
+      loadCompressionPromptFile(source, COMPRESSION_PROMPT_FILES.trigger),
+    ),
+    triggerWithPriorSnapshot: humanText(
+      loadCompressionPromptFile(
+        source,
+        COMPRESSION_PROMPT_FILES.triggerWithPriorSnapshot,
+      ),
+    ),
+  };
+}
+
+/**
  * Request turns that hand the summarizer runtime context: the active
  * task list and the session journal path, each from its prompt file.
  *
@@ -328,7 +362,7 @@ export function buildLargeLastPromptInjection(
 export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
-  context: CompressionContext,
+  context: Omit<CompressionContext, 'history'>,
   mediaResolver: RequestMediaResolutionService | undefined,
   requestMediaBudgetBytes: number | undefined,
   providerFileBindings: ProviderFileBindingStore | undefined,
@@ -338,7 +372,9 @@ export async function runVerificationPass(
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
   invocation?: RuntimeGenerateChatOptions['invocation'],
 ): Promise<string> {
-  const verificationRequest = verificationMessages(context, initialSummary);
+  const verificationRequest = await callerOwnedProviderRequest(
+    verificationMessages(context, initialSummary),
+  );
 
   try {
     const providerRuntime =
@@ -352,7 +388,7 @@ export async function runVerificationPass(
       resolvedConfig?.getTargetDir(),
     ).generateChatCompletion(
       await buildCompressionChatOptions({
-        contents: verificationRequest,
+        requestRows: verificationRequest,
         providerRuntime,
         resolvedConfig,
         fallbackConfig: context.config,
@@ -390,6 +426,8 @@ export async function runVerificationPass(
     }
   } catch {
     // Verification is best-effort — fall back to initial summary on any error
+  } finally {
+    await verificationRequest.close();
   }
 
   return initialSummary;

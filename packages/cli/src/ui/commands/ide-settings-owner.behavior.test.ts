@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -94,7 +95,9 @@ describe('registered IDE settings owner', () => {
       expect(persisted).toMatchObject({ ui: { ideMode: true } });
       expect(otherSettings.merged.ui.ideMode).toBe(false);
       await owner.dispose();
-      expect(await sibling.getHistory()).toStrictEqual([]);
+      expect(await collectResumeRows(sibling.streamHistory())).toStrictEqual(
+        [],
+      );
     } finally {
       await client.disconnect();
     }

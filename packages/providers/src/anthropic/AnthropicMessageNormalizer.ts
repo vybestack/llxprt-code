@@ -21,9 +21,12 @@ import {
   type ThinkingBlock,
   type CodeBlock,
   type MediaBlock,
+  type MediaDroppedBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
+import { measuredAnthropicMedia } from './anthropic-measured-media.js';
 import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
@@ -315,9 +318,18 @@ function appendLimitMessage(
   return contentPayload ? `${contentPayload}\n${limitMessage}` : limitMessage;
 }
 
-function buildAnthropicToolResultContent(
+/** A tool result's media blocks, and the references of images dropped from it. */
+export type ToolResultMedia = MediaBlock | MediaDroppedBlock;
+
+export function isToolResultMedia(
+  block: ContentBlock,
+): block is ToolResultMedia {
+  return block.type === 'media' || block.type === 'media_dropped';
+}
+
+export function buildAnthropicToolResultContent(
   contentPayload: string,
-  mediaBlocks: MediaBlock[],
+  mediaBlocks: readonly ToolResultMedia[],
   supportsUrlImages: boolean,
 ): AnthropicToolResultContent {
   if (mediaBlocks.length === 0) {
@@ -326,6 +338,9 @@ function buildAnthropicToolResultContent(
   return [
     { type: 'text' as const, text: contentPayload },
     ...mediaBlocks.map((mb) => {
+      if (mb.type === 'media_dropped') {
+        return { type: 'text' as const, text: droppedMediaModelText(mb) };
+      }
       const category = classifyMediaBlock(mb);
       // #3693: zai's Anthropic-compatible endpoint rejects url-sourced
       // images; on such endpoints a url image takes the placeholder path.
@@ -339,10 +354,10 @@ function buildAnthropicToolResultContent(
       if (category === 'pdf') {
         return mediaBlockToAnthropicDocument(mb);
       }
-      return {
-        type: 'text' as const,
+      return measuredAnthropicMedia(mb, {
+        type: 'text',
         text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
-      };
+      });
     }),
   ];
 }
@@ -350,7 +365,7 @@ function buildAnthropicToolResultContent(
 function buildToolResult(
   toolResponseBlock: ToolResponseBlock,
   toolTextContent: string,
-  mediaBlocks: MediaBlock[],
+  mediaBlocks: readonly ToolResultMedia[],
   config: OutputLimitConfig | undefined,
   supportsUrlImages: boolean,
 ): AnthropicToolResultBlock {
@@ -394,9 +409,7 @@ function buildToolResults(
 
   const toolTextContent =
     toolResponseBlocks.length > 0 ? blocksToText(nonToolResponseBlocks) : '';
-  const mediaBlocks = c.blocks.filter(
-    (b): b is MediaBlock => b.type === 'media',
-  );
+  const mediaBlocks = c.blocks.filter(isToolResultMedia);
 
   for (const toolResponseBlock of toolResponseBlocks) {
     results.push(
@@ -456,7 +469,7 @@ function processHumanContent(
   blocks: ContentBlock[],
   supportsUrlImages: boolean,
 ): AnthropicMessage | undefined {
-  const hasMedia = blocks.some((b) => b.type === 'media');
+  const hasMedia = blocks.some(isToolResultMedia);
 
   if (hasMedia) {
     const converted = convertHumanMessageWithMedia(blocks, supportsUrlImages);
@@ -506,7 +519,7 @@ function pushHumanMessageIfPresent(
   }
 }
 
-function convertContentToMessages(
+export function convertContentToMessages(
   contents: IContent[],
   redactedIndices: Set<number>,
   options: AnthropicMessageConversionOptions,
@@ -697,7 +710,7 @@ type AnthropicContentPart =
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking'; data: string };
 
-function convertBlockToAnthropicPart(
+export function convertBlockToAnthropicPart(
   block: ContentBlock,
   contentIndex: number,
   shouldRedact: boolean,
@@ -795,6 +808,10 @@ function buildAIMessageContent(
 /**
  * Main exported function: Convert IContent[] to AnthropicMessage[]
  */
+export type AnthropicConversationConversionOptions = Parameters<
+  typeof convertToAnthropicMessages
+>[1];
+
 export function convertToAnthropicMessages(
   contents: IContent[],
   options: {

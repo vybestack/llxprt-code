@@ -1,3 +1,4 @@
+import { ScratchRootOwner } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
@@ -57,6 +58,7 @@ import type { ServerAgentStreamEvent, ServerFinishedEvent } from '../turn.js';
 import { AgentEventType, DEFAULT_AGENT_ID, Turn } from '../turn.js';
 import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+const historyScratchRoots = new ScratchRootOwner();
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -190,7 +192,7 @@ export function createFullLoopHarness(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, historyScratchRoots);
 
   const provider = scriptedStreamProvider(generateChatCompletionMock);
 
@@ -202,10 +204,13 @@ export function createFullLoopHarness(
     model: config.getModel(),
     sessionId: config.getSessionId(),
   });
-  const historyService = options?.historyService ?? new HistoryService();
+  const historyService =
+    options?.historyService ??
+    new HistoryService({ scratchRoots: historyScratchRoots });
   const invocationOwner = createSessionSettingsFixture(config).settingsOwner;
   retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    scratchRoots: historyScratchRoots,
     prepareProviderInvocation: invocationReaderFor(
       invocationOwner,
       runtimeState.runtimeId,

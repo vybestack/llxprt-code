@@ -172,7 +172,7 @@ function configureProvider(
   manager.registerProvider(provider);
   manager.setActiveProvider(name);
   runtimeSettings.owner.initializeProviderSelection(name, PLACEHOLDER_MODEL);
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
   return manager;
 }
 

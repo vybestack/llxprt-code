@@ -30,7 +30,6 @@ import type { DialogStore } from '../dialog/dialogStore.js';
 import type { TerminalStore } from '../terminal/terminalStore.js';
 import type { TurnStore } from '../turn/turnStore.js';
 import type { SettingsProfileStore } from '../settings/settingsStore.js';
-import type { HistoryItem } from '../../types.js';
 import { StreamingState } from '../../types.js';
 
 /** Render counts per probe, incremented in the probe bodies. */
@@ -74,19 +73,11 @@ function TerminalProbe({ counters }: { counters: RenderCounters }) {
   return <Text color="white">terminal width: {width}</Text>;
 }
 
-/**
- * Transcript-shaped subscriber: reads the committed history array the same
- * way the <Static> region does, so it rerenders only when the committed set
- * changes (array identity), not for unrelated turn-store fields.
- */
 function TranscriptProbe({ counters }: { counters: RenderCounters }) {
   const { store } = useTurnStore();
-  const history = useStoreSelector(store, (s) => s.history);
+  const epoch = useStoreSelector(store, (s) => s.historyEpoch);
   counters.transcript += 1;
-  const text = history
-    .map((item) => (typeof item.text === 'string' ? item.text : ''))
-    .join(' | ');
-  return <Text color="white">transcript: {text}</Text>;
+  return <Text color="white">transcript epoch: {epoch}</Text>;
 }
 
 function SettingsProbe({ counters }: { counters: RenderCounters }) {
@@ -219,19 +210,19 @@ describe('store render isolation', () => {
     rendered.unmount();
   });
 
-  it('a TurnStore history append rerenders the transcript subscriber only', () => {
+  it('a transcript invalidation rerenders its subscriber only', () => {
     const { counters, stores, rendered } = renderIsolationHarness();
     expect(counters).toStrictEqual(MOUNTED);
 
     act(() => {
-      stores.turn.commands.addItem({ type: 'user', text: 'isolation probe' });
+      stores.turn.commands.clearItems();
     });
 
     expect(counters.transcript).toBe(2);
     expect(counters.dialog).toBe(1);
     expect(counters.terminal).toBe(1);
     expect(counters.settings).toBe(1);
-    expect(rendered.lastFrame()).toContain('isolation probe');
+    expect(rendered.lastFrame()).toContain('transcript epoch: 1');
 
     // Streaming state changes ride the same store but must not rerender the
     // transcript region: the history array keeps its identity.
@@ -248,14 +239,11 @@ describe('store render isolation', () => {
   });
 
   it('opening a dialog does not rerender the history/transcript region', () => {
-    const seededHistory: HistoryItem[] = [
-      { id: 1, type: 'user', text: 'seeded transcript line' },
-    ];
     const { counters, stores, rendered } = renderIsolationHarness({
-      turn: { history: seededHistory },
+      turn: { historyEpoch: 7 },
     });
     expect(counters).toStrictEqual(MOUNTED);
-    expect(rendered.lastFrame()).toContain('seeded transcript line');
+    expect(rendered.lastFrame()).toContain('transcript epoch: 7');
 
     act(() => {
       stores.dialog.commands.openDialog({ kind: 'settings', payload: {} });
@@ -263,7 +251,7 @@ describe('store render isolation', () => {
 
     expect(counters.transcript).toBe(1);
     expect(counters.dialog).toBe(2);
-    expect(rendered.lastFrame()).toContain('seeded transcript line');
+    expect(rendered.lastFrame()).toContain('transcript epoch: 7');
 
     rendered.unmount();
   });

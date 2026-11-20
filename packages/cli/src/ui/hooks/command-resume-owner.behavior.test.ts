@@ -19,7 +19,8 @@ import { bindContinueCommandOperations } from '../commands/continueCommandHost.j
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import { processSlashCommand } from './slashCommandHandlers.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
-import type { HistoryItem } from '../types.js';
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
+import { appendJournalUiItem } from './command-journal-output.js';
 
 function unused(): never {
   throw new Error('Unexpected dialog action');
@@ -101,7 +102,7 @@ describe('registered command resume owner', () => {
       ],
       context.signal,
     );
-    let loaded: readonly HistoryItem[] = [];
+    let refreshed = 0;
     await processSlashCommand(
       {
         commands: registry.getCommands(),
@@ -121,9 +122,11 @@ describe('registered command resume owner', () => {
         endSlashCommandAction: () => {},
         isMcpDiscoveryPending: () => false,
         resumeRawSession: null,
-        replayResumedHistory: () => {},
+        refreshResumedHistory: () => {},
+        writeOutput: async (item) => {
+          await appendJournalUiItem(owner.session, owner.session, item);
+        },
         recordCommandError: async () => {},
-        loadCommandHistory: async () => {},
         resumeOwnedSession: bindCommandOwnerResume(
           (action) => {
             if (action.sessionRef === undefined)
@@ -131,18 +134,18 @@ describe('registered command resume owner', () => {
             return resumeOwnerSession(
               owner.session.resume.bind(owner.session),
               action.sessionRef,
-              'allowed',
               owner.session.listBrowserTargetsDetailed.bind(owner.session),
             );
           },
-          (history) => {
-            loaded = history;
+          () => {
+            refreshed++;
           },
         ),
       },
       `/continue ${sourceId}`,
     );
-    expect(loaded).toContainEqual(
+    expect(refreshed).toBe(1);
+    expect(await readJournalItems(owner)).toContainEqual(
       expect.objectContaining({
         type: 'user',
         text: 'registered resume history',

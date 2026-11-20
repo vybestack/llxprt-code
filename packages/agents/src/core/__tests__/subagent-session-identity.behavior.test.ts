@@ -97,7 +97,10 @@ describe('Subagent session identity', () => {
           JSON.parse(await readFile(log, 'utf8')),
         );
         expect(child.identity.runtimeId).toStartWith('resumed-session#helper#');
-        expect(child.identity.sessionId).toStartWith('resumed-session::');
+        expect(child.identity.sessionId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+        );
+        expect(child.identity.sessionId).not.toBe(config.getSessionId());
         expect(record.runtime_id).toBe(child.identity.runtimeId);
         expect(record.session_id).toBe(child.identity.sessionId);
         expect(record.parent_runtime_id).toBe('resumed-session');

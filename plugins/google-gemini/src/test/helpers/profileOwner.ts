@@ -101,7 +101,7 @@ function createProfileOwner(
     provider.baseProviderConfig = { baseURL: '' };
     manager.registerProvider(provider);
   }
-  configureProviderTokenizer(manager);
+  configureProviderTokenizer(manager, config.scratchRoots);
   const switchProvider = assembleProviderSwitch(
     config,
     settings,

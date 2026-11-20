@@ -1,3 +1,4 @@
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -20,7 +21,7 @@ describe('fixture request admission settings ownership', () => {
 
     const admitted = normalizeRuntimeInputs(
       {
-        contents: [],
+        contents: callerOwnedRawProviderSource([]),
         runtime: { runtimeId: 'same-label' },
       },
       settings,

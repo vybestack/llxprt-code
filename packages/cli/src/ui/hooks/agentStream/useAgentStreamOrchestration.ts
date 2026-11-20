@@ -18,12 +18,12 @@ import {
   type HistoryItemWithoutId,
   type SlashCommandProcessorResult,
 } from '../../types.js';
-import {
-  type RemoveHistoryItems,
-  type UseHistoryManagerReturn,
-} from '../useHistoryManager.js';
+import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { type TrackedToolCall } from '../useReactToolScheduler.js';
-import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
+import {
+  mapToDisplay as mapTrackedToolCallsToDisplay,
+  mapPendingToDisplay,
+} from '../toolMapping.js';
 import { useStreamState } from './useStreamState.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from './useSubmitQuery.js';
 import {
@@ -58,7 +58,6 @@ export interface AgentStreamOrchestrationDeps {
   subscribeTaskNotifications: UseSubmitQueryDeps['subscribeTaskNotifications'];
   flushRecording: UseSubmitQueryDeps['flushRecording'];
   addItem: UseHistoryManagerReturn['addItem'];
-  removeItems?: RemoveHistoryItems;
   readSessionId: UseSubmitQueryDeps['readSessionId'];
   subscribeMcpUpdates: UseSubmitQueryDeps['subscribeMcpUpdates'];
   resetBuckets: UseSubmitQueryDeps['resetBuckets'];
@@ -154,6 +153,7 @@ export function useAgentStreamOrchestration(
   const scheduler = useToolSchedulerState(args, st);
   const pendingToolCallGroupDisplay = usePendingToolGroupDisplay(
     scheduler.toolCalls,
+    true,
   );
   const shell = useShell(args, st);
   const streamingState = useStreamingState(
@@ -326,9 +326,7 @@ function useEventStreamForAgent(
     processAgentEventRef,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     clearPendingHistoryItem: () => {
-      st.pendingResponse.endCommittedSegments();
       st.setPendingHistoryItem(null);
-      st.pendingResponse.reset();
     },
     performMemoryRefresh: args.performMemoryRefresh,
     markToolsAsDisplayCleared: scheduler.markToolsAsDisplayCleared,
@@ -349,14 +347,16 @@ function useEventStreamForAgent(
   });
 }
 
-function usePendingToolGroupDisplay(toolCalls: TrackedToolCall[]) {
-  return useMemo(
-    () =>
-      toolCalls.length > 0
-        ? mapTrackedToolCallsToDisplay(toolCalls)
-        : undefined,
-    [toolCalls],
-  );
+function usePendingToolGroupDisplay(
+  toolCalls: TrackedToolCall[],
+  journalControls: boolean,
+) {
+  return useMemo(() => {
+    const group = journalControls
+      ? mapPendingToDisplay(toolCalls)
+      : mapTrackedToolCallsToDisplay(toolCalls);
+    return group.tools.length > 0 ? group : undefined;
+  }, [toolCalls, journalControls]);
 }
 
 function useQueuedActions(
@@ -452,7 +452,6 @@ function useBuildSubmitQueryDeps({
     subscribeTaskNotifications: args.subscribeTaskNotifications,
     flushRecording: args.flushRecording,
     addItem: args.addItem,
-    removeItems: args.removeItems,
     settings: args.settings,
     onDebugMessage: args.onDebugMessage,
     onCancelSubmit: args.onCancelSubmit,
@@ -473,9 +472,7 @@ function submissionState(st: BuildSubmitQueryDepsArgs['st']) {
   return {
     sanitizeContent: st.sanitizeContent,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
-    pendingResponse: st.pendingResponse,
     pendingHistoryItemRef: st.pendingHistoryItemRef,
-    thinkingBlocksRef: st.thinkingBlocksRef,
     turnCancelledRef: st.turnCancelledRef,
     setTurnCancelled: st.setTurnCancelled,
     drainSuppressedRef: st.drainSuppressedRef,

@@ -332,7 +332,7 @@ describe('GeminiProvider Authentication', () => {
     );
   });
 
-  it('does not require project and location when application credentials are configured', async () => {
+  it('passes the configured application credential file to the client factory', async () => {
     process.env.GOOGLE_APPLICATION_CREDENTIALS = '/path/to/credentials.json';
     const provider = createProviderWithRuntimeSettings();
 
@@ -344,6 +344,7 @@ describe('GeminiProvider Authentication', () => {
       credentialEnvironment: ambientCredentialEnvironment({
         credentialsFile: '/path/to/credentials.json',
       }),
+
       httpOptions: { headers: {} },
     });
   });

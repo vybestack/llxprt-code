@@ -5,6 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { isAbsolute } from 'node:path';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type {
@@ -12,12 +13,17 @@ import type {
   IContent,
   InlineMediaBlock,
   MediaBlock,
+  MediaOrigin,
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import { isMediaReferenceBlock } from '../services/history/IContent.js';
 import { MediaStoreError, type LocalMediaStore } from './local-media-store.js';
 import { MIME_TYPE_PATTERN } from './local-media-store-validation.js';
 import { verifyHistoryMedia } from './media-reference-lifecycle.js';
+import {
+  captureAdmittedMediaSource,
+  closeAdmittedMediaSources,
+} from './admitted-media-source.js';
 
 const MAX_DATA_URI_PREFIX_LENGTH = 256;
 const CANONICAL_BASE64_PATTERN =
@@ -28,6 +34,13 @@ export interface MediaAdmissionContext {
   readonly source: string;
   readonly preserveLegacyMimeParameters?: boolean;
   readonly reservationOwnerScope?: string;
+  readonly captureSources?: boolean;
+  /**
+   * Content ids the caller already admitted and reserved under this exact
+   * `reservationOwnerScope` and has not released. Admission takes their
+   * word instead of repeating the store round trips for each further row.
+   */
+  readonly heldReservations?: { has(contentId: string): boolean };
 }
 
 export interface MediaAdmissionRelease {
@@ -81,7 +94,8 @@ interface NormalizedBase64Source {
   readonly contentId: string;
 }
 
-function normalizeBase64Source(data: string): NormalizedBase64Source {
+/** The canonical payload, decoded length and content id of base64 image data. */
+export function normalizeBase64Source(data: string): NormalizedBase64Source {
   let payload = data;
   if (data.toLowerCase().startsWith('data:')) {
     const comma = data.slice(0, MAX_DATA_URI_PREFIX_LENGTH).indexOf(',');
@@ -160,8 +174,41 @@ function modelVisibleMetadata(
 function copyModelVisibleMetadata(
   block: InlineMediaBlock,
   reference: MediaReferenceBlock,
+  origin: MediaOrigin,
 ): MediaReferenceBlock {
-  return Object.freeze({ ...reference, ...modelVisibleMetadata(block) });
+  return Object.freeze({
+    ...reference,
+    ...modelVisibleMetadata(block),
+    origin,
+  });
+}
+
+/**
+ * Where an inline image entered history. A caller-supplied origin wins; an
+ * absolute filename is the file it was read from; otherwise the row's tool
+ * response, the model, or the user (a pasted image) is the source.
+ */
+export function mediaOriginFor(
+  block: InlineMediaBlock,
+  content: IContent,
+  readAt: string,
+): MediaOrigin {
+  if (block.origin !== undefined) return block.origin;
+  if (block.filename !== undefined && isAbsolute(block.filename))
+    return { kind: 'file', path: block.filename, readAt };
+  const toolResponse = content.blocks.find(
+    (candidate) => candidate.type === 'tool_response',
+  );
+  if (toolResponse !== undefined)
+    return {
+      kind: 'tool',
+      toolName: toolResponse.toolName,
+      callId: toolResponse.callId,
+      readAt,
+    };
+  return content.speaker === 'ai'
+    ? { kind: 'model-output', readAt }
+    : { kind: 'pasted', readAt };
 }
 
 function ownerIdFor(
@@ -169,7 +216,11 @@ function ownerIdFor(
   mediaIndex: number,
   contentId: string,
 ): string {
-  return historyOwnerIdFor(contentId, context.reservationOwnerScope);
+  return historyOwnerIdFor(
+    contentId,
+    context.reservationOwnerScope ??
+      JSON.stringify(['admission', context.source, context.turnId, mediaIndex]),
+  );
 }
 
 /** Content-derived durable reservation owner. Live history adopts and releases
@@ -187,7 +238,15 @@ export function historyOwnerIdFor(
 }
 
 export class MediaAdmissionService {
+  private historyRelease: ((contentId: string) => Promise<void>) | undefined;
+
   constructor(private readonly store: LocalMediaStore) {}
+
+  bindHistoryRelease(release: (contentId: string) => Promise<void>): void {
+    if (this.historyRelease !== undefined)
+      throw new Error('Media admission history release is already bound');
+    this.historyRelease = release;
+  }
 
   async admitContent(
     content: IContent,
@@ -237,11 +296,20 @@ export class MediaAdmissionService {
     return this.releaseAdmissions([{ contents, context, mode: 'contents' }]);
   }
 
+  /** Releases the reservation one admitted reference holds under the given owner scope. */
+  async releaseReference(contentId: string, scope?: string): Promise<void> {
+    if (scope === undefined && this.historyRelease !== undefined)
+      await this.historyRelease(contentId);
+    else
+      await this.store.release(contentId, historyOwnerIdFor(contentId, scope));
+  }
+
   async releaseAdmissions(
     admissions: readonly MediaAdmissionRelease[],
   ): Promise<void> {
     const reservations: AdmissionReservation[] = [];
     for (const admission of admissions) {
+      await closeAdmittedMediaSources(admission.contents);
       for (const reservation of this.contentReservations(
         admission.contents,
         admission.context,
@@ -378,12 +446,14 @@ export class MediaAdmissionService {
         if (!isMediaReferenceBlock(block)) {
           throw new Error('Malformed media reference');
         }
-        const ownerId = ownerIdFor(context, mediaIndex, block.contentId);
-        await this.store.reserveAndReadVerified(block, ownerId);
-        this.recordReservation(reservations, {
-          contentId: block.contentId,
-          ownerId,
-        });
+        if (context.heldReservations?.has(block.contentId) !== true) {
+          const ownerId = ownerIdFor(context, mediaIndex, block.contentId);
+          await this.store.reserveAndReadVerified(block, ownerId);
+          this.recordReservation(reservations, {
+            contentId: block.contentId,
+            ownerId,
+          });
+        }
       } catch (error) {
         throw new MediaAdmissionError(
           context,
@@ -393,6 +463,19 @@ export class MediaAdmissionService {
           error,
         );
       }
+      if (
+        context.captureSources !== false &&
+        context.reservationOwnerScope !== undefined &&
+        context.heldReservations?.has(block.contentId) !== true
+      )
+        return {
+          block: captureAdmittedMediaSource(
+            block,
+            this.store,
+            ownerIdFor(context, mediaIndex, block.contentId),
+          ),
+          changed: true,
+        };
       return { block, changed: false };
     }
     if (
@@ -404,7 +487,13 @@ export class MediaAdmissionService {
       return { block, changed: false };
     }
     return {
-      block: await this.admitImage(block, context, mediaIndex, reservations),
+      block: await this.admitImage(
+        block,
+        mediaOriginFor(block, content, new Date().toISOString()),
+        context,
+        mediaIndex,
+        reservations,
+      ),
       changed: true,
     };
   }
@@ -412,23 +501,28 @@ export class MediaAdmissionService {
   private async admitIdentity(
     block: InlineMediaBlock,
     source: NormalizedBase64Source,
+    alreadyHeld: boolean,
   ): Promise<MediaReferenceBlock> {
-    await this.store.preflightKnown(source.contentId, source.decodedByteLength);
+    if (!alreadyHeld)
+      await this.store.preflightKnown(
+        source.contentId,
+        source.decodedByteLength,
+      );
     const dimensions =
       block.dimensions ?? parseImageDimensionsFromBase64(source.payload);
-    return this.store.admitKnown(
-      {
-        contentId: source.contentId,
-        knownByteLength: source.decodedByteLength,
-        mimeType: block.mimeType,
-        ...(dimensions === undefined ? {} : { dimensions }),
-        semanticMetadata: block.semanticMetadata ?? {},
-        ...(block.providerFileIds === undefined
-          ? {}
-          : { providerFileIds: block.providerFileIds }),
-      },
-      async () => decodeCanonicalBase64(source),
-    );
+    const input = {
+      contentId: source.contentId,
+      knownByteLength: source.decodedByteLength,
+      mimeType: block.mimeType,
+      ...(dimensions === undefined ? {} : { dimensions }),
+      semanticMetadata: block.semanticMetadata ?? {},
+      ...(block.providerFileIds === undefined
+        ? {}
+        : { providerFileIds: block.providerFileIds }),
+    };
+    return alreadyHeld
+      ? this.store.identityReferenceForKnown(input)
+      : this.store.admitKnown(input, async () => decodeCanonicalBase64(source));
   }
 
   private async admitDerived(
@@ -475,6 +569,7 @@ export class MediaAdmissionService {
 
   private async admitImage(
     block: InlineMediaBlock,
+    origin: MediaOrigin,
     context: MediaAdmissionContext,
     mediaIndex: number,
     reservations: AdmissionReservation[],
@@ -483,18 +578,31 @@ export class MediaAdmissionService {
     try {
       const source = normalizeBase64Source(block.data);
       contentId = source.contentId;
+      const alreadyHeld =
+        block.originalData === undefined &&
+        context.heldReservations?.has(source.contentId) === true;
       const reference =
         block.originalData === undefined
-          ? await this.admitIdentity(block, source)
+          ? await this.admitIdentity(block, source, alreadyHeld)
           : await this.admitDerived(block, source);
-      const presented = copyModelVisibleMetadata(block, reference);
-      const ownerId = ownerIdFor(context, mediaIndex, presented.contentId);
-      await this.store.reserve(presented, ownerId);
-      this.recordReservation(reservations, {
-        contentId: presented.contentId,
-        ownerId,
-      });
-      return presented;
+      const presented = copyModelVisibleMetadata(block, reference, origin);
+      if (!alreadyHeld) {
+        const ownerId = ownerIdFor(context, mediaIndex, presented.contentId);
+        await this.store.reserve(presented, ownerId);
+        this.recordReservation(reservations, {
+          contentId: presented.contentId,
+          ownerId,
+        });
+      }
+      return context.captureSources !== false &&
+        context.reservationOwnerScope !== undefined &&
+        !alreadyHeld
+        ? captureAdmittedMediaSource(
+            presented,
+            this.store,
+            ownerIdFor(context, mediaIndex, presented.contentId),
+          )
+        : presented;
     } catch (error) {
       const knownContentId =
         error instanceof MediaStoreError

@@ -15,12 +15,28 @@
  */
 
 import { ContentValidation, type IContent } from './IContent.js';
+import { isEmptiedCompressionSummary } from './compressionSummaryScratchpad.js';
 import type { DebugLogger } from '../../debug/index.js';
 import {
   logAiMessageAnalysis,
   logExcludedAiMessage,
   logCurationSummary,
 } from './curationDebugLogger.js';
+
+/**
+ * The row-wise inclusion rule shared by eager and journal-backed reads. A
+ * compression summary that strips to nothing is excluded here, at the
+ * row's admission, so request counts, positions and stored length facts
+ * all agree that it is never sent.
+ */
+export function isCuratedContent(content: IContent): boolean {
+  return (
+    (content.speaker === 'human' ||
+      content.speaker === 'tool' ||
+      ContentValidation.hasContent(content)) &&
+    !isEmptiedCompressionSummary(content)
+  );
+}
 
 /**
  * Analyze an AI content entry for curation, optionally logging debug details.
@@ -30,7 +46,7 @@ export function analyzeAiContent(
   content: IContent,
   messageIndex: number,
 ): { hasValidContent: boolean } {
-  const hasValidContent = ContentValidation.hasContent(content);
+  const hasValidContent = isCuratedContent(content);
   logAiMessageAnalysis(logger, content, messageIndex, hasValidContent);
   return { hasValidContent };
 }
@@ -54,40 +70,65 @@ export function buildCuratedHistory(
 
   // Build the curated list without modifying history
   const curated: IContent[] = [];
-  let excludedCount = 0;
-  let aiMessagesAnalyzed = 0;
-  let aiMessagesIncluded = 0;
-
+  const diagnostics = new CurationDiagnostics();
   for (const content of history) {
-    if (content.speaker === 'human' || content.speaker === 'tool') {
-      // Always include user and tool messages
-      curated.push(content);
-    } else {
-      aiMessagesAnalyzed++;
+    if (diagnostics.include(logger, content)) curated.push(content);
+  }
+  logCurationSummary(logger, { ...diagnostics, isCompressing });
+
+  return curated;
+}
+
+class CurationDiagnostics {
+  totalHistory = 0;
+  curatedCount = 0;
+  humanMessages = 0;
+  toolMessages = 0;
+  toolCallsInCurated = 0;
+  toolResponsesInCurated = 0;
+  aiMessagesAnalyzed = 0;
+  aiMessagesIncluded = 0;
+  excludedCount = 0;
+
+  include(logger: DebugLogger, content: IContent): boolean {
+    this.totalHistory++;
+    if (content.speaker !== 'human' && content.speaker !== 'tool') {
+      this.aiMessagesAnalyzed++;
       const { hasValidContent } = analyzeAiContent(
         logger,
         content,
-        aiMessagesAnalyzed,
+        this.aiMessagesAnalyzed,
       );
-
-      if (hasValidContent) {
-        curated.push(content);
-        aiMessagesIncluded++;
-      } else {
-        excludedCount++;
+      if (!hasValidContent) {
+        this.excludedCount++;
         logExcludedAiMessage(logger);
+        return false;
       }
+      this.aiMessagesIncluded++;
     }
+    this.curatedCount++;
+    if (content.speaker === 'human') this.humanMessages++;
+    if (content.speaker === 'tool') this.toolMessages++;
+    for (const block of content.blocks) {
+      if (block.type === 'tool_call') this.toolCallsInCurated++;
+      if (block.type === 'tool_response') this.toolResponsesInCurated++;
+    }
+    return true;
   }
+}
 
-  logCurationSummary(logger, {
-    totalHistory: history.length,
-    curated,
-    aiMessagesAnalyzed,
-    aiMessagesIncluded,
-    excludedCount,
-    isCompressing,
-  });
-
-  return curated;
+export async function* streamCuratedProviderHistory(
+  logger: DebugLogger,
+  rows: Iterable<IContent> | AsyncIterable<IContent>,
+  isCompressing: boolean,
+  signal?: AbortSignal,
+): AsyncGenerator<IContent, void, unknown> {
+  if (isCompressing)
+    logger.debug('getCurated called during compression - returning snapshot');
+  const diagnostics = new CurationDiagnostics();
+  for await (const row of rows) {
+    signal?.throwIfAborted();
+    if (diagnostics.include(logger, row)) yield row;
+  }
+  logCurationSummary(logger, { ...diagnostics, isCompressing });
 }

@@ -1,3 +1,4 @@
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -25,14 +26,14 @@ interface RecordedPost {
 class RecordingTransport {
   readonly posts: RecordedPost[] = [];
 
-  readonly fetch: typeof fetch = (input, init) => {
+  readonly fetch: typeof fetch = withFetchPreconnect((input, init) => {
     this.posts.push({
       path: new URL(input instanceof Request ? input.url : String(input))
         .pathname,
       contentLength: new Headers(init?.headers).get('content-length'),
     });
     return Promise.reject(new Error('transport stopped after recording'));
-  };
+  });
 
   client(): Anthropic {
     return new Anthropic({

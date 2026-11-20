@@ -14,6 +14,8 @@ import {
   type DumpAttemptCorrelation,
 } from './dumpContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { dumpRequestContextBodyBytes } from './dumpSourceRequestStream.js';
+import { prettyJsonBytes } from './prettyJsonBytes.js';
 
 const logger = new DebugLogger('llxprt:core:dumpSDKContext');
 
@@ -33,6 +35,27 @@ export interface RequestDumpMetadata {
   transport?: RequestDumpTransport;
   correlation?: DumpAttemptCorrelation;
 }
+
+/**
+ * A request body that exists only as compact, already sanitized JSON bytes (a
+ * file on scratch disk). {@link dumpSDKRequestContext} streams it to the dump
+ * file re-indented as `JSON.stringify(value, null, 2)` prints it, so the file
+ * is the one an in-memory body would have produced.
+ */
+export class StreamedDumpBody {
+  constructor(
+    readonly bytes: () => AsyncIterable<Uint8Array>,
+    readonly start?: (
+      request: DumpRequest,
+      provider: string,
+      correlation: DumpAttemptCorrelation | undefined,
+      deferRetention: boolean,
+    ) => Promise<DumpRequestResult>,
+  ) {}
+}
+
+/** Nesting level of the `body` member inside the dump file's request object. */
+const DUMP_BODY_DEPTH = 2;
 
 function resolveDumpHeaders(
   metadata: RequestDumpMetadata | undefined,
@@ -162,21 +185,66 @@ export async function dumpSDKRequestContext(
   metadata?: RequestDumpMetadata,
   deferRetention = false,
 ): Promise<DumpRequestResult> {
-  const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
-
-  const request = buildSDKDumpRequest(url, requestParams, metadata);
-
   logger.debug(
     () =>
       `Dumping SDK request context for ${providerName}: endpoint=${endpoint}`,
   );
 
+  if (requestParams instanceof StreamedDumpBody) {
+    if (requestParams.start !== undefined)
+      return requestParams.start(
+        buildSDKDumpRequest(
+          buildSDKDumpUrl(providerName, endpoint, baseURL),
+          undefined,
+          metadata,
+        ),
+        providerName,
+        metadata?.correlation,
+        deferRetention,
+      );
+    return dumpSDKRequestContextBodyBytes(
+      providerName,
+      endpoint,
+      prettyJsonBytes(requestParams.bytes(), DUMP_BODY_DEPTH),
+      baseURL,
+      metadata,
+      undefined,
+      deferRetention,
+    );
+  }
+  const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
   return dumpRequestContext(
-    request,
+    buildSDKDumpRequest(url, requestParams, metadata),
     providerName,
     undefined,
     undefined,
     {},
+    metadata?.correlation,
+    deferRetention,
+  );
+}
+
+/** Request dump whose body is streamed from encoded JSON bytes. */
+export async function dumpSDKRequestContextBodyBytes(
+  providerName: string,
+  endpoint: string,
+  body: AsyncIterable<Uint8Array>,
+  baseURL?: string,
+  metadata?: RequestDumpMetadata,
+  signal?: AbortSignal,
+  deferRetention = false,
+): Promise<DumpRequestResult> {
+  const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
+  const { body: _omitted, ...request } = buildSDKDumpRequest(
+    url,
+    undefined,
+    metadata,
+  );
+  return dumpRequestContextBodyBytes(
+    request,
+    providerName,
+    body,
+    signal,
     metadata?.correlation,
     deferRetention,
   );

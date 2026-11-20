@@ -47,7 +47,7 @@ function setupOwnerSessionRecording(
     argv,
     selection,
     warnings,
-  ).then(({ history }) => history);
+  ).then(({ resumedBoot }) => resumedBoot);
 }
 
 const scenario = z.enum(['record', 'profile', 'resume']).parse(process.argv[2]);
@@ -118,7 +118,7 @@ async function stream(agent: Agent, prompt: string): Promise<AgentEvent[]> {
 /** The disposed agent's session client rejects every history read. */
 async function agentClosed(agent: Agent): Promise<boolean> {
   try {
-    await agent.getHistory();
+    for await (const _row of agent.streamHistory()) break;
     return false;
   } catch (error) {
     if (!(error instanceof Error) || !/disposed/i.test(error.message))
@@ -296,12 +296,11 @@ async function resume() {
       next.argv,
       null,
     );
-    const restoredHumanCount = restored?.filter(
-      (content) => content.speaker === 'human',
-    ).length;
-    const historyHumanCount = (await nextAgent.getHistory()).filter(
-      (content) => content.speaker === 'human',
-    ).length;
+    const restoredHumanCount =
+      restored === null
+        ? undefined
+        : await countHumanRows(restored.streamRows());
+    const historyHumanCount = await countHumanRows(nextAgent.streamHistory());
     const events = await stream(nextAgent, 'resumed next prompt');
     const path = nextAgent.session.getRecording().path;
     if (!path) throw new Error('Missing resumed transcript');
@@ -379,6 +378,14 @@ async function applyLocalProfile(
       'base-url': baseUrl,
     },
   });
+}
+
+async function countHumanRows(
+  rows: AsyncIterable<{ readonly speaker: string }>,
+): Promise<number> {
+  let count = 0;
+  for await (const row of rows) if (row.speaker === 'human') count++;
+  return count;
 }
 
 function requireForegroundReceipt(

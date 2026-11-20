@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { ChildToolDisplay } from '../session/childToolDisplay.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 
@@ -27,7 +26,7 @@ import {
 } from './agentBootstrap.js';
 import {
   assembleShellOwner,
-  publishLeafFacade,
+  type FacadeConstruction,
   type FacadeParsedConfig,
   type LeafFacadeValues,
 } from './agent-facade.js';
@@ -36,16 +35,18 @@ import { type AgentSchedulerHandle } from './config-types.js';
 
 import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
 import type { McpTeardownPort, PublishedMcpPort } from './mcpRuntimePorts.js';
-import type {
-  PreflightAuthInput,
-  PreflightProviderInput,
-} from './activationPreflightState.js';
+import type { PreflightProviderInput } from './activationPreflightState.js';
 
 /** The runtime owners the foreground is handed once, exactly. */
 export interface ForegroundPreflightTransfer {
   mcp: PublishedMcpPort;
-  mediaOwner: SessionMediaOwner | undefined;
-  sessionClient: SessionClientOwner;
+  session: {
+    prepareTokenizer(provider: string, model: string): Promise<void>;
+    bindChildExecution: SessionClientOwner['toolCatalog']['bindChildExecution'];
+    initializeExecution: SessionClientOwner['clients']['initializeExecution'];
+    initializeConversation(): void;
+    publish(construction: FacadeConstruction, leaf: LeafFacadeValues): Agent;
+  };
   release(): Promise<void>;
 }
 
@@ -72,7 +73,6 @@ export class ForegroundAssembly {
   readonly #transfer: ForegroundPreflightTransfer;
   readonly #settings: ForegroundPreflightSettings;
   readonly #providers: PreflightProviderInput;
-  readonly #auth: PreflightAuthInput;
   readonly #construction: AbortSignal;
 
   constructor(
@@ -80,14 +80,12 @@ export class ForegroundAssembly {
     transfer: ForegroundPreflightTransfer,
     settings: ForegroundPreflightSettings,
     providers: PreflightProviderInput,
-    auth: PreflightAuthInput,
     construction: AbortSignal,
   ) {
     this.#config = config;
     this.#transfer = transfer;
     this.#settings = settings;
     this.#providers = providers;
-    this.#auth = auth;
     this.#construction = construction;
   }
 
@@ -100,10 +98,7 @@ export class ForegroundAssembly {
     const model =
       this.#settings.settingsOwner.readSelectedModel() ??
       this.#config.getModel();
-    await this.#transfer.sessionClient.clients.factories.tokenizerFactory.prepareTokenizer?.(
-      provider,
-      model,
-    );
+    await this.#transfer.session.prepareTokenizer(provider, model);
     this.#construction.throwIfAborted();
     return this.publish({
       parsed: { provider, model },
@@ -120,15 +115,15 @@ export class ForegroundAssembly {
   }
 
   async publish(publication: ForegroundPublication): Promise<Agent> {
-    const { mcp, mediaOwner, sessionClient } = this.#transfer;
+    const { session } = this.#transfer;
     const tasks = assembleTaskOwner(this.#providers.settings, undefined);
     const shell = assembleShellOwner(this.#providers.settings);
     const child = new ChildToolDisplay();
     const display: StableDisplayCallbacksHolder = {};
     try {
       const editors = { editorCallbacks: {} };
-      sessionClient.toolCatalog.bindChildExecution(child, tasks, shell);
-      sessionClient.clients.initializeExecution(
+      session.bindChildExecution(child, tasks, shell);
+      session.initializeExecution(
         withChildToolDisplay(
           publication.scheduler ??
             ((options) => new CoreToolScheduler(options)),
@@ -139,16 +134,8 @@ export class ForegroundAssembly {
         undefined,
         createStableDisplayCallbacks(editors, display),
       );
-      sessionClient.clients.conversationBinding.initializeConversation();
-      return publishLeafFacade(
-        mcp,
-        this.#config,
-        sessionClient,
-        this.#settings.settingsOwner,
-        mediaOwner,
-        this.#providers.settings,
-        this.#providers.manager,
-        this.#auth.oauth,
+      session.initializeConversation();
+      return session.publish(
         {
           parsed: publication.parsed,
           baseUrl: publication.baseUrl,

@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import { forwardPreconnect } from './fetchPreconnect.js';
+
 export const REFUSAL_AUDIT_TIMING_KEY = '__llxprtRefusalAuditTiming';
 
 export interface RefusalAuditTiming {
@@ -29,15 +32,12 @@ export function readRefusalAuditTiming(
 }
 
 export function observeFirstResponseByte(
-  fetcher: typeof fetch,
+  fetcher: NetworkFetch,
   timing: RefusalAuditTiming | undefined,
-): typeof fetch {
+): NetworkFetch {
   if (timing === undefined) return fetcher;
-  return async (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    const response = await fetcher(input, init);
+  const observed: NetworkFetch = async (input, init, options) => {
+    const response = await fetcher(input, init, options);
     if (response.body === null) return response;
     const reader = response.body.getReader();
     const body = new ReadableStream<Uint8Array>({
@@ -62,4 +62,8 @@ export function observeFirstResponseByte(
       headers: response.headers,
     });
   };
+  return Object.assign(
+    observed,
+    forwardPreconnect(() => fetcher),
+  );
 }

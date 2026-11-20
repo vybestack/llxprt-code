@@ -1,3 +1,4 @@
+import { readJournalItems } from '../stores/turn/read-journal-items.js';
 import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
@@ -36,19 +37,18 @@ describe('history operation ownership', () => {
     const resume = Object.assign(owner.session.resume.bind(owner.session), {
       session: sibling.session,
     });
-    const replay = await resumeOwnerSession(
+    await resumeOwnerSession(
       resume,
       checkpoint.checkpointId,
-      'allowed',
       owner.session.listBrowserTargetsDetailed.bind(owner.session),
     );
-    expect(replay.uiHistory).toContainEqual(
+    expect(await readJournalItems(owner, 64, true)).toContainEqual(
       expect.objectContaining({
         type: 'user',
         text: 'captured resume conversation',
       }),
     );
-    expect(await sibling.getHistory()).toStrictEqual([]);
+    expect(await sibling.session.getHistory()).toStrictEqual([]);
     await owner.dispose();
     await sibling.setHistory([
       {
@@ -56,7 +56,7 @@ describe('history operation ownership', () => {
         blocks: [{ type: 'text', text: 'surviving history' }],
       },
     ]);
-    expect(JSON.stringify(await sibling.getHistory())).toContain(
+    expect(JSON.stringify(await sibling.session.getHistory())).toContain(
       'surviving history',
     );
   });
@@ -92,13 +92,12 @@ describe('history operation ownership', () => {
         session.resume.bind(session),
         session.deleteCheckpoint.bind(session),
         session.renameCheckpoint.bind(session),
-        session.getHistory.bind(session),
+        session.getJournalLength.bind(session),
         session.clearHistory.bind(session),
         session.restoreTurns.bind(session),
         session.nameCurrentSession.bind(session),
         () => session.getRecording().path,
         owner.getModel.bind(owner),
-        () => 'auto',
       ),
       () => true,
     );
@@ -145,14 +144,13 @@ describe('history operation ownership', () => {
         () => undefined,
       ),
       () => owner.session.readInitializedHistory(),
-      async (history) => {
-        await owner.session.replaceHistory(history);
-      },
+      () => owner.session.clearHistory(),
+      (turns) => owner.session.restoreTurns(turns),
       () => owner.getModel(),
     );
-    expect(JSON.stringify(operations.getChatHistory())).toContain(
-      'raw captured conversation',
-    );
-    expect(await sibling.getHistory()).toStrictEqual([]);
+    const rows = [];
+    for await (const row of operations.getChatHistory() ?? []) rows.push(row);
+    expect(JSON.stringify(rows)).toContain('raw captured conversation');
+    expect(await sibling.session.getHistory()).toStrictEqual([]);
   });
 });

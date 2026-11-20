@@ -47,6 +47,11 @@ import {
   EMPTY_TOOL_RESULT_PLACEHOLDER,
   type ToolResponsePayload,
 } from '../utils/toolResponsePayload.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
+import {
+  droppedTextByResponse,
+  withDroppedText,
+} from '../utils/droppedMediaPlacement.js';
 import type { ToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import {
   extractThinkingBlocks,
@@ -140,14 +145,14 @@ function convertSystemContent(content: IContent): ModelMessage | null {
 }
 
 function convertHumanContent(content: IContent): ModelMessage | null {
-  const textBlocks = content.blocks.filter(
-    (b: ContentBlock) => b.type === 'text',
-  );
   const mediaBlocks = content.blocks.filter(
     (b: ContentBlock) => b.type === 'media',
   );
-  const text = textBlocks
-    .map((b) => b.text)
+  const text = content.blocks
+    .flatMap((b) => {
+      if (b.type === 'text') return [b.text];
+      return b.type === 'media_dropped' ? [droppedMediaModelText(b)] : [];
+    })
     .filter((t) => t.length > 0)
     .join('\n');
 
@@ -258,9 +263,14 @@ function convertToolContent(
     (b: ContentBlock) => b.type === 'tool_response',
   );
   if (toolResponseBlocks.length === 0) return;
+  const droppedText = droppedTextByResponse(content);
 
   const toolContent: ToolResultPart[] = toolResponseBlocks.map((block) => {
-    const payload = buildToolResponsePayload(block);
+    const built = buildToolResponsePayload(block);
+    const payload = {
+      ...built,
+      result: withDroppedText(built.result, droppedText, block),
+    };
     const extBlock = block as ToolResponseBlock & {
       id?: string;
       callId?: string;

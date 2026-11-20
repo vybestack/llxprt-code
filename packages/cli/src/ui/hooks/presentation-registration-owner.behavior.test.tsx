@@ -1,3 +1,4 @@
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -88,14 +89,14 @@ describe('presentation registration ownership', () => {
     );
     try {
       await clear(hook.result.current.clearCommand);
-      expect(await owner.getHistory()).toStrictEqual([]);
-      expect(JSON.stringify(await peer.getHistory())).toContain(
-        'surviving conversation',
-      );
+      expect(await collectResumeRows(owner.streamHistory())).toStrictEqual([]);
+      expect(
+        JSON.stringify(await collectResumeRows(peer.streamHistory())),
+      ).toContain('surviving conversation');
       await owner.dispose();
       hook.rerender({ current: peer });
       await clear(hook.result.current.clearCommand);
-      expect(await peer.getHistory()).toStrictEqual([]);
+      expect(await collectResumeRows(peer.streamHistory())).toStrictEqual([]);
     } finally {
       hook.unmount();
     }

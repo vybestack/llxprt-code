@@ -45,6 +45,8 @@ import {
   type AgentActivationPreflightResult,
 } from './activation-types.js';
 import { AdoptedAgentAssembly } from './adopted-agent-assembly.js';
+import type { ForegroundPreflightTransfer } from './foreground-agent-assembly.js';
+import { publishLeafFacade } from './agent-facade.js';
 import { type Agent } from './agent.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
 import {
@@ -56,7 +58,6 @@ import { retireActivationOwners } from './activationOwnerRetirement.js';
 import {
   acquireActivationSession,
   executeActivationSession,
-  type ActivationSessionClient,
   type ActivationSessionResources,
 } from './fromConfig-session.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
@@ -159,10 +160,10 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     providers: PreflightProviderInput,
     auth: PreflightAuthInput,
     resources: ActivationSessionResources,
-    session: ActivationSessionClient,
+    client: SessionClientOwner,
+    switcher: ProviderSwitcher,
   ) {
     const { config, activation } = input;
-    const { client, switcher } = session;
     this.#config = config;
     this.#assembly = AdoptedAgentAssembly.forPreflight(config);
     this.#providers = providers;
@@ -207,15 +208,16 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
       settings,
       providers,
       auth,
-      (resources, session) => ({
+      (resources, client, switcher) => ({
         activation: new AgentActivationBootstrap(
           { config, activation },
           providers,
           auth,
           resources,
-          session,
+          client,
+          switcher,
         ),
-        switcher: session.switcher,
+        switcher,
       }),
     );
     return {
@@ -236,8 +238,25 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
       name,
     );
   }
-  readHistory(): ReturnType<SessionClientOwner['clients']['readHistory']> {
-    return this.#admitPublic(() => this.#sessionClient.clients.readHistory());
+  streamHistory(): ReturnType<SessionClientOwner['clients']['streamHistory']> {
+    this.#assertPublicOpen();
+    return this.#observeHistory(this.#sessionClient.clients.streamHistory());
+  }
+  async *#observeHistory(
+    history: ReturnType<SessionClientOwner['clients']['streamHistory']>,
+  ): ReturnType<SessionClientOwner['clients']['streamHistory']> {
+    this.#assertPublicOpen();
+    let finish: () => void = () => {};
+    const completed = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    this.#publicWork.add(completed);
+    try {
+      yield* history;
+    } finally {
+      finish();
+      this.#publicWork.delete(completed);
+    }
   }
   #foregroundAgent: Agent | undefined;
   #foregroundPending: Promise<Agent> | undefined;
@@ -320,19 +339,17 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
       broker = assembleHostGitHubBroker(host);
       const mcp = await this.#constructForegroundMcp(host);
       assembly.assertOpen();
-      const client = await this.#bindForegroundClient(broker, mcp);
+      await this.#bindForegroundClient(broker, mcp);
       assembly.assertOpen();
       const publishedMcp: PublishedMcpPort = mcp;
       assembly.acceptPreflightTransfer(
         {
           mcp: publishedMcp,
-          mediaOwner: this.#mediaOwner,
-          sessionClient: client,
+          session: this.#foregroundSession(publishedMcp),
           release: this.#releaseForegroundProviders,
         },
         { settingsOwner: this.#sessionResources.settingsOwner },
         this.#providers,
-        this.#auth,
       );
       const agent = await assembly.finishForeground();
       this.#foregroundAgent = agent;
@@ -375,17 +392,45 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     }
   }
 
+  #foregroundSession(
+    publishedMcp: PublishedMcpPort,
+  ): ForegroundPreflightTransfer['session'] {
+    return {
+      prepareTokenizer: async (provider, model) => {
+        await this.#sessionClient.clients.prepareTokenizer(provider, model);
+      },
+      bindChildExecution: (child, tasks, shell) =>
+        this.#sessionClient.toolCatalog.bindChildExecution(child, tasks, shell),
+      initializeExecution: (...args) =>
+        this.#sessionClient.clients.initializeExecution(...args),
+      initializeConversation: () =>
+        this.#sessionClient.clients.conversationBinding.initializeConversation(),
+      publish: (construction, leaf) =>
+        publishLeafFacade(
+          publishedMcp,
+          this.#config,
+          this.#sessionClient,
+          this.#sessionResources.settingsOwner,
+          this.#mediaOwner,
+          this.#providers.settings,
+          this.#providers.manager,
+          this.#auth.oauth,
+          construction,
+          leaf,
+        ),
+    };
+  }
+
   async #bindForegroundClient(
     broker: ReturnType<typeof assembleHostGitHubBroker>,
     mcp: ForegroundMcpPort,
-  ): Promise<SessionClientOwner> {
+  ): Promise<void> {
     const client = this.#sessionClient;
     client.bindHostGitHub(broker);
     client.bindMcpRuntime(mcp, mcp.profileDefinitions, mcp.subagentDefinitions);
     if (!client.hasHookComposition()) client.bindHooks();
     await mcp.initialize();
     await client.initializeTools();
-    return client;
   }
 
   async #constructForegroundMcp(

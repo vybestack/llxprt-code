@@ -57,7 +57,7 @@
  * therefore an expected state, not an error.
  */
 
-import type { ContentBlock, IContent } from './IContent.js';
+import type { ContentBlock, IContent, MediaDroppedBlock } from './IContent.js';
 
 /**
  * Assumed bytes per character. JSC stores a string as latin1 (1 byte/char)
@@ -90,7 +90,7 @@ const MAX_DEPTH = 32;
 function estimateValueBytes(
   value: unknown,
   depth: number,
-  seen: Set<object>,
+  seen: Set<object> | WeakSet<object>,
 ): number {
   if (value === null || value === undefined) {
     return VALUE_OVERHEAD_BYTES;
@@ -164,7 +164,7 @@ function requiredStringBytes(s: string | null | undefined): number {
  */
 export function estimateBlockBytesTracked(
   block: ContentBlock,
-  seen: Set<object>,
+  seen: Set<object> | WeakSet<object>,
 ): number {
   if (seen.has(block)) {
     return 0;
@@ -228,6 +228,8 @@ export function estimateBlockBytesTracked(
       total += optionalStringBytes(block.error);
       total += estimateValueBytes(block.result, 1, seen);
       break;
+    case 'media_dropped':
+      return total + droppedMediaBytes(block, seen);
     default: {
       // Exhaustiveness guard: a new block type must be sized explicitly rather
       // than silently reported as zero.
@@ -240,6 +242,18 @@ export function estimateBlockBytesTracked(
     total += estimateValueBytes(block.providerMetadata, 1, seen);
   }
   return total;
+}
+
+function droppedMediaBytes(
+  block: MediaDroppedBlock,
+  seen: Set<object> | WeakSet<object>,
+): number {
+  return (
+    requiredStringBytes(block.mimeType) +
+    requiredStringBytes(block.contentId) +
+    requiredStringBytes(block.droppedAt) +
+    estimateValueBytes(block.origin, 1, seen)
+  );
 }
 
 /** Estimated retained bytes of one content block in isolation. */
@@ -257,7 +271,7 @@ export function estimateBlockBytes(block: ContentBlock): number {
  */
 export function estimateContentBytesTracked(
   content: IContent,
-  seen: Set<object>,
+  seen: Set<object> | WeakSet<object>,
 ): number {
   if (seen.has(content)) {
     return 0;
@@ -394,7 +408,7 @@ function accumulateItem(
   content: IContent,
   historyIndex: number,
   topN: number,
-  seen: Set<object>,
+  seen: Set<object> | WeakSet<object>,
   acc: Accumulators,
 ): void {
   acc.totalBytes += VALUE_OVERHEAD_BYTES;
@@ -466,6 +480,35 @@ export function computeHistorySizeBreakdown(
     countsByBlockType: acc.countsByBlockType,
     bytesByToolName: acc.bytesByToolName,
     // Ascending tracker -> descending ranking.
+    largestToolResponses: acc.topResponses.reverse(),
+  };
+}
+
+export async function computeHistorySizeBreakdownStream(
+  history: AsyncIterable<IContent>,
+  topN: number = DEFAULT_TOP_N,
+): Promise<HistorySizeBreakdown> {
+  const seen = new WeakSet<object>();
+  const acc: Accumulators = {
+    totalBytes: 0,
+    bytesByBlockType: {},
+    countsByBlockType: {},
+    bytesByToolName: {},
+    topResponses: [],
+  };
+  let itemCount = 0;
+  for await (const content of history) {
+    const historyIndex = itemCount++;
+    if (seen.has(content)) continue;
+    seen.add(content);
+    accumulateItem(content, historyIndex, topN, seen, acc);
+  }
+  return {
+    totalBytes: acc.totalBytes,
+    itemCount,
+    bytesByBlockType: acc.bytesByBlockType,
+    countsByBlockType: acc.countsByBlockType,
+    bytesByToolName: acc.bytesByToolName,
     largestToolResponses: acc.topResponses.reverse(),
   };
 }

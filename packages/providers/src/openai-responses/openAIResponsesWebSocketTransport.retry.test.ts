@@ -162,6 +162,15 @@ describe('Codex Responses WebSocket connection-lifecycle retry @issue:2771', () 
       openSocket: harness.openSocket,
     }).streamResponse(request(), options());
 
+    const arrival = await iterator.next();
+    expect(arrival.done).toBe(false);
+    expect(arrival.value?.blocks).toStrictEqual([]);
+    expect(arrival.value?.toolArgumentDelta).toStrictEqual({
+      sourceId: 'item',
+      id: 'call',
+      name: 'charge',
+      arguments: '{}',
+    });
     expect((await iterator.next()).value?.blocks).toContainEqual({
       type: 'tool_call',
       id: 'call',

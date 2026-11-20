@@ -216,7 +216,10 @@ describe('Profile cascade workflow at the owner', () => {
       credentials().authority,
       callerRelease,
     );
-    const factoriesTokenizer = configureProviderTokenizer(callerManager);
+    const factoriesTokenizer = configureProviderTokenizer(
+      callerManager,
+      callerConfig.scratchRoots,
+    );
     const factoriesContent = createRuntimeContentGeneratorFactory();
     callerTokenizer = factoriesTokenizer;
     callerContent = factoriesContent;
@@ -604,7 +607,7 @@ describe('Profile cascade workflow at the owner', () => {
     );
     manager.registerProvider(provider);
     manager.setActiveProvider('no-default');
-    configureProviderTokenizer(manager);
+    configureProviderTokenizer(manager, callerConfig.scratchRoots);
     callerSettingsOwner.chooseModel('');
     await expect(
       applyProfileCascade(

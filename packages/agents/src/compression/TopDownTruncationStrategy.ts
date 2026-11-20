@@ -19,15 +19,29 @@
  * surviving messages (no synthetic summary or acknowledgment).
  */
 
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
-  CompressionContext,
   StrategyCompressionResult,
   CompressionStrategy,
   StructuralNoopReason,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { adjustForToolCallBoundary } from './utils.js';
+import type { CompressionIndexedRows as HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
+import type { CompressionAttemptContext } from './compressionContextBuilder.js';
+import { adjustDiskToolBoundary } from './truncationDiskBoundary.js';
+import { compressionTokenSelection } from '@vybestack/llxprt-code-core/services/history/compression-token-selection.js';
+
+export interface DiskTruncationContext
+  extends Omit<CompressionAttemptContext, 'history'> {
+  readonly history: HistoryIndexedRows;
+}
+
+export type DiskTruncationResult =
+  | Extract<StrategyCompressionResult, { kind: 'noop' }>
+  | {
+      readonly kind: 'applied';
+      readonly start: number;
+      readonly metadata: StrategyCompressionResult['metadata'];
+    };
 
 export class TopDownTruncationStrategy implements CompressionStrategy {
   readonly name = 'top-down-truncation' as const;
@@ -38,76 +52,41 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
-  async compress(
-    context: CompressionContext,
-  ): Promise<StrategyCompressionResult> {
-    const {
-      history,
-      runtimeContext,
-      estimateTokens,
-      currentTokenCount,
-      targetTokenCount,
-    } = context;
-    const originalCount = history.length;
-
-    if (originalCount === 0) {
-      return this.structuralNoop(0, 'empty-history');
-    }
-
-    const compressionThreshold =
-      runtimeContext.ephemerals.compressionThreshold();
-    const contextLimit = runtimeContext.ephemerals.contextLimit();
-    // Hard-limit enforcement supplies the real target because it is the only
-    // layer that knows the finalized envelope's deficit; the ephemeral target
-    // below only sees committed history (issue #3406).
+  async compressDisk(
+    context: DiskTruncationContext,
+  ): Promise<DiskTruncationResult> {
+    const { history, currentTokenCount, targetTokenCount } = context;
+    if (history.length === 0) return this.structuralNoop(0, 'empty-history');
     const target =
-      targetTokenCount ?? compressionThreshold * contextLimit * 0.6;
-    // An explicit target is a maximum, so landing exactly on it is done —
-    // matching the `<=` no-op guard below. The threshold-derived fallback
-    // keeps its historical strict comparison.
-    const isSatisfied = (tokens: number): boolean =>
-      targetTokenCount !== undefined ? tokens <= target : tokens < target;
-
-    if (currentTokenCount <= target) {
-      return this.structuralNoop(originalCount, 'already-under-target');
-    }
-
-    const minKeep = Math.min(2, originalCount);
-
-    // Remove messages from start (oldest first) until under target
-    let removeCount = 0;
-    for (let i = 1; i <= originalCount - minKeep; i++) {
-      const remaining = history.slice(i);
-      const tokens = await estimateTokens(remaining);
-      if (isSatisfied(tokens)) {
-        removeCount = i;
+      targetTokenCount ??
+      context.runtimeContext.ephemerals.compressionThreshold() *
+        context.runtimeContext.ephemerals.contextLimit() *
+        0.6;
+    if (currentTokenCount <= target)
+      return this.structuralNoop(history.length, 'already-under-target');
+    const minKeep = Math.min(2, history.length);
+    let tokens = await context.estimateTokens(history);
+    let start = 0;
+    // HistoryService estimates a sum of per-row costs, independent of membership.
+    while (start < history.length - minKeep) {
+      tokens -= await context.estimateTokens(
+        compressionTokenSelection(history, start, start + 1),
+      );
+      start++;
+      if (targetTokenCount !== undefined ? tokens <= target : tokens < target)
         break;
-      }
-      removeCount = i;
     }
-
-    // Ensure we keep at least minKeep messages
-    removeCount = Math.min(removeCount, originalCount - minKeep);
-
-    // Adjust boundary to avoid orphaning tool call/response pairs
-    const mutableHistory = [...history] as IContent[];
-    const adjustedIndex = adjustForToolCallBoundary(
-      mutableHistory,
-      removeCount,
+    start = Math.min(
+      await adjustDiskToolBoundary(history, start),
+      history.length - minKeep,
     );
-
-    // Clamp: never remove more than originalCount - minKeep
-    const finalRemoveCount = Math.min(adjustedIndex, originalCount - minKeep);
-
-    const newHistory = mutableHistory.slice(finalRemoveCount);
-
     return {
       kind: 'applied',
-      newHistory,
+      start,
       metadata: {
-        originalMessageCount: originalCount,
-        compressedMessageCount: newHistory.length,
-        strategyUsed: 'top-down-truncation',
+        originalMessageCount: history.length,
+        compressedMessageCount: history.length - start,
+        strategyUsed: this.name,
         llmCallMade: false,
       },
     };
@@ -116,7 +95,7 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
   private structuralNoop(
     originalCount: number,
     reason: StructuralNoopReason,
-  ): StrategyCompressionResult {
+  ): Extract<StrategyCompressionResult, { kind: 'noop' }> {
     return {
       kind: 'noop',
       reason,

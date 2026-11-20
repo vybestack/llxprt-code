@@ -21,6 +21,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { replayableContents } from '../../utils/collectContents.js';
 export { createAnthropicRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 export type AnthropicContentBlock =
@@ -73,7 +74,9 @@ export interface AnthropicTestSetup {
   buildCallOptions: (
     contents: IContent[],
     overrides?: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'>,
-  ) => ReturnType<typeof createProviderCallOptions>;
+  ) => Omit<ReturnType<typeof createProviderCallOptions>, 'contents'> & {
+    contents: AsyncIterable<IContent>;
+  };
 }
 
 export function setupAnthropicProvider(): AnthropicTestSetup {
@@ -102,8 +105,8 @@ export function setupAnthropicProvider(): AnthropicTestSetup {
   const buildCallOptions = (
     contents: IContent[],
     overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
-  ) =>
-    createProviderCallOptions({
+  ) => {
+    const options = createProviderCallOptions({
       providerName: provider.name,
       contents,
       settings: settingsService,
@@ -111,6 +114,10 @@ export function setupAnthropicProvider(): AnthropicTestSetup {
       config,
       ...overrides,
     });
+    // Issue #854: the provider-facing contract is a history stream; the
+    // eager arrays tests assemble re-open as a replayable stream here.
+    return { ...options, contents: replayableContents(contents) };
+  };
 
   return {
     provider,

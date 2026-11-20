@@ -136,27 +136,31 @@ describe('profile refresh cancellation', () => {
     });
     let release = (): void => {};
     let transportSignal: AbortSignal | null | undefined;
+    const { preconnect } = globalThis.fetch;
     const transport = spyOn(globalThis, 'fetch').mockImplementation(
-      async (_input, init) => {
-        transportSignal = init?.signal;
-        const signal = transportSignal;
-        reached();
-        return new Promise<Response>((resolve, reject) => {
-          const onAbort = (): void => reject(signal?.reason);
-          signal?.addEventListener('abort', onAbort, { once: true });
-          release = () => {
-            signal?.removeEventListener('abort', onAbort);
-            resolve(
-              Response.json({
-                access_token: 'rotated',
-                refresh_token: 'rotated-refresh',
-                token_type: 'Bearer',
-                expires_in: 120,
-              }),
-            );
-          };
-        });
-      },
+      Object.assign(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          transportSignal = init?.signal;
+          const signal = transportSignal;
+          reached();
+          return new Promise<Response>((resolve, reject) => {
+            const onAbort = (): void => reject(signal?.reason);
+            signal?.addEventListener('abort', onAbort, { once: true });
+            release = () => {
+              signal?.removeEventListener('abort', onAbort);
+              resolve(
+                Response.json({
+                  access_token: 'rotated',
+                  refresh_token: 'rotated-refresh',
+                  token_type: 'Bearer',
+                  expires_in: 120,
+                }),
+              );
+            };
+          });
+        },
+        { preconnect },
+      ),
     );
     const provider: OAuthProvider = new CodexOAuthProvider(
       globalThis.fetch,
