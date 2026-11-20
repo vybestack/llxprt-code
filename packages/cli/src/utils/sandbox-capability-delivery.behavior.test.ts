@@ -29,8 +29,13 @@ import { entrypoint } from './sandbox-entrypoint.js';
 import { setupContainerUser } from './sandbox-containers.js';
 
 const posixHost = process.platform !== 'win32';
+// The behavior suite inspects /proc (environ, cmdline, fd links) to prove no
+// process holds the token, and its stand-ins list /proc/$$/fd. macOS has no
+// procfs, so that suite runs on Linux only.
+const linuxHost = process.platform === 'linux';
 const runningAsRoot = process.getuid?.() === 0;
 
+const SCRIPT_WORKDIR = path.join(os.tmpdir(), 'cap-delivery-script-work');
 const POLL_MS = 25;
 const PHASE_TIMEOUT_MS = 20_000;
 
@@ -339,7 +344,36 @@ async function runEntrypoint(
 }
 
 describe('capability delivery through the mount (#3573)', () => {
-  describe.skipIf(!posixHost)('POSIX behavior', () => {
+  // Reads only the generated script text, so it needs no procfs and still
+  // runs on macOS.
+  describe.skipIf(!posixHost)('generated scripts', () => {
+    it('the generated scripts reopen fd 3 from a pipe and never read the token from a here-string or the environment', async () => {
+      const entrypointScript = String(
+        entrypoint(SCRIPT_WORKDIR, ['llxprt', 'chat']).at(-1),
+      );
+      const finalEntrypoint = entrypoint(SCRIPT_WORKDIR, ['llxprt', 'chat']);
+      const containerArgs: string[] = [];
+      const previous = process.env.SANDBOX_SET_UID_GID;
+      process.env.SANDBOX_SET_UID_GID = 'true';
+      try {
+        await setupContainerUser(containerArgs, finalEntrypoint);
+      } finally {
+        if (previous === undefined) delete process.env.SANDBOX_SET_UID_GID;
+        else process.env.SANDBOX_SET_UID_GID = previous;
+      }
+      const wrapperScript = String(finalEntrypoint.at(-1));
+
+      for (const script of [entrypointScript, wrapperScript]) {
+        expect(script).not.toContain('<<<');
+        expect(script).not.toContain('${LLXPRT_CAPABILITY_TOKEN');
+        expect(script).toContain('exec 3< <(');
+        expect(script).toContain('/run/llxprt-capability');
+      }
+      expect(containerArgs.join(' ')).not.toContain('LLXPRT_CAPABILITY_TOKEN');
+    });
+  });
+
+  describe.skipIf(!linuxHost)('Linux procfs behavior', () => {
     let ws: Workspace;
     let token: Buffer;
     let tokenText: string;
@@ -385,31 +419,6 @@ describe('capability delivery through the mount (#3573)', () => {
       expect(readReport(ws, 'prefix.tokenfile')).toBeUndefined();
       expect(readReport(ws, 'prefix.mountlist')?.trim()).toBe('');
     }
-
-    it('the generated scripts reopen fd 3 from a pipe and never read the token from a here-string or the environment', async () => {
-      const entrypointScript = String(
-        entrypoint(ws.workdir, ['llxprt', 'chat']).at(-1),
-      );
-      const finalEntrypoint = entrypoint(ws.workdir, ['llxprt', 'chat']);
-      const containerArgs: string[] = [];
-      const previous = process.env.SANDBOX_SET_UID_GID;
-      process.env.SANDBOX_SET_UID_GID = 'true';
-      try {
-        await setupContainerUser(containerArgs, finalEntrypoint);
-      } finally {
-        if (previous === undefined) delete process.env.SANDBOX_SET_UID_GID;
-        else process.env.SANDBOX_SET_UID_GID = previous;
-      }
-      const wrapperScript = String(finalEntrypoint.at(-1));
-
-      for (const script of [entrypointScript, wrapperScript]) {
-        expect(script).not.toContain('<<<');
-        expect(script).not.toContain('${LLXPRT_CAPABILITY_TOKEN');
-        expect(script).toContain('exec 3< <(');
-        expect(script).toContain('/run/llxprt-capability');
-      }
-      expect(containerArgs.join(' ')).not.toContain('LLXPRT_CAPABILITY_TOKEN');
-    });
 
     it('control: the scanners find a token left in a process environment and in a file', async () => {
       // Without this, "the scan found nothing" could mean the scan cannot see.
