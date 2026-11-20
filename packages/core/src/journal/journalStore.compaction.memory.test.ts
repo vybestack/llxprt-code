@@ -5,13 +5,13 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { median } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import {
   ageOutIdleCode,
-  applicationHeapBytes,
   FLATNESS_BOUND_BYTES,
   medianSettledHeap,
   PerVersionBuilders,
   RETAINED_BOUND_BYTES,
   sessionWithCheckpoints,
 } from './__tests__/support/compactionMemory.js';
+import { applicationHeapBytes } from './__tests__/support/fresh-frame-heap.js';
 import { DEFAULT_BATCH_BYTES } from './groupAppender.js';
 import { ID_TRIE_MAX_DEPTH, ID_TRIE_PREFETCH_BYTES } from './idTrieNode.js';
 import { ROW_TREE_ARITY, ROW_TREE_MAX_FRAME_BYTES } from './rowTreeNode.js';

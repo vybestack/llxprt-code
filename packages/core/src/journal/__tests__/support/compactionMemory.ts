@@ -26,6 +26,7 @@ import {
   populatedSource,
 } from './copyFixtures.js';
 import { withPinnedAccess } from './pinnedAccess.js';
+import { applicationHeapBytes } from './fresh-frame-heap.js';
 
 const MIB = 1024 * 1024;
 
@@ -169,29 +170,6 @@ export async function medianSettledHeap(label: string): Promise<number> {
     readings.push(await strictSettledHeap(label));
   }
   return median(readings);
-}
-
-/** Heap snapshot classes that hold compiled code and its engine metadata. */
-const ENGINE_CODE_CLASSES =
-  /CodeBlock|Executable|^Structure(?:RareData)?$|^JSSourceCode$|^SourceCode$|^SymbolTable$|^PropertyTable$/;
-
-/**
- * The application-memory census of the allowance ledger: the bytes of every
- * heap snapshot node except compiled code and its engine metadata.
- * JavaScriptCore drops and recompiles code on its own schedule, which moves
- * the total heap by hundreds of KiB between readings while the objects the
- * application holds stay the same.
- */
-export function applicationHeapBytes(): number {
-  const snapshot = Bun.generateHeapSnapshot();
-  if (snapshot.version !== 3 || snapshot.nodes.length % 4 !== 0)
-    throw new Error('Unsupported JSC heap snapshot layout');
-  let bytes = 0;
-  for (let at = 4; at < snapshot.nodes.length; at += 4) {
-    const name = snapshot.nodeClassNames[snapshot.nodes[at + 2]];
-    if (!ENGINE_CODE_CLASSES.test(name)) bytes += snapshot.nodes[at + 1];
-  }
-  return bytes;
 }
 
 export interface SettledReading {
