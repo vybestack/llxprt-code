@@ -49,7 +49,9 @@ describe('native recording integration lifecycle', () => {
     const { integration } = fixture();
     const previousNamespaces = createDebug.disable();
     const output: string[] = [];
-    const consoleOutput = spyOn(console, 'log').mockImplementation(
+    // The debug package writes through console.warn so its lines reach
+    // stderr rather than headless stdout.
+    const consoleOutput = spyOn(console, 'warn').mockImplementation(
       (...args: unknown[]) => {
         output.push(args.map(String).join(' '));
       },
