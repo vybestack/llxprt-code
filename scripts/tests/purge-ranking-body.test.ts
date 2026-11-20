@@ -13,6 +13,7 @@ import {
   detachedDurableDigest,
 } from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
 import {
+  droppedAtOf,
   purgeRankingRows,
   expectedPurgeRankingRow,
   prepareValueRoute,
@@ -27,10 +28,11 @@ async function compareBodies(
   before: Awaited<ReturnType<typeof detachedDigest>>,
   expected: Awaited<ReturnType<typeof detachedDigest>>,
   beforeTokens: number,
+  droppedAt: string | undefined,
 ): Promise<number> {
   const independent = buildProviderContent(
     Array.from({ length: size }, (_, index) =>
-      expectedPurgeRankingRow(route, index, size, bytes),
+      expectedPurgeRankingRow(route, index, size, bytes, droppedAt),
     ),
     [],
     new DebugLogger('test:purge-ranking-body'),
@@ -101,8 +103,9 @@ async function verifyBody(
     try {
       expect(await prepared.execute()).toBe(true);
       await history.waitForCommit();
+      const droppedAt = await droppedAtOf(history, route);
       const expected = await detachedDigest(
-        purgeRankingRows(size, bytes, route),
+        purgeRankingRows(size, bytes, route, droppedAt),
       );
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
         expected,
@@ -116,6 +119,7 @@ async function verifyBody(
         before,
         expected,
         beforeTokens,
+        droppedAt,
       );
       if (route === 'purge') {
         await prepared.rollback();

@@ -6,7 +6,7 @@ import { operationFileCreates } from '../../compression/__tests__/support/operat
 import { buildAgent, drain } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { expectedDroppedImage } from '../../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+import { expectedDroppedImage } from '@vybestack/llxprt-code-core/services/history/__tests__/support/dropped-media-expectation.js';
 
 const image = {
   type: 'media',

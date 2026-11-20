@@ -25,6 +25,7 @@ import { bodyRequestRows } from './support/body-request-rows.js';
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
 import type { HistoryIndexedRows } from '../../packages/core/src/services/history/historyIndexedRows.js';
 import { diskSummaryRequestSelection } from '../../packages/agents/src/compression/middleOutDiskPlan.js';
+import { testSummaryFrame } from '../../packages/agents/src/compression/__tests__/summary-request-reference.js';
 import { buildCompressionChatOptions } from '../../packages/agents/src/compression/compressionSystemPrompt.js';
 import { CompressionLoadBalancingProvider } from '../../packages/agents/src/core/CompressionLoadBalancingProvider.js';
 
@@ -264,7 +265,7 @@ async function summaryCall(family: Family, wrap: Wrap) {
   const request = diskSummaryRequestSelection(
     journal,
     { top: 0, bottom: journal.length, injection: [] },
-    'Summarize this conversation.',
+    testSummaryFrame('Summarize this conversation.'),
     [],
     new RowOwnership(),
   );

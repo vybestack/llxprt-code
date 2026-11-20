@@ -15,37 +15,13 @@ import {
   transformPhaseSampler,
 } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
 import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
-  PURGED_IMAGE_BLOCK,
+  droppedAtOf,
   purgeRankingRows,
   purgeRankingRow,
   prepareValueRoute,
   type ValueRoute,
 } from './purge-ranking-value-helpers.js';
-
-const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-/**
- * The wall-clock time a remove purge stamped on the reference it left in row
- * 0; the ranking route drops nothing.
- */
-async function droppedAtOf(
-  history: HistoryService,
-  route: ValueRoute,
-): Promise<string | undefined> {
-  if (route !== 'purge') return undefined;
-  for await (const row of history.streamRawHistory()) {
-    if (row.blocks.length <= PURGED_IMAGE_BLOCK)
-      throw new Error(`Row 0 has no block ${PURGED_IMAGE_BLOCK}`);
-    const block = row.blocks[PURGED_IMAGE_BLOCK];
-    if (block.type !== 'media_dropped')
-      throw new Error(`Expected a dropped image, found ${block.type}`);
-    expect(block.droppedAt).toMatch(ISO_TIME);
-    return block.droppedAt;
-  }
-  throw new Error('History has no rows');
-}
 
 async function observeRoute(
   route: ValueRoute,

@@ -6,6 +6,8 @@ import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/j
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { expectedDroppedRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/dropped-media-expectation.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -29,6 +31,29 @@ import { StreamEventType } from '../chatSession.js';
 import { loggingChatSession } from './support/chat-session-logging-fixture.js';
 import { occupyMistralFormats } from './support/occupied-mistral-formats.js';
 const historyScratchRoots = createTestScratchOwner();
+
+async function storedRow(
+  history: HistoryService,
+  index: number,
+): Promise<IContent> {
+  const snapshot = await history.openDumpSnapshot();
+  try {
+    let position = 0;
+    for await (const row of snapshot.rows())
+      if (position++ === index) return row;
+    throw new Error(`History has no row ${index}`);
+  } finally {
+    await snapshot.close();
+  }
+}
+
+/** Where the image in block 1 of `row` came from, if it records an origin. */
+function originKind(row: IContent | undefined): string | undefined {
+  const block = row?.blocks[1];
+  return block !== undefined && 'origin' in block
+    ? block.origin?.kind
+    : undefined;
+}
 
 const calls: ContinuationToolCall[] = [
   {
@@ -262,18 +287,54 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         await history.waitForCommit();
         if (toolFormat === 'mistral' && purge === 'off')
           occupied = await occupyMistralFormats(history);
+        let output = '';
+        const receipt = await operationFileCreates(async () => {
+          for await (const event of await chat.sendMessageStream(
+            { message },
+            'native-chat-session',
+            {
+              transcriptPath: () => recording.getFilePath() ?? undefined,
+              persistSemanticMediaPurge: async () => undefined,
+            },
+          )) {
+            if (event.type === StreamEventType.CHUNK)
+              output += event.value.content.blocks
+                .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+                .join('');
+          }
+          await chat.waitForIdle();
+        }, true).then(
+          (created) => ({ created, error: undefined }),
+          (error: unknown) => ({ created: undefined, error }),
+        );
+        expect(receipt.error).toBeUndefined();
+        expect(output).toBe('terminal 雪');
+        expect(receipt.created).toStrictEqual({ files: [], directories: [] });
+        await history.waitForCommit();
+        // A remove purge leaves the pasted image as a reference to its bytes.
+        const droppedIndex = prior.length - 2;
+        const dropped =
+          purge === 'remove'
+            ? await storedRow(history, droppedIndex)
+            : undefined;
+        expect(originKind(dropped)).toBe(
+          purge === 'remove' ? 'pasted' : undefined,
+        );
         const reference = await prepareRequestBody(
           {
             contents: [],
             requestRows: rowsSelection(
               await oldTailUnits(
-                prior.map((row) => ({
+                prior.map((row, index) => ({
                   ...row,
-                  blocks: row.blocks.flatMap((block) => {
-                    if (block.type !== 'media') return [block];
-                    if (purge === 'remove') return [];
-                    return [{ type: 'text' as const, text: 'image summary' }];
-                  }),
+                  blocks:
+                    dropped !== undefined && index === droppedIndex
+                      ? expectedDroppedRow(row, dropped, 1)
+                      : row.blocks.flatMap((block) =>
+                          block.type === 'media'
+                            ? [{ type: 'text' as const, text: 'image summary' }]
+                            : [block],
+                        ),
                 })),
                 [message],
               ),
@@ -300,29 +361,6 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         const expectedTokens = estimateTokens(
           JSON.stringify({ messages: reference.messagesWithSystem }),
         );
-        let output = '';
-        const receipt = await operationFileCreates(async () => {
-          for await (const event of await chat.sendMessageStream(
-            { message },
-            'native-chat-session',
-            {
-              transcriptPath: () => recording.getFilePath() ?? undefined,
-              persistSemanticMediaPurge: async () => undefined,
-            },
-          )) {
-            if (event.type === StreamEventType.CHUNK)
-              output += event.value.content.blocks
-                .flatMap((block) => (block.type === 'text' ? [block.text] : []))
-                .join('');
-          }
-          await chat.waitForIdle();
-        }, true).then(
-          (created) => ({ created, error: undefined }),
-          (error: unknown) => ({ created: undefined, error }),
-        );
-        expect(receipt.error).toBeUndefined();
-        expect(output).toBe('terminal 雪');
-        expect(receipt.created).toStrictEqual({ files: [], directories: [] });
         expect(requests).toHaveLength(2);
         expect(requests[1]).toBe(
           JSON.stringify({

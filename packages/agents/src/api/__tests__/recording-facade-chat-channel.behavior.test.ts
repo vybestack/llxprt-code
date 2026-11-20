@@ -34,7 +34,7 @@ import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { expectedDroppedImage } from '../../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+import { expectedDroppedImage } from '@vybestack/llxprt-code-core/services/history/__tests__/support/dropped-media-expectation.js';
 
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 

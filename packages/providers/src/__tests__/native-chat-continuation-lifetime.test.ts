@@ -4,9 +4,13 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  MediaReferenceBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it, spyOn } from 'bun:test';
@@ -121,6 +125,39 @@ async function mutateHistory(
   }
 }
 
+/**
+ * A pasted image admitted the way a session admits it, so it carries the
+ * origin a remove purge keeps as its reference. The admission reservation is
+ * released at once: only the history under test holds the image.
+ */
+async function pastedReference(
+  store: LocalMediaStore,
+): Promise<MediaReferenceBlock> {
+  const admission = new MediaAdmissionService(store);
+  const context = { turnId: 'continuation-lifetime', source: 'user-input' };
+  const [admitted] = await admission.admitContents(
+    [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            encoding: 'base64',
+            mimeType: 'image/png',
+            data: Buffer.from([1, 2, 3]).toString('base64'),
+          },
+        ],
+      },
+    ],
+    context,
+  );
+  await admission.releaseContents([admitted], context);
+  const block = admitted.blocks[0];
+  if (block.type !== 'media' || block.encoding !== 'reference')
+    throw new Error('Admission did not store the pasted image');
+  return block;
+}
+
 async function reclaimed(store: LocalMediaStore): Promise<number> {
   return (await store.reclaimUnreferenced(new Set(), Number.MAX_SAFE_INTEGER))
     .objectsRemoved;
@@ -143,11 +180,7 @@ describe('native continuation second HTTP body ownership', () => {
         rootDirectory: mkdtempSync(join(parent, 'media-')),
         quotaBytes: 1024,
       });
-      const reference = await store.admit({
-        bytes: new Uint8Array([1, 2, 3]),
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
+      const reference = await pastedReference(store);
       const rows: IContent[] = [
         ...Array.from(
           { length: 40 },

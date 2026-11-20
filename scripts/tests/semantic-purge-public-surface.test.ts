@@ -6,6 +6,7 @@ import { describe, expect, it } from 'bun:test';
 import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { expectedDroppedRow } from '../../packages/core/src/services/history/__tests__/support/dropped-media-expectation.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 const historyScratchRoots = createTestScratchOwner();
 
@@ -75,8 +76,15 @@ describe('semantic purge public streaming package surface', () => {
           let committedCount = 0;
           for await (const row of history.streamRawHistory()) {
             const original = imageRow(committedCount);
+            // The first image stays as a reference to its dropped bytes.
             expect(row.blocks).toStrictEqual(
-              committedCount === 0 ? [original.blocks[0]] : original.blocks,
+              committedCount === 0
+                ? expectedDroppedRow(original, row, 1)
+                : original.blocks,
+            );
+            const kept = row.blocks[1];
+            expect('origin' in kept ? kept.origin?.kind : undefined).toBe(
+              committedCount === 0 ? 'pasted' : undefined,
             );
             committedCount++;
           }

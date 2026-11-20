@@ -43,6 +43,30 @@ function purgedRow(
   );
 }
 
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/**
+ * The wall-clock time a remove purge stamped on the reference it left in row
+ * 0; the ranking route drops nothing.
+ */
+export async function droppedAtOf(
+  history: HistoryService,
+  route: ValueRoute,
+): Promise<string | undefined> {
+  if (route !== 'purge') return undefined;
+  for await (const row of history.streamRawHistory()) {
+    if (row.blocks.length <= PURGED_IMAGE_BLOCK)
+      throw new Error(`Row 0 has no block ${PURGED_IMAGE_BLOCK}`);
+    const block = row.blocks[PURGED_IMAGE_BLOCK];
+    if (block.type !== 'media_dropped')
+      throw new Error(`Expected a dropped image, found ${block.type}`);
+    if (!ISO_TIME.test(block.droppedAt))
+      throw new Error(`Dropped image time is not ISO: ${block.droppedAt}`);
+    return block.droppedAt;
+  }
+  throw new Error('History has no rows');
+}
+
 export function purgeRankingRow(index: number, bytes = 2048): IContent {
   const row = toolRankingRow(index, 0);
   const pair = Math.floor((index + 1) / 2);

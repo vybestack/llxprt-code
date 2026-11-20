@@ -6,6 +6,8 @@ import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/j
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { expectedDroppedRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/dropped-media-expectation.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -19,6 +21,17 @@ import { OpenAIProvider } from '../../../../providers/src/openai/OpenAIProvider.
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import { loggingChatSession } from './support/chat-session-logging-fixture.js';
 const historyScratchRoots = createTestScratchOwner();
+
+async function committedRows(history: HistoryService): Promise<IContent[]> {
+  const snapshot = await history.openDumpSnapshot();
+  try {
+    const rows: IContent[] = [];
+    for await (const row of snapshot.rows()) rows.push(row);
+    return rows;
+  } finally {
+    await snapshot.close();
+  }
+}
 
 describe('public native plain Chat semantic purge HTTP', () => {
   const directory = useTempDir('native-chat-purge-http-');
@@ -180,18 +193,56 @@ describe('public native plain Chat semantic purge HTTP', () => {
       try {
         await history.addBatch(prior);
         await history.waitForCommit();
+        let output = '';
+        const receipt = await operationFileCreates(async () => {
+          const result = await chat.sendMessage(
+            {
+              message: {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'new user 雪' }],
+              },
+            },
+            'native-chat-session',
+            {
+              transcriptPath: () => recording.getFilePath() ?? undefined,
+              persistSemanticMediaPurge: async () => undefined,
+            },
+          );
+          expect(result.status).toBe('published');
+          output =
+            (await chat.getHistoryService().getLastContent())?.blocks
+              .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+              .join('') ?? '';
+        }, true);
+        expect(output).toBe('ok');
+        expect(receipt).toStrictEqual({ files: [], directories: [] });
+        await history.waitForCommit();
+        const committed = await committedRows(history);
+        // A remove purge leaves the pasted image in history as a reference to
+        // its dropped bytes; a summary purge replaces it with text.
+        const kept = committed[1].blocks[1];
+        expect('origin' in kept ? kept.origin?.kind : kept.type).toBe(
+          purge === 'remove' ? 'pasted' : 'text',
+        );
         const reference = await prepareRequestBody(
           {
             contents: [],
             requestRows: rowsSelection([
-              ...prior.map((row) => ({
+              ...prior.map((row, index) => ({
                 ...row,
-                blocks: row.blocks.flatMap((block) => {
-                  if (block.type !== 'media') return [block];
-                  return purge === 'remove'
-                    ? []
-                    : [{ type: 'text' as const, text: 'prior image summary' }];
-                }),
+                blocks:
+                  purge === 'remove' && index === 1
+                    ? expectedDroppedRow(row, committed[1], 1)
+                    : row.blocks.flatMap((block) =>
+                        block.type === 'media'
+                          ? [
+                              {
+                                type: 'text' as const,
+                                text: 'prior image summary',
+                              },
+                            ]
+                          : [block],
+                      ),
               })),
               {
                 speaker: 'human',
@@ -220,29 +271,6 @@ describe('public native plain Chat semantic purge HTTP', () => {
         const expectedTokens = estimateTokens(
           JSON.stringify({ messages: reference.messagesWithSystem }),
         );
-        let output = '';
-        const receipt = await operationFileCreates(async () => {
-          const result = await chat.sendMessage(
-            {
-              message: {
-                speaker: 'human',
-                blocks: [{ type: 'text', text: 'new user 雪' }],
-              },
-            },
-            'native-chat-session',
-            {
-              transcriptPath: () => recording.getFilePath() ?? undefined,
-              persistSemanticMediaPurge: async () => undefined,
-            },
-          );
-          expect(result.status).toBe('published');
-          output =
-            (await chat.getHistoryService().getLastContent())?.blocks
-              .flatMap((block) => (block.type === 'text' ? [block.text] : []))
-              .join('') ?? '';
-        }, true);
-        expect(output).toBe('ok');
-        expect(receipt).toStrictEqual({ files: [], directories: [] });
         expect(requests).toHaveLength(1);
         expect(requests[0]).toBe(JSON.stringify(reference.requestBody));
         expect(expectedTokens).toBeGreaterThan(0);
@@ -264,29 +292,20 @@ describe('public native plain Chat semantic purge HTTP', () => {
         expect(storedLengths).toStrictEqual([4]);
         expect(storedSubmissions).toStrictEqual([true]);
         expect(JSON.parse(requests[0]).model).toBe('gpt-4o');
-        await history.waitForCommit();
-        const committed = await history.openDumpSnapshot();
-        try {
-          const messages: string[] = [];
-          for await (const row of committed.rows()) {
-            messages.push(
+        expect(
+          committed.map(
+            (row) =>
               `${row.speaker}:${row.blocks
                 .flatMap((block) => (block.type === 'text' ? [block.text] : []))
                 .join('')}`,
-            );
-          }
-          expect(messages).toStrictEqual([
-            'ai:older answer',
-            purge === 'remove'
-              ? 'human:prior'
-              : 'human:priorprior image summary',
-            'ai:answer',
-            'human:new user 雪',
-            'ai:ok',
-          ]);
-        } finally {
-          await committed.close();
-        }
+          ),
+        ).toStrictEqual([
+          'ai:older answer',
+          purge === 'remove' ? 'human:prior' : 'human:priorprior image summary',
+          'ai:answer',
+          'human:new user 雪',
+          'ai:ok',
+        ]);
       } finally {
         await server.stop(true);
         await history.dispose();
