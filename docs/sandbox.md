@@ -678,12 +678,40 @@ What the proxy blocks:
   [#2957](https://github.com/vybestack/llxprt-code/issues/2957)).
 
 How the container proves it is authorised: a per-session capability token is
-passed to LLxprt Code through an inherited file descriptor, never through
-process arguments, the container environment, or a file mounted where the
-sandbox can read it. Processes that run before the CLI — relays, launchers,
+passed to LLxprt Code through an inherited file descriptor (fd 3). It is never
+in process arguments, in the container's create configuration (`--env`,
+`--env-file`, `docker inspect` or `podman inspect` output), or in any process
+environment, including the environment of the container's init process
+(`/proc/1/environ`). Processes that run before the CLI — relays, launchers,
 your `sandbox.bashrc` — never see it. Reaching the socket is therefore not
 sufficient by itself; a client without the consumed capability is rejected as
 `UNAUTHORIZED`.
+
+For Docker and Podman the token travels in three steps:
+
+1. The host writes the token (mode `0600`) to a file in a host-only directory
+   and bind-mounts that directory read-write at `/run/llxprt-capability`. The
+   directory holds nothing else.
+2. The trusted entrypoint opens the file and deletes it before it starts
+   anything else (relays, bridges, `sandbox.bashrc`, the CLI). Deleting it
+   removes the host's copy as well, because both sides share the directory.
+   The token then lives only in an unexported shell variable.
+3. At the final `exec` the entrypoint opens fd 3 on a pipe that carries the
+   token, so no temporary file holds it, and starts the CLI.
+
+The host removes the directory after the first authorised handshake, after a
+ten-minute no-handshake countdown that starts when the sandbox process spawns,
+or at exit, whichever comes first.
+
+On the current-user path (the sandbox starts as root with `--cap-drop=ALL`
+and then drops to your UID/GID), the file is opened by whichever process can
+read it: root when it owns the file (rootless Podman, where your UID is the
+container's root), otherwise the dropped user (rootful Docker, where root
+without `CAP_DAC_OVERRIDE` cannot read a file owned by your UID). No
+capability is added for this. On the image-user path the image's default user
+must be able to read and delete a file owned by your UID; if it cannot, the
+entrypoint stops with a message that the capability token file is not readable
+by the sandbox user. See [Troubleshooting](#troubleshooting).
 
 > **Risk:** A compromised process inside the container that obtains the
 > capability token can authenticate as you for the lifetime of the session.
@@ -1117,6 +1145,14 @@ first. The flag `--security-opt label=disable` (via `SANDBOX_FLAGS`) is a
 **last resort** for SELinux systems: it turns off SELinux process labelling for
 the container, removing a mandatory-access-control boundary. Use it only to
 diagnose a SELinux denial, then remove it so label enforcement is restored.
+
+**"capability token file ... is not readable by the sandbox user"** — the
+container's default user cannot read the host-only token file, which your UID
+owns (for example rootful Docker with an image user whose UID differs from
+yours, or Podman where the image user maps to a sub-UID). Set
+`SANDBOX_SET_UID_GID=true` so the sandbox runs as your UID/GID and the entrypoint
+can open and delete the file. The entrypoint refuses to start without the file
+rather than run the CLI with no credential channel or leave a readable copy.
 
 **SSH not working in Podman on macOS** — use a stable socket path. The default
 launchd socket paths are unreliable. Set up a dedicated socket under a
