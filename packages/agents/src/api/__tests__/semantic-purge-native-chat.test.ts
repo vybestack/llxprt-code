@@ -5,6 +5,15 @@ import { useTempDir } from './helpers/journal-fixture-support.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import { buildAgent, drain } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { expectedDroppedImage } from '../../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+
+const image = {
+  type: 'media',
+  mimeType: 'image/png',
+  encoding: 'base64',
+  data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=',
+} satisfies IContent['blocks'][number];
 
 describe('native public chat semantic purge trigger', () => {
   const directory = useTempDir('native-purge-chat-');
@@ -17,15 +26,7 @@ describe('native public chat semantic purge trigger', () => {
       await agent.setHistory([
         {
           speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'image prompt' },
-            {
-              type: 'media',
-              mimeType: 'image/png',
-              encoding: 'base64',
-              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=',
-            },
-          ],
+          blocks: [{ type: 'text', text: 'image prompt' }, image],
         },
         { speaker: 'ai', blocks: [{ type: 'text', text: 'prior response' }] },
       ]);
@@ -39,12 +40,15 @@ describe('native public chat semantic purge trigger', () => {
       }, true);
       expect(receipt).toStrictEqual({ directories: [], files: [] });
       const rows = await collectAgentHistory(agent);
+      // The pasted image stays in history as a reference to its dropped bytes.
       expect(rows[0].blocks).toStrictEqual([
         { type: 'text', text: 'image prompt' },
+        expectedDroppedImage(image, rows[0].blocks[1]),
       ]);
+      expect(rows[0].blocks[1]).toMatchObject({ origin: { kind: 'pasted' } });
       expect(rows[0].metadata?.semanticMediaPurgeFrontier).toStrictEqual({
         contentIndex: 0,
-        blockIndex: 0,
+        blockIndex: 1,
       });
       expect(
         rows.some(

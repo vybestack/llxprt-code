@@ -27,6 +27,9 @@ import {
 import { referenceSeedOutcome } from './native-seed-reference.js';
 import type { HistoryCase } from './wireBodyHistories.js';
 
+// One drop time for the purge under test and its oracle.
+const PURGE_DROPPED_AT = '2026-11-19T12:00:00.000Z';
+
 type EagerTransaction = NonNullable<
   Awaited<ReturnType<EagerSemanticPurgeOracle['begin']>>
 >;
@@ -341,6 +344,7 @@ async function checkNativePurge(
     enabled: true,
     explicitCacheWriteRequired: false,
     ownership,
+    now: () => new Date(PURGE_DROPPED_AT),
   });
   const selectedOptions =
     process.env.W23_NATIVE_SEED_TRAP === 'wrong-purge'
@@ -405,6 +409,7 @@ export async function checkRandomPurge(seed: number): Promise<void> {
       const oracle = new EagerSemanticPurgeOracle(old, {
         enabled: true,
         explicitCacheWriteRequired: false,
+        droppedAt: PURGE_DROPPED_AT,
       });
       const expected = await oracle.begin(purgeOptions(seed));
       if (expected === undefined)

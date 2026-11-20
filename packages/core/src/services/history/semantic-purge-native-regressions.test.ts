@@ -4,6 +4,10 @@ import { withNativePurgeFixture } from './__tests__/support/native-purge-fixture
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
 import { selectNativeSemanticPurge } from './semantic-purge-native.js';
 import type { IContent } from './IContent.js';
+import {
+  expectedDroppedRow,
+  readFromFile,
+} from './__tests__/support/dropped-media-expectation.js';
 import type { ProviderSnapshotOpener } from './native-purge-provider-request.js';
 
 async function hasKimiFacts(open: ProviderSnapshotOpener): Promise<boolean> {
@@ -51,11 +55,13 @@ describe('native semantic purge row preservation and facts', () => {
         close: async () => {},
       },
       { mode: 'remove' },
+      '2026-11-19T00:00:00.000Z',
     );
     if (selection === undefined) throw new Error('Missing purge');
     try {
       const candidate = await collect(selection.candidate.streamRows());
       expect(candidate.map((row) => [row.speaker, row.blocks])).toStrictEqual([
+        ['human', expectedDroppedRow(rows[0], candidate[0], 0)],
         ['ai', []],
         ['human', [{ type: 'text', text: 'after' }]],
       ]);
@@ -66,11 +72,14 @@ describe('native semantic purge row preservation and facts', () => {
 
   it('fills Kimi facts for both base and candidate request pins', async () => {
     await withNativePurgeFixture(async ({ history, store }) => {
-      const image = await store.admit({
-        bytes: new Uint8Array([2]),
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      });
+      const image = readFromFile(
+        await store.admit({
+          bytes: new Uint8Array([2]),
+          mimeType: 'image/png',
+          semanticMetadata: {},
+        }),
+        '/workspace/shot.png',
+      );
       await history.addBatch([
         { speaker: 'human', blocks: [{ type: 'text', text: 'before' }, image] },
       ]);

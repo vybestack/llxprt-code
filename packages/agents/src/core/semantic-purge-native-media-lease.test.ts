@@ -17,6 +17,7 @@ import { parseReservationRecord } from '@vybestack/llxprt-code-core/storage/loca
 import { parseInstanceLeaseRecord } from '@vybestack/llxprt-code-core/storage/local-media-store-reservations.js';
 import { withNativePurgeFixture } from '../../../core/src/services/history/__tests__/support/native-purge-fixture.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import { readFromFile } from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
 
 function sourceRow(index: number, image: MediaReferenceBlock): IContent {
   return {
@@ -141,11 +142,14 @@ describe('native pending media consumer below provider preparation', () => {
       await withNativePurgeFixture(
         async ({ history, store, session, owners }) => {
           const originalBytes = new Uint8Array([17, 29, 43, 255]);
-          const image = await store.admit({
-            bytes: originalBytes,
-            mimeType: 'image/png',
-            semanticMetadata: {},
-          });
+          const image = readFromFile(
+            await store.admit({
+              bytes: originalBytes,
+              mimeType: 'image/png',
+              semanticMetadata: {},
+            }),
+            '/workspace/lease.png',
+          );
           await history.detachedValues.replace(
             (async function* () {
               for (let index = 0; index < size; index++)
@@ -268,12 +272,18 @@ describe('native pending media consumer below provider preparation', () => {
             const next = await IndexedJournalRequestSnapshot.create(nextPin);
             try {
               let mediaCount = 0;
-              for await (const row of next.openReader())
+              let droppedCount = 0;
+              for await (const row of next.openReader()) {
                 mediaCount += row.blocks.filter(
                   (block) => block.type === 'media',
                 ).length;
-              expect(next.count).toBe(size - 1);
+                droppedCount += row.blocks.filter(
+                  (block) => block.type === 'media_dropped',
+                ).length;
+              }
+              expect(next.count).toBe(size);
               expect(mediaCount).toBe(0);
+              expect(droppedCount).toBe(1);
             } finally {
               await next.close();
               await nextPin.close();
@@ -383,11 +393,14 @@ describe('native pending media consumer below provider preparation', () => {
       await history.detachedValues.replace(
         (async function* () {
           for (let index = 0; index < 65; index++) {
-            const image = await store.admit({
-              bytes: new Uint8Array([index, 117]),
-              mimeType: 'image/png',
-              semanticMetadata: {},
-            });
+            const image = readFromFile(
+              await store.admit({
+                bytes: new Uint8Array([index, 117]),
+                mimeType: 'image/png',
+                semanticMetadata: {},
+              }),
+              `/workspace/lease-${index}.png`,
+            );
             yield { speaker: 'human', blocks: [image] } satisfies IContent;
           }
         })(),

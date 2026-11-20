@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { withNativePurgeFixture } from './__tests__/support/native-purge-fixture.js';
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
 import type { IContent } from './IContent.js';
+import { readFromFile } from './__tests__/support/dropped-media-expectation.js';
 
 async function collect(rows: AsyncIterable<IContent>): Promise<IContent[]> {
   const result: IContent[] = [];
@@ -14,11 +15,14 @@ describe('native semantic purge durable callback compensation', () => {
   it('restores the candidate callback state when rollback media publication fails', async () => {
     await withNativePurgeFixture(
       async ({ history, store, owner, assertDurable }) => {
-        const image = await store.admit({
-          bytes: new Uint8Array([1]),
-          mimeType: 'image/png',
-          semanticMetadata: {},
-        });
+        const image = readFromFile(
+          await store.admit({
+            bytes: new Uint8Array([1]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          }),
+          '/workspace/before.png',
+        );
         await history.addBatch([
           {
             speaker: 'human',

@@ -8,6 +8,7 @@ import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/suppor
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { estimatorCorpus } from '../__tests__/support/estimatorCorpus.js';
+import { droppedToolImageRows } from '../__tests__/support/dropped-tool-image-rows.js';
 import { AnthropicStreamRepair } from './anthropic-stream-repair.js';
 import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
 import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
@@ -108,8 +109,47 @@ async function assertCacheParities(
   return tokens;
 }
 
+/** Stored-fact tokens of `rows`, checked against counting the serialized wire. */
+async function storedTokens(path: string, rows: IContent[]): Promise<number> {
+  const session = await JournalSession.create(
+    path,
+    testJournalOptions({ journal: testJournalSeams().dependencies }),
+  );
+  await session.append(rows);
+  await session.store.commit([
+    { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
+  ]);
+  const snapshot = await session.store.snapshot();
+  const query = await IndexedJournalRequestSnapshot.create(snapshot);
+  try {
+    const engine = await AnthropicStreamRepair.create(query, settings, {
+      strip: 'none',
+    });
+    return await assertParity(engine, await getO200kBaseEncoder(), undefined);
+  } finally {
+    await query.close();
+    await snapshot.close();
+    await session.close();
+  }
+}
+
 describe('persisted Anthropic estimate composition', () => {
   const directory = useTempDir('anthropic-numeric-estimate-');
+  it.each(['after', 'before'] satisfies ReadonlyArray<'after' | 'before'>)(
+    'counts a dropped image reference placed %s its tool response in the stored estimate',
+    async (placement) => {
+      const dropped = await storedTokens(
+        `${directory()}/dropped-${placement}.llxj`,
+        droppedToolImageRows(placement),
+      );
+      const bare = await storedTokens(
+        `${directory()}/bare-${placement}.llxj`,
+        droppedToolImageRows(placement, false),
+      );
+      // The reference text the wire carries costs tokens of its own.
+      expect(dropped - bare).toBeGreaterThan(16);
+    },
+  );
   for (const entry of [
     ...estimatorCorpus(),
     ...punctuation.map((row, index) => ({ id: `edge-${index}`, rows: [row] })),

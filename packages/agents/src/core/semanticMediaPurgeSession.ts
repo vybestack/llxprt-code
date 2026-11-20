@@ -44,6 +44,8 @@ export interface SemanticMediaPurgeSessionOptions {
     candidateHistory: SemanticPurgeRowSource,
     frontier: SemanticMediaPurgeFrontier,
   ) => Promise<void>;
+  /** The clock a removed image's drop time is read from. */
+  readonly now?: () => Date;
 }
 
 function observedAnthropicCacheWrite(usage: UsageStats | undefined): boolean {
@@ -206,6 +208,7 @@ export class SemanticMediaPurgeSession {
         explicitCacheWriteRequired: false,
         ownership: options.ownership,
         persist: options.persist,
+        now: options.now,
       },
     );
   }
@@ -236,6 +239,7 @@ export class SemanticMediaPurgeSession {
             explicitCacheWriteRequired: false,
             ownership: this.options.ownership,
             persist,
+            now: this.options.now,
           })
         : this.coordinator;
       const transaction = await coordinator.begin({ mode }, signal);

@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ContentBlock } from './IContent.js';
+import type { ContentBlock, IContent } from './IContent.js';
+import { droppedBlockOf } from './journalMediaDrop.js';
 
 export interface SemanticMediaPurgeFrontier {
   readonly contentIndex: number;
@@ -70,22 +71,35 @@ export function isPurgeableImage(
   return essence.toLowerCase().startsWith('image/');
 }
 
-export function hasSummaryReplacement(
+/**
+ * Whether a purge can replace this image. Only stored bytes (inline or
+ * referenced) can be dropped to a reference; a URL image has no bytes, so a
+ * remove purge leaves it for the provider to fetch. A summary needs text.
+ */
+export function hasPurgeReplacement(
   block: ContentBlock,
   options: SemanticMediaPurgeOptions,
 ): boolean {
-  if (options.mode !== 'summary' || options.summaryText !== undefined)
-    return true;
+  if (options.mode === 'remove')
+    return block.type === 'media' && block.encoding !== 'url';
+  if (options.summaryText !== undefined) return true;
   if (block.type !== 'media' || block.caption === undefined) return false;
   return block.caption.trim().length > 0;
 }
 
+/**
+ * What a purged image becomes. A removed image keeps a reference to where it
+ * was read from (Andrew's decision for #854: dropped images become source
+ * references); a summary is the user's chosen text, not a drop.
+ */
 export function replacementBlock(
   options: SemanticMediaPurgeOptions,
   source: ContentBlock,
-): ContentBlock | undefined {
+  droppedAt: string,
+  row: IContent,
+): ContentBlock {
   if (options.mode === 'remove') {
-    return undefined;
+    return Object.freeze(droppedBlockOf(source, droppedAt, row));
   }
   const summaryText =
     options.summaryText ??

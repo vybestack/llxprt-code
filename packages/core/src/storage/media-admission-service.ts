@@ -94,7 +94,8 @@ interface NormalizedBase64Source {
   readonly contentId: string;
 }
 
-function normalizeBase64Source(data: string): NormalizedBase64Source {
+/** The canonical payload, decoded length and content id of base64 image data. */
+export function normalizeBase64Source(data: string): NormalizedBase64Source {
   let payload = data;
   if (data.toLowerCase().startsWith('data:')) {
     const comma = data.slice(0, MAX_DATA_URI_PREFIX_LENGTH).indexOf(',');

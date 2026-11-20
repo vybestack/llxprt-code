@@ -10,10 +10,13 @@ import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
+  ContentBlock,
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import { droppedImageOf } from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+import { PURGE_DROPPED_AT } from './__tests__/support/semantic-purge-row-oracle.js';
 import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 const historyScratchRoots = createTestScratchOwner();
 
@@ -23,20 +26,26 @@ async function collect(source: SemanticPurgeRowSource): Promise<IContent[]> {
   return rows;
 }
 
+const image: ContentBlock = {
+  type: 'media',
+  mimeType: 'image/png',
+  encoding: 'base64',
+  data: 'aW1hZ2U=',
+  caption: 'A green build result.',
+};
+
+// A pasted image (a human row without a tool response) keeps a pasted reference.
+const droppedImage = droppedImageOf(
+  image,
+  { kind: 'pasted', readAt: PURGE_DROPPED_AT },
+  PURGE_DROPPED_AT,
+);
+
 function historyWithImage(): HistoryService {
   const history = new HistoryService({ scratchRoots: historyScratchRoots });
   history.add({
     speaker: 'human',
-    blocks: [
-      { type: 'text', text: 'inspect' },
-      {
-        type: 'media',
-        mimeType: 'image/png',
-        encoding: 'base64',
-        data: 'aW1hZ2U=',
-        caption: 'A green build result.',
-      },
-    ],
+    blocks: [{ type: 'text', text: 'inspect' }, image],
   });
   return history;
 }
@@ -83,6 +92,7 @@ describe('SemanticMediaPurgeSession: keeps the selected image in an explicit-cac
     const session = new SemanticMediaPurgeSession({
       history,
       mode: () => 'remove',
+      now: () => new Date(PURGE_DROPPED_AT),
       requiresExplicitCacheWrite: () => true,
       persist: () => Promise.resolve(),
     });
@@ -99,6 +109,7 @@ describe('SemanticMediaPurgeSession: keeps the selected image in an explicit-cac
       expect(request[0]?.blocks[0]).not.toBe(rows[0]?.blocks[0]);
       expect(candidate[0]?.blocks).toStrictEqual([
         { type: 'text', text: 'inspect' },
+        droppedImage,
       ]);
     });
     await attempt.finalize();
@@ -123,6 +134,7 @@ describe('SemanticMediaPurgeSession: does not start an explicit-cache purge when
     const session = new SemanticMediaPurgeSession({
       history,
       mode: () => 'remove',
+      now: () => new Date(PURGE_DROPPED_AT),
       requiresExplicitCacheWrite: () => true,
       persist: () => Promise.resolve(),
     });
@@ -164,6 +176,7 @@ describe('SemanticMediaPurgeSession: exposes the exact candidate and commits it 
     const session = new SemanticMediaPurgeSession({
       history,
       mode: () => 'remove',
+      now: () => new Date(PURGE_DROPPED_AT),
       requiresExplicitCacheWrite: () => false,
       persist: (candidate) => {
         persisted = candidate;
@@ -183,6 +196,7 @@ describe('SemanticMediaPurgeSession: exposes the exact candidate and commits it 
     await withRows(history.streamRawHistory(), (rows) => {
       expect(rows[0]?.blocks).toStrictEqual([
         { type: 'text', text: 'inspect' },
+        droppedImage,
       ]);
     });
     await attempt.finalize();
@@ -243,6 +257,7 @@ describe('SemanticMediaPurgeSession: rejects absent, mismatched, aggregate-only,
       const session = new SemanticMediaPurgeSession({
         history,
         mode: () => 'remove',
+        now: () => new Date(PURGE_DROPPED_AT),
         requiresExplicitCacheWrite: () => true,
         persist: () => Promise.resolve(),
       });
@@ -269,6 +284,7 @@ describe('SemanticMediaPurgeSession: commits exact-match cache evidence for remo
     const session = new SemanticMediaPurgeSession({
       history,
       mode: () => 'remove',
+      now: () => new Date(PURGE_DROPPED_AT),
       requiresExplicitCacheWrite: () => true,
       persist: () => Promise.resolve(),
     });
@@ -291,6 +307,7 @@ describe('SemanticMediaPurgeSession: commits exact-match cache evidence for remo
     await withRows(history.streamRawHistory(), (rows) => {
       expect(rows[0]?.blocks).toStrictEqual([
         { type: 'text', text: 'inspect' },
+        droppedImage,
       ]);
     });
     await attempt.finalize();
@@ -334,6 +351,7 @@ describe('SemanticMediaPurgeSession: holds the next purge until a committed atte
     const session = new SemanticMediaPurgeSession({
       history,
       mode: () => 'remove',
+      now: () => new Date(PURGE_DROPPED_AT),
       persist: () => Promise.resolve(),
     });
     const first = await session.begin(false);
@@ -366,6 +384,7 @@ describe('SemanticMediaPurgeSession: releases the next purge after a noncommitte
     const session = new SemanticMediaPurgeSession({
       history,
       mode: () => 'remove',
+      now: () => new Date(PURGE_DROPPED_AT),
       persist: () => Promise.resolve(),
     });
     const first = await session.begin(false);
@@ -405,6 +424,7 @@ describe('SemanticMediaPurgeSession: releases the next purge only after committe
     const session = new SemanticMediaPurgeSession({
       history,
       mode: () => 'remove',
+      now: () => new Date(PURGE_DROPPED_AT),
       persist: () => Promise.resolve(),
     });
     const first = await session.begin(false);
@@ -447,6 +467,7 @@ describe('SemanticMediaPurgeSession: keeps the purge lease when committed rollba
     const session = new SemanticMediaPurgeSession({
       history,
       mode: () => 'remove',
+      now: () => new Date(PURGE_DROPPED_AT),
       persist: () => {
         persistenceAttempt += 1;
         return persistenceAttempt === 1

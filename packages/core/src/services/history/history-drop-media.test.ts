@@ -161,7 +161,7 @@ describe('dropping stored media keeps a reference', () => {
       await history.settleMediaOwnership();
       await expect(
         history.dropMedia([{ position: 0, blockIndex: 0 }], DROPPED_AT),
-      ).rejects.toThrow('Only a stored media reference can be dropped');
+      ).rejects.toThrow('Only stored media bytes can be dropped');
       await history.waitForOwnershipSettlement();
       expect(await rows(history)).toStrictEqual([row]);
       expect(await store.hasReservations(pasted.contentId)).toBe(true);

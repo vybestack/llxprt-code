@@ -21,6 +21,10 @@ import {
   snapshotReferences,
 } from './journalMediaReferences.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+import {
+  mediaOriginFor,
+  normalizeBase64Source,
+} from '../../storage/media-admission-service.js';
 import { ROW_FLAG, ROW_SPEAKER } from '../../journal/rowRecord.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 
@@ -42,15 +46,28 @@ export interface HistoryDropMediaRequest {
 
 /**
  * The reference that replaces a stored image: where it was read from, what
- * it was and when its bytes were dropped. Only a referenced block with an
- * origin can be dropped; anything else is a caller bug.
+ * it was and when its bytes were dropped. A referenced block must carry the
+ * origin admission stamped; base64 bytes still inline in `row` get the origin
+ * admission would have stamped. Anything else is a caller bug.
  */
 export function droppedBlockOf(
   block: ContentBlock,
   droppedAt: string,
+  row: IContent,
 ): MediaDroppedBlock {
+  if (block.type === 'media' && block.encoding === 'base64') {
+    const source = normalizeBase64Source(block.data);
+    return {
+      type: 'media_dropped',
+      origin: mediaOriginFor(block, row, droppedAt),
+      mimeType: block.mimeType,
+      byteLength: source.decodedByteLength,
+      contentId: source.contentId,
+      droppedAt,
+    };
+  }
   if (!isMediaReferenceBlock(block))
-    throw new Error('Only a stored media reference can be dropped');
+    throw new Error('Only stored media bytes can be dropped');
   const origin = block.origin;
   if (origin === undefined)
     throw new Error(
@@ -107,7 +124,7 @@ function droppedRow(
   return {
     ...row,
     blocks: row.blocks.map((block, index) =>
-      blocks.has(index) ? droppedBlockOf(block, droppedAt) : block,
+      blocks.has(index) ? droppedBlockOf(block, droppedAt, row) : block,
     ),
   };
 }

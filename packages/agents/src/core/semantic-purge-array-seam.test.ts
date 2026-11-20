@@ -16,6 +16,7 @@ import {
 } from './__tests__/support/semantic-purge-fault-test-helpers.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import { expectedDroppedRow } from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
 const historyScratchRoots = createTestScratchOwner();
 
 class StreamOnlyHistory extends HistoryService {
@@ -84,7 +85,7 @@ async function verifyCandidate(
       count === 0
         ? {
             ...original,
-            blocks: original.blocks.filter((_, index) => index !== 3),
+            blocks: expectedDroppedRow(original, row, 3),
             metadata: {
               ...original.metadata,
               semanticMediaPurgeFrontier: { contentIndex: 1, blockIndex: 3 },

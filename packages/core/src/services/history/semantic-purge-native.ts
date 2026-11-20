@@ -12,7 +12,7 @@ import type { DetachedHistorySink } from './detachedHistoryMutation.js';
 import type { SemanticPurgeRowSource } from './semantic-purge-disk-rows.js';
 import {
   freezeSemanticPurgeValue,
-  hasSummaryReplacement,
+  hasPurgeReplacement,
   isPurgeableImage,
   replacementBlock,
   restoredFrontierValue,
@@ -114,12 +114,12 @@ export class NativeSemanticPurgeCandidate
   constructor(
     readonly snapshot: SemanticPurgeSnapshot,
     readonly location: SemanticMediaPurgeBoundary,
-    readonly removed: boolean,
     private readonly options: SemanticMediaPurgeOptions,
+    private readonly droppedAt: string,
     readonly frontier: SemanticMediaPurgeFrontier,
     private readonly ownership?: RowOwnership,
   ) {
-    this.length = snapshot.length - Number(removed);
+    this.length = snapshot.length;
   }
 
   view(): SemanticPurgeRowSource {
@@ -134,32 +134,19 @@ export class NativeSemanticPurgeCandidate
     return this.readers.close();
   }
 
-  sourceOrdinal(index: number): number {
-    return this.removed && index >= this.location.contentIndex
-      ? index + 1
-      : index;
-  }
-
-  get removesBlock(): boolean {
-    return this.options.mode === 'remove';
-  }
-
   private transformed(
     row: IContent,
-    sourceOrdinal: number,
     index: number,
     annotate: boolean,
-  ): IContent | undefined {
+  ): IContent {
     const blocks =
-      sourceOrdinal === this.location.contentIndex
-        ? row.blocks.flatMap((block, blockIndex) => {
-            if (blockIndex !== this.location.blockIndex) return [block];
-            const replacement = replacementBlock(this.options, block);
-            return replacement === undefined ? [] : [replacement];
-          })
+      index === this.location.contentIndex
+        ? row.blocks.map((block, blockIndex) =>
+            blockIndex === this.location.blockIndex
+              ? replacementBlock(this.options, block, this.droppedAt, row)
+              : block,
+          )
         : row.blocks;
-    if (sourceOrdinal === this.location.contentIndex && blocks.length === 0)
-      return undefined;
     const metadata = { ...row.metadata };
     if (
       index >= this.location.contentIndex &&
@@ -175,29 +162,16 @@ export class NativeSemanticPurgeCandidate
   }
 
   projectRequestRow(row: IContent): IContent {
-    const projected = this.transformed(
-      row,
-      this.location.contentIndex,
-      this.location.contentIndex,
-      true,
-    );
-    if (projected === undefined)
-      throw new Error('Semantic purge selected a removed request row');
-    return projected;
+    return this.transformed(row, this.location.contentIndex, true);
   }
 
   async readRow(index: number, annotate = true): Promise<IContent> {
     this.readers.requireOpen();
-    const sourceOrdinal = this.sourceOrdinal(index);
-    const row = this.transformed(
-      await this.snapshot.readRow(sourceOrdinal),
-      sourceOrdinal,
+    return this.transformed(
+      await this.snapshot.readRow(index),
       index,
       annotate,
     );
-    if (row === undefined)
-      throw new Error('Semantic purge selected a removed row');
-    return row;
   }
 
   streamRows(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown> {
@@ -227,10 +201,7 @@ export class NativeSemanticPurgeCandidate
   ): Promise<void> {
     for (let index = 0; index < this.length; index++) {
       signal?.throwIfAborted();
-      await sink.appendDerived(
-        this.sourceOrdinal(index),
-        await this.readRow(index),
-      );
+      await sink.appendDerived(index, await this.readRow(index));
     }
   }
 }
@@ -249,14 +220,6 @@ async function positionalFrontier(
     candidate.length - 1,
   );
   const row = await candidate.readRow(contentIndex, false);
-  if (candidate.removed)
-    return {
-      contentIndex,
-      blockIndex:
-        contentIndex === candidate.location.contentIndex
-          ? 0
-          : row.blocks.length - 1,
-    };
   return {
     contentIndex,
     blockIndex: Math.min(candidate.location.blockIndex, row.blocks.length - 1),
@@ -306,6 +269,7 @@ async function candidateFrontier(
 export async function selectNativeSemanticPurge(
   snapshot: SemanticPurgeSnapshot,
   options: SemanticMediaPurgeOptions,
+  droppedAt: string,
   signal?: AbortSignal,
   ownership?: RowOwnership,
 ): Promise<NativeSemanticPurgeSelection | undefined> {
@@ -313,7 +277,6 @@ export async function selectNativeSemanticPurge(
   const start = await rebase(snapshot, previousFrontier, signal);
   let prefix: SemanticMediaPurgeBoundary | undefined;
   let location: SemanticMediaPurgeBoundary | undefined;
-  let removed = false;
   let contentIndex = 0;
   for await (const row of snapshot.streamRows(signal)) {
     for (const [blockIndex, block] of row.blocks.entries()) {
@@ -323,10 +286,9 @@ export async function selectNativeSemanticPurge(
       if (
         atOrAfter &&
         isPurgeableImage(block, { contentIndex, blockIndex }) &&
-        hasSummaryReplacement(block, options)
+        hasPurgeReplacement(block, options)
       ) {
         location = { contentIndex, blockIndex };
-        removed = row.blocks.length === 1 && options.mode === 'remove';
         break;
       }
       prefix = { contentIndex, blockIndex };
@@ -338,8 +300,8 @@ export async function selectNativeSemanticPurge(
   const draft = new NativeSemanticPurgeCandidate(
     snapshot,
     location,
-    removed,
     options,
+    droppedAt,
     { contentIndex: 0, blockIndex: 0 },
   );
   const frontier = await candidateFrontier(draft, signal);
@@ -348,8 +310,8 @@ export async function selectNativeSemanticPurge(
     candidate: new NativeSemanticPurgeCandidate(
       snapshot,
       location,
-      removed,
       options,
+      droppedAt,
       frontier,
       ownership,
     ),

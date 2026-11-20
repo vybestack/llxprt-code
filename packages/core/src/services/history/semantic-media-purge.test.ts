@@ -25,6 +25,7 @@ import {
   type SemanticPurgeStreamTransaction,
 } from './semantic-purge-stream.js';
 import type { SemanticPurgeRowSource } from './semantic-purge-disk-rows.js';
+import { expectedDroppedImage } from './__tests__/support/dropped-media-expectation.js';
 const historyScratchRoots = createTestScratchOwner();
 
 const histories: HistoryService[] = [];
@@ -183,8 +184,10 @@ describe('SemanticMediaPurgeStreamCoordinator: does nothing until an explicit tr
     const transaction = await begin(coordinator, { mode: 'remove' });
 
     await expectOriginalHistory(history);
-    expect((await collect(transaction?.candidate))[2]?.blocks).toStrictEqual([
+    const candidateBlocks = (await collect(transaction?.candidate))[2]?.blocks;
+    expect(candidateBlocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
+      expectedDroppedImage(firstImage, candidateBlocks[1]),
       secondImage,
     ]);
     expect(Object.isFrozen(transaction?.candidate)).toBe(true);
@@ -258,8 +261,11 @@ describe('SemanticMediaPurgeStreamCoordinator: advances oldest-first across two 
     });
 
     await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-      expect(rows[2]?.blocks).toStrictEqual([
+      const blocks = rows[2]?.blocks;
+      expect(blocks).toStrictEqual([
         { type: 'text', text: 'inspect' },
+        expectedDroppedImage(firstImage, blocks[1]),
+        expectedDroppedImage(secondImage, blocks[2]),
       ]);
     });
     expect(await begin(coordinator, { mode: 'remove' })).toBeUndefined();
@@ -313,7 +319,10 @@ describe('SemanticMediaPurgeStreamCoordinator: rebases the durable frontier afte
       expect((await collect(next?.candidate))[0]?.metadata?.id).toBe(
         'compressed-summary',
       );
-      expect((await collect(next?.candidate))[1]).toBeUndefined();
+      const changed = (await collect(next?.candidate))[1]?.blocks;
+      expect(changed).toStrictEqual([
+        expectedDroppedImage(secondImage, changed[0]),
+      ]);
     });
   });
 });
@@ -403,7 +412,7 @@ describe('SemanticMediaPurgeStreamCoordinator: skips an uncaptioned image in sum
 
 describe('SemanticMediaPurgeStreamCoordinator: preserves every earlier stored response when removing an image-only final content', () => {
   afterEach(cleanupPurge);
-  it('preserves every earlier stored response when removing an image-only final content', async () => {
+  it('preserves every earlier stored response when dropping the image of an image-only final content', async () => {
     const history = trackedHistory();
     history.add(
       content('ai', 'first-parent', [{ type: 'text', text: 'first' }], true),
@@ -424,7 +433,10 @@ describe('SemanticMediaPurgeStreamCoordinator: preserves every earlier stored re
     await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
       expect(
         rows.map((entry) => entry.metadata?.responsesStored),
-      ).toStrictEqual([true, true]);
+      ).toStrictEqual([true, true, undefined]);
+      expect(rows[2]?.blocks).toStrictEqual([
+        expectedDroppedImage(firstImage, rows[2]?.blocks[0]),
+      ]);
     });
   });
 });

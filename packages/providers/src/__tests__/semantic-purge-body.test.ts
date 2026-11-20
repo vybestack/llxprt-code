@@ -14,6 +14,8 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/cor
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { closeInOrder } from './support/close-in-order.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
+import { droppedImageOf } from '@vybestack/llxprt-code-core/services/history/__tests__/support/dropped-media-expectation.js';
 import { rawJournalSelection } from './support/journal-send-fixture.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
@@ -59,6 +61,10 @@ function bodyRow(index: number, bytes: number): IContent {
   };
 }
 
+// The purged image stays as a reference to a pasted image; its text follows the
+// user text. The drop time does not appear in the model text.
+const PASTED = { kind: 'pasted', readAt: '2026-11-19T12:00:00.000Z' } as const;
+
 function independentInput(size: number, explicit: boolean): unknown[] {
   const input: unknown[] = [];
   for (let index = 0; index < size; index++) {
@@ -67,7 +73,12 @@ function independentInput(size: number, explicit: boolean): unknown[] {
     if (row.speaker === 'human') {
       if (first.type !== 'text') throw new Error('Expected human text');
       if (index === 0 && !explicit)
-        input.push({ role: 'user', content: first.text });
+        input.push({
+          role: 'user',
+          content: `${first.text}\n${droppedMediaModelText(
+            droppedImageOf(row.blocks[1], PASTED, PASTED.readAt),
+          )}`,
+        });
       else
         input.push({
           role: 'user',

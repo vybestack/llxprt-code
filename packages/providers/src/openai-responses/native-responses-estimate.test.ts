@@ -15,6 +15,7 @@ import {
   WIRE_ROUTES,
 } from '../__tests__/support/wireBodyCapture.js';
 import { normalizedRows } from '../__tests__/support/frozenWire/normalizedRows.js';
+import { droppedToolImageRows } from '../__tests__/support/dropped-tool-image-rows.js';
 const tokenizerScratchRoots = createTestScratchOwner();
 
 async function estimate(
@@ -100,6 +101,37 @@ describe('native Responses estimates', () => {
         }, true);
         expect(actual).toStrictEqual(expected);
         expect(created).toStrictEqual({ files: [], directories: [] });
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
+
+  it.each(['after', 'before'] satisfies ReadonlyArray<'after' | 'before'>)(
+    'counts a dropped image reference placed %s its tool response in the stored estimate',
+    async (placement) => {
+      const rows = droppedToolImageRows(placement);
+      const expected = await estimate(
+        rowsSelection(await normalizedRows(rows)),
+        'gpt-5.2',
+      );
+      const bare = await estimate(
+        rowsSelection(
+          await normalizedRows(droppedToolImageRows(placement, false)),
+        ),
+        'gpt-5.2',
+      );
+      // The reference text the wire carries costs tokens of its own.
+      expect(
+        expected.estimatedPromptTokens - bare.estimatedPromptTokens,
+      ).toBeGreaterThan(16);
+      const fixture = await journalSendFixture(rows, [], {
+        directory: 'tmp/responses-native/fixtures',
+      });
+      try {
+        expect(await estimate(fixture.selection, 'gpt-5.2')).toStrictEqual(
+          expected,
+        );
       } finally {
         await fixture.close();
       }

@@ -3,7 +3,7 @@ import type { IContent, ContentBlock } from './IContent.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import { SemanticPurgeDiskRows } from './semantic-purge-disk-rows.js';
 import {
-  hasSummaryReplacement,
+  hasPurgeReplacement,
   isPurgeableImage,
   replacementBlock,
   restoredFrontierValue,
@@ -102,7 +102,7 @@ export function locateDiskPurge(
       if (
         atOrAfter(contentIndex, blockIndex, start) &&
         isPurgeableImage(block, { contentIndex, blockIndex }) &&
-        hasSummaryReplacement(block, options)
+        hasPurgeReplacement(block, options)
       )
         return { location: { contentIndex, blockIndex }, prefix };
       prefix = { contentIndex, blockIndex };
@@ -115,7 +115,6 @@ export function locateDiskPurge(
 function positionalFrontier(
   rows: SemanticPurgeDiskRows,
   location: SemanticMediaPurgeBoundary,
-  removed: boolean,
 ): SemanticMediaPurgeFrontier {
   if (rows.length === 0)
     return Object.freeze({ contentIndex: 0, blockIndex: 0 });
@@ -123,10 +122,7 @@ function positionalFrontier(
   return rows.withRow(contentIndex, (row) => {
     if (row.blocks.length === 0)
       throw new Error('Semantic media purge produced invalid history');
-    let blockIndex = Math.min(location.blockIndex, row.blocks.length - 1);
-    if (removed)
-      blockIndex =
-        contentIndex === location.contentIndex ? 0 : row.blocks.length - 1;
+    const blockIndex = Math.min(location.blockIndex, row.blocks.length - 1);
     return { contentIndex, blockIndex };
   });
 }
@@ -157,18 +153,18 @@ function changedRow(
   index: number,
   location: SemanticMediaPurgeBoundary,
   options: SemanticMediaPurgeOptions,
-): IContent | undefined {
+  droppedAt: string,
+): IContent {
   const row = sanitizeProviderContentForSerialization(source);
   if (index !== location.contentIndex) return row;
-  const replacement = replacementBlock(
-    options,
-    row.blocks[location.blockIndex],
-  );
-  const blocks = row.blocks.flatMap((block, blockIndex) => {
-    if (blockIndex !== location.blockIndex) return [block];
-    return replacement === undefined ? [] : [replacement];
-  });
-  return blocks.length === 0 ? undefined : { ...row, blocks };
+  return {
+    ...row,
+    blocks: row.blocks.map((block, blockIndex) =>
+      blockIndex === location.blockIndex
+        ? replacementBlock(options, block, droppedAt, row)
+        : block,
+    ),
+  };
 }
 
 function appendCandidate(
@@ -195,26 +191,22 @@ export function buildDiskPurgeCandidate(
   base: SemanticPurgeDiskRows,
   location: SemanticMediaPurgeBoundary,
   options: SemanticMediaPurgeOptions,
+  droppedAt: string,
   ownership?: RowOwnership,
 ): {
   candidate: SemanticPurgeDiskRows;
   frontier: SemanticMediaPurgeFrontier;
 } {
   const candidate = new SemanticPurgeDiskRows(base.scratchRoots, ownership);
-  let removed = false;
   try {
     let index = 0;
     for (const source of base) {
-      const row = changedRow(source, index++, location, options);
-      if (row === undefined) {
-        removed = true;
-        continue;
-      }
+      const row = changedRow(source, index++, location, options, droppedAt);
       appendCandidate(candidate, row, location.contentIndex, ownership);
     }
     const frontier = stableDiskFrontier(
       candidate,
-      positionalFrontier(candidate, location, removed),
+      positionalFrontier(candidate, location),
     );
     if (candidate.length > 0)
       candidate.withRow(0, (first) => {

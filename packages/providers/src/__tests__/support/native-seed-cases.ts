@@ -224,6 +224,15 @@ async function seedPurgeTransaction(
   return coordinator.begin({ mode: 'remove' });
 }
 
+function withoutPurgeBoundary(rows: readonly IContent[]): IContent[] {
+  return rows.map((row) => {
+    if (row.metadata?.semanticMediaPurgeBoundary === undefined) return row;
+    const metadata = { ...row.metadata };
+    delete metadata.semanticMediaPurgeBoundary;
+    return { ...row, metadata };
+  });
+}
+
 async function transactionSeedReference(
   format: FrozenFormat,
   settings: FrozenSettings,
@@ -232,9 +241,20 @@ async function transactionSeedReference(
   serviceReference: CaseOutcome,
   sameBoundary: boolean,
 ): Promise<{ serviceReference: CaseOutcome; sameBoundary: boolean }> {
-  if (transaction === undefined) return { serviceReference, sameBoundary };
+  const marked = input.rows.some(
+    (row) => row.metadata?.semanticMediaPurgeBoundary !== undefined,
+  );
+  if (transaction === undefined && !marked)
+    return { serviceReference, sameBoundary };
   const rows: IContent[] = [];
-  for await (const row of transaction.requestRows(true)) rows.push(row);
+  if (transaction === undefined) {
+    // A remove purge drops only stored bytes. When the marked image is a URL
+    // image and no stored image follows, no purge starts and the request
+    // carries no pre-image boundary.
+    rows.push(...withoutPurgeBoundary(input.rows));
+  } else {
+    for await (const row of transaction.requestRows(true)) rows.push(row);
+  }
   const serviceRows = eagerProviderOracle({ ...input, rows }).rows;
   const providerRows =
     settings.form === 'raw' ? input.rows : await normalizedRows(input.rows);

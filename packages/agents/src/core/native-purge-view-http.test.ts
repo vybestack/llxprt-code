@@ -11,6 +11,12 @@ import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/histor
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { withNativePurgeFixture } from '../../../core/src/services/history/__tests__/support/native-purge-fixture.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import {
+  admittedOrigin,
+  droppedImageOf,
+  readFromFile,
+} from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+import { PURGE_DROPPED_AT } from './__tests__/support/semantic-purge-row-oracle.js';
 import { streamSemanticPurgeRequest } from './streamRequestHelpers.js';
 import { OpenAIProvider } from '../../../providers/src/openai/OpenAIProvider.js';
 import { prepareRequest } from '../../../providers/src/openai/OpenAIRequestPreparation.js';
@@ -262,11 +268,14 @@ describe('native semantic purge selected-view HTTP', () => {
       await withNativePurgeFixture(async ({ history, store }) => {
         const selectedImage = reference
           ? {
-              ...(await store.admit({
-                bytes: Buffer.from(image.data, 'base64'),
-                mimeType: 'image/png',
-                semanticMetadata: {},
-              })),
+              ...readFromFile(
+                await store.admit({
+                  bytes: Buffer.from(image.data, 'base64'),
+                  mimeType: 'image/png',
+                  semanticMetadata: {},
+                }),
+                '/workspace/view.png',
+              ),
               caption: image.caption,
             }
           : image;
@@ -282,6 +291,7 @@ describe('native semantic purge selected-view HTTP', () => {
           history,
           mode: () => mode,
           persist: async () => undefined,
+          now: () => new Date(PURGE_DROPPED_AT),
         });
         const attempt = await session.begin(explicit);
         if (attempt === undefined) throw new Error('Missing purge attempt');
@@ -313,7 +323,14 @@ describe('native semantic purge selected-view HTTP', () => {
               if (index !== input.changed) return [row];
               const blocks = row.blocks.flatMap((block) => {
                 if (block !== image) return [block];
-                if (mode === 'remove') return [];
+                if (mode === 'remove')
+                  return [
+                    droppedImageOf(
+                      selectedImage,
+                      admittedOrigin(row, selectedImage, PURGE_DROPPED_AT),
+                      PURGE_DROPPED_AT,
+                    ),
+                  ];
                 return [{ type: 'text' as const, text: image.caption }];
               });
               return blocks.length === 0 ? [] : [{ ...row, blocks }];

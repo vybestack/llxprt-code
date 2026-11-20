@@ -4,7 +4,10 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
 import { withNativePurgeFixture } from '../../../core/src/services/history/__tests__/support/native-purge-fixture.js';
-import { expectedSemanticPurge } from './__tests__/support/semantic-purge-row-oracle.js';
+import {
+  expectedSemanticPurge,
+  PURGE_DROPPED_AT,
+} from './__tests__/support/semantic-purge-row-oracle.js';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
@@ -89,6 +92,7 @@ describe('actual native purge independent scale parity below provider preparatio
             history,
             mode: () => 'remove',
             persist: async () => undefined,
+            now: () => new Date(PURGE_DROPPED_AT),
           });
           const receipt = await operationFileCreates(async () => {
             const attempt = await session.begin(false);
@@ -122,9 +126,7 @@ describe('actual native purge independent scale parity below provider preparatio
             for (let index = 0; index < view.length; index++)
               origins.push(await view.originAt(index));
             expect(origins).toStrictEqual(
-              Array.from({ length: size - 1 }, () =>
-                history.originIds.get(origin),
-              ),
+              Array.from({ length: size }, () => history.originIds.get(origin)),
             );
           });
           expect(events).toStrictEqual(expectedEvents);

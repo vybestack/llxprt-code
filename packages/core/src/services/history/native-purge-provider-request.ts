@@ -124,12 +124,8 @@ export function nativePurgeProviderRequest(
       const changedLabel = (
         await snapshot.entryAt(candidate.location.contentIndex)
       ).label;
-      const firstOrdinal =
-        candidate.removed && candidate.location.contentIndex === 0 ? 1 : 0;
       const firstLabel =
-        snapshot.rows === Number(candidate.removed)
-          ? undefined
-          : (await snapshot.entryAt(firstOrdinal)).label;
+        snapshot.rows === 0 ? undefined : (await snapshot.entryAt(0)).label;
       const boundaryLabel =
         boundary === undefined
           ? undefined
@@ -139,10 +135,6 @@ export function nativePurgeProviderRequest(
           ? { headerLabels: boundaryLabel === undefined ? [] : [boundaryLabel] }
           : {
               label: changedLabel,
-              removedBlock: candidate.removesBlock
-                ? candidate.location.blockIndex
-                : undefined,
-              removedRow: candidate.removed,
               readChangedRow: (held) => readProjectedRow(held, candidate),
             }),
         header: (row, label) => {

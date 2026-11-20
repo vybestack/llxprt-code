@@ -8,6 +8,7 @@ import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/co
 import type { HistoryService } from '../../HistoryService.js';
 import type { ContentBlock, IContent } from '../../IContent.js';
 import { sanitizeProviderHistoryForSerialization } from '../../historyCloneUtils.js';
+import { admittedOrigin, droppedImageOf } from './dropped-media-expectation.js';
 
 interface SemanticMediaPurgeFrontier {
   readonly contentIndex: number;
@@ -24,6 +25,8 @@ interface SemanticMediaPurgeOptions {
 interface EagerPurgeOracleConfiguration {
   readonly enabled?: boolean;
   readonly explicitCacheWriteRequired: boolean;
+  /** The drop time the purge under test records on a removed image. */
+  readonly droppedAt: string;
   readonly persist?: (
     candidateHistory: readonly IContent[],
     frontier: SemanticMediaPurgeFrontier,
@@ -112,12 +115,14 @@ function isPurgeableImage(
   return essence.toLowerCase().startsWith('image/');
 }
 
-function hasSummaryReplacement(
+// A removed image needs stored bytes to drop; a summary needs text.
+function hasPurgeReplacement(
   block: ContentBlock,
   options: SemanticMediaPurgeOptions,
 ): boolean {
-  if (options.mode !== 'summary' || options.summaryText !== undefined)
-    return true;
+  if (options.mode === 'remove')
+    return block.type === 'media' && block.encoding !== 'url';
+  if (options.summaryText !== undefined) return true;
   if (block.type !== 'media' || block.caption === undefined) return false;
   return block.caption.trim().length > 0;
 }
@@ -125,7 +130,7 @@ function hasSummaryReplacement(
 function findCandidate(
   history: readonly IContent[],
   frontier: SemanticMediaPurgeFrontier,
-  options: SemanticMediaPurgeOptions = { mode: 'remove' },
+  options?: SemanticMediaPurgeOptions,
 ): SemanticMediaPurgeBoundary | undefined {
   for (const [contentIndex, content] of history.entries()) {
     if (contentIndex < frontier.contentIndex) continue;
@@ -136,7 +141,7 @@ function findCandidate(
       const location = { contentIndex, blockIndex };
       if (
         isPurgeableImage(block, location) &&
-        hasSummaryReplacement(block, options)
+        (options === undefined || hasPurgeReplacement(block, options))
       ) {
         return location;
       }
@@ -171,12 +176,19 @@ function findPreImageBoundary(
   return undefined;
 }
 
+// A removed image stays in place as a reference to where it came from.
 function replacementBlock(
   options: SemanticMediaPurgeOptions,
   source: ContentBlock,
-): ContentBlock | undefined {
+  row: IContent,
+  droppedAt: string,
+): ContentBlock {
   if (options.mode === 'remove') {
-    return undefined;
+    return droppedImageOf(
+      source,
+      admittedOrigin(row, source, droppedAt),
+      droppedAt,
+    );
   }
   const summaryText =
     options.summaryText ??
@@ -274,27 +286,6 @@ function restoredFrontier(
   return Object.freeze({ contentIndex: 0, blockIndex: 0 });
 }
 
-function nextValidFrontier(
-  history: readonly IContent[],
-  location: SemanticMediaPurgeBoundary,
-  contentRemoved: boolean,
-): SemanticMediaPurgeFrontier {
-  if (history.length === 0) {
-    return Object.freeze({ contentIndex: 0, blockIndex: 0 });
-  }
-  const contentIndex = Math.min(location.contentIndex, history.length - 1);
-  const content = history[contentIndex];
-  if (content.blocks.length === 0) {
-    throw new Error('Semantic media purge produced invalid history');
-  }
-  let blockIndex = Math.min(location.blockIndex, content.blocks.length - 1);
-  if (contentRemoved) {
-    blockIndex =
-      contentIndex === location.contentIndex ? 0 : content.blocks.length - 1;
-  }
-  return Object.freeze({ contentIndex, blockIndex });
-}
-
 function mediaIdentity(block: ContentBlock): string | undefined {
   if (block.type !== 'media') return undefined;
   if (block.encoding === 'reference') return block.contentId;
@@ -377,6 +368,7 @@ function buildCandidateHistory(
   history: readonly IContent[],
   location: SemanticMediaPurgeBoundary,
   options: SemanticMediaPurgeOptions,
+  droppedAt: string,
 ): {
   readonly history: readonly IContent[];
   readonly nextFrontier: SemanticMediaPurgeFrontier;
@@ -391,23 +383,30 @@ function buildCandidateHistory(
   if (sourceContent === undefined || sourceBlock === undefined) {
     throw new Error('Semantic media purge candidate no longer exists');
   }
-  const replacement = replacementBlock(options, sourceBlock);
-  const blocks = sourceContent.blocks.flatMap((block, index) => {
-    if (index !== location.blockIndex) {
-      return [block];
-    }
-    return replacement === undefined ? [] : [replacement];
-  });
-  const contentRemoved = blocks.length === 0;
-  const changedHistory = clonedHistory.flatMap((entry, index) => {
-    if (index !== location.contentIndex) {
-      return [entry];
-    }
-    return contentRemoved ? [] : [{ ...entry, blocks: [...blocks] }];
-  });
+  const replacement = replacementBlock(
+    options,
+    sourceBlock,
+    sourceContent,
+    droppedAt,
+  );
+  const changedHistory = clonedHistory.map((entry, index) =>
+    index === location.contentIndex
+      ? {
+          ...entry,
+          blocks: entry.blocks.map((block, blockIndex) =>
+            blockIndex === location.blockIndex ? replacement : block,
+          ),
+        }
+      : entry,
+  );
+  // The purged block stays in place, so the positional frontier is its own
+  // location; the stable frontier then advances to the next image.
   const nextFrontier = stableFrontier(
     changedHistory,
-    nextValidFrontier(changedHistory, location, contentRemoved),
+    Object.freeze({
+      contentIndex: location.contentIndex,
+      blockIndex: location.blockIndex,
+    }),
   );
   const candidateHistory = [
     ...persistFrontierInHistory(
@@ -462,7 +461,12 @@ export class EagerSemanticPurgeOracle {
     if (location === undefined) {
       return undefined;
     }
-    const candidate = buildCandidateHistory(baseHistory, location, options);
+    const candidate = buildCandidateHistory(
+      baseHistory,
+      location,
+      options,
+      this.configuration.droppedAt,
+    );
     return new EagerPurgeOracleTransaction({
       candidateHistory: candidate.history,
       preImageBoundary: findPreImageBoundary(baseHistory, location),

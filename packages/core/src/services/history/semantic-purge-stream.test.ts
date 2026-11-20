@@ -16,6 +16,7 @@ import {
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
+import { expectedDroppedRow } from './__tests__/support/dropped-media-expectation.js';
 const historyScratchRoots = createTestScratchOwner();
 
 export function purgeRow(index: number, bytes = 2048): IContent {
@@ -83,6 +84,12 @@ async function collect(source: {
   for await (const row of source.streamRows()) rows.push(row);
   return rows;
 }
+async function firstRow(source: {
+  streamRows(): AsyncIterable<IContent>;
+}): Promise<IContent> {
+  for await (const row of source.streamRows()) return row;
+  throw new Error('Expected a candidate row');
+}
 
 async function verifyFullFixture(
   size: number,
@@ -101,18 +108,6 @@ async function verifyFullFixture(
         contentId: 'row-17',
         mediaId: 'image-17',
       };
-      const expected = input.map((row, index) => {
-        const metadata = { ...row.metadata };
-        if (row.speaker === 'ai') delete metadata.responsesStored;
-        return {
-          ...row,
-          blocks: index === 0 ? row.blocks.slice(0, -1) : row.blocks,
-          metadata:
-            index === 0
-              ? { ...metadata, semanticMediaPurgeFrontier: nextFrontier }
-              : metadata,
-        };
-      });
       const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
         enabled: true,
         explicitCacheWriteRequired: false,
@@ -121,6 +116,22 @@ async function verifyFullFixture(
       const transaction = await coordinator.begin({ mode: 'remove' });
       if (transaction === undefined)
         throw new Error('Missing streaming candidate');
+      const first = await firstRow(transaction.candidate);
+      const expected = input.map((row, index) => {
+        const metadata = { ...row.metadata };
+        if (row.speaker === 'ai') delete metadata.responsesStored;
+        return {
+          ...row,
+          blocks:
+            index === 0
+              ? expectedDroppedRow(row, first, row.blocks.length - 1)
+              : row.blocks,
+          metadata:
+            index === 0
+              ? { ...metadata, semanticMediaPurgeFrontier: nextFrontier }
+              : metadata,
+        };
+      });
       try {
         expect(await collect(transaction.candidate)).toStrictEqual(expected);
         expect(transaction.nextFrontier).toStrictEqual(nextFrontier);

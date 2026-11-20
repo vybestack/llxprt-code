@@ -4,6 +4,7 @@ import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js'
 import { rowsOf, exactTokenizer } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
 import { withPurgeFailureFixture } from './__tests__/support/purge-failure-fixture.js';
+import { expectedDroppedRow } from './__tests__/support/dropped-media-expectation.js';
 
 function image(id: string): IContent {
   return {
@@ -41,9 +42,12 @@ describe('semantic purge failures on journal', () => {
           await coordinator.commit(transaction, success);
           await history.waitForCommit();
           const saved = await persistedRows();
-          expect(saved[0].blocks).toStrictEqual([
-            { type: 'text', text: 'first' },
-          ]);
+          expect(saved[0].blocks).toStrictEqual(
+            expectedDroppedRow(image('first'), saved[0], 1),
+          );
+          expect(saved[0].blocks[1]).toMatchObject({
+            origin: { kind: 'pasted' },
+          });
           expect(saved[0].metadata?.semanticMediaPurgeFrontier).toStrictEqual(
             transaction.nextFrontier,
           );
@@ -89,8 +93,15 @@ describe('semantic purge failures on journal', () => {
           const candidate: IContent[] = [];
           for await (const row of transaction.candidate.streamRows())
             candidate.push(row);
-          expect(candidate).toHaveLength(1);
+          expect(candidate).toHaveLength(2);
           expect(candidate[0].blocks[1].type).toBe('media');
+          expect(candidate[1].blocks).toStrictEqual(
+            expectedDroppedRow(
+              { ...second, blocks: second.blocks.slice(1) },
+              candidate[1],
+              0,
+            ),
+          );
         } finally {
           await transaction.close();
         }

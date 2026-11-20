@@ -6,6 +6,8 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { streamSemanticPurgeRequest } from './streamRequestHelpers.js';
+import { droppedImageOf } from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+import { PURGE_DROPPED_AT } from './__tests__/support/semantic-purge-row-oracle.js';
 const historyScratchRoots = createTestScratchOwner();
 
 async function fixture(): Promise<{
@@ -33,6 +35,7 @@ async function fixture(): Promise<{
     ownership,
     mode: () => 'remove',
     persist: async () => {},
+    now: () => new Date(PURGE_DROPPED_AT),
   });
   const attempt = await session.begin(false);
   if (!attempt) {
@@ -54,6 +57,16 @@ describe('semantic request stream backpressure', () => {
       const first = await rows.next();
       expect(first.value?.blocks).toStrictEqual([
         { type: 'text', text: 'first' },
+        droppedImageOf(
+          {
+            type: 'media',
+            encoding: 'base64',
+            mimeType: 'image/png',
+            data: 'aW1hZ2U=',
+          },
+          { kind: 'pasted', readAt: PURGE_DROPPED_AT },
+          PURGE_DROPPED_AT,
+        ),
       ]);
       const suspended = ownership.snapshot();
       await new Promise((resolve) => setTimeout(resolve, 10));

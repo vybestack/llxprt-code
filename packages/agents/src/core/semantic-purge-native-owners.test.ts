@@ -52,7 +52,7 @@ async function seedOwnedHistory(
 
 describe('native semantic purge current source ownership', () => {
   for (const size of [3, 64, 65, 5000]) {
-    it(`preserves current owned and unowned source rows after a removed row at ${size}`, async () => {
+    it(`preserves current owned and unowned source rows after a dropped image at ${size}`, async () => {
       const history = new HistoryService({ scratchRoots: historyScratchRoots });
       history.setTokenizerFactory(exactTokenizer());
       const a = {};
@@ -86,9 +86,8 @@ describe('native semantic purge current source ownership', () => {
                 retryHandoff: false,
               }),
             ).toBe(true);
-            expect(await origins(history)).toStrictEqual(
-              before.filter((_, index) => index !== 1),
-            );
+            // The dropped image keeps its row, so every row keeps its owner.
+            expect(await origins(history)).toStrictEqual(before);
             await attempt.rollbackCommitted();
             expect(await origins(history)).toStrictEqual(before);
           } finally {

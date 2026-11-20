@@ -43,6 +43,8 @@ export interface SemanticPurgeStreamConfiguration {
     rows: SemanticPurgeRowSource,
     frontier: SemanticMediaPurgeFrontier,
   ) => Promise<void>;
+  /** The clock a removed image's drop time is read from. */
+  readonly now?: () => Date;
 }
 
 export class SemanticPurgeStreamTransaction {
@@ -219,6 +221,10 @@ export class SemanticMediaPurgeStreamCoordinator {
     return this.currentFrontier;
   }
 
+  private dropTime(): string {
+    return (this.configuration.now?.() ?? new Date()).toISOString();
+  }
+
   async begin(
     options: SemanticMediaPurgeOptions,
     signal?: AbortSignal,
@@ -232,6 +238,7 @@ export class SemanticMediaPurgeStreamCoordinator {
         const selected = await selectNativeSemanticPurge(
           snapshot,
           options,
+          this.dropTime(),
           signal,
           this.configuration.ownership,
         );
@@ -279,6 +286,7 @@ export class SemanticMediaPurgeStreamCoordinator {
         base,
         selected.location,
         options,
+        this.dropTime(),
         this.configuration.ownership,
       );
       return new SemanticPurgeStreamTransaction(

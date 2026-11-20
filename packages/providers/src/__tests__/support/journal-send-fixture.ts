@@ -168,12 +168,8 @@ export async function rawJournalSelection(
     if (closed) throw new Error('Raw journal selection is closed');
     signal?.throwIfAborted();
     assertRowIndex(index, count);
-    const original =
-      !explicit &&
-      candidate?.removed === true &&
-      index >= candidate.location.contentIndex
-        ? index + 1
-        : index;
+    // A purge drops the image in place, so request and source rows align.
+    const original = index;
     let row = await snapshot.readRow(original);
     if (
       !explicit &&

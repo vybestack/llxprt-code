@@ -11,7 +11,10 @@ import { orphanAdjacent } from './journal-orphan-slots.js';
 export function strippedSelf(row: IContent): IContent | undefined {
   if (!row.blocks.some((block) => block.type === 'tool_response')) return row;
   const blocks = row.blocks.filter(
-    (block) => block.type !== 'tool_response' && block.type !== 'media',
+    (block) =>
+      block.type !== 'tool_response' &&
+      block.type !== 'media' &&
+      block.type !== 'media_dropped',
   );
   return row.speaker === 'tool' || blocks.length === 0
     ? undefined

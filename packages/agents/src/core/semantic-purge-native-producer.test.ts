@@ -6,6 +6,8 @@ import { describe, expect, it } from 'bun:test';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import { droppedImageOf } from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+import { PURGE_DROPPED_AT } from './__tests__/support/semantic-purge-row-oracle.js';
 const historyScratchRoots = createTestScratchOwner();
 
 function rows(): IContent[] {
@@ -49,6 +51,7 @@ describe('native public semantic purge producer', () => {
           history,
           mode: () => 'remove',
           persist: async () => undefined,
+          now: () => new Date(PURGE_DROPPED_AT),
         });
         const receipt = await operationFileCreates(async () => {
           const attempt = await session.begin(false);
@@ -64,9 +67,16 @@ describe('native public semantic purge producer', () => {
             const after = await collect(history);
             expect(after.map(({ blocks }) => blocks)).toStrictEqual([
               rows()[0].blocks,
+              [
+                droppedImageOf(
+                  rows()[1].blocks[0],
+                  { kind: 'pasted', readAt: PURGE_DROPPED_AT },
+                  PURGE_DROPPED_AT,
+                ),
+              ],
               rows()[2].blocks,
             ]);
-            expect(after[1].metadata?.responsesStored).toBeUndefined();
+            expect(after[2].metadata?.responsesStored).toBeUndefined();
             await attempt.rollbackCommitted();
             expect(await collect(history)).toStrictEqual(before);
             expect(history.getTotalTokens()).toBe(tokens);

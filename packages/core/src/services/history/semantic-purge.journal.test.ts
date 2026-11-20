@@ -13,6 +13,10 @@ import {
 import { withNativePurgeFixture } from './__tests__/support/native-purge-fixture.js';
 import { batchGate } from './__tests__/support/addbatch-stream-test-helpers.js';
 import type { IContent } from './IContent.js';
+import {
+  expectedDroppedImage,
+  readFromFile,
+} from './__tests__/support/dropped-media-expectation.js';
 
 type Fixture = Parameters<Parameters<typeof withNativePurgeFixture>[0]>[0];
 const success = { status: 'success', cachePrefixWritten: true } as const;
@@ -62,11 +66,14 @@ async function failureOf(operation: Promise<void>): Promise<unknown> {
 }
 
 async function seed({ history, store, assertDurable }: Fixture) {
-  const image = await store.admit({
-    bytes: new Uint8Array([1]),
-    mimeType: 'image/png',
-    semanticMetadata: {},
-  });
+  const image = readFromFile(
+    await store.admit({
+      bytes: new Uint8Array([1]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    }),
+    '/workspace/prompt.png',
+  );
   const kept = await store.admit({
     bytes: new Uint8Array([2]),
     mimeType: 'application/octet-stream',
@@ -237,8 +244,12 @@ describe.each(failures)('native semantic purge with %s', (failure) => {
         const candidate = await collect(transaction.candidate);
         expect(candidate[0].blocks).toStrictEqual([
           { type: 'text', text: 'image prompt' },
+          expectedDroppedImage(input.image, candidate[0].blocks[1]),
           input.kept,
         ]);
+        expect(candidate[0].blocks[1]).toMatchObject({
+          origin: { kind: 'file', path: '/workspace/prompt.png' },
+        });
         rollback = await commitAndRollback(
           fixture,
           coordinator,

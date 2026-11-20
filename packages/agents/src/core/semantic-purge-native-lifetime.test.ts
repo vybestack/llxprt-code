@@ -7,6 +7,11 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import {
+  droppedImageOf,
+  expectedDroppedRow,
+} from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+import { PURGE_DROPPED_AT } from './__tests__/support/semantic-purge-row-oracle.js';
 const historyScratchRoots = createTestScratchOwner();
 
 function row(index: number, text = `surviving value ${index}`): IContent {
@@ -116,17 +121,19 @@ async function observePublication(
     }, true);
     expect(receipt).toStrictEqual({ directories: [], files: [] });
     await collectGarbage();
-    expect(refs.length).toBe(size - 1);
+    expect(refs.length).toBe(size);
     expect(samples).toBeGreaterThan(0);
     const final = live(refs);
     let index = 0;
     for await (const content of history.streamRawHistory()) {
       expect(content.blocks).toStrictEqual(
-        row(index === 0 ? 0 : index + 1).blocks,
+        index === 1
+          ? expectedDroppedRow(row(1), content, 0)
+          : row(index).blocks,
       );
       index++;
     }
-    expect(index).toBe(size - 1);
+    expect(index).toBe(size);
     process.stdout.write(
       `PURGE_LIFETIME ${JSON.stringify({ size, outputs: refs.length, samples, peak, final })}\n`,
     );
@@ -152,10 +159,10 @@ describe('native semantic purge output lifetimes', () => {
             size,
             trap ? retained : undefined,
           );
-          expect(result.outputs).toBe(size - 1);
+          expect(result.outputs).toBe(size);
           expect(result.peak <= LIVE_OUTPUT_BOUND).toBe(!trap);
-          expect(result.final).toBe(trap ? size - 1 : 0);
-          expect(retained.length).toBe(trap ? size - 1 : 0);
+          expect(result.final).toBe(trap ? size : 0);
+          expect(retained.length).toBe(trap ? size : 0);
         } finally {
           await history.dispose();
         }
@@ -172,6 +179,7 @@ describe('native semantic purge output lifetimes', () => {
         history,
         mode: () => 'remove',
         persist: async () => undefined,
+        now: () => new Date(PURGE_DROPPED_AT),
       });
       const receipt = await operationFileCreates(async () => {
         const attempt = await session.begin(false);
@@ -193,7 +201,17 @@ describe('native semantic purge output lifetimes', () => {
       const contents: Array<IContent['blocks']> = [];
       for await (const content of history.streamRawHistory())
         contents.push(content.blocks);
-      expect(contents).toStrictEqual([row(0, text).blocks, row(2).blocks]);
+      expect(contents).toStrictEqual([
+        row(0, text).blocks,
+        [
+          droppedImageOf(
+            row(1).blocks[0],
+            { kind: 'pasted', readAt: PURGE_DROPPED_AT },
+            PURGE_DROPPED_AT,
+          ),
+        ],
+        row(2).blocks,
+      ]);
     } finally {
       await history.dispose();
     }

@@ -3,7 +3,10 @@ import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__te
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
-import { expectedSemanticPurge } from './__tests__/support/semantic-purge-row-oracle.js';
+import {
+  expectedSemanticPurge,
+  PURGE_DROPPED_AT,
+} from './__tests__/support/semantic-purge-row-oracle.js';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
@@ -162,6 +165,7 @@ describe('native semantic purge independent eager policy parity', () => {
           history,
           mode: () => mode,
           persist: async () => undefined,
+          now: () => new Date(PURGE_DROPPED_AT),
         });
         for (let round = 0; round < 3; round++) {
           const expected = expectedSemanticPurge(oracleRows, mode);

@@ -14,6 +14,25 @@ import {
   projectOpenAIChatPromptEnvelopeFromSource,
 } from '../../../providers/src/runtime/promptEnvelopeProjections.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
+import { droppedMediaModelText } from '@vybestack/llxprt-code-core/services/history/droppedMediaText.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { droppedImageOf } from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+import { PURGE_DROPPED_AT } from './__tests__/support/semantic-purge-row-oracle.js';
+
+const image: ContentBlock = {
+  type: 'media',
+  encoding: 'base64',
+  mimeType: 'image/png',
+  data: 'aW1hZ2U=',
+};
+// The purged pasted image reaches the model as its reference text.
+const droppedText = droppedMediaModelText(
+  droppedImageOf(
+    image,
+    { kind: 'pasted', readAt: PURGE_DROPPED_AT },
+    PURGE_DROPPED_AT,
+  ),
+);
 
 describe('native purge warm selected-view planning', () => {
   it.each([40, 4000])(
@@ -27,15 +46,7 @@ describe('native purge warm selected-view planning', () => {
                 speaker: 'human' as const,
                 blocks:
                   index === 0
-                    ? [
-                        { type: 'text' as const, text: 'kept' },
-                        {
-                          type: 'media' as const,
-                          encoding: 'base64' as const,
-                          mimeType: 'image/png',
-                          data: 'aW1hZ2U=',
-                        },
-                      ]
+                    ? [{ type: 'text' as const, text: 'kept' }, image]
                     : [{ type: 'text' as const, text: 'unchanged' }],
               };
           })(),
@@ -47,6 +58,7 @@ describe('native purge warm selected-view planning', () => {
           history,
           mode: () => 'remove',
           persist: async () => undefined,
+          now: () => new Date(PURGE_DROPPED_AT),
         });
         const attempt = await purge.begin(false);
         if (attempt === undefined) throw new Error('Missing native purge');
@@ -59,7 +71,7 @@ describe('native purge warm selected-view planning', () => {
             { role: 'system', content: '' },
             ...Array.from({ length: size }, (_value, index) => ({
               role: 'user',
-              content: index === 0 ? 'kept' : 'unchanged',
+              content: index === 0 ? `kept\n${droppedText}` : 'unchanged',
             })),
           ],
         };

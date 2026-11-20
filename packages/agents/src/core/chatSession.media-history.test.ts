@@ -23,6 +23,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
+import { expectedDroppedImage } from '../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
 import {
   mediaHistory,
   mediaHistoryShape,
@@ -271,15 +272,16 @@ async function testMediaHistory5(): Promise<void> {
   await sendOwned(fixture, 'next', 'purge-success');
   await fixture.recording.flush();
 
+  // The stored image becomes a reference; the URL image has no stored bytes.
+  const source = mediaHistory()[0].blocks;
   const firstRequestBlocks = fixture.requests[0]?.[0]?.blocks;
   expect(firstRequestBlocks).toStrictEqual([
-    {
-      type: 'media',
-      mimeType: 'image/png',
-      encoding: 'url',
-      data: 'https://example.test/image.png',
-    },
+    expectedDroppedImage(source[0], firstRequestBlocks[0]),
+    source[1],
   ]);
+  expect(firstRequestBlocks[0]).toMatchObject({
+    origin: { kind: 'pasted' },
+  });
   expect(
     (await collectHistoryFixture(fixture.chat.getHistory()))[0]?.blocks,
   ).toStrictEqual(firstRequestBlocks);
@@ -346,12 +348,12 @@ async function testMediaHistory8(): Promise<void> {
     fixture.requests[0]?.[0]?.blocks.map((block) =>
       block.type === 'media' ? block.encoding : block.type,
     ),
-  ).toStrictEqual(['url']);
+  ).toStrictEqual(['media_dropped', 'url']);
   expect(
     (await collectHistoryFixture(fixture.chat.getHistory()))[0]?.blocks.map(
       (block) => (block.type === 'media' ? block.encoding : block.type),
     ),
-  ).toStrictEqual(['url']);
+  ).toStrictEqual(['media_dropped', 'url']);
   await fixture.recording.dispose();
 }
 
@@ -411,10 +413,12 @@ async function testMediaHistory11(): Promise<void> {
 
   await sendOwned(fixture, 'next', 'purge-cache-write');
 
-  expect(
-    (await collectHistoryFixture(fixture.chat.getHistory()))[0]?.blocks,
-  ).toStrictEqual([
+  const source = prefixedMediaHistory()[0].blocks;
+  const stored = (await collectHistoryFixture(fixture.chat.getHistory()))[0]
+    ?.blocks;
+  expect(stored).toStrictEqual([
     { type: 'text', text: 'stable prefix' },
+    expectedDroppedImage(source[1], stored[1]),
     {
       type: 'media',
       mimeType: 'image/png',
@@ -554,11 +558,19 @@ async function testMediaHistory16(): Promise<void> {
   const [firstRequest, secondRequest] = fixture.requests;
   assertDefined(firstRequest, 'first message never reached the transport');
   assertDefined(secondRequest, 'second message never reached the transport');
-  expect(mediaEncodings(firstRequest)).toStrictEqual(['url']);
-  expect(mediaEncodings(secondRequest)).toStrictEqual([]);
+  // The first purge drops the stored image to a reference; the second finds
+  // only the URL image, which has no stored bytes to drop.
+  expect(mediaHistoryShape(firstRequest).slice(0, 2)).toStrictEqual([
+    'media_dropped',
+    'url',
+  ]);
+  expect(mediaHistoryShape(secondRequest).slice(0, 2)).toStrictEqual([
+    'media_dropped',
+    'url',
+  ]);
   expect(
     mediaEncodings(await collectHistoryFixture(fixture.chat.getHistory())),
-  ).toStrictEqual([]);
+  ).toStrictEqual(['url']);
   await fixture.recording.dispose();
 }
 
