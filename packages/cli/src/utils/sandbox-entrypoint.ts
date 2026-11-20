@@ -9,6 +9,7 @@ import { quote } from 'shell-quote';
 import {
   buildCapabilityFileCapture,
   CAPABILITY_CONTAINER_DIR,
+  CAPABILITY_VARIABLE_RESET,
   CAPABILITY_FD_REOPEN,
 } from './sandbox-capability-container.js';
 import {
@@ -92,14 +93,16 @@ function resolveCliCommand(workdir: string): string {
  * Either way the token ends in the unexported shell variable `__llxprt_cap`,
  * the transport markers are ALWAYS unset so no later process can observe
  * them, and no descriptor holding the token stays open. `__llxprt_cap` is
- * reset first so an inherited variable cannot stand in for the file. Prefixes
- * and socat relays are composed INTO this script AFTER the capture stanza.
+ * reset first (see CAPABILITY_VARIABLE_RESET) so an inherited variable can
+ * neither stand in for the file nor carry its export attribute onto the
+ * token. Prefixes and socat relays are composed INTO this script AFTER the
+ * capture stanza.
  *
  * @plan project-plans/issue-1954-sandbox-hardening.md (AC2, AC3, F1, F7)
  */
 function buildCapabilityCaptureStanza(capabilityMountDir: string): string {
   return [
-    "__llxprt_cap=''",
+    ...CAPABILITY_VARIABLE_RESET,
     'if [ "${LLXPRT_CAPABILITY_FD-}" = "3" ]; then',
     // O21: fail fast if fd 3 is marked but cannot be read.
     '  if ! { IFS= read -r __llxprt_cap <&3; } 2>/dev/null; then',

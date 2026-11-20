@@ -23,6 +23,7 @@ import {
   buildCapabilityFileCapture,
   CAPABILITY_CONTAINER_DIR,
   CAPABILITY_FD_REOPEN,
+  CAPABILITY_VARIABLE_RESET,
   shellSingleQuote,
 } from './sandbox-capability-container.js';
 import {
@@ -575,7 +576,7 @@ export async function setupContainerUser(
       "'\\''",
     );
     finalEntrypoint[scriptIdx] = [
-      "__llxprt_cap=''",
+      ...CAPABILITY_VARIABLE_RESET,
       'unset LLXPRT_CAPABILITY_TOKEN LLXPRT_CAPABILITY_FD',
       buildCapabilityFileCapture(capabilityMountDir, 'opportunistic'),
       `{ ${setupUserCommands}; } 3<&-`,

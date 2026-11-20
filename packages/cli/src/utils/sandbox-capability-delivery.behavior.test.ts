@@ -183,9 +183,16 @@ function installStandInPrefix(ws: Workspace): string {
  * that lets the host uid read a file root could not (rootful Docker).
  */
 function installPrivilegedToolStandIns(ws: Workspace): void {
-  for (const tool of ['groupadd', 'useradd', 'chown']) {
+  for (const tool of ['useradd', 'chown']) {
     writeExecutable(path.join(ws.binDir, tool), ['#!/bin/sh', 'exit 0']);
   }
+  // groupadd runs in the root setup stanza after the capture. It records
+  // whether the shell variable that holds the token reached its environment.
+  writeExecutable(path.join(ws.binDir, 'groupadd'), [
+    '#!/bin/sh',
+    `if printenv __llxprt_cap >/dev/null 2>&1; then echo present > ${JSON.stringify(path.join(ws.reportDir, 'setup.capenv'))}; fi`,
+    'exit 0',
+  ]);
   writeExecutable(path.join(ws.binDir, 'id'), ['#!/bin/sh', 'exit 0']);
   writeExecutable(path.join(ws.binDir, 'su'), [
     '#!/usr/bin/env bash',
@@ -550,6 +557,52 @@ describe('capability delivery through the mount (#3573)', () => {
 
       expectDeliveredOnlyOnFd3(result);
       expect(fs.existsSync(ws.tokenFile)).toBe(false);
+    });
+
+    describe('an inherited exported __llxprt_cap', () => {
+      // Bash keeps the export attribute of a variable that arrives in the
+      // environment, so assigning the token to it would hand the token to
+      // every process started before the final exec.
+      const inherited = { __llxprt_cap: 'f'.repeat(64) };
+
+      it('image-user mode: the token reaches no prefix environment', async () => {
+        const result = await runEntrypoint(ws, token, {
+          mode: 'image-user',
+          usePrefix: true,
+          extraEnv: inherited,
+        });
+
+        expectDeliveredOnlyOnFd3(result);
+        expectPrefixSawNothing();
+        expectNoTokenAnywhere(result);
+      });
+
+      it('current-user mode: the token reaches neither the setup tools nor the prefix', async () => {
+        const result = await runEntrypoint(ws, token, {
+          mode: 'current-user',
+          usePrefix: true,
+          extraEnv: inherited,
+        });
+
+        expect(readReport(ws, 'su.ran')).toBeDefined();
+        expect(readReport(ws, 'setup.capenv')).toBeUndefined();
+        expectDeliveredOnlyOnFd3(result);
+        expectPrefixSawNothing();
+        expectNoTokenAnywhere(result);
+      });
+
+      it('allexport inherited through SHELLOPTS does not export the token either', async () => {
+        const result = await runEntrypoint(ws, token, {
+          mode: 'current-user',
+          usePrefix: true,
+          extraEnv: { SHELLOPTS: 'allexport' },
+        });
+
+        expect(readReport(ws, 'setup.capenv')).toBeUndefined();
+        expectDeliveredOnlyOnFd3(result);
+        expectPrefixSawNothing();
+        expectNoTokenAnywhere(result);
+      });
     });
   });
 });

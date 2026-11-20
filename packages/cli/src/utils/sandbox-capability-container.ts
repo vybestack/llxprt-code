@@ -53,14 +53,30 @@ function captureFailure(mode: CapabilityFileCaptureMode, message: string) {
 }
 
 /**
+ * Starts every capture site with a variable that is empty and NOT exported.
+ * Bash keeps the export attribute of a variable that arrives in the
+ * environment, and an empty assignment does not clear it, so the token would
+ * be exported to every process started before the final exec (prefixes,
+ * relays, the root setup tools). `unset` removes the attribute with the
+ * value, and `set +a` stops an `allexport` option imported through SHELLOPTS
+ * from exporting the later assignment. The caller captures into the variable
+ * afterwards.
+ */
+export const CAPABILITY_VARIABLE_RESET: readonly string[] = [
+  'set +a',
+  'unset __llxprt_cap',
+  "__llxprt_cap=''",
+];
+
+/**
  * Opens the capability file on fd 4, unlinks it, reads the token into the
  * unexported shell variable `__llxprt_cap`, and closes fd 4. The file is
  * unlinked before anything is read from it, so the on-disk entry is gone
  * before any other process can start. Reading uses the `read` builtin, so no
  * temporary file, here-string, or argv ever carries the token.
  *
- * The caller must set `__llxprt_cap=''` first so an inherited variable cannot
- * stand in for the file.
+ * The caller must run CAPABILITY_VARIABLE_RESET first so an inherited variable
+ * can neither stand in for the file nor export the token.
  */
 export function buildCapabilityFileCapture(
   mountDir: string,
