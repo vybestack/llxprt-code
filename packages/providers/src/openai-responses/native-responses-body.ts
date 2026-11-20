@@ -51,6 +51,7 @@ import { NativeResponsesEstimateProjection } from './native-responses-estimate.j
 import {
   NativeDumpBody,
   nativeDumpLiteral,
+  nativeDumpSeparatedValue,
   nativeDumpValue,
   type NativeDumpPiece,
 } from '../utils/native-dump-body.js';
@@ -259,8 +260,7 @@ export class NativeResponsesPrompt {
           counter,
           this.selection.skipRows,
         )) {
-          yield nativeDumpLiteral(separator);
-          yield* nativeDumpValue(item);
+          yield* nativeDumpSeparatedValue(separator, item);
           separator = ',';
         }
       }
@@ -277,8 +277,7 @@ export class NativeResponsesPrompt {
     else {
       let separator = '';
       for await (const item of this.items()) {
-        yield nativeDumpLiteral(separator);
-        yield* nativeDumpValue(item);
+        yield* nativeDumpSeparatedValue(separator, item);
         separator = ',';
       }
     }

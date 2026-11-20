@@ -63,6 +63,22 @@ export function* nativeDumpValue(
   }
 }
 
+/**
+ * `separator` then `value`, as one sequence. A JavaScriptCore generator keeps
+ * the iterator of its last `yield*` in a frame register until the next
+ * `yield*` replaces it, so a list loop that yields its separator on its own
+ * pauses there still holding the previous value's serializer, and through it
+ * the previous value. Delegating to one sequence per value replaces that
+ * register before the separator is yielded.
+ */
+export function* nativeDumpSeparatedValue(
+  separator: string,
+  value: unknown,
+): Generator<NativeDumpPiece> {
+  yield nativeDumpLiteral(separator);
+  yield* nativeDumpValue(value);
+}
+
 export class NativeDumpBody {
   private writer: NativeDumpWriter | undefined;
   private sent = false;

@@ -1,9 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { gcAndSweep } from 'bun:jsc';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { NativeDumpBody, nativeDumpLiteral } from './native-dump-body.js';
+import {
+  NativeDumpBody,
+  nativeDumpLiteral,
+  nativeDumpSeparatedValue,
+  nativeDumpValue,
+  type NativeDumpPiece,
+} from './native-dump-body.js';
 import { dumpSDKRequestContext } from './dumpSDKContext.js';
 
 describe('native dump stream cleanup', () => {
@@ -82,5 +90,64 @@ describe('native dump stream cleanup', () => {
       join(result.dumpDir, result.requestFilename),
     ).json();
     expect(dump).toMatchObject({ request: { body: { messages: [] } } });
+  });
+});
+
+type ListPieces = (
+  values: AsyncIterable<{ readonly content: string }>,
+) => AsyncGenerator<NativeDumpPiece>;
+
+/**
+ * Serializes three list values and, while the consumer holds each `,`
+ * separator, collects garbage and reports which values are still live.
+ */
+async function liveValuesAtSeparators(list: ListPieces): Promise<boolean[][]> {
+  const values: Array<WeakRef<object>> = [];
+  async function* source(): AsyncGenerator<{ readonly content: string }> {
+    for (let index = 0; index < 3; index++) {
+      await sleep(0);
+      const value = { content: `${index}:`.padEnd(64 * 1024, '雪') };
+      values.push(new WeakRef(value));
+      yield value;
+    }
+  }
+  const live: boolean[][] = [];
+  for await (const piece of list(source())) {
+    if (Buffer.from(piece.wire).toString() !== ',') continue;
+    await sleep(0);
+    gcAndSweep();
+    live.push(values.map((value) => value.deref() !== undefined));
+  }
+  return live;
+}
+
+describe('native dump list values', () => {
+  it('holds only the value whose separator the consumer is reading', async () => {
+    const live = await liveValuesAtSeparators(async function* (values) {
+      let separator = '';
+      for await (const value of values) {
+        yield* nativeDumpSeparatedValue(separator, value);
+        separator = ',';
+      }
+    });
+    expect(live).toStrictEqual([
+      [false, true],
+      [false, false, true],
+    ]);
+  });
+
+  it('detects the previous value a separator yielded on its own keeps live', async () => {
+    const live = await liveValuesAtSeparators(async function* (values) {
+      let separator = '';
+      for await (const value of values) {
+        yield nativeDumpLiteral(separator);
+        yield* nativeDumpValue(value);
+        separator = ',';
+      }
+    });
+    expect(live).toStrictEqual([
+      [true, true],
+      [false, true, true],
+    ]);
   });
 });
