@@ -418,15 +418,30 @@ describe('#1456 credential proxy network policy', () => {
         async () => {
           const result = await invocation.promise;
           cleanup = result.credentialProxyBridgeCleanup;
-          const envFile = argumentOrEmpty(invocation.args, 3);
+          // The capability reaches the container as a read-write bind mount of
+          // the host-only directory at a fixed private path; there is no
+          // --env-file, so the token never enters the container's create
+          // configuration. Podman adds the shared SELinux label.
+          const mountSpec = argumentOrEmpty(invocation.args, 3);
+          const mountSuffix = `:/run/llxprt-capability:${command === 'podman' ? 'rw,z' : 'rw'}`;
+          const hostDir = mountSpec.slice(
+            0,
+            Math.max(0, mountSpec.length - mountSuffix.length),
+          );
           const platformSocket = credentialSocketForPlatform(socket, tmpDir);
           expect(invocation.args).toStrictEqual([
             '--env',
             `LLXPRT_CREDENTIAL_SOCKET=${platformSocket}`,
-            '--env-file',
-            envFile,
+            '--volume',
+            `${hostDir}${mountSuffix}`,
           ]);
-          expect(fs.existsSync(envFile)).toBe(true);
+          expect(fs.readFileSync(path.join(hostDir, 'token'), 'utf8')).toBe(
+            `${CAPABILITY_TOKEN}\n`,
+          );
+          expect(invocation.args).not.toContain('--env-file');
+          expect(JSON.stringify(invocation.args)).not.toContain(
+            CAPABILITY_TOKEN,
+          );
           expect(invocation.prefixes).toStrictEqual(
             prefix as unknown as string[],
           );

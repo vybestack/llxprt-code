@@ -7,6 +7,12 @@
 import os from 'node:os';
 import { quote } from 'shell-quote';
 import {
+  buildCapabilityFileCapture,
+  CAPABILITY_CONTAINER_DIR,
+  CAPABILITY_VARIABLE_RESET,
+  CAPABILITY_FD_REOPEN,
+} from './sandbox-capability-container.js';
+import {
   getContainerPath,
   sandboxPorts,
   isSandboxDebugModeEnabled,
@@ -37,24 +43,6 @@ function buildPathSuffix(
   return suffix;
 }
 
-function buildSourceDependencyPreparation(workdir: string): string | undefined {
-  if (!isSourceDevelopmentWorkdir(workdir)) return undefined;
-  return [
-    'if [ ! -f package.json ] || [ ! -f bun.lock ]; then',
-    '  echo "LLxprt source development requires package.json and bun.lock in the repository root" >&2',
-    '  exit 1',
-    'fi',
-    'if ! command -v bun >/dev/null 2>&1; then',
-    '  echo "LLxprt source development requires Bun in the sandbox image" >&2',
-    '  exit 1',
-    'fi',
-    'if ! bun install --no-save; then',
-    '  echo "Failed to prepare isolated Linux dependencies for LLxprt source development" >&2',
-    '  exit 1',
-    'fi',
-  ].join(NL);
-}
-
 function resolveCliCommand(workdir: string): string {
   const isDebugMode = isSandboxDebugModeEnabled(process.env.DEBUG);
   const debugPort = resolveDebugPort();
@@ -78,33 +66,48 @@ function resolveCliCommand(workdir: string): string {
 
 /**
  * The trusted capability-capture stanza. It runs BEFORE any prefix/bridge
- * process, project-controlled code, or final CLI. It captures the token into
- * an unexported shell variable from fd 3 (current-user path) or from
- * `LLXPRT_CAPABILITY_TOKEN` (env-file path), ALWAYS unsets the env value so
- * no later process can observe it, and records whether a token was present so
- * the final exec only re-opens fd 3 when a token exists. Prefixes and socat
- * relays are composed INTO this script AFTER the capture stanza.
+ * process, project-controlled code, or final CLI. The token arrives in one of
+ * two ways, and neither is the container environment:
+ * - fd 3, when the current-user wrapper (setupContainerUser) already opened
+ *   the capability file as root and passed the token on to the dropped user;
+ * - the capability file in the bind-mounted host-only directory, which this
+ *   stanza opens, unlinks, and reads with the `read` builtin (#3573).
+ * Either way the token ends in the unexported shell variable `__llxprt_cap`,
+ * the transport markers are ALWAYS unset so no later process can observe
+ * them, and no descriptor holding the token stays open. `__llxprt_cap` is
+ * reset first (see CAPABILITY_VARIABLE_RESET) so an inherited variable can
+ * neither stand in for the file nor carry its export attribute onto the
+ * token. Prefixes and socat relays are composed INTO this script AFTER the
+ * capture stanza.
  *
  * @plan project-plans/issue-1954-sandbox-hardening.md (AC2, AC3, F1, F7)
  */
-const CAPABILITY_CAPTURE_STANZA = [
-  'if [ "${LLXPRT_CAPABILITY_FD-}" = "3" ]; then',
-  // O21: fail fast if fd 3 is marked but cannot be read.
-  '  if ! { IFS= read -r __llxprt_cap <&3; } 2>/dev/null; then',
-  '    echo "Capability descriptor fd 3 is marked but cannot be read" >&2',
-  '    unset LLXPRT_CAPABILITY_TOKEN LLXPRT_CAPABILITY_FD',
-  '    exit 1',
-  '  fi',
-  '  exec 3<&-',
-  'elif [ -n "${LLXPRT_CAPABILITY_FD-}" ]; then',
-  '  echo "Invalid LLXPRT_CAPABILITY_FD marker" >&2',
-  '  exit 1',
-  'else',
-  '  __llxprt_cap="${LLXPRT_CAPABILITY_TOKEN-}"',
-  'fi',
-  // F7: ALWAYS scrub the transport markers before any prefix/bridge.
-  'unset LLXPRT_CAPABILITY_TOKEN LLXPRT_CAPABILITY_FD',
-].join(NL);
+function buildCapabilityCaptureStanza(capabilityMountDir: string): string {
+  return [
+    ...CAPABILITY_VARIABLE_RESET,
+    'if [ "${LLXPRT_CAPABILITY_FD-}" = "3" ]; then',
+    // O21: fail fast if fd 3 is marked but cannot be read.
+    '  if ! { IFS= read -r __llxprt_cap <&3; } 2>/dev/null; then',
+    '    echo "Capability descriptor fd 3 is marked but cannot be read" >&2',
+    '    unset LLXPRT_CAPABILITY_TOKEN LLXPRT_CAPABILITY_FD',
+    '    exit 1',
+    '  fi',
+    '  exec 3<&-',
+    'elif [ -n "${LLXPRT_CAPABILITY_FD-}" ]; then',
+    '  echo "Invalid LLXPRT_CAPABILITY_FD marker" >&2',
+    '  exit 1',
+    'else',
+    buildCapabilityFileCapture(capabilityMountDir, 'required')
+      .split(NL)
+      .map((line) => `  ${line}`)
+      .join(NL),
+    'fi',
+    // F7: ALWAYS scrub the transport markers before any prefix/bridge. The
+    // token itself is never read from LLXPRT_CAPABILITY_TOKEN; the unset only
+    // keeps an injected value from reaching later processes.
+    'unset LLXPRT_CAPABILITY_TOKEN LLXPRT_CAPABILITY_FD',
+  ].join(NL);
+}
 
 /**
  * Pins the container-local data/cache/log roots to the REAL container HOME.
@@ -131,10 +134,12 @@ export const XDG_HOME_PIN_STANZA = [
 ].join(NL);
 
 /**
- * Builds the final CLI exec stanza. Opens fd 3 and sets `LLXPRT_CAPABILITY_FD=3`
- * only when a capability token was captured; otherwise execs the CLI without
- * capability transport (tokenless path). The captured shell variable is unset
- * before exec so it does not persist into the CLI's shell environment.
+ * Builds the final CLI exec stanza. Opens fd 3 on a pipe and sets
+ * `LLXPRT_CAPABILITY_FD=3` only when a capability token was captured;
+ * otherwise execs the CLI without capability transport (tokenless path). The
+ * captured shell variable is unset before exec so it does not persist into
+ * the CLI's shell environment. fd 3 is opened here, after every prefix,
+ * bridge and relay has started, so only the CLI inherits it.
  *
  * @plan project-plans/issue-1954-sandbox-hardening.md (AC2, F7)
  */
@@ -143,7 +148,7 @@ function buildFinalExec(cliCmd: string, quotedCliArgs: string[]): string {
     quotedCliArgs.length > 0 ? `${cliCmd} ${quotedCliArgs.join(' ')}` : cliCmd;
   return [
     'if [ -n "${__llxprt_cap}" ]; then',
-    '  exec 3<<<"${__llxprt_cap}"',
+    `  ${CAPABILITY_FD_REOPEN}`,
     '  unset __llxprt_cap',
     `  LLXPRT_CAPABILITY_FD=3 exec ${fullCmd}`,
     'else',
@@ -151,6 +156,15 @@ function buildFinalExec(cliCmd: string, quotedCliArgs: string[]): string {
     `  exec ${fullCmd}`,
     'fi',
   ].join(NL);
+}
+
+export interface EntrypointOptions {
+  /**
+   * Where the capability directory is mounted in the container. Production
+   * uses the fixed private path; tests point it at a temporary directory.
+   * setupContainerUser must be given the same value.
+   */
+  readonly capabilityMountDir?: string;
 }
 
 /**
@@ -173,6 +187,7 @@ export function entrypoint(
   skipPortRelays?: Set<string>,
   entrypointPrefixes?: string[],
   checkpointStoreStanza?: string,
+  options: EntrypointOptions = {},
 ): string[] {
   const isWindows = os.platform() === 'win32';
   const containerWorkdir = getContainerPath(workdir);
@@ -180,7 +195,11 @@ export function entrypoint(
   const pathSeparator = isWindows ? ';' : ':';
 
   // STEP 1 (security): capture and scrub the capability BEFORE anything else.
-  shellCmds.push(CAPABILITY_CAPTURE_STANZA);
+  shellCmds.push(
+    buildCapabilityCaptureStanza(
+      options.capabilityMountDir ?? CAPABILITY_CONTAINER_DIR,
+    ),
+  );
 
   // STEP 1.5: pin the container-local data/cache/log roots to the real
   // container HOME before the CLI is exec'd on every path this entrypoint
@@ -240,13 +259,13 @@ export function entrypoint(
 
   const quotedCliArgs = cliArgs.slice(2).map((arg) => quote([arg]));
   const cliCmd = resolveCliCommand(workdir);
-  const sourceDependencyPreparation = buildSourceDependencyPreparation(workdir);
-  if (sourceDependencyPreparation !== undefined) {
-    shellCmds.push(sourceDependencyPreparation);
-  }
+  // A source checkout's `bun install` is not a step here: it runs in a
+  // separate container that never receives the capability (see
+  // sandbox-dependency-preparation.ts), so no project-controlled code runs
+  // between the capture and the final exec.
 
-  // STEP 3: re-open fd 3 with the scrubbed capability (only when present) and
-  // exec the final CLI.
+  // STEP 3: re-open fd 3 from a pipe carrying the captured capability (only
+  // when present) and exec the final CLI.
   shellCmds.push(buildFinalExec(cliCmd, quotedCliArgs));
 
   // The outer invocation disables implicit Bash startup files (--noprofile

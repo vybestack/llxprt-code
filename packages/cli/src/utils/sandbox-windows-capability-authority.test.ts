@@ -6,15 +6,16 @@
 
 /**
  * Behavioral tests for the capability delivery path a WINDOWS host uses
- * (#3841 review item E11). On Windows the sandbox is a Linux container, so the
- * host cannot hand the CLI a descriptor of its own: it writes `capability.env`
- * and Docker/Podman load it with `--env-file`. Inside the container the trusted
- * entrypoint's env branch captures `LLXPRT_CAPABILITY_TOKEN`, unsets the
- * transport variables, re-opens descriptor 3, and execs the CLI. Everything
- * after the host file runs under bash in Linux, so this suite drives that
- * stretch on macOS and Linux CI: the host producer is real
- * (`createHostOnlyCapabilityEnvFile`), the entrypoint is the REAL generated
- * command array (which composes CAPABILITY_CAPTURE_STANZA verbatim), and the
+ * (#3841 review item E11, reworked for #3573). On Windows the sandbox is a
+ * Linux container, so the host cannot hand the CLI a descriptor of its own:
+ * it writes the token to a file in a host-only directory and Docker/Podman
+ * bind-mount that directory at a fixed private path. Inside the container the
+ * trusted entrypoint opens the file, unlinks it, re-opens descriptor 3 from a
+ * pipe, and execs the CLI. The container's create configuration never holds
+ * the token. Everything after the host file runs under bash in Linux, so this
+ * suite drives that stretch on macOS and Linux CI: the host producer is real
+ * (`createHostOnlyCapabilityMount`), the entrypoint is the REAL generated
+ * command array with its mount path pointed at the host directory, and the
  * consumer is the real `HostCredentialOwner` in a spawned Bun process standing
  * in for the CLI.
  *
@@ -31,7 +32,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { STORAGE_ENV_KEYS } from '@vybestack/llxprt-code-storage/testing';
-import { createHostOnlyCapabilityEnvFile } from './sandbox-capability.js';
+import { createHostOnlyCapabilityMount } from './sandbox-capability.js';
 import { entrypoint } from './sandbox-entrypoint.js';
 import { CredentialProxyServer } from '../../../providers/src/auth/proxy/credential-proxy-server.js';
 import {
@@ -47,7 +48,7 @@ const posixDescriptorHost = process.platform !== 'win32';
 const VALID_TOKEN = 'a1b2'.repeat(16);
 
 const PROVIDER_KEY_NAME = 'primary';
-const PROVIDER_KEY_VALUE = 'primary-key-through-env-file';
+const PROVIDER_KEY_VALUE = 'primary-key-through-capability-mount';
 
 /**
  * Control variable proving the child's environment dump really reaches the
@@ -77,7 +78,8 @@ interface Delivery {
   readonly command: string[];
   readonly env: NodeJS.ProcessEnv;
   readonly cwd: string;
-  readonly envFilePath: string;
+  readonly tokenFilePath: string;
+  readonly mountArgs: readonly string[];
   readonly sentinel: string;
   readonly release: () => void;
 }
@@ -85,27 +87,6 @@ interface Delivery {
 interface ProxyHandle {
   readonly socketPath: string;
   readonly stop: () => Promise<void>;
-}
-
-/**
- * Reads the env file the way `docker --env-file` and `podman --env-file` do:
- * one KEY=VALUE per line, blank lines and `#` comments ignored, split at the
- * FIRST `=`. Docker does no quote processing, so neither does this.
- */
-function parseDockerEnvFile(envFilePath: string): Record<string, string> {
-  const assignments: Record<string, string> = {};
-  const lines = fs
-    .readFileSync(envFilePath, 'utf8')
-    .split('\n')
-    .filter((line) => line !== '' && !line.startsWith('#'));
-  for (const line of lines) {
-    const separator = line.indexOf('=');
-    if (separator <= 0) {
-      throw new Error(`Env-file line has no KEY=VALUE form: ${line}`);
-    }
-    assignments[line.slice(0, separator)] = line.slice(separator + 1);
-  }
-  return assignments;
 }
 
 function shellQuote(value: string): string {
@@ -165,7 +146,7 @@ async function startProxy(capabilityToken: string): Promise<ProxyHandle> {
   };
 }
 
-describe('windows capability delivery through capability.env', () => {
+describe('windows capability delivery through the capability mount', () => {
   let tmpDir = '';
   let binDir = '';
   let workdir = '';
@@ -176,7 +157,7 @@ describe('windows capability delivery through capability.env', () => {
     environmentSnapshot = { ...process.env };
     delete process.env.SANDBOX_PORTS;
     delete process.env.DEBUG;
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-envfile-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-mount-'));
     binDir = path.join(tmpDir, 'bin');
     workdir = path.join(tmpDir, 'workdir');
     containerHome = path.join(tmpDir, 'container-home');
@@ -191,10 +172,11 @@ describe('windows capability delivery through capability.env', () => {
   });
 
   /**
-   * Builds the Windows-equivalent delivery. The host producer writes
-   * capability.env; its assignments are loaded the way `--env-file` loads them;
+   * Builds the Windows-equivalent delivery. The host producer writes the token
+   * file in its host-only directory; the entrypoint is generated with that
+   * directory standing in for the container mount path;
    * `LLXPRT_CREDENTIAL_SOCKET` is added the way sandbox-credential-proxy.ts adds
-   * it with `--env`; and the trusted entrypoint command array is generated for a
+   * it with `--env`; and the command array is generated for a
    * PATH-discoverable `llxprt`. HOME points inside the temp tree because the
    * container has its own home, which keeps the entrypoint's pinned data roots
    * out of the real one.
@@ -204,9 +186,9 @@ describe('windows capability delivery through capability.env', () => {
     socketPath: string | undefined,
     mode: string,
   ): Delivery {
-    const result = createHostOnlyCapabilityEnvFile(token, []);
+    const result = createHostOnlyCapabilityMount(token, []);
     if (result === undefined) {
-      throw new Error('Expected a capability env file result');
+      throw new Error('Expected a capability mount result');
     }
     const sentinel = `env-visible-${String(Date.now())}-${String(
       Math.random(),
@@ -215,7 +197,6 @@ describe('windows capability delivery through capability.env', () => {
     delete env.LLXPRT_CAPABILITY_FD;
     delete env.LLXPRT_CAPABILITY_TOKEN;
     delete env.LLXPRT_CREDENTIAL_SOCKET;
-    Object.assign(env, parseDockerEnvFile(result.envFilePath));
     env[SENTINEL_KEY] = sentinel;
     env.HOME = containerHome;
     env.PATH = `${binDir}:${process.env.PATH ?? ''}`;
@@ -223,10 +204,18 @@ describe('windows capability delivery through capability.env', () => {
       env.LLXPRT_CREDENTIAL_SOCKET = socketPath;
     }
     return {
-      command: entrypoint(workdir, ['llxprt', 'run', mode]),
+      command: entrypoint(
+        workdir,
+        ['llxprt', 'run', mode],
+        undefined,
+        undefined,
+        undefined,
+        { capabilityMountDir: path.dirname(result.tokenFilePath) },
+      ),
       env,
       cwd: workdir,
-      envFilePath: result.envFilePath,
+      tokenFilePath: result.tokenFilePath,
+      mountArgs: result.args,
       sentinel,
       release: result.cleanup,
     };
@@ -289,7 +278,7 @@ describe('windows capability delivery through capability.env', () => {
   }
 
   it.skipIf(!posixDescriptorHost)(
-    'carries the env-file token through the trusted entrypoint to the consumer and authenticates every request',
+    'carries the mounted token through the trusted entrypoint to the consumer and authenticates every request',
     async () => {
       const proxy = await startProxy(VALID_TOKEN);
       const delivery = createDelivery(
@@ -298,13 +287,14 @@ describe('windows capability delivery through capability.env', () => {
         'requests',
       );
       try {
-        // The host half: the env file holds the one assignment docker loads,
-        // and the token reaches the container through the environment, never
-        // through the container argv.
-        expect(parseDockerEnvFile(delivery.envFilePath)).toStrictEqual({
-          LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN,
-        });
-        expect(delivery.env.LLXPRT_CAPABILITY_TOKEN).toBe(VALID_TOKEN);
+        // The host half: the token file holds the token and a newline, and
+        // the token reaches the container neither through the environment nor
+        // through any argv.
+        expect(fs.readFileSync(delivery.tokenFilePath, 'utf8')).toBe(
+          `${VALID_TOKEN}\n`,
+        );
+        expect(delivery.env.LLXPRT_CAPABILITY_TOKEN).toBeUndefined();
+        expect(delivery.mountArgs.join('\n')).not.toContain(VALID_TOKEN);
         expect(delivery.command.join('\n')).not.toContain(VALID_TOKEN);
 
         const report = await parseReport(runDelivery(delivery));
@@ -328,6 +318,8 @@ describe('windows capability delivery through capability.env', () => {
           brokerKey: PROVIDER_KEY_VALUE,
           serialized: '{}',
         });
+        // The entrypoint unlinked the file before it ran the CLI.
+        expect(fs.existsSync(delivery.tokenFilePath)).toBe(false);
       } finally {
         delivery.release();
         await proxy.stop();
@@ -366,10 +358,10 @@ describe('windows capability delivery through capability.env', () => {
     ['a newline', `${'a'.repeat(63)}\n`],
     ['a carriage return', `${'a'.repeat(63)}\r`],
   ])(
-    'rejects a capability containing %s at the producer before writing an env file',
+    'rejects a capability containing %s at the producer before writing a capability file',
     (_label, token) => {
-      expect(() => createHostOnlyCapabilityEnvFile(token, [])).toThrow(
-        'Capability token contains invalid characters for env file',
+      expect(() => createHostOnlyCapabilityMount(token, [])).toThrow(
+        'Capability token contains invalid characters for the capability file',
       );
     },
   );
@@ -395,38 +387,41 @@ describe('windows capability delivery through capability.env', () => {
     },
   );
 
-  it('removes the env file and its host-only directory on cleanup', () => {
-    const result = createHostOnlyCapabilityEnvFile(VALID_TOKEN, []);
+  it('removes the token file and its host-only directory on cleanup', () => {
+    const result = createHostOnlyCapabilityMount(VALID_TOKEN, []);
     if (result === undefined) {
-      throw new Error('Expected a capability env file result');
+      throw new Error('Expected a capability mount result');
     }
-    const envFileDir = path.dirname(result.envFilePath);
+    const hostDir = path.dirname(result.tokenFilePath);
     try {
-      expect(fs.existsSync(result.envFilePath)).toBe(true);
-      expect(fs.existsSync(envFileDir)).toBe(true);
-      expect(path.basename(result.envFilePath)).toBe('capability.env');
-      expect(result.args).toStrictEqual(['--env-file', result.envFilePath]);
+      expect(fs.existsSync(result.tokenFilePath)).toBe(true);
+      expect(fs.existsSync(hostDir)).toBe(true);
+      expect(path.basename(result.tokenFilePath)).toBe('token');
+      expect(result.args).toStrictEqual([
+        '--volume',
+        `${hostDir}:/run/llxprt-capability:rw`,
+      ]);
     } finally {
       result.cleanup();
     }
 
-    expect(fs.existsSync(result.envFilePath)).toBe(false);
-    expect(fs.existsSync(envFileDir)).toBe(false);
+    expect(fs.existsSync(result.tokenFilePath)).toBe(false);
+    expect(fs.existsSync(hostDir)).toBe(false);
     expect(() => result.cleanup()).not.toThrow();
   });
 
   it.skipIf(!posixDescriptorHost)(
-    'restricts the env file to owner read and write',
+    'restricts the token file to owner read and write',
     () => {
-      const result = createHostOnlyCapabilityEnvFile(VALID_TOKEN, []);
+      const result = createHostOnlyCapabilityMount(VALID_TOKEN, []);
       if (result === undefined) {
-        throw new Error('Expected a capability env file result');
+        throw new Error('Expected a capability mount result');
       }
       try {
-        expect(fs.statSync(result.envFilePath).mode & 0o777).toBe(0o600);
-        expect(fs.statSync(path.dirname(result.envFilePath)).mode & 0o777).toBe(
-          0o700,
-        );
+        expect(fs.statSync(result.tokenFilePath).mode & 0o777).toBe(0o600);
+        expect(
+          fs.statSync(path.dirname(result.tokenFilePath)).mode & 0o777,
+        ).toBe(0o700);
       } finally {
         result.cleanup();
       }

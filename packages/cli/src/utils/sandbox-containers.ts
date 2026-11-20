@@ -20,6 +20,13 @@ import type {
 } from './sandbox-ssh.js';
 import { containerMountSources } from './sandbox-capability.js';
 import {
+  buildCapabilityFileCapture,
+  CAPABILITY_CONTAINER_DIR,
+  CAPABILITY_FD_REOPEN,
+  CAPABILITY_VARIABLE_RESET,
+  shellSingleQuote,
+} from './sandbox-capability-container.js';
+import {
   getContainerPath,
   mountGitConfigFiles,
   buildSandboxEnvArgs,
@@ -32,10 +39,16 @@ import {
   resolveDebugPort,
 } from './sandbox-env.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
+import {
+  buildContainerDeviceArgs,
+  preflightSandboxDevices,
+  resolveSandboxDevices,
+} from './sandbox-devices.js';
 import { addSandboxOwnershipLabels } from './sandbox-owner-labels.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { DependencyVolumeLifecycle } from './sandbox-node-modules.js';
 import type { SandboxLaunchLifecycle } from './sandbox-lifecycle.js';
+import type { SourceDependencyPreparationPlan } from './sandbox-dependency-preparation.js';
 import {
   setupCredentialProxy,
   type CredentialProxyBridgeCleanup,
@@ -74,6 +87,8 @@ export interface ContainerSandboxPrepared {
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: CredentialProxyBridgeCleanup | undefined;
   dependencyVolumeLifecycle: DependencyVolumeLifecycle;
+  /** Set for a source checkout: the separate dependency preparation run. */
+  sourceDependencyPreparation?: SourceDependencyPreparationPlan | undefined;
   reservedTunnelPorts: Set<number>;
   sshResult: SshAgentResult;
 }
@@ -121,15 +136,23 @@ function isNonEmptyEnvValue(value: string | undefined): value is string {
   return value !== undefined && value !== '';
 }
 
-/** Builds docker/podman run args. */
-export function buildContainerRunArgs(
-  config: SandboxConfig,
-  image: string,
-  workdir: string,
-  containerWorkdir: string,
-  sessionTmpdir: string,
-): string[] {
-  const args = ['run', '-i', '--rm', '--init', '--workdir', containerWorkdir];
+function appendDeviceArgs(args: string[], config: SandboxConfig): void {
+  if (config.devices === undefined || config.devices.length === 0) {
+    return;
+  }
+  const resolved = resolveSandboxDevices(config.devices);
+  preflightSandboxDevices(resolved);
+  args.push(...buildContainerDeviceArgs(resolved));
+}
+
+/**
+ * The policy flags every sandbox container run shares, in launch order:
+ * privilege hardening, the user's SANDBOX_FLAGS, resource limits and the
+ * network-off setting. The main container and the source-checkout dependency
+ * preparation container both start from this list so they cannot drift apart.
+ */
+export function buildContainerPolicyArgs(): string[] {
+  const args: string[] = [];
   // Privilege hardening defaults: applied before SANDBOX_FLAGS so a user can
   // still add specific capabilities back via SANDBOX_FLAGS. See
   // project-plans/issue-2902-sandbox-privilege-hardening.md.
@@ -161,6 +184,20 @@ export function buildContainerRunArgs(
       'Sandbox network mode "proxied" requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.',
     );
   }
+  return args;
+}
+
+/** Builds docker/podman run args. */
+export function buildContainerRunArgs(
+  config: SandboxConfig,
+  image: string,
+  workdir: string,
+  containerWorkdir: string,
+  sessionTmpdir: string,
+): string[] {
+  const args = ['run', '-i', '--rm', '--init', '--workdir', containerWorkdir];
+  args.push(...buildContainerPolicyArgs());
+  appendDeviceArgs(args, config);
   if (shouldAllocateSandboxTty()) args.push('-t');
   args.push('--volume', `${workdir}:${containerWorkdir}`);
   // Issue #3081: mount the host config directory at path parity and pin
@@ -308,13 +345,19 @@ export function validateContainerSandboxEnv(): void {
   parseSandboxEnvVars();
 }
 
-function addSandboxEnvVars(args: string[]): void {
-  const entries = parseSandboxEnvVars();
-  for (const env of entries) {
+/** The `--env` pairs for the user's SANDBOX_ENV entries. */
+export function buildUserSandboxEnvArgs(): string[] {
+  const args: string[] = [];
+  for (const env of parseSandboxEnvVars()) {
     const envName = env.substring(0, env.indexOf('='));
     debugLogger.log(`SANDBOX_ENV: ${envName}=<redacted>`);
     args.push('--env', env);
   }
+  return args;
+}
+
+function addSandboxEnvVars(args: string[]): void {
+  args.push(...buildUserSandboxEnvArgs());
 }
 
 /** Adds custom SANDBOX_MOUNTS volume flags. */
@@ -395,6 +438,29 @@ export function addContainerEnvVars(
   }
 }
 
+/**
+ * The proxy environment a proxied container receives, with the loopback proxy
+ * host rewritten to the sidecar's name. Empty when no proxy command is set.
+ */
+export function buildProxiedNetworkEnvArgs(): string[] {
+  if (!isNonEmptyEnvValue(process.env.LLXPRT_SANDBOX_PROXY_COMMAND)) return [];
+  const args: string[] = [];
+  const proxy = rewriteProxyHostname(resolveSandboxProxyUrl(process.env));
+  args.push('--env', `HTTPS_PROXY=${proxy}`);
+  args.push('--env', `https_proxy=${proxy}`);
+  args.push('--env', `HTTP_PROXY=${proxy}`);
+  args.push('--env', `http_proxy=${proxy}`);
+  const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
+  if (noProxy !== undefined) {
+    args.push('--env', `NO_PROXY=${noProxy}`);
+    args.push('--env', `no_proxy=${noProxy}`);
+  }
+  return args;
+}
+
+/** Name of the internal network a proxied sandbox joins. */
+export const SANDBOX_INTERNAL_NETWORK_NAME = SANDBOX_NETWORK_NAME;
+
 /** Sets up container networking, including proxy env and network creation. */
 export function setupContainerNetworking(
   args: string[],
@@ -403,17 +469,7 @@ export function setupContainerNetworking(
 ): string | undefined {
   const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
   if (isNonEmptyEnvValue(proxyCommand)) {
-    const proxy = rewriteProxyHostname(resolveSandboxProxyUrl(process.env));
-    args.push('--env', `HTTPS_PROXY=${proxy}`);
-    args.push('--env', `https_proxy=${proxy}`);
-    args.push('--env', `HTTP_PROXY=${proxy}`);
-    args.push('--env', `http_proxy=${proxy}`);
-
-    const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
-    if (noProxy !== undefined) {
-      args.push('--env', `NO_PROXY=${noProxy}`);
-      args.push('--env', `no_proxy=${noProxy}`);
-    }
+    args.push(...buildProxiedNetworkEnvArgs());
     // execSync resolves the command against the process STARTUP env in Bun,
     // so PATH mutations made in-process (e.g. by tests) are ignored unless
     // the current env is passed explicitly.
@@ -490,14 +546,22 @@ const CURRENT_USER_CAPABILITIES = ['CHOWN', 'SETUID', 'SETGID'] as const;
  * safe-representation for sh. The same escaping is applied to the wrapped
  * inner script below, so quoted values nest correctly.
  */
-function shQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+const shQuote = shellSingleQuote;
+
+export interface ContainerUserOptions {
+  /**
+   * Where the capability directory is mounted in the container; must match
+   * the `capabilityMountDir` the wrapped entrypoint was generated with.
+   * Production uses the fixed private path.
+   */
+  readonly capabilityMountDir?: string;
 }
 
 /** Configures user/UID for the container and modifies entrypoint if needed. */
 export async function setupContainerUser(
   args: string[],
   finalEntrypoint: string[],
+  options: ContainerUserOptions = {},
 ): Promise<string> {
   let userFlag = '';
 
@@ -530,19 +594,28 @@ export async function setupContainerUser(
       `mkdir -p ${quotedHome} && chown ${uid}:${gid} ${quotedHome}`,
     ].join(' && ');
 
-    // Current-user path (AC3): root captures token, opens fd 3, runs setup
-    // with fd 3 closed, then su forwards fd 3 through a clean env.
+    // Current-user path (AC3, #3573): root tries to open and unlink the
+    // capability file first, runs setup with fd 3 closed, then reopens fd 3
+    // on a pipe and su forwards it through a clean env. Root without
+    // CAP_DAC_OVERRIDE cannot read a file owned by the host uid (rootful
+    // Docker), so when root cannot open it the file stays for the inner
+    // entrypoint stanza, which runs as the user su drops to. On rootless
+    // Podman the host uid is container root, so root opens it here and the
+    // dropped user needs no access. No capability is added for either case.
+    const capabilityMountDir =
+      options.capabilityMountDir ?? CAPABILITY_CONTAINER_DIR;
     const scriptIdx = finalEntrypoint.length - 1;
     const escapedInnerScript = finalEntrypoint[scriptIdx].replace(
       /'/g,
       "'\\''",
     );
     finalEntrypoint[scriptIdx] = [
-      '__llxprt_cap="${LLXPRT_CAPABILITY_TOKEN-}"',
-      'unset LLXPRT_CAPABILITY_TOKEN',
+      ...CAPABILITY_VARIABLE_RESET,
+      'unset LLXPRT_CAPABILITY_TOKEN LLXPRT_CAPABILITY_FD',
+      buildCapabilityFileCapture(capabilityMountDir, 'opportunistic'),
       `{ ${setupUserCommands}; } 3<&-`,
       'if [ -n "${__llxprt_cap}" ]; then',
-      '  exec 3<<<"${__llxprt_cap}"',
+      `  ${CAPABILITY_FD_REOPEN}`,
       '  unset __llxprt_cap',
       '  export LLXPRT_CAPABILITY_FD=3',
       `  exec su -p ${username} -c '${escapedInnerScript}'`,
@@ -648,30 +721,37 @@ export async function startProxyContainer(
 }
 
 /**
- * What the proxy sidecar's close handler observed, read by the launch path
- * after the sandbox child has closed.
+ * What the proxy sidecar's close handler observed, read by the launch path.
  */
 export interface ProxyContainerWatch {
   /** Throws the fatal error for a sidecar that exited without being asked to. */
   throwIfFailed(): void;
+  /**
+   * Ends `sandboxProcess` when the sidecar fails, at once when it already
+   * has. The launch path raises the failure itself after the child closes.
+   */
+  endOnFailure(sandboxProcess: ChildProcess): void;
 }
 
 const NO_PROXY_CONTAINER_FAILURE: ProxyContainerWatch = {
   throwIfFailed: () => {},
+  endOnFailure: () => {},
 };
 
 /**
- * Ends the sandbox child when the proxy sidecar dies unasked, and records the
- * failure for the launch path. The launch path raises it after the child has
- * closed: a throw from this listener would end the host at once, before the
- * child's close and before the release of the resources the launch owns.
+ * Records an unasked exit of the proxy sidecar. The launch attaches this as
+ * soon as the sidecar is up, so an exit during source-checkout dependency
+ * preparation (before any sandbox child exists) is still seen. A throw from
+ * the close listener would end the host at once, before the release of the
+ * resources the launch owns, so the failure is only recorded here and raised
+ * by the launch path.
  */
-export function wireProxyContainerCloseHandler(
+export function watchProxyContainer(
   proxyContainer: ProxyContainerHandle | undefined,
-  sandboxProcess: ChildProcess,
 ): ProxyContainerWatch {
   if (proxyContainer === undefined) return NO_PROXY_CONTAINER_FAILURE;
   let failure: FatalSandboxError | undefined;
+  let sandboxChild: ChildProcess | undefined;
   proxyContainer.process.on('close', (code, signal) => {
     // An intended stop ends the sidecar while the sandboxed child is still
     // handling the same signal. The host keeps waiting for that child and
@@ -682,11 +762,15 @@ export function wireProxyContainerCloseHandler(
     );
     // The sandbox child is not detached, so there is no process group with its
     // id to signal; address the child itself.
-    sandboxProcess.kill('SIGTERM');
+    sandboxChild?.kill('SIGTERM');
   });
   return {
     throwIfFailed: () => {
       if (failure !== undefined) throw failure;
+    },
+    endOnFailure: (sandboxProcess) => {
+      sandboxChild = sandboxProcess;
+      if (failure !== undefined) sandboxProcess.kill('SIGTERM');
     },
   };
 }
@@ -719,8 +803,9 @@ export function wireCleanupHandlers(
   if (credentialProxyBridgeCleanup !== undefined) {
     // #3524: wireCleanupHandlers runs immediately after the sandbox process
     // has spawned, so this is where the no-handshake fallback countdown
-    // starts — before the spawn the runtime cannot have read --env-file.
-    credentialProxyBridgeCleanup.armCapabilityEnvFileFallback?.();
+    // starts — before the spawn the container cannot have mounted the
+    // capability directory.
+    credentialProxyBridgeCleanup.armCapabilityFileFallback?.();
     let bridgeCleanedUp = false;
     const runBridgeCleanup = (): void => {
       if (bridgeCleanedUp) return;

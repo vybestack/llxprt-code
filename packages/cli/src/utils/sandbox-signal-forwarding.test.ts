@@ -58,6 +58,26 @@ const PROXY_COMMAND = [
   'exec sleep 600',
 ].join('; ');
 
+/**
+ * Stand-in for the process the bwrap launcher runs. It handles the three
+ * forwarded signals itself, records which one arrived and exits with
+ * HANDLED_EXIT_STATUS. Like the shell stand-in it publishes its pid by rename
+ * only after its handlers exist.
+ */
+const NODE_HANDLING_STUB = [
+  `#!${process.execPath}`,
+  "const fs = require('node:fs');",
+  "for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {",
+  '  process.on(signal, () => {',
+  '    fs.writeFileSync(`${process.env.STUB_DIR}/received`, signal.slice(3));',
+  `    process.exit(${HANDLED_EXIT_STATUS});`,
+  '  });',
+  '}',
+  'fs.writeFileSync(`${process.env.STUB_DIR}/child.pid.tmp`, String(process.pid));',
+  'fs.renameSync(`${process.env.STUB_DIR}/child.pid.tmp`, `${process.env.STUB_DIR}/child.pid`);',
+  'setInterval(() => {}, 1000);',
+].join('\n');
+
 // The stand-ins are POSIX shell scripts and Windows cannot deliver these
 // signals to a process as signals.
 describe('sandbox hop signal forwarding', () => {
@@ -104,6 +124,35 @@ describe('sandbox hop signal forwarding', () => {
 
           expect(result.signal).toBeNull();
           expect(result.exitCode).toBe(128 + SIGNAL_NUMBERS[signal]);
+          expect(isAlive(childPid)).toBe(false);
+        },
+        TEST_TIMEOUT_MS,
+      );
+    }
+
+    for (const signal of FORWARDED_SIGNALS) {
+      it(
+        `forwards ${signal} through bwrap and exits with the sandboxed child's status`,
+        async () => {
+          // bwrap runs with a scrubbed environment, so the launcher stand-in
+          // carries the stub directory itself and runs the payload stand-in.
+          const bwrapStub = [
+            '#!/bin/sh',
+            `STUB_DIR='${harness.stubDir}'`,
+            'export STUB_DIR',
+            `exec '${harness.file('sandbox-exec')}'`,
+          ].join('\n');
+          const { host, childPid, finished } = await harness.startHost({
+            stubs: { 'sandbox-exec': NODE_HANDLING_STUB, bwrap: bwrapStub },
+            env: { SANDBOX_SIGNAL_TEST_ENGINE: 'bwrap' },
+          });
+
+          host.kill(signal);
+          const result = await finished;
+
+          expect(result.signal).toBeNull();
+          expect(harness.readText('received')).toBe(signal.slice('SIG'.length));
+          expect(result.exitCode).toBe(HANDLED_EXIT_STATUS);
           expect(isAlive(childPid)).toBe(false);
         },
         TEST_TIMEOUT_MS,

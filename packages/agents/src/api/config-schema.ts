@@ -238,12 +238,37 @@ const AgentSkillDefinitionSchema = z
   })
   .strict();
 
-const AgentSandboxSchema = z
+// Shape only: host device checks belong to the launch host, not to a remote
+// API caller that may be describing a different machine.
+const AgentSandboxDevicesSchema = z.array(z.string()).max(64).optional();
+
+const AgentSandboxMountSchema = z
   .object({
-    command: z.enum(['docker', 'podman', 'sandbox-exec']),
-    image: z.string(),
+    from: z.string(),
+    to: z.string().optional(),
+    mode: z.enum(['ro', 'rw']).optional(),
   })
   .strict();
+
+const AgentSandboxSchema = z.union([
+  z
+    .object({
+      command: z.enum(['docker', 'podman', 'sandbox-exec']),
+      image: z.string(),
+      devices: AgentSandboxDevicesSchema,
+    })
+    .strict(),
+  z
+    .object({
+      command: z.literal('bwrap'),
+      mounts: z.array(AgentSandboxMountSchema).optional(),
+      env: z.record(z.string()).optional(),
+      network: z.enum(['on', 'off', 'proxied']).optional(),
+      sshAgent: z.enum(['auto', 'on', 'off']).optional(),
+      devices: AgentSandboxDevicesSchema,
+    })
+    .strict(),
+]);
 
 const AgentExtensionSchema = z
   .object({

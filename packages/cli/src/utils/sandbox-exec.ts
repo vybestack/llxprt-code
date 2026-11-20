@@ -8,7 +8,10 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  ContainerSandboxConfig,
+} from '@vybestack/llxprt-code-core';
 import {
   FatalSandboxError,
   getErrorMessage,
@@ -30,7 +33,7 @@ import {
   setupContainerUser,
   setupCredentialProxy,
   startProxyContainer,
-  wireProxyContainerCloseHandler,
+  watchProxyContainer,
   wireCleanupHandlers,
   handleStdinForSandbox,
   restoreStdinAfterSandbox,
@@ -38,6 +41,11 @@ import {
   LOCAL_DEV_SANDBOX_IMAGE_NAME,
 } from './sandbox-containers.js';
 import { entrypoint } from './sandbox-entrypoint.js';
+import {
+  planSourceDependencyPreparation,
+  runSourceDependencyPreparation,
+  type SourceDependencyPreparationPlan,
+} from './sandbox-dependency-preparation.js';
 import { canonicalizeExistingPath } from './sandbox-path-canonicalization.js';
 import {
   planCheckpointStorage,
@@ -79,7 +87,7 @@ function removeSessionTmpdir(sessionTmpdir: string): void {
 
 /** Validates image and builds initial container run args. */
 async function prepareContainerImageAndArgs(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   workspacePlan: ContainerWorkspacePlan,
   dependencyMountPlan: DependencyMountPlan,
   lifecycle: SandboxLaunchLifecycle,
@@ -165,7 +173,7 @@ async function prepareContainerImageAndArgs(
 
 /** Sets up SSH forwarding, port forwarding, networking, and env vars. */
 async function prepareContainerNetworkAndEnv(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   args: string[],
   workdir: string,
   isPodmanMacOS: boolean,
@@ -243,7 +251,7 @@ async function prepareContainerEntrypoint({
 }
 
 async function planWorkspacesAndDependencies(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   cliConfig: Config | undefined,
   directories: (() => readonly string[]) | undefined,
 ): Promise<{
@@ -272,7 +280,7 @@ async function planWorkspacesAndDependencies(
  * no stanza and keep today's fully-ephemeral behavior.
  */
 function planCheckpointPersistence(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   workdir: string,
   cliConfig: Config | undefined,
 ): { plan: CheckpointStoragePlan; stanza: string | undefined } {
@@ -287,9 +295,19 @@ function planCheckpointPersistence(
   };
 }
 
+/**
+ * The SSH agent bridge's entrypoint prefix, if the launch set one up. Bridge
+ * prefixes are composed after the trusted capability capture stanza (F1).
+ */
+function sshBridgePrefixes(sshResult: SshAgentResult): string[] {
+  return sshResult.entrypointPrefix === undefined
+    ? []
+    : [sshResult.entrypointPrefix];
+}
+
 /** Runs the Docker/Podman sandbox path: image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   nodeArgs: string[],
   cliConfig: Config | undefined,
   cliArgs: string[],
@@ -334,17 +352,8 @@ async function prepareContainerSandbox(
   const containerName = assignContainerName(args, config, image);
   addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
 
-  const {
-    sshResult,
-    podmanMacOSPortsForwarded,
-    proxyCommand,
-    portForwardingResult,
-  } = networkAndEnv;
-  // Compose bridge prefixes after the trusted capability capture stanza (F1).
-  const entrypointPrefixes: string[] = [];
-  if (sshResult.entrypointPrefix !== undefined) {
-    entrypointPrefixes.push(sshResult.entrypointPrefix);
-  }
+  const { sshResult, podmanMacOSPortsForwarded } = networkAndEnv;
+  const entrypointPrefixes = sshBridgePrefixes(sshResult);
   const credentialProxySetup = await startCredentialProxyGuarded(
     args,
     config,
@@ -366,14 +375,22 @@ async function prepareContainerSandbox(
   return {
     args,
     finalEntrypoint,
-    proxyCommand,
+    proxyCommand: networkAndEnv.proxyCommand,
     userFlag,
     image,
     containerName,
     workdir,
-    portForwardingResult,
+    portForwardingResult: networkAndEnv.portForwardingResult,
     ...credentialProxySetup,
     dependencyVolumeLifecycle,
+    // #3573: a source checkout installs its dependencies in a separate
+    // container without the capability mount or credential socket.
+    sourceDependencyPreparation: planSourceDependencyPreparation(
+      config,
+      workspacePlan,
+      dependencyVolumeLifecycle.preparationVolumes,
+      userFlag,
+    ),
     reservedTunnelPorts,
     sshResult,
   };
@@ -381,7 +398,7 @@ async function prepareContainerSandbox(
 
 async function startCredentialProxyGuarded(
   args: string[],
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   sessionTmpdir: string,
   reservedTunnelPorts: Set<number>,
   entrypointPrefixes: string[],
@@ -398,7 +415,7 @@ async function startCredentialProxyGuarded(
     );
   } catch (error) {
     // setupCredentialProxy releases everything it acquired on its own
-    // failure paths (proxy server, bridge, env file, tmpdir); the launch
+    // failure paths (proxy server, bridge, capability mount, tmpdir); the launch
     // lifecycle owns nothing from it yet.
     if (error instanceof FatalSandboxError) throw error;
     // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
@@ -445,9 +462,32 @@ export async function awaitSandboxExit(
   return exitCode;
 }
 
+/**
+ * Runs the source-checkout install, if the launch has one, after the proxy
+ * sidecar (a proxied launch needs it for network access) and before the main
+ * container exists, so nothing the install started can outlive it or see the
+ * capability delivery. A sidecar that exited meanwhile fails the launch here,
+ * so no main container starts without its proxy; that failure is the root
+ * cause and takes precedence over an install error it may have produced.
+ */
+async function prepareSourceDependencies(
+  plan: SourceDependencyPreparationPlan | undefined,
+  proxyContainerWatch: ProxyContainerWatch,
+): Promise<void> {
+  if (plan !== undefined) {
+    try {
+      await runSourceDependencyPreparation(plan);
+    } catch (error) {
+      proxyContainerWatch.throwIfFailed();
+      throw error;
+    }
+  }
+  proxyContainerWatch.throwIfFailed();
+}
+
 /** Spawns container and proxy, wires cleanup, and waits for exit. */
 async function executeContainerSandbox(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   cliConfig: Config | undefined,
   prepared: Awaited<ReturnType<typeof prepareContainerSandbox>>,
   lifecycle: SandboxLaunchLifecycle,
@@ -467,6 +507,7 @@ async function executeContainerSandbox(
     portForwardingResult,
     sshResult,
     dependencyVolumeLifecycle,
+    sourceDependencyPreparation,
   } = prepared;
   let credentialProxyBridgeCleanup = prepared.credentialProxyBridgeCleanup;
 
@@ -490,6 +531,14 @@ async function executeContainerSandbox(
         )
       : undefined;
 
+  // The sidecar is watched from here on, so an exit during the install is
+  // recorded before any sandbox child exists.
+  const proxyContainerWatch = watchProxyContainer(proxyContainerProcess);
+  await prepareSourceDependencies(
+    sourceDependencyPreparation,
+    proxyContainerWatch,
+  );
+
   const { stdinWasPaused, stdinHadRawMode } = handleStdinForSandbox();
   const sandboxProcess = spawn(config.command, args, { stdio: 'inherit' });
   forwardSignalsToSandboxProcess(sandboxProcess);
@@ -497,10 +546,7 @@ async function executeContainerSandbox(
     sandboxProcess.kill('SIGTERM');
   });
   dependencyVolumeLifecycle.recordMainContainerName(containerName);
-  const proxyContainerWatch = wireProxyContainerCloseHandler(
-    proxyContainerProcess,
-    sandboxProcess,
-  );
+  proxyContainerWatch.endOnFailure(sandboxProcess);
   restoreStdinAfterSandbox(
     sandboxProcess,
     stdinWasPaused,
@@ -533,7 +579,7 @@ async function executeContainerSandbox(
 
 /** Runs the Docker/Podman sandbox path. */
 export async function runContainerSandbox(
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
   nodeArgs: string[],
   cliConfig?: Config,
   cliArgs: string[] = [],
@@ -599,7 +645,7 @@ function buildSandboxImage(
   isCustomProjectSandbox: boolean,
   projectSandboxDockerfile: string,
   image: string,
-  config: SandboxConfig,
+  config: ContainerSandboxConfig,
 ): void {
   const normalizedGcPath = gcPath.split(/[\\/]/).join('/');
   if (!normalizedGcPath.includes('gemini-cli/packages/')) {

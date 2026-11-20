@@ -18,7 +18,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { ContainerSandboxConfig } from '@vybestack/llxprt-code-core';
 import { psExecutableSource } from '../../test-utils/ps-executable-fixture.js';
 import {
   FIXTURE_TIMEOUT_MS,
@@ -30,7 +30,13 @@ import {
   writePortableExecutable,
 } from '../../test-utils/sandbox-fixture-compiler.js';
 import { assignContainerName } from './sandbox-containers.js';
+import {
+  readCurrentPidNamespace,
+  type SandboxOwnerMetadata as OwnerMetadata,
+} from './sandbox-owner-labels.js';
 import { runContainerSandbox } from './sandbox-exec.js';
+
+type ContainerCommand = ContainerSandboxConfig['command'];
 
 const MANAGED_LABEL = 'com.vybestack.llxprt.sandbox-managed=true';
 const TEST_IMAGE = 'llxprt-code-sandbox';
@@ -48,14 +54,6 @@ const ENGINE_ENV_KEYS = [
   'LLXPRT_TEST_PS_HANG',
   'LLXPRT_TEST_PS_OUTPUT',
 ] satisfies readonly string[];
-
-interface OwnerMetadata {
-  readonly version: 1;
-  readonly hostname: string;
-  readonly pid: number;
-  readonly startTimeMs: number;
-  readonly startTimeSource: 'observed' | 'estimated';
-}
 
 function requirePid(child: ChildProcess): number {
   if (child.pid === undefined) {
@@ -117,7 +115,7 @@ function engineLogPath(): string {
   return logPath;
 }
 
-function engineExecutableSource(command: SandboxConfig['command']): string {
+function engineExecutableSource(command: ContainerCommand): string {
   return `#!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
@@ -217,7 +215,7 @@ function warmProcessStartExecutable(fixtureDir: string): void {
 // Warmed before each recovery run rather than in beforeAll so that only engines
 // a test uses are launched (the timezone child process never starts one). A
 // launch after the first is cheap.
-function warmEngineExecutable(command: SandboxConfig['command']): void {
+function warmEngineExecutable(command: ContainerCommand): void {
   const fixtureDir = path.dirname(engineLogPath());
   const scratch = path.join(fixtureDir, 'warmup.scratch');
   // The first three keys are the state and log paths every engine requires.
@@ -229,10 +227,8 @@ function warmEngineExecutable(command: SandboxConfig['command']): void {
   );
 }
 
-async function runRecoveryStartup(
-  command: SandboxConfig['command'],
-): Promise<string> {
-  const config: SandboxConfig = { command, image: TEST_IMAGE };
+async function runRecoveryStartup(command: ContainerCommand): Promise<string> {
+  const config: ContainerSandboxConfig = { command, image: TEST_IMAGE };
   warmEngineExecutable(command);
   try {
     await runContainerSandbox(config, []);
@@ -419,12 +415,14 @@ describe('sandbox orphan recovery startup', () => {
     const recordedOwner: unknown = JSON.parse(
       ownerLabel.slice(ownerLabel.indexOf('=') + 1),
     );
+    const pidNamespace = readCurrentPidNamespace();
     const expectedOwner: OwnerMetadata = {
       version: 1,
       hostname: os.hostname(),
       pid: process.pid,
       startTimeMs: observedStartTimeMs,
       startTimeSource: 'observed',
+      ...(pidNamespace === undefined ? {} : { pidNamespace }),
     };
     expect(recordedOwner).toStrictEqual(expectedOwner);
 

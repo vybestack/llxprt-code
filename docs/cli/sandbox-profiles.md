@@ -99,11 +99,12 @@ Use for local/offline workflows.
 
 ### `engine`
 
-Type: `"auto" | "docker" | "podman" | "sandbox-exec" | "none"`
+Type: `"auto" | "docker" | "podman" | "bwrap" | "sandbox-exec" | "none"`
 
 - `auto`: picks available runtime
 - `docker`: force Docker
 - `podman`: force Podman
+- `bwrap`: Linux bubblewrap, running host tools in private user and PID namespaces
 - `sandbox-exec`: macOS Seatbelt
 - `none`: disable sandboxing
 
@@ -181,6 +182,55 @@ Mount object:
 ```
 
 Adds environment variables to sandbox launch context.
+
+### `devices`
+
+Type: `string[]` (optional; omitted or `[]` grants no host devices)
+
+```json
+{
+  "devices": ["/dev/dri/renderD128"]
+}
+```
+
+Each entry is the absolute host path of a character device under `/dev`. The same path appears inside the sandbox. A grant never carries a mode or a different destination, and a colon is rejected.
+
+- Grant a single GPU render node such as `/dev/dri/renderD128` when the workload only needs compute or offscreen rendering. `/dev/dri/card*` nodes are display-master nodes and are not needed for headless work.
+- `/dev/dri` is the only directory accepted. It must contain character nodes, and its optional `by-path` directory may only hold links to those nodes. Prefer individual nodes: with bwrap a directory grant follows later hotplug changes, while Docker and Podman receive a snapshot of the nodes present at launch.
+- Block devices, regular files, other directories, `/dev` itself, `/dev/fd`, `/dev/pts`, `/dev/shm`, `/dev/mqueue` and aliases that resolve outside `/dev` are rejected.
+- At most 64 entries, each at most 4095 bytes.
+
+Engine behavior:
+
+| Engine            | Mapping                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `bwrap`           | `--dev-bind PATH PATH` after the fresh `/dev`; user and PID namespaces stay private         |
+| `docker`/`podman` | `--device PATH:PATH:rw` per node on the main container only (Linux hosts only)              |
+| `sandbox-exec`    | Not supported: a nonempty `devices` fails the launch. Metal access uses the Seatbelt policy |
+
+A grant never silently degrades. A missing device, a type mismatch, or a device the launching user cannot open read/write stops the launch before credentials are issued. Access still follows the host's permissions (ACLs or `render`/`video` group membership); the sandbox does not change them. The bwrap preflight uses the same user the sandbox runs as. For Docker and Podman the preflight checks the launching host user; whether the container's own user can open the node depends on the container's user mapping, so verify it with your image before relying on it. A devices grant also needs the host driver files and sysfs entries that the bwrap engine already exposes read-only.
+
+Example render-only profile for a Linux workstation with a Rust toolchain:
+
+```json
+{
+  "engine": "bwrap",
+  "network": "on",
+  "sshAgent": "off",
+  "devices": ["/dev/dri/renderD128"],
+  "mounts": [
+    { "from": "~/.rustup", "mode": "ro" },
+    { "from": "~/.cargo/bin", "mode": "ro" }
+  ],
+  "env": {
+    "RUSTUP_HOME": "/home/me/.rustup",
+    "CARGO_HOME": "/tmp/cargo",
+    "PATH": "/home/me/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+  }
+}
+```
+
+A GPU grant does not add a display, D-Bus or compositor socket.
 
 ## Engine selection notes
 

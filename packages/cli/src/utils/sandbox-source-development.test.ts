@@ -176,7 +176,7 @@ describe('#3455 entrypoint command selection', () => {
   );
 
   it.skipIf(process.platform === 'win32')(
-    'source checkout with NODE_ENV=development execs the checked-out source command',
+    'source checkout with NODE_ENV=development execs the checked-out source command without installing',
     () => {
       seedSourceCheckout(repo);
       const restore = setNodeEnv('development');
@@ -185,9 +185,9 @@ describe('#3455 entrypoint command selection', () => {
           command: 'bun',
           args: ['./packages/cli/index.ts'],
         });
-        expect(fs.readFileSync(`${recordPath}.install`, 'utf8')).toBe(
-          'install\n--no-save\n',
-        );
+        // Dependency preparation runs in its own container (#3573); nothing
+        // project-controlled runs in this entrypoint before the final exec.
+        expect(fs.existsSync(`${recordPath}.install`)).toBe(false);
         expect(fs.readFileSync(path.join(repo, 'bun.lock'), 'utf8')).toBe(
           LOCKFILE_FIXTURE,
         );
@@ -198,60 +198,15 @@ describe('#3455 entrypoint command selection', () => {
   );
 
   it.skipIf(process.platform === 'win32')(
-    'fails before dependency preparation when the committed Bun lockfile is missing',
-    () => {
-      seedSourceCheckout(repo);
-      fs.rmSync(path.join(repo, 'bun.lock'));
-      const restore = setNodeEnv('development');
-      try {
-        const cmd = entrypoint(repo, ['llxprt', 'chat']);
-        const result = spawnSync(cmd[0], cmd.slice(1), {
-          encoding: 'utf8',
-          cwd: repo,
-          env: {
-            ...process.env,
-            BASH_ENV: '',
-            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
-          },
-        });
-
-        expect(result.status).toBe(1);
-        expect(result.stderr).toContain(
-          'requires package.json and bun.lock in the repository root',
-        );
-        expect(fs.existsSync(`${recordPath}.install`)).toBe(false);
-        expect(readShimInvocation(recordPath)).toBeUndefined();
-      } finally {
-        restore();
-      }
-    },
-  );
-
-  it.skipIf(process.platform === 'win32')(
-    'does not execute checked-out source when isolated dependency preparation fails',
+    'the generated entrypoint script contains no dependency installation step',
     () => {
       seedSourceCheckout(repo);
       const restore = setNodeEnv('development');
-      process.env.ISSUE3534_BUN_INSTALL_EXIT = '17';
       try {
-        const cmd = entrypoint(repo, ['llxprt', 'chat']);
-        const result = spawnSync(cmd[0], cmd.slice(1), {
-          encoding: 'utf8',
-          cwd: repo,
-          env: {
-            ...process.env,
-            BASH_ENV: '',
-            PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
-          },
-        });
-
-        expect(result.status).toBe(1);
-        expect(result.stderr).toContain(
-          'Failed to prepare isolated Linux dependencies for LLxprt source development',
-        );
-        expect(readShimInvocation(recordPath)).toBeUndefined();
+        const script = String(entrypoint(repo, ['llxprt', 'chat']).at(-1));
+        expect(script).not.toContain('bun install');
+        expect(script).not.toContain('bun.lock');
       } finally {
-        delete process.env.ISSUE3534_BUN_INSTALL_EXIT;
         restore();
       }
     },

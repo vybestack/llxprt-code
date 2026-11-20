@@ -320,9 +320,11 @@ that matches nothing has no effect. These checks finish before Docker or Podman
 creates a volume or container.
 
 Each private volume is initialized for the user the container already runs as,
-even when that user's UID differs from the host user. This isolation applies
-to normal installed-mode sessions. A `NODE_ENV=development` source-entrypoint
-session keeps using the shared workspace binds unchanged.
+even when that user's UID differs from the host user. A `NODE_ENV=development`
+launch from an llxprt-code source checkout gets the same private volumes. The
+Linux dependencies for that checkout are installed into them by a separate
+container that runs before the main one (see
+[Source-checkout dependency preparation](#source-checkout-dependency-preparation)).
 
 Inside a sandboxed session this means:
 
@@ -678,12 +680,40 @@ What the proxy blocks:
   [#2957](https://github.com/vybestack/llxprt-code/issues/2957)).
 
 How the container proves it is authorised: a per-session capability token is
-passed to LLxprt Code through an inherited file descriptor, never through
-process arguments, the container environment, or a file mounted where the
-sandbox can read it. Processes that run before the CLI — relays, launchers,
+passed to LLxprt Code through an inherited file descriptor (fd 3). It is never
+in process arguments, in the container's create configuration (`--env`,
+`--env-file`, `docker inspect` or `podman inspect` output), or in any process
+environment, including the environment of the container's init process
+(`/proc/1/environ`). Processes that run before the CLI — relays, launchers,
 your `sandbox.bashrc` — never see it. Reaching the socket is therefore not
 sufficient by itself; a client without the consumed capability is rejected as
 `UNAUTHORIZED`.
+
+For Docker and Podman the token travels in three steps:
+
+1. The host writes the token (mode `0600`) to a file in a host-only directory
+   and bind-mounts that directory read-write at `/run/llxprt-capability`. The
+   directory holds nothing else.
+2. The trusted entrypoint opens the file and deletes it before it starts
+   anything else (relays, bridges, `sandbox.bashrc`, the CLI). Deleting it
+   removes the host's copy as well, because both sides share the directory.
+   The token then lives only in an unexported shell variable.
+3. At the final `exec` the entrypoint opens fd 3 on a pipe that carries the
+   token, so no temporary file holds it, and starts the CLI.
+
+The host removes the directory after the first authorised handshake, after a
+ten-minute no-handshake countdown that starts when the sandbox process spawns,
+or at exit, whichever comes first.
+
+On the current-user path (the sandbox starts as root with `--cap-drop=ALL`
+and then drops to your UID/GID), the file is opened by whichever process can
+read it: root when it owns the file (rootless Podman, where your UID is the
+container's root), otherwise the dropped user (rootful Docker, where root
+without `CAP_DAC_OVERRIDE` cannot read a file owned by your UID). No
+capability is added for this. On the image-user path the image's default user
+must be able to read and delete a file owned by your UID; if it cannot, the
+entrypoint stops with a message that the capability token file is not readable
+by the sandbox user. See [Troubleshooting](#troubleshooting).
 
 > **Risk:** A compromised process inside the container that obtains the
 > capability token can authenticate as you for the lifetime of the session.
@@ -697,6 +727,54 @@ container starts — see [Network](#network).
 
 > **Note:** Seatbelt mode does not use the credential proxy. It runs on your
 > host with full access to your keyring and token store.
+
+#### Source-checkout dependency preparation
+
+A launch from an llxprt-code source checkout with `NODE_ENV=development`
+installs Linux dependencies with `bun install --no-save` before it runs the
+checked-out TypeScript. That install runs lifecycle scripts from the
+checkout, which is project-controlled code, so it must not run where the
+capability is. The main container holds the token file in its capability mount
+from its start, and its entrypoint shell keeps the token in memory until the
+final `exec`. Code from the same UID could read the shell's memory on a host
+that allows ptrace, or read the shell's open descriptors under `/proc`.
+
+The install therefore runs in a separate, short-lived container that starts
+before the main container and is removed when the install ends:
+
+- It uses the same image, workdir, workspace binds, private dependency
+  volumes, hardening flags (`--cap-drop=ALL`, `no-new-privileges`),
+  `SANDBOX_FLAGS`, resource limits, network mode and `SANDBOX_ENV` entries as
+  the main container.
+- It has no capability mount, no credential socket, no credential bridge, no
+  SSH agent, no LLxprt config directory, no session directory, no Git config
+  mounts and none of the host passthrough variables.
+- On the current-user path it runs directly as your UID and GID with
+  `HOME=/tmp`, because it needs neither the root setup stage nor `su`.
+- When the install ends, the preparation container is removed and every
+  process it started, including daemons, ends with it. Nothing
+  project-controlled runs in the main container's entrypoint between the token
+  capture and the final `exec`.
+
+Process cleanup does not undo file changes. The private dependency volumes and
+the read-write workspace bind are mounted into the main container, so any file
+the install wrote to either one is there when the main container starts. That
+includes modified dependencies in `node_modules` and any edits that a
+lifecycle script made to source files in the checkout. The main container runs
+the checked-out CLI, which is the intended recipient of the capability, so
+review the checkout and its lockfile as you would before running its code
+directly.
+
+A failed install fails the launch with `Failed to prepare isolated Linux
+dependencies for LLxprt source development`; a missing `package.json` or
+`bun.lock`, or a sandbox image without Bun, fails it with the message that
+names that cause. The main container is never started, and the dependency
+volumes, the preparation container and the capability directory are released
+as for any other failed launch. A proxied-network launch starts the proxy
+sidecar first, so the install reaches the network the same way the main
+container does. If that sidecar exits while the install runs, the launch fails
+with the sidecar's error and the main container is not started. Installer
+output appears in your terminal while the install runs.
 
 ### SSH agent forwarding
 
@@ -854,26 +932,63 @@ echo "$LLXPRT_CREDENTIAL_SOCKET"
 container, which gives you a separate process namespace, enforceable resource
 limits, and a credential proxy that keeps your stored secrets on the host.
 
-**Use Seatbelt only when containers are unavailable.** Seatbelt is a macOS-only
-fallback with a substantially weaker boundary: it provides no process isolation
-(the sandboxed process runs directly on your host), no resource limits (CPU,
-memory, and process count cannot be capped), and no credential isolation (the
-process runs against your full keyring and token store). Its only effective
-control is a write-path allow-list, backed by Apple's `sandbox-exec`, which is
-undocumented and informally deprecated since macOS 10.15.
+**Use Seatbelt only when containers are unavailable on macOS.** Seatbelt is a
+macOS-only fallback with a substantially weaker boundary: it provides no
+process isolation, resource limits, or credential isolation.
+
+Linux also supports the experimental `bwrap` engine. It runs host tools inside
+private user and PID namespaces, masks host home and runtime paths, and brokers
+credentials through the host credential proxy. The capability token travels
+through an inherited pipe file descriptor. It is absent from bwrap's options,
+argv, and environment, and from sandbox process environments. The CLI consumes
+the token from its descriptor at startup and marks itself non-dumpable. The
+token and any resolved credential then reside in the CLI process memory while
+used. The kernel blocks same-UID reads of that memory; code running inside the
+CLI process can still read it. Bwrap does not enforce CPU, memory, or
+process-count limits. It rejects profiles that request these limits, proxied
+networking, or nonempty
+`SANDBOX_FLAGS`. The host system root remains readable except for masked paths,
+so this engine does not promise confidentiality for secrets stored elsewhere
+on the host.
+
+The engine supports launches from a source checkout as well as the built CLI
+bundle. It grants the checkout's `packages` tree and root `node_modules`
+read-only so workspace package links resolve, while keeping the home directory
+masked. Those trees stay read-only when the workspace is the checkout itself,
+and the rest of the workspace stays writable. The engine masks `/home`,
+`/root`, `/run`, `/tmp` and `/var/tmp` with private tmpfs mounts. It refuses a
+workspace or included directory that equals or contains one of those paths or
+the home directory, because binding it would expose the real directory over its
+mask; a directory below them, such as `/tmp/project`, is accepted. It also
+refuses a profile mount whose source equals or contains the home directory.
+
+Signals reach a bwrap session the way [Stopping a sandboxed
+session](#stopping-a-sandboxed-session) describes, with one difference: the
+host also escalates. When the CLI is still running 10 seconds after SIGTERM or
+SIGHUP, the host kills the whole sandbox with SIGKILL and exits with status 137.
+SIGINT starts no timer, because the CLI handles it as a request to cancel the
+current work. SIGKILL sent to the host ends every process in the sandbox,
+because the sandbox's PID namespace ends with the host. Nothing from the sandbox
+outlives the host.
+
+Each bwrap launch keeps its credential proxy socket in a private directory
+named `llxprt-bwrap-<random>` under the temp directory. A host that dies from
+SIGKILL, an out-of-memory kill or a crash cannot remove it, so the next bwrap
+launch removes the directories whose owning process no longer exists in the
+same PID namespace and leaves those of running sessions, and of owners it cannot
+check from its own namespace, alone.
 
 | Engine       | Platform     | Resource limits | Credential proxy | Network control              |
 | ------------ | ------------ | --------------- | ---------------- | ---------------------------- |
 | **Docker**   | macOS, Linux | Yes             | Yes              | Yes (network namespace)      |
 | **Podman**   | macOS, Linux | Yes             | Yes              | Yes (network namespace)      |
+| **bwrap**    | Linux        | No              | Yes              | On/off (network namespace)   |
 | **Seatbelt** | macOS only   | No              | No               | Yes (via macOS profile file) |
 
 When `--sandbox` is used without an explicit engine, LLxprt Code auto-detects an
-available runtime. When `LLXPRT_SANDBOX=true` is set in the environment and no
-engine is specified, the detection order on macOS is Seatbelt, then Docker, then
-Podman; on Linux it is Docker, then Podman. If you are on macOS and want the
-stronger container boundary, set `--sandbox-engine docker` (or `podman`)
-explicitly rather than relying on auto-detection, which prefers Seatbelt.
+available runtime. Docker and Podman retain priority; Linux selects bwrap only
+when neither container engine is available. macOS keeps its existing Seatbelt,
+Docker, then Podman order.
 
 ## Configuring sandboxing
 
@@ -884,11 +999,12 @@ llxprt --sandbox                              # Enable with auto-detected engine
 llxprt --sandbox-engine docker                # Force Docker
 llxprt --sandbox-engine podman                # Force Podman
 llxprt --sandbox-engine sandbox-exec          # Force Seatbelt (macOS only)
+llxprt --sandbox-engine bwrap                  # Force bwrap (Linux only)
 llxprt --sandbox-engine none                  # Explicitly disable
 llxprt --sandbox-profile-load <name>          # Load a profile
 ```
 
-`--sandbox-engine` accepts: `auto`, `docker`, `podman`, `sandbox-exec`, `none`.
+`--sandbox-engine` accepts: `auto`, `docker`, `podman`, `sandbox-exec`, `bwrap`, `none`.
 
 ### Environment variable
 
@@ -899,7 +1015,7 @@ export LLXPRT_SANDBOX=false                   # Disable
 ```
 
 `LLXPRT_SANDBOX` accepts a boolean (`true`/`false`/`1`/`0`) or an engine name
-(`docker`, `podman`, `sandbox-exec`). When set to `true`, LLxprt Code
+(`docker`, `podman`, `sandbox-exec`, `bwrap`). When set to `true`, LLxprt Code
 auto-detects an available engine.
 
 `--sandbox-engine none` always wins, even when `LLXPRT_SANDBOX` is set.
@@ -928,9 +1044,10 @@ flag, variable, or settings.
 
 Profiles are JSON files in your config directory under `sandboxes/` (see
 [Application Directories](./reference/application-directories.md)). They control
-engine, image, resources, networking, SSH agent, and extra mounts. Default
-profiles are created automatically the first time you use
-`--sandbox-profile-load`.
+engine, image, resources, networking, SSH agent, environment, and extra mounts.
+Default profiles are created automatically the first time you use
+`--sandbox-profile-load`. Built-in profiles request resource limits, so they
+cannot be used with bwrap. Create a bwrap-specific profile without `resources`.
 
 #### Built-in profiles
 
@@ -959,20 +1076,25 @@ profiles are created automatically the first time you use
 }
 ```
 
-| Field              | Valid values                                       | Description                                                |
-| ------------------ | -------------------------------------------------- | ---------------------------------------------------------- |
-| `engine`           | `auto`, `docker`, `podman`, `sandbox-exec`, `none` | Container runtime                                          |
-| `image`            | string                                             | Container image (defaults to the release image)            |
-| `resources.cpus`   | number                                             | CPU core limit                                             |
-| `resources.memory` | string                                             | Memory limit (e.g., `4g`, `512m`)                          |
-| `resources.pids`   | number                                             | Max process count                                          |
-| `network`          | `on`, `off`, `proxied`                             | Sandbox network policy (see [Network](#network))           |
-| `sshAgent`         | `auto`, `on`, `off`                                | SSH agent forwarding into container                        |
-| `mounts`           | array                                              | Extra mounts (`{from, to?, mode?}`); mode defaults to `ro` |
-| `env`              | object                                             | Additional environment variables                           |
+| Field              | Valid values                                                | Description                                                |
+| ------------------ | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| `engine`           | `auto`, `docker`, `podman`, `sandbox-exec`, `bwrap`, `none` | Container or host-tool sandbox engine                      |
+| `image`            | string                                                      | Container image (defaults to the release image)            |
+| `resources.cpus`   | number                                                      | CPU core limit                                             |
+| `resources.memory` | string                                                      | Memory limit (e.g., `4g`, `512m`)                          |
+| `resources.pids`   | number                                                      | Max process count                                          |
+| `network`          | `on`, `off`, `proxied`                                      | Sandbox network policy (see [Network](#network))           |
+| `sshAgent`         | `auto`, `on`, `off`                                         | SSH agent forwarding into container                        |
+| `mounts`           | array                                                       | Extra mounts (`{from, to?, mode?}`); mode defaults to `ro` |
+| `env`              | object                                                      | Additional environment variables                           |
+| `devices`          | array of `/dev` character-device paths                      | Host devices to expose, e.g. `/dev/dri/renderD128` (Linux) |
 
 > **Note:** `network: proxied` requires `LLXPRT_SANDBOX_PROXY_COMMAND`. Without
 > it, startup fails rather than silently using open networking.
+
+> **Note:** `devices` is honored by `bwrap`, Docker and Podman on Linux. Seatbelt
+> and container engines on non-Linux hosts fail the launch when `devices` is
+> nonempty. See the [profile reference](./cli/sandbox-profiles.md#devices).
 
 #### Creating a custom profile
 
@@ -1073,6 +1195,33 @@ first. The flag `--security-opt label=disable` (via `SANDBOX_FLAGS`) is a
 **last resort** for SELinux systems: it turns off SELinux process labelling for
 the container, removing a mandatory-access-control boundary. Use it only to
 diagnose a SELinux denial, then remove it so label enforcement is restored.
+
+**"capability token file ... is not readable by the sandbox user"** — the
+container's default user cannot read the host-only token file, which your UID
+owns (for example rootful Docker with an image user whose UID differs from
+yours, or Podman where the image user maps to a sub-UID). Set
+`SANDBOX_SET_UID_GID=true` so the sandbox runs as your UID/GID and the entrypoint
+can open and delete the file. The entrypoint refuses to start without the file
+rather than run the CLI with no credential channel or leave a readable copy.
+
+**"Failed to prepare isolated Linux dependencies for LLxprt source development"**
+— the separate preparation container did not finish its install. Two causes
+produce this message:
+
+- The install ran and `bun install --no-save` failed. The install output is
+  printed above the message. The failure is in the checkout's dependencies or
+  in the container's network access, since the preparation container gets the
+  same network settings as the main container (a `network: off` session cannot
+  install).
+- The container engine could not start the preparation container, so no
+  install ran. The message then ends with the engine's exit status or with the
+  reason it could not be started, and the dependencies and the network are not
+  the cause. Check the engine's own error output printed above the message
+  (for example from `docker run` or `podman run`), and check that the engine is
+  running, the image is present and any `SANDBOX_FLAGS` are valid for it.
+
+See
+[Source-checkout dependency preparation](#source-checkout-dependency-preparation).
 
 **SSH not working in Podman on macOS** — use a stable socket path. The default
 launchd socket paths are unreliable. Set up a dedicated socket under a
