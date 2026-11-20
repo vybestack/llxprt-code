@@ -23,8 +23,21 @@ import process from 'node:process';
 import { ZedAgent } from './zedIntegration.js';
 import type { ZedSessionProviderInputs } from './zed-session-agent.js';
 import { toAcpReadableStream } from './acp-readable-stream.js';
+import { KILL_GRACE_PERIOD_MS } from './zed-terminal-manager.js';
 
 const DISPOSAL_SIGNALS: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
+
+/**
+ * How long shutdown waits for each of its two phases (releasing the sessions,
+ * then the host's exit cleanup) before giving up on it and exiting anyway.
+ * Releasing a session can include killing its client-side terminals, which is
+ * allowed {@link KILL_GRACE_PERIOD_MS}, so the bound leaves room for that
+ * grace to run out before the wait is abandoned.
+ */
+export const DISPOSAL_BOUND_MS = 2 * KILL_GRACE_PERIOD_MS;
+
+/** Exit status after SIGINT, matching the CLI's other SIGINT exits (128 + 2). */
+const SIGINT_EXIT_CODE = 130;
 
 /**
  * Listener target for process-signal-driven disposal. Injectable so tests can
@@ -34,6 +47,32 @@ export type SignalListenerTarget = {
   on(signal: NodeJS.Signals, listener: () => void): unknown;
   off(signal: NodeJS.Signals, listener: () => void): unknown;
 };
+
+/**
+ * Outcome of waiting for work for a bounded time. `timedOut` is true when the
+ * bound passed first; the work itself is not cancelled.
+ */
+type Bounded<T> =
+  | { readonly timedOut: false; readonly value: T }
+  | { readonly timedOut: true };
+
+async function boundedBy<T>(
+  work: Promise<T>,
+  boundMs: number,
+): Promise<Bounded<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<{ readonly timedOut: true }>((resolve) => {
+    timer = setTimeout(() => resolve({ timedOut: true }), boundMs);
+  });
+  try {
+    return await Promise.race([
+      work.then((value) => ({ timedOut: false as const, value })),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Builds the disposal action performed when a disposal signal fires.
@@ -78,38 +117,63 @@ export function buildSignalDisposalHandler(
  * {@link runZedIntegration} to run.
  */
 export function installDisposalSignalHandlers(
-  onSignal: () => void,
+  onSignal: (signal: NodeJS.Signals) => void,
   signals: readonly NodeJS.Signals[] = DISPOSAL_SIGNALS,
   target: SignalListenerTarget = process,
 ): () => void {
-  for (const signal of signals) {
-    target.on(signal, onSignal);
+  const listeners = signals.map(
+    (signal) => [signal, () => onSignal(signal)] as const,
+  );
+  for (const [signal, listener] of listeners) {
+    target.on(signal, listener);
   }
   return () => {
-    for (const signal of signals) {
-      target.off(signal, onSignal);
+    for (const [signal, listener] of listeners) {
+      target.off(signal, listener);
     }
   };
 }
 
 export type ExitCleanupCallback = () => void | Promise<void>;
 
+/**
+ * Releases every agent, then runs the host's exit cleanup. Each phase is
+ * waited for at most `disposalBoundMs`: a session that cannot finish its
+ * shutdown (a tool call that will not stop, a client that no longer answers)
+ * must not keep the process from ending.
+ */
 export async function cleanupAgents(
   agents: readonly ZedAgent[],
   logger: DebugLogger,
   onExitCleanup: ExitCleanupCallback | undefined = undefined,
+  disposalBoundMs: number = DISPOSAL_BOUND_MS,
 ): Promise<void> {
-  const disposalResults = await Promise.allSettled(
-    agents.map((agent) => agent.disposeAll()),
+  const disposal = await boundedBy(
+    Promise.allSettled(agents.map((agent) => agent.disposeAll())),
+    disposalBoundMs,
   );
-  const rejected = disposalResults.filter(
-    (result): result is PromiseRejectedResult => result.status === 'rejected',
-  );
-  for (const result of rejected) {
-    logger.warn(() => `Zed agent cleanup failed: ${String(result.reason)}`);
+  if (disposal.timedOut) {
+    logger.warn(
+      () => `Zed agent cleanup did not finish within ${disposalBoundMs} ms`,
+    );
+  } else {
+    const rejected = disposal.value.filter(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    for (const result of rejected) {
+      logger.warn(() => `Zed agent cleanup failed: ${String(result.reason)}`);
+    }
   }
   try {
-    await onExitCleanup?.();
+    const exitCleanup = await boundedBy(
+      (async () => onExitCleanup?.())(),
+      disposalBoundMs,
+    );
+    if (exitCleanup.timedOut) {
+      logger.warn(
+        () => `Zed exit cleanup did not finish within ${disposalBoundMs} ms`,
+      );
+    }
   } catch (cleanupError) {
     logger.debug(() => `Exit cleanup failed: ${String(cleanupError)}`);
   }
@@ -194,9 +258,12 @@ export async function runZedIntegration(
     providerInputs:
       options.providerInputs ?? (await discoverZedSessionProviderInputs()),
   };
-  const removeSignalHandlers = installDisposalSignalHandlers(
-    buildSignalDisposalHandler(stdinSource, logger),
-  );
+  const destroyTransport = buildSignalDisposalHandler(stdinSource, logger);
+  let disposalSignal: NodeJS.Signals | undefined;
+  const removeSignalHandlers = installDisposalSignalHandlers((signal) => {
+    disposalSignal ??= signal;
+    destroyTransport();
+  });
   try {
     await serveZedConnection(
       owner,
@@ -209,4 +276,9 @@ export async function runZedIntegration(
   } finally {
     removeSignalHandlers();
   }
+  // The connection is over and cleanup has run (or been given up on). Other
+  // handles, such as a provider's open connection, must not keep the process
+  // running after that, so end it here instead of waiting for the event loop
+  // to drain.
+  process.exit(disposalSignal === 'SIGINT' ? SIGINT_EXIT_CODE : 0);
 }

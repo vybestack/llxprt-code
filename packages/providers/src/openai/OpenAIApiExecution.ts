@@ -21,9 +21,11 @@ import {
   dumpSDKRequestContext,
   dumpSDKResponseContext,
   wrapStreamWithDump,
+  wrapStreamWithOutcomeDump,
   wrapStreamWithSDKErrorDump,
   bestEffortDump,
   dumpSDKErrorRequestResponse,
+  type DumpOutcome,
   type RequestDumpMetadata,
   type StreamedDumpBody,
 } from '../utils/dumpSDKContext.js';
@@ -34,6 +36,8 @@ import {
   type ChatHttpBody,
 } from '../utils/chat-http-body.js';
 
+import type { DumpAttemptContext } from '../utils/dumpAttemptContext.js';
+import { mapFinishReason } from './finishReasonMapping.js';
 interface OpenAIRawPostOptions {
   readonly body: unknown;
   readonly headers: Record<string, string>;
@@ -63,6 +67,8 @@ export interface ApiExecutionOptions {
   model: string;
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
+  attemptContext?: DumpAttemptContext;
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
   logger: DebugLogger;
   getBaseURL: () => string | undefined;
 }
@@ -78,7 +84,24 @@ function hasHeaderName(headers: Record<string, string>, name: string): boolean {
 function chatDumpMetadata(
   mergedHeaders: Record<string, string> | undefined,
   apiKey: string | undefined,
+  attemptContext?: DumpAttemptContext,
+  outcome?: string,
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number },
 ): RequestDumpMetadata {
+  const limits = attemptContext?.retentionLimits ?? retentionLimits;
+  const correlation =
+    attemptContext === undefined && limits === undefined
+      ? undefined
+      : {
+          promptId: attemptContext?.promptId ?? null,
+          attemptIndex: attemptContext?.attemptIndex ?? null,
+          runtimeId: attemptContext?.runtimeId ?? null,
+          ...(attemptContext === undefined
+            ? {}
+            : { retentionCoordinator: attemptContext.retentionCoordinator }),
+          ...(limits === undefined ? {} : { retentionLimits: limits }),
+          ...(outcome === undefined ? {} : { outcome }),
+        };
   // The SDK sends Authorization from the client api key; synthesize the
   // header for the dump unless the caller already supplied one (#3159).
   // A null/empty key means the SDK sends no Authorization header, so the
@@ -88,11 +111,16 @@ function chatDumpMetadata(
     (mergedHeaders !== undefined &&
       hasHeaderName(mergedHeaders, 'Authorization'))
   ) {
-    return { headers: mergedHeaders, transport: { type: 'http' } };
+    return {
+      headers: mergedHeaders,
+      transport: { type: 'http' },
+      ...(correlation === undefined ? {} : { correlation }),
+    };
   }
   return {
     headers: { ...mergedHeaders, Authorization: `Bearer ${apiKey}` },
     transport: { type: 'http' },
+    ...(correlation === undefined ? {} : { correlation }),
   };
 }
 
@@ -106,6 +134,8 @@ interface ErrorContext {
   model: string;
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
+  attemptContext?: DumpAttemptContext;
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
   logger: DebugLogger;
   getBaseURL: () => string | undefined;
 }
@@ -143,7 +173,7 @@ async function dumpOpenAIErrorContext(
       resolvedBaseURL ?? 'https://api.openai.com/v1',
       dumpSDKRequestContext,
       dumpSDKResponseContext,
-      chatDumpMetadata(ctx.mergedHeaders, ctx.apiKey),
+      chatDumpMetadata(ctx.mergedHeaders, ctx.apiKey, ctx.attemptContext),
     );
   }
 }
@@ -258,6 +288,40 @@ function isChatCompletion(
   );
 }
 
+function selectOpenAIDumpOutcome(value: unknown): DumpOutcome {
+  if (typeof value !== 'object' || value === null || !('choices' in value))
+    return undefined;
+  const choices = value.choices;
+  if (!Array.isArray(choices)) return undefined;
+  const lastChoice = choices[choices.length - 1];
+  if (
+    typeof lastChoice !== 'object' ||
+    lastChoice === null ||
+    !('finish_reason' in lastChoice)
+  )
+    return undefined;
+  const rawReason = lastChoice.finish_reason;
+  if (typeof rawReason !== 'string') return undefined;
+  const finishReason = mapFinishReason(rawReason).finishReason;
+  if (finishReason === 'refusal' || finishReason === 'safety') return 'refusal';
+  if (
+    finishReason === 'stop' ||
+    finishReason === 'tool_calls' ||
+    finishReason === 'max_tokens'
+  )
+    return 'success';
+  return undefined;
+}
+
+function selectOpenAIStreamingDumpOutcome(
+  response: Record<string, unknown>,
+): DumpOutcome {
+  if (response['completed'] !== true || !Array.isArray(response['chunks']))
+    return undefined;
+  const chunks = response['chunks'];
+  return selectOpenAIDumpOutcome(chunks[chunks.length - 1]);
+}
+
 /** Posts a sealed body as a streaming chat request (also the continuation). */
 export async function executeSpooledStreamingChatRequest(
   client: OpenAIRawPostClient,
@@ -326,31 +390,138 @@ function resolveDumpBodies(opts: ApiExecutionOptions): DumpBodies {
 /**
  * Execute streaming API request with dump and error handling.
  */
+async function dumpOpenAIRequest(
+  opts: ApiExecutionOptions,
+  body: StreamedDumpBody,
+): Promise<string | undefined> {
+  const result = await bestEffortDump(
+    'request',
+    'openai',
+    () =>
+      dumpSDKRequestContext(
+        'openai',
+        '/chat/completions',
+        body,
+        opts.baseURL ?? 'https://api.openai.com/v1',
+        chatDumpMetadata(
+          opts.mergedHeaders,
+          opts.client.apiKey,
+          opts.attemptContext,
+          undefined,
+          opts.retentionLimits,
+        ),
+      ),
+    opts.logger,
+  );
+  return result?.baseId;
+}
+
+function wrapOpenAIErrorStreamingResponse(
+  response: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+  opts: ApiExecutionOptions,
+  requestBody: StreamedDumpBody,
+): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
+  const { client, mergedHeaders, baseURL, attemptContext, retentionLimits } =
+    opts;
+  const metadata = chatDumpMetadata(
+    mergedHeaders,
+    client.apiKey,
+    attemptContext,
+    undefined,
+    retentionLimits,
+  );
+  const errorWrapped = wrapStreamWithSDKErrorDump(
+    response,
+    'openai',
+    '/chat/completions',
+    requestBody,
+    baseURL ?? 'https://api.openai.com/v1',
+    dumpSDKRequestContext,
+    dumpSDKResponseContext,
+    metadata,
+  );
+  const correlation = metadata.correlation ?? {
+    promptId: null,
+    attemptIndex: null,
+    runtimeId: null,
+    ...(retentionLimits === undefined ? {} : { retentionLimits }),
+  };
+  return wrapStreamWithOutcomeDump(
+    errorWrapped,
+    'openai',
+    '/chat/completions',
+    requestBody,
+    baseURL,
+    { ...metadata, correlation },
+    attemptContext?.pairedSuccess ?? false,
+    selectOpenAIDumpOutcome,
+    (outcome, baseId) => attemptContext?.recordDump(outcome, baseId),
+  );
+}
+
+function wrapOpenAIStreamingResponse(
+  response: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+  opts: ApiExecutionOptions,
+  requestBaseId: string | undefined,
+  dump: DumpBodies,
+): AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
+  const { client, mergedHeaders, baseURL, attemptContext, retentionLimits } =
+    opts;
+  const { success: successBody, error: errorBody } = dump;
+  if (errorBody !== undefined && successBody === undefined)
+    return wrapOpenAIErrorStreamingResponse(response, opts, errorBody);
+  if (successBody !== undefined && requestBaseId !== undefined) {
+    const correlation = chatDumpMetadata(
+      mergedHeaders,
+      client.apiKey,
+      attemptContext,
+      undefined,
+      retentionLimits,
+    ).correlation;
+    return wrapStreamWithDump(
+      response,
+      requestBaseId,
+      'openai',
+      dumpSDKResponseContext,
+      correlation,
+      attemptContext === undefined
+        ? undefined
+        : (baseId, responseBody) => {
+            const outcome = selectOpenAIStreamingDumpOutcome(responseBody);
+            if (outcome !== undefined)
+              attemptContext.recordDump(outcome, baseId);
+          },
+    );
+  }
+  if (errorBody === undefined) return response;
+  return wrapStreamWithSDKErrorDump(
+    response,
+    'openai',
+    '/chat/completions',
+    errorBody,
+    baseURL ?? 'https://api.openai.com/v1',
+    dumpSDKRequestContext,
+    dumpSDKResponseContext,
+    chatDumpMetadata(
+      mergedHeaders,
+      client.apiKey,
+      attemptContext,
+      undefined,
+      retentionLimits,
+    ),
+  );
+}
+
 async function executeStreamingRequest(
   opts: ApiExecutionOptions,
   dump: DumpBodies,
 ): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
   const { client, spool, abortSignal, mergedHeaders, baseURL } = opts;
-  const { success: successBody, error: errorBody } = dump;
-
-  let requestBaseId: string | undefined;
-
-  if (successBody !== undefined) {
-    const reqResult = await bestEffortDump(
-      'request',
-      'openai',
-      () =>
-        dumpSDKRequestContext(
-          'openai',
-          '/chat/completions',
-          successBody,
-          baseURL ?? 'https://api.openai.com/v1',
-          chatDumpMetadata(mergedHeaders, client.apiKey),
-        ),
-      opts.logger,
-    );
-    requestBaseId = reqResult?.baseId;
-  }
+  const { error: errorBody } = dump;
+  const requestBaseId =
+    dump.success === undefined
+      ? undefined
+      : await dumpOpenAIRequest(opts, dump.success);
 
   try {
     const response = await executeSpooledStreamingChatRequest(
@@ -360,29 +531,7 @@ async function executeStreamingRequest(
       mergedHeaders,
     );
 
-    if (successBody !== undefined && requestBaseId) {
-      return wrapStreamWithDump(
-        response,
-        requestBaseId,
-        'openai',
-        dumpSDKResponseContext,
-      );
-    }
-
-    if (errorBody !== undefined) {
-      return wrapStreamWithSDKErrorDump(
-        response,
-        'openai',
-        '/chat/completions',
-        errorBody,
-        baseURL ?? 'https://api.openai.com/v1',
-        dumpSDKRequestContext,
-        dumpSDKResponseContext,
-        chatDumpMetadata(mergedHeaders, client.apiKey),
-      );
-    }
-
-    return response;
+    return wrapOpenAIStreamingResponse(response, opts, requestBaseId, dump);
   } catch (error) {
     const errorMessage = String(error);
     const resolvedBaseURL = opts.baseURL ?? opts.getBaseURL();
@@ -396,6 +545,8 @@ async function executeStreamingRequest(
       model: opts.model,
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,
+      attemptContext: opts.attemptContext,
+      retentionLimits: opts.retentionLimits,
       logger: opts.logger,
       getBaseURL: opts.getBaseURL,
     };
@@ -416,6 +567,31 @@ async function executeStreamingRequest(
   }
 }
 
+async function dumpSuccessfulNonStreamingResponse(
+  response: OpenAI.Chat.Completions.ChatCompletion,
+  opts: ApiExecutionOptions,
+  requestBaseId: string,
+): Promise<void> {
+  const attempt = opts.attemptContext;
+  const correlation = chatDumpMetadata(
+    opts.mergedHeaders,
+    opts.client.apiKey,
+    attempt,
+  ).correlation;
+  const written = await bestEffortDump('response', 'openai', () =>
+    dumpSDKResponseContext(
+      requestBaseId,
+      'openai',
+      { status: 200, streaming: false, response },
+      false,
+      correlation,
+    ),
+  );
+  const outcome = selectOpenAIDumpOutcome(response);
+  if (written !== undefined && attempt !== undefined && outcome !== undefined)
+    attempt.recordDump(outcome, requestBaseId);
+}
+
 /**
  * Execute non-streaming API request with dump and error handling.
  */
@@ -425,25 +601,10 @@ async function executeNonStreamingRequest(
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   const { client, spool, abortSignal, mergedHeaders, baseURL } = opts;
   const { success: successBody, error: errorBody } = dump;
-
-  let requestBaseId: string | undefined;
-
-  if (successBody !== undefined) {
-    const reqResult = await bestEffortDump(
-      'request',
-      'openai',
-      () =>
-        dumpSDKRequestContext(
-          'openai',
-          '/chat/completions',
-          successBody,
-          baseURL ?? 'https://api.openai.com/v1',
-          chatDumpMetadata(mergedHeaders, client.apiKey),
-        ),
-      opts.logger,
-    );
-    requestBaseId = reqResult?.baseId;
-  }
+  const requestBaseId =
+    successBody === undefined
+      ? undefined
+      : await dumpOpenAIRequest(opts, successBody);
 
   try {
     const response = await executeSpooledNonStreamingChatRequest(
@@ -453,13 +614,12 @@ async function executeNonStreamingRequest(
       mergedHeaders,
     );
 
+    if (errorBody !== undefined && successBody === undefined) {
+      await dumpOpenAIOutcomeResponse(response, opts, errorBody);
+    }
+
     if (successBody !== undefined && requestBaseId) {
-      await bestEffortDump(
-        'response',
-        'openai',
-        () => dumpSDKResponseContext(requestBaseId, 'openai', response, false),
-        opts.logger,
-      );
+      await dumpSuccessfulNonStreamingResponse(response, opts, requestBaseId);
     }
 
     return response;
@@ -486,6 +646,8 @@ async function executeNonStreamingRequest(
       model: opts.model,
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,
+      attemptContext: opts.attemptContext,
+      retentionLimits: opts.retentionLimits,
       logger: opts.logger,
       getBaseURL: opts.getBaseURL,
     };
@@ -504,6 +666,58 @@ async function executeNonStreamingRequest(
     // This line is unreachable but satisfies the type system.
     throw error;
   }
+}
+
+async function dumpOpenAIOutcomeResponse(
+  response: OpenAI.Chat.Completions.ChatCompletion,
+  opts: ApiExecutionOptions,
+  requestBody: StreamedDumpBody,
+): Promise<void> {
+  const attempt = opts.attemptContext;
+  const outcome = selectOpenAIDumpOutcome(response);
+  if (
+    outcome !== 'refusal' &&
+    !(outcome === 'success' && attempt?.pairedSuccess === true)
+  )
+    return;
+  const dumpOutcome = outcome === 'refusal' ? 'refusal' : 'paired-success';
+  const metadata: RequestDumpMetadata = {
+    ...chatDumpMetadata(opts.mergedHeaders, opts.client.apiKey, attempt),
+    correlation: {
+      promptId: attempt?.promptId ?? null,
+      attemptIndex: attempt?.attemptIndex ?? null,
+      runtimeId: attempt?.runtimeId ?? null,
+      ...(attempt === undefined
+        ? {}
+        : { retentionCoordinator: attempt.retentionCoordinator }),
+      ...(attempt?.retentionLimits === undefined
+        ? {}
+        : { retentionLimits: attempt.retentionLimits }),
+      outcome: dumpOutcome,
+    },
+  };
+  const request = await bestEffortDump('outcome-request', 'openai', () =>
+    dumpSDKRequestContext(
+      'openai',
+      '/chat/completions',
+      requestBody,
+      opts.baseURL ?? 'https://api.openai.com/v1',
+      metadata,
+      true,
+    ),
+  );
+  if (request === undefined) return;
+  const dumpResponse = await bestEffortDump('outcome-response', 'openai', () =>
+    dumpSDKResponseContext(
+      request.baseId,
+      'openai',
+      { status: 200, streaming: false, response },
+      false,
+      metadata.correlation,
+    ),
+  );
+  if (dumpResponse !== undefined)
+    attempt?.recordDump(dumpOutcome, request.baseId);
 }
 
 /**

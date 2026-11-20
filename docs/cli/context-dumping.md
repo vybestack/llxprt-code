@@ -65,6 +65,16 @@ YYYYMMDD-HHMMSS-<provider>-<random>.json
 
 Example: `20251208-183505-openai-asq1d9.json`
 
+## Offline refusal survey
+
+To summarize recorded refusal attempts without sending requests or replaying dumps, run:
+
+```bash
+bun scripts/refusal-survey.ts --since 2026-11-01 --json refusal-survey.json
+```
+
+The script scans projects under the resolved LLxprt log directory and reads available session journals and dump pairs. `--root` selects a token-log project root for fixtures or alternate log trees, and `--project HASH_PREFIX` narrows the scan. Compression correlation puts calls within 60 seconds after the latest compression in after-compression, older calls with a matched compression in elsewhere, and calls with no matched prior compression in missing-evidence; each bucket's denominator counts all observed provider calls assigned to it. The report labels legacy zero-output Claude records as suspected refusals; they are not confirmed classifier refusals. Reports can contain excerpts from private session content.
+
 ## Dump File Structure
 
 Each dump file contains the complete HTTP request and response:

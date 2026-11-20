@@ -6,6 +6,7 @@ import {
   type IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { applyCompressionValuesWithAnchor } from '../cache-anchor-values.js';
+import { unauthoredProvenance } from '../compressionAuditProvenance.js';
 import { summaryOutput } from '../summaryOutput.js';
 import { withNativeFallbackFixture } from './support/native-fallback-fixture.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
@@ -38,15 +39,28 @@ describe('native cache-anchor span publication', () => {
           const top = size === 3 ? 1 : 2;
           const bottom = size === 3 ? 2 : size - 2;
           const start = top - 1;
-          const output = summaryOutput(source.rows, top, bottom, [summary]);
+          const output = summaryOutput(
+            source.rows,
+            top,
+            bottom,
+            [summary],
+            unauthoredProvenance('one-shot'),
+          );
           if (output.kind !== 'applied')
             throw new Error('Missing summary output');
           const before = Array.from({ length: size }, (_, index) =>
             truncationValueRow(index, 64),
           );
+          // The published summary row carries the compression provenance.
           const kept = [
             ...before.slice(0, top),
-            summary,
+            {
+              ...summary,
+              metadata: {
+                ...summary.metadata,
+                compressionProvenance: unauthoredProvenance('one-shot'),
+              },
+            },
             ...before.slice(bottom),
           ].slice(start);
           const expected = annotateCompressionSpan(before, kept).map(

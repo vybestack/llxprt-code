@@ -13,6 +13,7 @@ import {
 } from './compressionAttempt.js';
 import { bindCompressionProvider } from './utils.js';
 import { summaryOutput, type SummaryOutput } from './summaryOutput.js';
+import { summarizerProvenance } from './compressionAuditProvenance.js';
 /**
  * @plan PLAN-20260211-COMPRESSION.P06
  * @plan PLAN-20260211-HIGHDENSITY.P03
@@ -29,7 +30,6 @@ import { summaryOutput, type SummaryOutput } from './summaryOutput.js';
  * ChatSession (getCompressionSplit, directCompressionCall, applyCompression).
  */
 
-import { readFileSync } from 'node:fs';
 import type {
   IContent,
   UsageStats,
@@ -44,14 +44,15 @@ import type {
   CompressionStrategy,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
-  EmptySummaryError,
-  PromptResolutionError,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { aggregateTextFromBlocks, runVerificationPass } from './utils.js';
+  aggregateTextFromBlocks,
+  buildContextInjections,
+  buildSummaryRequestFrame,
+  runVerificationPass,
+} from './utils.js';
+import { stripScratchpadSections } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
-import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
-import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
 import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
@@ -137,8 +138,8 @@ export class MiddleOutStrategy implements CompressionStrategy {
       diskSummaryRequestSelection(
         context.history,
         plan,
-        this.resolvePrompt(context),
-        this.buildContextInjections(context),
+        buildSummaryRequestFrame(context),
+        buildContextInjections(context),
         this.summaryRequestOwnership,
       ),
       providerResult,
@@ -152,6 +153,11 @@ export class MiddleOutStrategy implements CompressionStrategy {
         context.activeTodos,
         capturedUsage,
         plan.lastPromptContext,
+      ),
+      summarizerProvenance(
+        'middle-out',
+        providerResult.provider.name,
+        providerResult.resolvedOptions?.model ?? null,
       ),
     );
   }
@@ -183,29 +189,6 @@ export class MiddleOutStrategy implements CompressionStrategy {
     );
   }
 
-  private resolvePrompt(context: Omit<CompressionContext, 'history'>): string {
-    const resolved = context.promptResolver.resolveFile(
-      context.promptBaseDir,
-      'compression.md',
-      context.promptContext,
-    );
-
-    if (resolved.found && resolved.path) {
-      try {
-        return readFileSync(resolved.path, 'utf-8');
-      } catch {
-        // Fall through to hardcoded default
-      }
-    }
-
-    // Fall back to the hardcoded compression prompt
-    const fallback = getCompressionPrompt();
-    if (!fallback) {
-      throw new PromptResolutionError('compression.md');
-    }
-    return fallback;
-  }
-
   /**
    * Calls the provider, throws EmptySummaryError with diagnostics if the
    * summary is empty, then runs the optional verification pass.
@@ -224,7 +207,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     } = providerResult;
 
     const {
-      text: summary,
+      text: rawSummary,
       usage: capturedUsage,
       diagnostics,
     } = await this.callProvider(
@@ -237,6 +220,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       invocation,
     );
 
+    const summary = stripScratchpadSections(rawSummary);
     if (!summary.trim()) {
       throw new EmptySummaryError('middle-out', diagnostics);
     }
@@ -387,44 +371,5 @@ export class MiddleOutStrategy implements CompressionStrategy {
         },
       },
     ];
-  }
-
-  /**
-   * @plan PLAN-20260211-HIGHDENSITY.P23
-   * @requirement REQ-HD-011.3, REQ-HD-012.2
-   * @pseudocode prompts-todos.md lines 251-276
-   */
-  private buildContextInjections(
-    context: Omit<CompressionContext, 'history'>,
-  ): IContent[] {
-    const injections: IContent[] = [];
-
-    if (context.activeTodos && context.activeTodos.trim().length > 0) {
-      injections.push({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: `The following are the current active todo/task items. When summarizing, preserve context about why each task exists and what has been tried:
-
-${context.activeTodos}`,
-          },
-        ],
-      });
-    }
-
-    if (context.transcriptPath) {
-      injections.push({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: buildTranscriptPathNotice(context.transcriptPath),
-          },
-        ],
-      });
-    }
-
-    return injections;
   }
 }

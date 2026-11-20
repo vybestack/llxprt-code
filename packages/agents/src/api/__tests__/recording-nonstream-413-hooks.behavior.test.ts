@@ -31,6 +31,7 @@ import {
   runCleanupSteps,
 } from '../../core/subagent-cleanup.js';
 import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
+import { unauthoredProvenance } from '../../compression/compressionAuditProvenance.js';
 import { summaryOutput } from '../../compression/summaryOutput.js';
 import { createRecordingExecution } from '../recordingExecution.js';
 import { SessionControl } from '../control/sessionControl.js';
@@ -76,13 +77,19 @@ async function inputsAt(path: string): Promise<CommandInput[]> {
 function spyOnSummaryStrategy() {
   return spyOn(OneShotStrategy.prototype, 'prepareDisk').mockImplementation(
     async (context) =>
-      summaryOutput(context.history, 0, context.history.length, [
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'short summary' }],
-          metadata: { reason: 'compression-state-snapshot' },
-        },
-      ]),
+      summaryOutput(
+        context.history,
+        0,
+        context.history.length,
+        [
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'short summary' }],
+            metadata: { reason: 'compression-state-snapshot' },
+          },
+        ],
+        unauthoredProvenance('one-shot'),
+      ),
   );
 }
 interface ContextLimitServer {

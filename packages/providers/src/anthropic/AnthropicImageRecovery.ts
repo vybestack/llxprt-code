@@ -26,6 +26,7 @@ import type { AnthropicRateLimitInfo } from './AnthropicRateLimitHandler.js';
 type ExecutedAnthropicCall = {
   response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   rateLimitInfo?: AnthropicRateLimitInfo | undefined;
+  requestId: string | null;
 };
 
 /** The provider's transport call and error logger the recovery runs through. */
@@ -85,6 +86,7 @@ export async function executeImageDimensionRecovery(
   | {
       response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
       rateLimitInfo: AnthropicRateLimitInfo | undefined;
+      requestId: string | null;
     }
   | undefined
 > {
@@ -134,5 +136,6 @@ export async function executeImageDimensionRecovery(
   return {
     response: retryResult.response,
     rateLimitInfo: retryResult.rateLimitInfo,
+    requestId: retryResult.requestId,
   };
 }

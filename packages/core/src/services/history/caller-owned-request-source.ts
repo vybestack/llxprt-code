@@ -5,6 +5,7 @@ import { encodeRowDraft, entryForNewRow } from '../../journal/rowDraft.js';
 import type { RowEntry } from '../../journal/rowEntry.js';
 import type { RowIds, StoredRow } from '../../journal/rowReads.js';
 import type { IContent } from './IContent.js';
+import { isEmptiedCompressionSummary } from './compressionSummaryScratchpad.js';
 import type { JournalResponseSource } from './journal-response-source.js';
 import { encodeContentRow, encodeContentBlock } from './journalRowCodec.js';
 import { ROW_FLAG } from '../../journal/rowRecord.js';
@@ -66,7 +67,9 @@ export class CallerOwnedRequestSource implements JournalResponseSource {
 
   private included(row: IContent): boolean {
     return (
-      row.blocks.length > 0 || (this.preserveEmptyAi && row.speaker === 'ai')
+      (row.blocks.length > 0 ||
+        (this.preserveEmptyAi && row.speaker === 'ai')) &&
+      !isEmptiedCompressionSummary(row)
     );
   }
 

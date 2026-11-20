@@ -5,6 +5,7 @@ import type { StreamProcessorRuntime } from './chatSessionPorts.js';
 import type { ProviderReadyRequest } from './sendRequestState.js';
 import type { SendMessageParams, ChatSessionConfig } from './chatSession.js';
 import type { RawTokenDeltaBridge } from './streamTelemetryLogger.js';
+import type { DumpAttemptContext } from '@vybestack/llxprt-code-providers';
 import { responseTransportSource } from './response-transport-source.js';
 import { enforceAndStreamSourcePromptEnvelopeRetries } from './prompt-envelope-source-send.js';
 import { buildStreamChatOptions } from './streamChatOptions.js';
@@ -19,6 +20,7 @@ export function resendKeptRequestSource(
   generationConfig: ChatSessionConfig,
   bridge: RawTokenDeltaBridge | null,
   onPrepared: (estimate: PromptEnvelopeEstimate | null) => void,
+  dumpAttemptContext: DumpAttemptContext,
 ): ReturnType<typeof responseTransportSource> {
   const source = kept.prepared.source;
   return responseTransportSource(
@@ -62,6 +64,7 @@ export function resendKeptRequestSource(
               systemInstruction: kept.systemInstruction,
             },
             bridge,
+            dumpAttemptContext,
           ),
           requestRows: rows,
           contentCount: rows.count,

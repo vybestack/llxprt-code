@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { unauthoredProvenance } from '../compressionAuditProvenance.js';
 import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
 import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import {
@@ -76,8 +77,11 @@ async function ownership(size: number, rollback: boolean): Promise<number> {
     const operation = rejectedValue(
       executeTruncation(history, size).then((result) => {
         returned = true;
-        expect(result.outcome).toBe('applied');
-        expect(result.summary).toBeUndefined();
+        expect(result).toStrictEqual({
+          outcome: 'applied',
+          summary: undefined,
+          provenance: unauthoredProvenance('top-down-truncation'),
+        });
       }),
     );
     try {

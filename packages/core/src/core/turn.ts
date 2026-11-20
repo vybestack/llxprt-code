@@ -306,6 +306,12 @@ export type ServerFinishedEvent = {
     // consumers can surface a refusal-specific notice distinct from a normal
     // completion.
     stopReason?: string;
+    stopDetails?: {
+      readonly type: string;
+      readonly category: string | null;
+      readonly explanation: string | null;
+      readonly recommendedModel?: string;
+    };
   };
 };
 

@@ -1,10 +1,29 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import {
-  buildTriggerInstruction,
-  COMPRESSION_SECURITY_PREAMBLE,
+  buildSummaryRequestFrame,
   sanitizeHistoryForCompression,
+  type SummaryRequestFrame,
 } from '../utils.js';
+
+/**
+ * A request frame built from the shipped compression prompt files, with the
+ * instructions turn replaced by `instructions` so tests can tell it apart.
+ */
+export function testSummaryFrame(instructions: string): SummaryRequestFrame {
+  return {
+    ...buildSummaryRequestFrame({
+      promptResolver: new PromptResolver(),
+      promptBaseDir: '',
+      promptContext: {},
+    }),
+    instructions: {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: instructions }],
+    },
+  };
+}
 
 /**
  * Independent reference for the summarization model request: the resident
@@ -16,7 +35,7 @@ export function referenceSummaryRequest(
   rows: readonly IContent[],
   top: number,
   bottom: number,
-  prompt: string,
+  frame: SummaryRequestFrame,
   injections: readonly IContent[],
 ): IContent[] {
   const range = rows.slice(top, bottom);
@@ -27,27 +46,10 @@ export function referenceSummaryRequest(
     ),
   );
   return [
-    COMPRESSION_SECURITY_PREAMBLE,
-    { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
+    frame.preamble,
+    frame.instructions,
     ...sanitizeHistoryForCompression(range),
     ...injections,
-    {
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'text',
-          text: buildTriggerInstruction(
-            priorSnapshot
-              ? [
-                  {
-                    speaker: 'human',
-                    blocks: [{ type: 'text', text: '<state_snapshot>' }],
-                  },
-                ]
-              : [],
-          ),
-        },
-      ],
-    },
+    priorSnapshot ? frame.triggerWithPriorSnapshot : frame.trigger,
   ];
 }

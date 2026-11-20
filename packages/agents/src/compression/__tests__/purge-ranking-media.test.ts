@@ -6,6 +6,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
+import {
+  MediaAdmissionService,
+  type MediaAdmissionContext,
+} from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type {
   IContent,
   MediaReferenceBlock,
@@ -22,6 +26,35 @@ import {
   type ValueRoute,
 } from './purge-ranking-value-helpers.js';
 const historyScratchRoots = createTestScratchOwner();
+const ONE_PIXEL_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
+const pastedImage: IContent = {
+  speaker: 'human',
+  blocks: [
+    {
+      type: 'media',
+      mimeType: 'image/png',
+      encoding: 'base64',
+      data: ONE_PIXEL_PNG,
+    },
+  ],
+};
+const admissionContext: MediaAdmissionContext = {
+  turnId: 'purge-ranking-media',
+  source: 'user-input',
+  reservationOwnerScope: 'purge-ranking-admission',
+};
+
+/** The pasted image as admission stores it: a reference carrying its origin. */
+async function admitPastedImage(
+  admission: MediaAdmissionService,
+): Promise<{ readonly row: IContent; readonly media: MediaReferenceBlock }> {
+  const row = await admission.admitContent(pastedImage, admissionContext);
+  const media = row.blocks[0];
+  if (media.type !== 'media' || media.encoding !== 'reference')
+    throw new Error('Expected an admitted media reference');
+  return { row, media };
+}
 
 async function* referenceRows(
   size: number,
@@ -38,16 +71,18 @@ async function* referenceRows(
 async function observeMediaRoute(
   store: LocalMediaStore,
   owner: HistoryMediaOwnership,
-  media: MediaReferenceBlock,
+  admission: MediaAdmissionService,
   route: ValueRoute,
   size: number,
   rollback: boolean,
 ): Promise<number> {
   return withValueTransformFixture(async (fixture) => {
     const { history, recorder, owners } = fixture;
+    const { row: admitted, media } = await admitPastedImage(admission);
     try {
       await history.registerMediaOwner(owner);
       await history.detachedValues.replace(referenceRows(size, media));
+      await admission.releaseContents([admitted], admissionContext);
       const before = await detachedDigest(referenceRows(size, media));
       const tokens = size * 2 + 1000;
       expect(history.getTotalTokens()).toBe(tokens);
@@ -99,7 +134,9 @@ async function observeMediaRoute(
           expect(await detachedDurableDigest(recorder)).toStrictEqual(before);
           expect(history.getTotalTokens()).toBe(tokens);
         } else if (route === 'purge')
-          expect(history.getTotalTokens()).toBe(size * 2);
+          // The media_dropped reference left for the image is one text part,
+          // which exactTokenizer counts as 1.
+          expect(history.getTotalTokens()).toBe(size * 2 + 1);
         expect(owners.snapshot().liveRows).toBe(0);
         return size;
       } finally {
@@ -120,13 +157,16 @@ async function mediaRoute(
   const root = await mkdtemp(join(tmpdir(), 'purge-ranking-media-'));
   const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
   const owner = new HistoryMediaOwnership(store, historyScratchRoots);
+  const admission = new MediaAdmissionService(store);
   try {
-    const media = await store.admit({
-      bytes: new Uint8Array([1, 2, 3]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
-    return await observeMediaRoute(store, owner, media, route, size, rollback);
+    return await observeMediaRoute(
+      store,
+      owner,
+      admission,
+      route,
+      size,
+      rollback,
+    );
   } finally {
     await store.close();
     await rm(root, { recursive: true, force: true });

@@ -469,6 +469,21 @@ export function withReportedUsage(
  * mid-stream. Taking the last chunk verbatim would then record a billed
  * request as having cost nothing (#3130).
  */
+export function preserveProviderDiagnosticsAfterHook(
+  providerChunk: ModelStreamChunk,
+  hookChunk: ModelStreamChunk,
+): ModelStreamChunk {
+  return {
+    ...hookChunk,
+    ...(providerChunk.stopDetails === undefined
+      ? {}
+      : { stopDetails: providerChunk.stopDetails }),
+    ...(providerChunk.requestId === undefined
+      ? {}
+      : { requestId: providerChunk.requestId }),
+  };
+}
+
 export function contentForTelemetryPreservingUsage(
   chunk: ModelStreamChunk,
   previous: IContent | undefined,

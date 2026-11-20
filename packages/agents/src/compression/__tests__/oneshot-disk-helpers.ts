@@ -63,9 +63,17 @@ export async function oneshotOracle(
   if (result.kind !== 'applied')
     throw new Error('Expected legacy one-shot oracle compression');
   const annotated = annotateCompressionSpan(raw, result.newHistory).map(
-    (row) => {
+    (row, index) => {
       const metadata = { ...row.metadata };
       delete metadata.cacheAnchor;
+      // The summary this run writes (row 0; older kept summaries are not
+      // restamped) records who wrote it; the transport reports no model.
+      if (index === 0 && metadata.isSummary === true)
+        metadata.compressionProvenance = {
+          summaryAuthorModel: null,
+          summaryAuthorProvider: transport.name,
+          compressionStrategy: 'one-shot',
+        };
       return { ...row, metadata };
     },
   );

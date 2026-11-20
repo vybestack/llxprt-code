@@ -21,6 +21,26 @@ export interface ProviderFallbackCandidate {
 
 export class ProviderFallbackInvariantError extends Error {}
 
+/**
+ * The error a failed hard-limit truncation fallback surfaces: invariant
+ * violations as-is, anything else aggregated with the primary failure.
+ */
+export function providerFallbackFailure(
+  primaryError: Error,
+  fallbackError: unknown,
+): Error {
+  if (fallbackError instanceof ProviderFallbackInvariantError)
+    return fallbackError;
+  const fallbackMessage =
+    fallbackError instanceof Error
+      ? fallbackError.message
+      : String(fallbackError);
+  return new AggregateError(
+    [primaryError, fallbackError],
+    `Provider truncation fallback failed during hard-limit enforcement. Primary failure: ${primaryError.message}. Fallback failure: ${fallbackMessage}`,
+  );
+}
+
 export async function publishProviderFallbackCandidate(
   history: Pick<HistoryService, 'detachedValues'>,
   candidate: ProviderFallbackCandidate,

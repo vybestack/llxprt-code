@@ -3,8 +3,12 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
+  beginRequestDumpRetention,
+  dumpCorrelationFields,
+  endRequestDumpRetention,
   generateDumpBaseId,
   redactSensitiveData,
+  type DumpAttemptCorrelation,
   type DumpRequest,
   type DumpRequestResult,
 } from './dumpContext.js';
@@ -21,9 +25,11 @@ export async function openNativeDumpWriter(
   request: DumpRequest,
   provider: string,
   pretty: boolean,
+  correlation?: DumpAttemptCorrelation,
+  deferRetention = false,
 ): Promise<NativeDumpWriter> {
   const dumpDir = join(Storage.getGlobalCacheDir(), 'dumps');
-  await fs.mkdir(dumpDir, { recursive: true });
+  await fs.mkdir(dumpDir, { recursive: true, mode: 0o700 });
   const baseId = generateDumpBaseId(provider);
   const requestFilename = `${baseId}-request.json`;
   const filepath = join(dumpDir, requestFilename);
@@ -33,6 +39,7 @@ export async function openNativeDumpWriter(
     {
       provider,
       timestamp: new Date().toISOString(),
+      ...dumpCorrelationFields(correlation),
       request: redactSensitiveData(metadata),
     },
     null,
@@ -40,7 +47,8 @@ export async function openNativeDumpWriter(
   );
   if (!envelope.endsWith(closing))
     throw new Error('Unexpected dump envelope shape');
-  const file = await fs.open(filepath, 'w');
+  await beginRequestDumpRetention(dumpDir, baseId, correlation, deferRetention);
+  const file = await fs.open(filepath, 'w', 0o600);
   const indent = pretty ? new Reindenter(2) : undefined;
   let closed = false;
   try {
@@ -65,6 +73,7 @@ export async function openNativeDumpWriter(
       await file.writeFile(closing, 'utf8');
       await file.close();
       closed = true;
+      await endRequestDumpRetention(dumpDir, correlation, deferRetention);
     },
     async discard() {
       if (closed) return;

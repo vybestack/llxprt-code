@@ -94,6 +94,7 @@ export function middleoutSetup(
   transport = new SummaryTransport(),
   hook: ConstructorParameters<typeof CompressionHandler>[9] = async () => {},
   overrides: Parameters<typeof buildRuntimeContext>[1] = {},
+  resolved?: RuntimeGenerateChatOptions['resolved'],
 ): {
   handler: CompressionHandler;
   transport: SummaryTransport;
@@ -117,6 +118,7 @@ export function middleoutSetup(
       provider: transport,
       runtime: runtime.providerRuntime,
       invocation: runtime.prepareProviderInvocation(transport.name),
+      ...(resolved === undefined ? {} : { resolved }),
     }),
     hook,
   );
@@ -156,9 +158,12 @@ export async function middleoutOracle(
     ...metadata,
     history: buildCuratedHistory(logger, raw, false),
   };
+  let strategy: 'middle-out' | 'one-shot' = 'middle-out';
   let result = await new MiddleOutArrayOracle().compress(context);
-  if (result.kind === 'noop')
+  if (result.kind === 'noop') {
+    strategy = 'one-shot';
     result = await new OneShotArrayOracle().compress(context);
+  }
   if (result.kind !== 'applied')
     throw new Error('Expected legacy oracle compression');
   const top = result.metadata.topPreserved ?? 0;
@@ -167,6 +172,13 @@ export async function middleoutOracle(
       const metadata = { ...row.metadata };
       delete metadata.cacheAnchor;
       if (index === top - 1) metadata.cacheAnchor = true;
+      // The summary row records who wrote it; the transport reports no model.
+      if (metadata.isSummary === true)
+        metadata.compressionProvenance = {
+          summaryAuthorModel: null,
+          summaryAuthorProvider: transport.name,
+          compressionStrategy: strategy,
+        };
       return { ...row, metadata };
     },
   );

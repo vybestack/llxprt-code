@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  DUMP_ATTEMPT_CONTEXT_KEY,
+  type ProviderFileLifecycle,
+} from '@vybestack/llxprt-code-providers';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -81,6 +84,7 @@ import {
   beforeModelBlockingToModelOutput,
 } from './hookWireAdapter.js';
 import { canonicalizeToolName } from './toolGovernance.js';
+import { RefusalDumpPairing } from './refusalDumpPairing.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
@@ -154,6 +158,8 @@ function buildBlockingModelOutput(
  */
 export class DirectMessageProcessor {
   private logger = new DebugLogger('llxprt:direct-message-processor');
+  private readonly refusalDumpPairing = new RefusalDumpPairing(() => 0);
+  private readonly directAttempts = new Map<string, number>();
 
   private telemetryPorts() {
     return turnTelemetryPorts(this.ports.state, this.ports.telemetry);
@@ -532,6 +538,12 @@ export class DirectMessageProcessor {
       },
     );
 
+    const attemptIndex = this.directAttempts.get(promptId) ?? 0;
+    this.directAttempts.set(promptId, attemptIndex + 1);
+    const dumpAttemptContext = this.refusalDumpPairing.createAttempt(
+      promptId,
+      attemptIndex,
+    );
     return bindProviderMediaAndFiles(
       provider,
       this.mediaResolver,
@@ -571,6 +583,7 @@ export class DirectMessageProcessor {
         ...runtimeContext.metadata,
         _retryRequestContext: params.config?.providerRequestContext,
         __logicalRequestId: promptId,
+        [DUMP_ATTEMPT_CONTEXT_KEY]: dumpAttemptContext,
       },
       systemInstruction: extractSystemInstructionText(
         turnSystemInstruction(params, this.generationConfig),

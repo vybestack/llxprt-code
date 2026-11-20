@@ -53,6 +53,7 @@ function recordChunkToAttempt(
   chunkUsage: UsageStats | undefined,
   chunkText: string,
   lastFinishReason: string | undefined,
+  refusalCategory: string | null | undefined,
   recorder: AttemptRecorder,
 ): void {
   if (isTokenBearing) {
@@ -61,6 +62,7 @@ function recordChunkToAttempt(
       chunkUsage,
       chunkText,
       lastFinishReason,
+      refusalCategory,
     );
     return;
   }
@@ -69,6 +71,7 @@ function recordChunkToAttempt(
       currentAttemptId,
       chunkUsage,
       lastFinishReason,
+      refusalCategory,
     );
   }
 }
@@ -145,6 +148,7 @@ export function processStreamChunk(
       chunkUsage,
       chunkText,
       acc.lastFinishReason,
+      chunk.metadata?.stopDetails?.category,
       recorder,
     );
   }
@@ -191,6 +195,7 @@ export function processLoggedStreamChunk(
       chunkUsage,
       content,
       acc.lastFinishReason,
+      chunk.metadata?.stopDetails?.category,
       recorder,
     );
   }

@@ -38,6 +38,8 @@ describe('shared history recording origin', () => {
       if (!pathA || !pathB) throw new Error('Missing journal');
       await drain(agent.stream('A-only-content-marker'));
       await drain(sibling.stream('B-only-content-marker'));
+      await agent.session.flushRecording();
+      await sibling.session.flushRecording();
       const a = await recordingText(pathA);
       const b = await recordingText(pathB);
       expect(a).toContain('A-only-content-marker');
@@ -200,6 +202,8 @@ describe('shared history recording origin', () => {
       const resumedPath = agent.session.getRecording().path;
       if (!resumedPath) throw new Error('Missing restarted journal');
       await drain(agent.stream('A-after-A-restart'));
+      await agent.session.flushRecording();
+      await sibling.session.flushRecording();
       const a = await recordingText(aPath);
       const b = await recordingText(bPath);
       expect(a).not.toContain('B-after-A-stop');
@@ -231,6 +235,8 @@ describe('shared history recording origin', () => {
         if (!saved) throw new Error('Missing A session');
         await agent.session.resume(saved.id);
         await drain(agent.stream('A-resumed-content-marker'));
+        await agent.session.flushRecording();
+        await sibling.session.flushRecording();
         const aPath = agent.session.getRecording().path;
         if (!aPath) throw new Error('Missing resumed journal');
         expect(await recordingText(aPath)).toContain(
@@ -260,6 +266,7 @@ describe('shared history recording origin', () => {
       if (!aPath || !bPath) throw new Error('Missing journal');
       await agent.dispose();
       await drain(sibling.stream('B-after-A-dispose'));
+      await sibling.session.flushRecording();
       expect(await recordingText(bPath)).toContain('B-after-A-dispose');
       expect(await recordingText(aPath)).not.toContain('B-after-A-dispose');
     });

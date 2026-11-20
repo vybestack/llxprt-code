@@ -15,6 +15,11 @@ import {
   hashContent,
   getInstalledHash,
 } from './manifest-operations.js';
+import {
+  buildScratchpadNotice,
+  isRetiredDefault,
+  requestsScratchpad,
+} from './retired-defaults.js';
 
 export type PromptConflictReason =
   | 'default-newer'
@@ -39,8 +44,13 @@ export interface PromptConflictSummary extends PromptConflictDetails {
 export type ExistingFileDecision =
   | { action: 'same' }
   | { action: 'overwrite' }
-  | { action: 'keep'; conflict: PromptConflictSummary; notice: string | null }
-  | { action: 'resolved' };
+  | {
+      action: 'keep';
+      conflict: PromptConflictSummary;
+      notice: string | null;
+      scratchpadNotice?: string;
+    }
+  | { action: 'resolved'; scratchpadNotice?: string };
 
 /** Default prompt files checked during uninstall (non-user-file mode). */
 const DEFAULT_UNINSTALL_PATHS = [
@@ -53,6 +63,7 @@ const DEFAULT_UNINSTALL_PATHS = [
 
 /**
  * Determine how to handle an existing file when installing a default.
+ * A kept file that still requests a `<scratchpad>` carries an extra notice.
  */
 export async function handleExistingFile(
   expandedBaseDir: string,
@@ -64,10 +75,41 @@ export async function handleExistingFile(
   defaultSourceDirs?: readonly string[],
 ): Promise<ExistingFileDecision> {
   const existingContent = await fs.readFile(fullPath, 'utf-8');
+  const decision = await decideExistingFile(
+    expandedBaseDir,
+    relativePath,
+    existingContent,
+    content,
+    createReviewCopy,
+    manifest,
+    defaultSourceDirs,
+  );
+  if (
+    (decision.action === 'keep' || decision.action === 'resolved') &&
+    requestsScratchpad(existingContent)
+  ) {
+    return { ...decision, scratchpadNotice: buildScratchpadNotice(fullPath) };
+  }
+  return decision;
+}
 
+async function decideExistingFile(
+  expandedBaseDir: string,
+  relativePath: string,
+  existingContent: string,
+  content: string,
+  createReviewCopy: boolean,
+  manifest: InstalledManifest | null,
+  defaultSourceDirs?: readonly string[],
+): Promise<ExistingFileDecision> {
   // 1. Content identical - skip (no change needed)
   if (existingContent === content) {
     return { action: 'same' };
+  }
+
+  // 1b. Untouched copy of a default an earlier release shipped - upgrade it
+  if (isRetiredDefault(relativePath, existingContent)) {
+    return { action: 'overwrite' };
   }
 
   // 2. Check for NO OVERWRITE flag - user explicitly protects this file
@@ -112,6 +154,21 @@ export async function handleExistingFile(
     createReviewCopy,
     defaultSourceDirs,
   );
+}
+
+/** Notices a kept or already-resolved existing file reports to the user. */
+export function existingFileNotices(decision: ExistingFileDecision): string[] {
+  if (decision.action === 'keep') {
+    return [decision.notice, decision.scratchpadNotice].filter(
+      (notice): notice is string => notice !== null && notice !== undefined,
+    );
+  }
+  if (decision.action === 'resolved') {
+    return decision.scratchpadNotice === undefined
+      ? []
+      : [decision.scratchpadNotice];
+  }
+  return [];
 }
 
 /** Create a keep decision with optional review file. */

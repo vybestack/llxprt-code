@@ -95,6 +95,8 @@ describe('registered diagnostic session owner', () => {
     expect(result.content).toContain(
       `Working Directory: ${owner.workspace.getWorkingDirectory()}`,
     );
+    expect(result.content).toContain('## Context Dumping');
+    expect(result.content).toContain('- Mode: off');
     expect(result.content).not.toContain(
       `Model: ${sibling.getRuntimeDiagnosticsSnapshot().modelName}`,
     );

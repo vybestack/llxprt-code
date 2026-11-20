@@ -6,6 +6,7 @@
  */
 
 import { mapStopReason } from './finishReasonMapping.js';
+import { readAnthropicMessageDeltaStopDetails } from './anthropicStopDetails.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ToolUseBlock,
@@ -55,6 +56,7 @@ export type StreamProcessorOptions = {
    * to the guarded stream that yields outward.
    */
   commitState?: RequestCommitState;
+  refusalAuditTiming?: { readonly firstByteAt: number | null };
 };
 
 type CurrentThinkingBlock = {
@@ -146,6 +148,12 @@ interface StreamAssemblyState {
   currentThinkingBlock: CurrentThinkingBlock | undefined;
   terminalSeen: boolean;
   thinkingBlockIdentity: ThinkingBlockIdentity;
+  toolInputAudit: Array<{
+    readonly id: string;
+    readonly name: string;
+    readonly input: string;
+    readonly complete: boolean;
+  }>;
 }
 
 async function* processStreamEvents(
@@ -158,6 +166,7 @@ async function* processStreamEvents(
     currentThinkingBlock: undefined,
     terminalSeen: false,
     thinkingBlockIdentity: createThinkingBlockIdentity(),
+    toolInputAudit: [],
   };
 
   for await (const chunk of stream) {
@@ -207,7 +216,7 @@ function* applyStreamEvent(
         state.terminalSeen = true;
         options.commitState?.markTerminalSeen();
       }
-      yield* handleMessageDelta(chunk, options.logger);
+      yield* handleMessageDelta(chunk, state, options);
       return;
     }
     default:
@@ -271,6 +280,14 @@ function* applyContentBlockStop(
   state: StreamAssemblyState,
   options: StreamProcessorOptions,
 ): Generator<IContent> {
+  if (state.currentToolCall !== undefined) {
+    state.toolInputAudit.push({
+      id: state.currentToolCall.id,
+      name: state.currentToolCall.name,
+      input: state.currentToolCall.input,
+      complete: true,
+    });
+  }
   const stopResult = handleContentBlockStop(
     chunk,
     state.currentToolCall,
@@ -643,6 +660,37 @@ function handleContentBlockStop(
   return { currentToolCall, currentThinkingBlock };
 }
 
+function refusalAuditFields(
+  stopReason: string | null | undefined,
+  state: StreamAssemblyState,
+  options: StreamProcessorOptions,
+): {
+  refusalAuditToolInputs: StreamAssemblyState['toolInputAudit'] | undefined;
+  firstByteToRefusalMs: number | null;
+} {
+  const refusalAuditToolInputs =
+    stopReason !== 'refusal'
+      ? undefined
+      : [
+          ...state.toolInputAudit,
+          ...(state.currentToolCall === undefined
+            ? []
+            : [
+                {
+                  id: state.currentToolCall.id,
+                  name: state.currentToolCall.name,
+                  input: state.currentToolCall.input,
+                  complete: false,
+                },
+              ]),
+        ];
+  const firstByteToRefusalMs =
+    stopReason === 'refusal' && options.refusalAuditTiming?.firstByteAt != null
+      ? Math.max(0, performance.now() - options.refusalAuditTiming.firstByteAt)
+      : null;
+  return { refusalAuditToolInputs, firstByteToRefusalMs };
+}
+
 /**
  * Reads stop_reason from a message_delta event defensively.
  * The SDK type declares delta as required, but some test/runtime
@@ -659,7 +707,8 @@ function readMessageDeltaStopReason(
 
 function* handleMessageDelta(
   chunk: Anthropic.MessageStreamEvent & { type: 'message_delta' },
-  logger: { debug: (fn: () => string) => void },
+  state: StreamAssemblyState,
+  options: StreamProcessorOptions,
 ): Generator<IContent> {
   const usage = chunk.usage as
     | {
@@ -671,6 +720,13 @@ function* handleMessageDelta(
     | undefined;
 
   const stopReason = readMessageDeltaStopReason(chunk);
+  const stopDetails = readAnthropicMessageDeltaStopDetails(chunk);
+  const { refusalAuditToolInputs, firstByteToRefusalMs } = refusalAuditFields(
+    stopReason,
+    state,
+    options,
+  );
+  const logger = options.logger;
 
   if (!usage) {
     logger.debug(
@@ -678,14 +734,21 @@ function* handleMessageDelta(
         `Received message_delta without usage metadata; stopReason=${String(stopReason)}`,
     );
 
-    if (stopReason) {
+    if (stopReason || stopDetails !== undefined) {
       yield {
         speaker: 'ai',
         blocks: [],
         metadata: {
-          ...mapStopReason(stopReason),
+          ...(stopReason === undefined || stopReason === null
+            ? {}
+            : mapStopReason(stopReason)),
+          ...(stopDetails === undefined ? {} : { stopDetails }),
+          ...(refusalAuditToolInputs === undefined
+            ? {}
+            : { refusalAuditToolInputs }),
+          ...(stopReason === 'refusal' ? { firstByteToRefusalMs } : {}),
         },
-      } as IContent;
+      };
     }
 
     return;
@@ -717,6 +780,11 @@ function* handleMessageDelta(
         cache_creation_input_tokens: cacheCreation,
       },
       ...(stopReason ? mapStopReason(stopReason) : {}),
+      ...(stopDetails === undefined ? {} : { stopDetails }),
+      ...(refusalAuditToolInputs === undefined
+        ? {}
+        : { refusalAuditToolInputs }),
+      ...(stopReason === 'refusal' ? { firstByteToRefusalMs } : {}),
     },
-  } as IContent;
+  };
 }

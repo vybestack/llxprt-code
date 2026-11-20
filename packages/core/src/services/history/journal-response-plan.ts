@@ -13,6 +13,10 @@ import type { JournalResponseSource } from './journal-response-source.js';
 import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
 import { streamBlockField } from './stream-block-field.js';
 import { serializeRequestRow } from './token-usage-measurement.js';
+import {
+  compressionSummaryRequestBlocks,
+  mayBeCompressionSummary,
+} from './compressionSummaryScratchpad.js';
 
 export interface CountingBlock {
   readonly content: ContentBlock;
@@ -121,6 +125,31 @@ function materializedCountingBlock(content: ContentBlock): CountingBlock {
   };
 }
 
+function convertedCountingBlock(content: ContentBlock): CountingBlock {
+  if (content.type !== 'text') return materializedCountingBlock(content);
+  const bytes = Buffer.from(content.text);
+  return {
+    content: { type: 'text', text: '' },
+    text: (async function* () {
+      yield bytes;
+    })(),
+  };
+}
+
+/**
+ * A compression summary is sent without its scratchpad sections (#4128).
+ * Only this row's blocks are read to decide and strip; the stored row keeps
+ * its text.
+ */
+async function summaryRequestBlocks(
+  header: IContent,
+  blocks: AsyncIterable<ContentBlock>,
+): Promise<ContentBlock[]> {
+  const read: ContentBlock[] = [];
+  for await (const block of blocks) read.push(block);
+  return compressionSummaryRequestBlocks({ ...header, blocks: read });
+}
+
 export function responsePlan(
   source: JournalResponseSource,
   header: IContent,
@@ -128,8 +157,33 @@ export function responsePlan(
   pending: boolean,
   known?: ResponsePart,
 ): JournalResponsePlan {
+  const sanitized = sanitizeProviderContentForSerialization(header);
+  async function* sourceBlocks(): AsyncGenerator<ContentBlock> {
+    for (const ref of blocks) {
+      // Decoding owns this block; journal admission already sanitized its JSON.
+      yield await resolveBlock(source, ref, known);
+    }
+  }
+  if (mayBeCompressionSummary(sanitized))
+    return {
+      header: sanitized,
+      blocks,
+      pending,
+      sourceIds: (label) =>
+        known?.entry.label === label ? known.ids : undefined,
+      async *openCountingBlocks() {
+        for (const block of await summaryRequestBlocks(
+          sanitized,
+          sourceBlocks(),
+        ))
+          yield convertedCountingBlock(block);
+      },
+      async *openBlocks() {
+        yield* await summaryRequestBlocks(sanitized, sourceBlocks());
+      },
+    };
   return {
-    header: sanitizeProviderContentForSerialization(header),
+    header: sanitized,
     blocks,
     pending,
     sourceIds: (label) =>
@@ -137,12 +191,6 @@ export function responsePlan(
     async *openCountingBlocks() {
       for (const ref of blocks) yield await countingBlock(source, ref, known);
     },
-    async *openBlocks() {
-      for (const ref of blocks) {
-        const block = await resolveBlock(source, ref, known);
-        // Decoding owns this block; journal admission already sanitized its JSON.
-        yield block;
-      }
-    },
+    openBlocks: sourceBlocks,
   };
 }

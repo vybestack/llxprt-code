@@ -6,6 +6,7 @@ import { useRecordingPrompts } from './helpers/recording-prompts.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
+import { unauthoredProvenance } from '../../compression/compressionAuditProvenance.js';
 import { summaryOutput } from '../../compression/summaryOutput.js';
 import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
@@ -47,13 +48,19 @@ function useSummaryStrategy(fails = false): () => void {
     'prepareDisk',
   ).mockImplementation(async (context) => {
     if (fails) throw new Error('compression rejected');
-    return summaryOutput(context.history, 0, context.history.length, [
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: `owned-summary-${++index}` }],
-        metadata: { reason: 'compression-state-snapshot' },
-      },
-    ]);
+    return summaryOutput(
+      context.history,
+      0,
+      context.history.length,
+      [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: `owned-summary-${++index}` }],
+          metadata: { reason: 'compression-state-snapshot' },
+        },
+      ],
+      unauthoredProvenance('one-shot'),
+    );
   });
   return () => spy.mockRestore();
 }
@@ -253,13 +260,19 @@ describe('shared history compression recording origin', () => {
       OneShotStrategy.prototype,
       'prepareDisk',
     ).mockImplementation(async (context) =>
-      summaryOutput(context.history, 0, context.history.length, [
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'A-fallback-summary' }],
-          metadata: { reason: 'compression-state-snapshot' },
-        },
-      ]),
+      summaryOutput(
+        context.history,
+        0,
+        context.history.length,
+        [
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'A-fallback-summary' }],
+            metadata: { reason: 'compression-state-snapshot' },
+          },
+        ],
+        unauthoredProvenance('one-shot'),
+      ),
     );
     const fallback = spyOn(
       TopDownTruncationStrategy.prototype,

@@ -5,7 +5,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { diskSummaryRequestSelection } from '../middleOutDiskPlan.js';
-import { referenceSummaryRequest } from './summary-request-reference.js';
+import {
+  referenceSummaryRequest,
+  testSummaryFrame,
+} from './summary-request-reference.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
 import {
   rowsSelection,
@@ -144,7 +147,7 @@ describe('summary ranges, framing, media, tool failures and signed thinking', ()
           [Symbol.iterator]: () => rows[Symbol.iterator](),
         },
         plan,
-        'summarize this range',
+        testSummaryFrame('summarize this range'),
         injections,
         ownership,
       );
@@ -153,7 +156,7 @@ describe('summary ranges, framing, media, tool failures and signed thinking', ()
           rows,
           plan.top,
           plan.bottom,
-          'summarize this range',
+          testSummaryFrame('summarize this range'),
           [...injections, ...plan.injection],
         ),
       );

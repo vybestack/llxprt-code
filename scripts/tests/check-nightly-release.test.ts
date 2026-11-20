@@ -14,6 +14,7 @@ import {
   decideNightlyPresence,
   expectedReleasePackages,
 } from '../check-nightly-release.ts';
+import { FIRST_PARTY_RUNTIME_PLUGIN_RELEASES } from '../utils/release-packages.ts';
 
 const packages = [
   '@vybestack/llxprt-code-tools',
@@ -176,6 +177,41 @@ describe('nightly package presence', () => {
     expect(names).toContain('@vybestack/llxprt-code');
     expect(names).toContain('@vybestack/llxprt-plugin-google-gemini');
     expect(names).toContain('@vybestack/llxprt-plugin-google-mcp-auth');
+  });
+
+  it('declares the upstream repository for every npm-published package', () => {
+    const root = process.cwd();
+    const rootPackage: { workspaces: string[] } = JSON.parse(
+      fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+    );
+    const manifestPaths = new Map<string, string>();
+
+    for (const workspace of rootPackage.workspaces) {
+      const manifestPath = path.join(root, workspace, 'package.json');
+      const manifest: { name: string; private?: boolean } = JSON.parse(
+        fs.readFileSync(manifestPath, 'utf8'),
+      );
+      if (!manifest.private) manifestPaths.set(manifest.name, manifestPath);
+    }
+    for (const plugin of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
+      manifestPaths.set(
+        plugin.name,
+        path.join(root, plugin.dir, 'package.json'),
+      );
+    }
+
+    for (const name of expectedReleasePackages(root)) {
+      const manifestPath = manifestPaths.get(name);
+      if (!manifestPath) throw new Error(`Missing manifest path for ${name}`);
+      const manifest: { repository?: { url?: string } } = JSON.parse(
+        fs.readFileSync(manifestPath, 'utf8'),
+      );
+      const repositoryUrl = manifest.repository?.url;
+      expect(repositoryUrl).toBeDefined();
+      expect(repositoryUrl?.replace(/^git\+/, '').replace(/\.git$/, '')).toBe(
+        'https://github.com/vybestack/llxprt-code',
+      );
+    }
   });
 
   it('rejects incomplete observations rather than treating them as absence', () => {

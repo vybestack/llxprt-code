@@ -4,7 +4,12 @@ import type { IContent, ToolCallBlock } from './IContent.js';
 import type { JournalDisplayHandle } from './journal-display-commands.js';
 import type { JournalDisplayDescriptor } from '../../journal/display-recording.js';
 import { HistoryServiceCore } from './HistoryServiceCore.js';
-import type { CurrentTurnMarker } from './historyChronology.js';
+import {
+  projectChronologyTraceEntry,
+  type ChronologyTraceEntry,
+  type CurrentTurnMarker,
+} from './historyChronology.js';
+import type { ConversationStatistics } from './curationDebugLogger.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import {
   findUnmatchedToolCalls as findUnmatchedToolCallsHelper,
@@ -159,5 +164,32 @@ export abstract class HistoryServiceReads extends HistoryServiceCore {
       { kind: 'tokens', maxTokens, countTokens: countTokensFn },
       signal,
     );
+  }
+
+  /**
+   * Get conversation statistics
+   */
+  getStatistics(): ConversationStatistics {
+    return this.journal.statistics();
+  }
+
+  get compressionRowCount(): number | undefined {
+    return this.journal.compressionRowCount?.();
+  }
+
+  /**
+   * Get an ordered chronology trace: one compact, JSON-safe entry per history
+   * item carrying its marker fields and structural descriptors. No message
+   * text, tool parameters, or tool results appear in the trace.
+   */
+  async *getChronologyTrace(): AsyncGenerator<
+    ChronologyTraceEntry,
+    void,
+    unknown
+  > {
+    for await (const content of this.journal.streamRows()) {
+      const entry = projectChronologyTraceEntry(content);
+      if (entry !== undefined) yield entry;
+    }
   }
 }

@@ -70,6 +70,7 @@ import {
 } from '../utils/request-media-resolution.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
+  configureDumpCapture,
   createCaptureBuffer,
   type CaptureBuffer,
 } from './vercelReasoningCapture.js';
@@ -245,7 +246,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const logger = this.getLogger();
     const modelId = options.resolved.model || this.getDefaultModel();
     const materializedMessages: ModelMessage[] = [];
-
     const { mediaRequest, effectiveOptions } =
       await this.resolveMediaPreparation(options);
     this.registerRequestBodyLease(mediaRequest, materializedMessages);
@@ -270,6 +270,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         'reasoning.fieldName',
       );
       const captureBuffer: CaptureBuffer = createCaptureBuffer(rawFieldName);
+      configureDumpCapture(captureBuffer, effectiveOptions, metadata);
       const { model } = await createConfiguredModel(
         effectiveOptions,
         this.getClientConfig(effectiveOptions),

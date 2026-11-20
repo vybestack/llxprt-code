@@ -333,6 +333,7 @@ describe('loggers', () => {
           totalRequests: 1,
           totalErrors: 0,
           totalRefusals: 0,
+          refusalsByCategory: [],
           totalLatencyMs: 100,
         },
         tokens: {
@@ -398,6 +399,7 @@ describe('loggers', () => {
           totalRequests: 1,
           totalErrors: 1,
           totalRefusals: 0,
+          refusalsByCategory: [],
           totalLatencyMs: 100,
         },
         tokens: {

@@ -27,7 +27,7 @@ import {
 } from './terminalOutputDelta.js';
 
 const OUTPUT_POLL_INTERVAL_MS = 100;
-const KILL_GRACE_PERIOD_MS = 5000;
+export const KILL_GRACE_PERIOD_MS = 5000;
 
 type SendUpdateFn = (update: acp.SessionUpdate) => Promise<void>;
 

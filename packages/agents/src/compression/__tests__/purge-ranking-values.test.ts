@@ -15,12 +15,35 @@ import {
   transformPhaseSampler,
 } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
 import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
+  PURGED_IMAGE_BLOCK,
   purgeRankingRows,
   purgeRankingRow,
   prepareValueRoute,
   type ValueRoute,
 } from './purge-ranking-value-helpers.js';
+
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/**
+ * The wall-clock time a remove purge stamped on the reference it left in row
+ * 0; the ranking route drops nothing.
+ */
+async function droppedAtOf(
+  history: HistoryService,
+  route: ValueRoute,
+): Promise<string | undefined> {
+  if (route !== 'purge') return undefined;
+  for await (const row of history.streamRawHistory()) {
+    const block = row.blocks.at(PURGED_IMAGE_BLOCK);
+    if (block?.type !== 'media_dropped')
+      throw new Error(`Expected a dropped image, found ${block?.type}`);
+    expect(block.droppedAt).toMatch(ISO_TIME);
+    return block.droppedAt;
+  }
+  throw new Error('History has no rows');
+}
 
 async function observeRoute(
   route: ValueRoute,
@@ -37,6 +60,9 @@ async function observeRoute(
     const before = await detachedDigest(purgeRankingRows(size));
     expect(await detachedDurableDigest(recorder)).toStrictEqual(before);
     const beforeTokens = size * 2 + 1000;
+    // The image costs 1000; the media_dropped reference left in its place is
+    // one text part, which exactTokenizer counts as 1.
+    const purgedTokens = size * 2 + 1;
     const beforeRange = expectedRange(size);
     expect(history.getTotalTokens()).toBe(beforeTokens);
     expect(history.getContextRange()).toStrictEqual(beforeRange);
@@ -65,7 +91,7 @@ async function observeRoute(
       await finalization.acknowledged;
       await sample('acknowledged');
       const expected = await detachedDigest(
-        purgeRankingRows(size, 2048, route),
+        purgeRankingRows(size, 2048, route, await droppedAtOf(history, route)),
       );
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
         expected,
@@ -74,7 +100,7 @@ async function observeRoute(
         expected,
       );
       expect(history.getTotalTokens()).toBe(
-        route === 'purge' ? size * 2 : beforeTokens,
+        route === 'purge' ? purgedTokens : beforeTokens,
       );
       expect(history.getContextRange()).toStrictEqual(expectedRange(size));
       await Promise.resolve(finalization.release());
@@ -85,7 +111,7 @@ async function observeRoute(
         restored,
       );
       expect(await detachedDurableDigest(recorder)).toStrictEqual(restored);
-      const successfulTokens = route === 'purge' ? size * 2 : beforeTokens;
+      const successfulTokens = route === 'purge' ? purgedTokens : beforeTokens;
       expect(history.getTotalTokens()).toBe(
         rollback ? beforeTokens : successfulTokens,
       );

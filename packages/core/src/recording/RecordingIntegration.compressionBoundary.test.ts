@@ -49,6 +49,8 @@ import {
   type RecordedJournalGroup,
 } from './__tests__/support/journal-read-test-helpers.js';
 import { MUTATION } from '../journal/recordKinds.js';
+import type { CompressionAuditProvenance } from '../core/compression/types.js';
+import { stampCompressionProvenance } from '../services/history/compressionProvenance.js';
 
 const recordingScratchRoots = new ScratchRootOwner();
 
@@ -180,12 +182,18 @@ async function rebuildHistoryInPlace(
 async function compressUnderLock(
   historyService: HistoryService,
   summaryText: string,
+  provenance?: CompressionAuditProvenance,
 ): Promise<void> {
   historyService.startCompression();
   const itemsCompressed = historyService.length();
   const summary = textContent(summaryText, 'ai');
   await historyService.replaceAll([summary]);
-  historyService.endCompression(summary, itemsCompressed);
+  historyService.endCompression(
+    summary,
+    itemsCompressed,
+    undefined,
+    provenance,
+  );
 }
 
 interface RecordingHarness {
@@ -329,6 +337,11 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
   it(
     'does not re-record an unstamped disk snapshot when its history is rebuilt',
     testRecordingCompressionBoundary13,
+  );
+
+  it(
+    'persists compression summarizer provenance on the summary row and reports it after resume',
+    testRecordingCompressionBoundary14,
   );
 });
 
@@ -726,6 +739,70 @@ async function testRecordingCompressionBoundary13(): Promise<void> {
       'unstamped disk snapshot',
       'unstamped disk snapshot',
     ]);
+  } finally {
+    await closeResumedSession(resumed);
+  }
+}
+
+async function testRecordingCompressionBoundary14(): Promise<void> {
+  const provenance: CompressionAuditProvenance = {
+    summaryAuthorModel: 'summary-model',
+    summaryAuthorProvider: 'summary-provider',
+    compressionStrategy: 'one-shot',
+  };
+  harness.historyService.add(textContent('before summary'));
+  // The rows a summarizing compression publishes: the summary carries the
+  // author, the continuation row does not.
+  const published = stampCompressionProvenance(
+    [
+      {
+        ...textContent('dedicated summary'),
+        metadata: { isSummary: true, reason: 'compression-state-snapshot' },
+      },
+      {
+        ...textContent('continue', 'ai'),
+        metadata: { synthetic: true, reason: 'compression-continuation' },
+      },
+    ],
+    provenance,
+  );
+  harness.historyService.startCompression();
+  const itemsCompressed = harness.historyService.length();
+  await harness.historyService.replaceAll(published);
+  harness.historyService.endCompression(
+    published[0],
+    itemsCompressed,
+    undefined,
+    provenance,
+  );
+  await harness.integration.flushAtTurnBoundary();
+  const sessionPath = harness.recordingService.getFilePath();
+  expect(sessionPath).not.toBeNull();
+
+  const { resumed, replayed } = await resumeHarnessSession(sessionPath ?? '');
+  try {
+    expect(textsOf(replayed.history)).toStrictEqual([
+      'dedicated summary',
+      'continue',
+    ]);
+    expect(replayed.history[0].metadata?.compressionProvenance).toStrictEqual(
+      provenance,
+    );
+    expect(replayed.history[1].metadata?.compressionProvenance).toBeUndefined();
+    let resumedRows: IContent[] = [];
+    await collectRowsForAssertions(
+      resumed.history.streamRawHistory(),
+      (contentsForAssertions) => {
+        resumedRows = [...contentsForAssertions];
+      },
+    );
+    expect(textsOf(resumedRows)).toStrictEqual([
+      'dedicated summary',
+      'continue',
+    ]);
+    expect(resumedRows[0].metadata?.compressionProvenance).toStrictEqual(
+      provenance,
+    );
   } finally {
     await closeResumedSession(resumed);
   }

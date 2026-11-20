@@ -32,6 +32,7 @@ import {
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { unauthoredProvenance } from '../../compression/compressionAuditProvenance.js';
 import { summaryOutput } from '../../compression/summaryOutput.js';
 import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
 
@@ -251,13 +252,19 @@ describe('borrowed facade remaining hook producers', () => {
       OneShotStrategy.prototype,
       'prepareDisk',
     ).mockImplementation(async (context) =>
-      summaryOutput(context.history, 0, context.history.length, [
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'short summary' }],
-          metadata: { reason: 'compression-state-snapshot' },
-        },
-      ]),
+      summaryOutput(
+        context.history,
+        0,
+        context.history.length,
+        [
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'short summary' }],
+            metadata: { reason: 'compression-state-snapshot' },
+          },
+        ],
+        unauthoredProvenance('one-shot'),
+      ),
     );
     try {
       await withHookedPair(

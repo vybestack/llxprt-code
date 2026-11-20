@@ -57,7 +57,6 @@ const promptAssembly = vi.fn(
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: promptAssembly,
   getCoreSystemPrompt: vi.fn(() => 'Test system instruction'),
-  getCompressionPrompt: vi.fn(() => 'Test compression prompt'),
   initializePromptSystem: vi.fn(() => Promise.resolve(undefined)),
 }));
 

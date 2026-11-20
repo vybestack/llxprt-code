@@ -2,7 +2,6 @@
 import type { HighDensityOutput } from './highDensityDiskPlan.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import {
   shouldRetryCompressionError,
@@ -11,13 +10,11 @@ import {
 import { HighDensityStrategy } from './HighDensityStrategy.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
 import { applyCompressionValuesWithAnchor } from './cache-anchor-values.js';
-import { fallbackDisk } from './diskMiddleOut.js';
+import { fallbackDisk, type DiskSummaryOutcome } from './diskMiddleOut.js';
+import { unauthoredProvenance } from './compressionAuditProvenance.js';
 import type { CompressionRunReport } from './compressionLifecycleTelemetry.js';
 
-type Outcome = {
-  readonly outcome: 'applied' | 'noop' | 'failed';
-  readonly summary?: IContent;
-};
+type Outcome = DiskSummaryOutcome;
 
 async function compressPinned(
   context: Parameters<HighDensityStrategy['compressDisk']>[0],
@@ -77,15 +74,29 @@ async function compressPinned(
       llmCallMade: false,
       usage: undefined,
     });
-    return { outcome: 'applied', summary };
+    return {
+      outcome: 'applied',
+      summary,
+      provenance: unauthoredProvenance('high-density'),
+    };
   };
   try {
     result = { outcome: await attempt() };
   } catch (error) {
     result = { error };
   }
-  try {
+  return settleAfterClose(result, () => {
     if (output?.kind === 'applied') output.close();
+  });
+}
+
+/** Closes the prepared candidate, then returns or rethrows the attempt result. */
+function settleAfterClose(
+  result: { readonly outcome: Outcome } | { readonly error: unknown },
+  close: () => void,
+): Outcome {
+  try {
+    close();
   } catch (error) {
     throw new AggregateError(
       'error' in result ? [result.error, error] : [error],

@@ -1,5 +1,6 @@
 import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { unauthoredProvenance } from '../compressionAuditProvenance.js';
 import { describe, expect, it } from 'bun:test';
 import { nativeTruncationSourceFailure } from './support/native-truncation-source.js';
 import { expectedTruncationValue } from './truncation-value-helpers.js';
@@ -228,10 +229,13 @@ describe('native truncation publication and source enforcement', () => {
     await withNativeFallbackFixture(async ({ history, durable }) => {
       await history.detachedValues.replace(summaryRows());
       const result = await executeTruncation(history, 32);
-      expect(result.outcome).toBe('applied');
       // The marked row was carried from history, so truncation reports no
       // summary of its own (#4067); the published row keeps its annotations.
-      expect(result.summary).toBeUndefined();
+      expect(result).toStrictEqual({
+        outcome: 'applied',
+        summary: undefined,
+        provenance: unauthoredProvenance('top-down-truncation'),
+      });
       let truncated: IContent | undefined;
       for await (const row of history.streamRawHistory()) {
         if (row.metadata?.reason === 'compression-state-snapshot')

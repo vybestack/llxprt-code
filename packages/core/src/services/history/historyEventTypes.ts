@@ -19,6 +19,7 @@ import type { IContent } from './IContent.js';
 import type { SealedHistoryRow } from './sealed-history-row.js';
 import type { HistoryBatchEvent } from './history-batch-values.js';
 import type { TokensUpdatedEvent } from './HistoryEvents.js';
+import type { CompressionAuditProvenance } from '../../core/compression/types.js';
 
 /**
  * Why an interior span of chronology seqs left the curated context while the
@@ -166,6 +167,7 @@ export interface HistoryServiceEventEmitter {
       summary: IContent,
       itemsCompressed: number,
       origin?: object,
+      provenance?: CompressionAuditProvenance,
     ) => void,
   ): this;
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
@@ -179,6 +181,7 @@ export interface HistoryServiceEventEmitter {
     summary: IContent,
     itemsCompressed: number,
     origin?: object,
+    provenance?: CompressionAuditProvenance,
   ): boolean;
   off(
     event: 'tokensUpdated',
@@ -207,6 +210,7 @@ export interface HistoryServiceEventEmitter {
       summary: IContent,
       itemsCompressed: number,
       origin?: object,
+      provenance?: CompressionAuditProvenance,
     ) => void,
   ): this;
 }

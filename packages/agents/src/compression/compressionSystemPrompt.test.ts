@@ -60,7 +60,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
     const model = args.model ?? 'NO_MODEL';
     return `${COMPRESSION_SYSTEM_PROMPT} mode=${mode} provider=${provider} model=${model}`;
   }),
-  getCompressionPrompt: vi.fn(() => 'COMPRESS_PROMPT'),
 }));
 
 // ---------------------------------------------------------------------------

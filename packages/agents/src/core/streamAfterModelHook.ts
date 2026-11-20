@@ -4,34 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  ModelOutput,
+  ModelStreamChunk,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
-  iContentFromBlocks,
-  type ModelOutput,
-  type ModelStreamChunk,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  AgentExecutionBlockedError,
   AgentExecutionStoppedError,
+  AgentExecutionBlockedError,
 } from './chatSession.js';
+import type { PreparedRequest } from './streamRequestHelpers.js';
+import {
+  afterModelModifiedToChunk,
+  afterModelBlockingToModelOutput,
+} from './hookWireAdapter.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
 import {
-  afterModelBlockingToModelOutput,
-  afterModelModifiedToChunk,
-} from './hookWireAdapter.js';
-import type { PreparedRequest } from './streamRequestHelpers.js';
-
-/** Everything the AfterModel hook needs to see about one streamed chunk. */
-interface AfterModelChunk {
-  readonly model: string;
-  readonly iContent: IContent;
-  readonly requestPayload: PreparedRequest['requestPayload'] | undefined;
-  readonly chunk: ModelStreamChunk;
-  readonly hookRestrictedAllowedTools: string[] | undefined;
-  readonly owner?: HookExecutionOwner;
-}
+  fireSourceAfterModelHook,
+  type SourceAfterModelRequest,
+} from './source-after-model-hook.js';
 
 /**
  * Process AfterModel hook for a single streamed chunk.
@@ -46,11 +41,18 @@ interface AfterModelChunk {
  * @requirement:REQ-002.6
  */
 export async function processAfterModelHook(
-  input: AfterModelChunk,
+  iContent: IContent,
+  requestPayload: PreparedRequest['requestPayload'] | undefined,
+  chunk: ModelStreamChunk,
+  hookRestrictedAllowedTools: string[] | undefined,
+  sourceRequest: SourceAfterModelRequest | undefined,
+  owner: HookExecutionOwner | undefined,
+  model: string,
+  logger: DebugLogger,
 ): Promise<ModelStreamChunk | undefined> {
-  const { model, iContent, requestPayload, chunk } = input;
-  const { hookRestrictedAllowedTools, owner } = input;
-  if (owner?.afterModel === undefined) return undefined;
+  if (owner === undefined) return undefined;
+  if (requestPayload !== undefined && owner.afterModel === undefined)
+    return undefined;
 
   // Build the hook-visible IContent with restricted tool blocks filtered.
   const filteredBlocks = filterHookRestrictedBlocks(
@@ -59,32 +61,42 @@ export async function processAfterModelHook(
   );
   const hookIContent = iContentFromBlocks(filteredBlocks, iContent.speaker);
 
-  const afterModelResult = await owner.afterModel(
-    {
-      model,
-      contents: requestPayload?.contents ?? [],
-      ...(requestPayload?.tools !== undefined &&
-      (requestPayload.tools.length > 0 ||
-        hookRestrictedAllowedTools === undefined)
-        ? {
-            tools: requestPayload.tools,
-          }
-        : {}),
-    },
-    {
-      content: hookIContent,
-      // finishReason/rawStopReason live only on terminal chunks; toModelStreamChunk
-      // already lifted them onto the chunk when the provider emitted them.
-      ...(chunk.finishReason !== undefined
-        ? { finishReason: chunk.finishReason }
-        : {}),
-      ...(chunk.rawStopReason !== undefined
-        ? { rawStopReason: chunk.rawStopReason }
-        : {}),
-      ...(chunk.usage !== undefined ? { usage: chunk.usage } : {}),
-    },
-    owner.signal,
-  );
+  const response = {
+    content: hookIContent,
+    // finishReason/rawStopReason live only on terminal chunks; toModelStreamChunk
+    // already lifted them onto the chunk when the provider emitted them.
+    ...(chunk.finishReason !== undefined
+      ? { finishReason: chunk.finishReason }
+      : {}),
+    ...(chunk.rawStopReason !== undefined
+      ? { rawStopReason: chunk.rawStopReason }
+      : {}),
+    ...(chunk.usage !== undefined ? { usage: chunk.usage } : {}),
+  };
+  const requestTools = requestPayload?.tools ?? sourceRequest?.tools;
+  // A restricted selection that emptied the tool list is hidden from hooks.
+  const omitTools =
+    requestTools === undefined ||
+    (requestTools.length === 0 && hookRestrictedAllowedTools !== undefined);
+  const afterModelResult =
+    requestPayload !== undefined
+      ? await owner.afterModel?.(
+          {
+            model,
+            contents: requestPayload.contents,
+            ...(omitTools ? {} : { tools: requestTools }),
+          },
+          response,
+          owner.signal,
+        )
+      : await fireSourceAfterModelHook({
+          owner,
+          request: sourceRequest,
+          model,
+          response,
+          omitTools,
+          log: (message) => logger.debug(() => message),
+        });
 
   if (afterModelResult?.shouldStopExecution() === true) {
     throw new AgentExecutionStoppedError(

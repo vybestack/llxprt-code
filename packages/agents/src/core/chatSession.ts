@@ -763,6 +763,7 @@ export class ChatSession {
    * retried here as a side effect of clearing rows.
    */
   async clearHistoryForDisposal(): Promise<void> {
+    this.dispose();
     await this.releaseHistoryAdmissions();
     await this.historyService.releaseMediaForDisposal();
     // Disposal retires the journal without publishing a clear into a recorder
@@ -773,6 +774,11 @@ export class ChatSession {
   private async clearHistoryRows(): Promise<void> {
     await this.releaseHistoryAdmissions();
     await this.conversationManager.clearHistory();
+    this.streamProcessor.resetRefusalContextBaseline();
+  }
+
+  dispose(): void {
+    this.streamProcessor.dispose();
   }
 
   private async releaseHistoryAdmissions(): Promise<void> {

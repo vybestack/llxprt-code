@@ -14,6 +14,8 @@ import {
   type ChronologyReplacedSpan,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
+import type { DiskSummaryOutcome } from './diskMiddleOut.js';
+import { unauthoredProvenance } from './compressionAuditProvenance.js';
 import { appendCandidateRow, curatedCandidate } from './curatedCandidate.js';
 import { CompressionSummarySelection } from './compressionSummary.js';
 import {
@@ -183,12 +185,19 @@ export async function publishCandidate(
   return selection.summary;
 }
 
+function truncationApplied(
+  summary: Awaited<ReturnType<typeof publishCandidate>>,
+): DiskSummaryOutcome {
+  return {
+    outcome: 'applied',
+    summary,
+    provenance: unauthoredProvenance('top-down-truncation'),
+  };
+}
+
 export async function runDiskTruncation(
   ...args: Parameters<typeof buildCompressionMetadata>
-): Promise<{
-  readonly outcome: 'applied' | 'noop';
-  readonly summary?: IContent;
-}> {
+): Promise<DiskSummaryOutcome> {
   const metadata = await buildCompressionMetadata(...args);
   const history = args[3];
   const origin = args[8]?.historyOrigin;
@@ -230,7 +239,7 @@ export async function runDiskTruncation(
         (position) => input.rows.sourceOrdinalAt(position),
       );
       runReport?.recordApplied(result.metadata);
-      return { outcome: 'applied', summary };
+      return truncationApplied(summary);
     }
     const curated = await curatedCandidate(
       history.scratchRoots,
@@ -254,7 +263,7 @@ export async function runDiskTruncation(
         (position) => curated.sourceOrdinalAt(position),
       );
       runReport?.recordApplied(result.metadata);
-      return { outcome: 'applied', summary };
+      return truncationApplied(summary);
     } finally {
       curated.close();
     }

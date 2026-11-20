@@ -6,6 +6,7 @@
 
 export { dumpRequestContextStream } from './dumpRequestContextStream.js';
 import { promises as fs } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -14,6 +15,13 @@ import {
   sanitizeDiagnosticData,
   type DiagnosticSanitizationOptions,
 } from './mediaDiagnostics.js';
+import {
+  DEFAULT_DUMP_RETENTION,
+  markDumpGroupActive,
+  markDumpGroupPublished,
+  pruneDumpDirectory,
+} from './dump-retention.js';
+import type { DumpRetentionCoordinator } from './dump-retention.js';
 
 const logger = new DebugLogger('llxprt:core:dumpContext');
 
@@ -36,9 +44,25 @@ export interface DumpResponse {
   body?: unknown;
 }
 
+export interface DumpAttemptCorrelation {
+  readonly promptId: string | null;
+  readonly attemptIndex: number | null;
+  readonly runtimeId: string | null;
+  readonly outcome?: string;
+  readonly retentionLimits?: {
+    readonly maxBytes: number;
+    readonly maxAgeDays: number;
+  };
+  readonly retentionCoordinator?: DumpRetentionCoordinator;
+}
+
 export interface DumpData {
   provider: string;
   timestamp: string;
+  promptId?: string | null;
+  attemptIndex?: number | null;
+  runtimeId?: string | null;
+  outcome?: string;
   request?: DumpRequest;
   response?: DumpResponse;
   relatedRequestFile?: string;
@@ -173,11 +197,87 @@ export interface DumpRequestResult {
 export interface DumpResponseResult {
   responseFilename: string;
   dumpDir: string;
+  retained: boolean;
 }
 
 /**
  * Generates a shared base id used to relate request and response dump files.
  */
+async function writeDumpFile(filepath: string, data: unknown): Promise<void> {
+  const temporary = `${filepath}.${randomUUID()}.tmp`;
+  await fs.writeFile(temporary, JSON.stringify(data, null, 2), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
+  await fs.rename(temporary, filepath);
+}
+
+/** Attempt correlation fields written beside `request` in a dump file. */
+export function dumpCorrelationFields(
+  correlation: DumpAttemptCorrelation | undefined,
+): Partial<
+  Pick<DumpData, 'promptId' | 'attemptIndex' | 'runtimeId' | 'outcome'>
+> {
+  if (correlation === undefined) return {};
+  return {
+    promptId: correlation.promptId,
+    attemptIndex: correlation.attemptIndex,
+    runtimeId: correlation.runtimeId,
+    ...(correlation.outcome === undefined
+      ? {}
+      : { outcome: correlation.outcome }),
+  };
+}
+
+/**
+ * Retention bracket shared by the in-memory and streamed request writers:
+ * deferred groups are marked active before the write so pruning cannot remove
+ * a refused request before its pair is published; immediate dumps prune after.
+ */
+export async function beginRequestDumpRetention(
+  dumpDir: string,
+  baseId: string,
+  correlation: DumpAttemptCorrelation | undefined,
+  deferRetention: boolean,
+): Promise<void> {
+  if (deferRetention)
+    await markDumpGroupActive(
+      dumpDir,
+      baseId,
+      correlation?.retentionCoordinator,
+    );
+}
+
+export async function endRequestDumpRetention(
+  dumpDir: string,
+  correlation: DumpAttemptCorrelation | undefined,
+  deferRetention: boolean,
+): Promise<void> {
+  if (!deferRetention)
+    await pruneDumpFiles(
+      dumpDir,
+      correlation?.retentionLimits,
+      correlation?.retentionCoordinator,
+    );
+}
+
+async function pruneDumpFiles(
+  dumpDir: string,
+  limits: DumpAttemptCorrelation['retentionLimits'] = DEFAULT_DUMP_RETENTION,
+  coordinator?: DumpRetentionCoordinator,
+): Promise<void> {
+  try {
+    const result = await pruneDumpDirectory(dumpDir, limits, coordinator);
+    if (result.skipped === true)
+      logger.debug(
+        () => `Skipped dump retention for unverified directory: ${dumpDir}`,
+      );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.debug(() => `Best-effort dump retention failed: ${message}`);
+  }
+}
+
 export function generateDumpBaseId(provider: string): string {
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -196,9 +296,11 @@ export async function dumpRequestContext(
   baseId?: string,
   chronology?: readonly ChronologyTraceEntry[],
   options: DiagnosticSanitizationOptions = {},
+  correlation?: DumpAttemptCorrelation,
+  deferRetention = false,
 ): Promise<DumpRequestResult> {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
-  await fs.mkdir(dumpDir, { recursive: true });
+  await fs.mkdir(dumpDir, { recursive: true, mode: 0o700 });
 
   const id = baseId ?? generateDumpBaseId(provider);
   const requestFilename = `${id}-request.json`;
@@ -209,12 +311,15 @@ export async function dumpRequestContext(
   const data: DumpData = {
     provider,
     timestamp: new Date().toISOString(),
+    ...dumpCorrelationFields(correlation),
     request: redactedRequest,
     // Sibling of `request`, never inside `request.body` (#1721).
     ...(chronology ? { chronology } : {}),
   };
 
-  await fs.writeFile(filepath, JSON.stringify(data, null, 2), 'utf-8');
+  await beginRequestDumpRetention(dumpDir, id, correlation, deferRetention);
+  await writeDumpFile(filepath, data);
+  await endRequestDumpRetention(dumpDir, correlation, deferRetention);
   logger.debug(() => `Request context dumped to: ${filepath}`);
 
   return { baseId: id, requestFilename, dumpDir };
@@ -229,9 +334,10 @@ export async function dumpResponseContext(
   response: DumpResponse,
   provider: string,
   options: DiagnosticSanitizationOptions = {},
+  correlation?: DumpAttemptCorrelation,
 ): Promise<DumpResponseResult> {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
-  await fs.mkdir(dumpDir, { recursive: true });
+  await fs.mkdir(dumpDir, { recursive: true, mode: 0o700 });
 
   const id = baseId ?? generateDumpBaseId(provider);
   const responseFilename = `${id}-response.json`;
@@ -240,6 +346,16 @@ export async function dumpResponseContext(
   const data = {
     provider,
     timestamp: new Date().toISOString(),
+    ...(correlation === undefined
+      ? {}
+      : {
+          promptId: correlation.promptId,
+          attemptIndex: correlation.attemptIndex,
+          runtimeId: correlation.runtimeId,
+          ...(correlation.outcome === undefined
+            ? {}
+            : { outcome: correlation.outcome }),
+        }),
     response: {
       ...response,
       headers: redactSensitiveHeaders(response.headers),
@@ -250,10 +366,36 @@ export async function dumpResponseContext(
     ...(baseId ? { relatedRequestFile: `${baseId}-request.json` } : {}),
   };
 
-  await fs.writeFile(filepath, JSON.stringify(data, null, 2), 'utf-8');
+  await writeDumpFile(filepath, data);
+  if (baseId !== undefined)
+    await markDumpGroupPublished(
+      dumpDir,
+      baseId,
+      correlation?.retentionCoordinator,
+    );
+  await pruneDumpFiles(
+    dumpDir,
+    correlation?.retentionLimits,
+    correlation?.retentionCoordinator,
+  );
+  let retained = true;
+  try {
+    await fs.stat(filepath);
+    if (baseId !== undefined)
+      await fs.stat(path.join(dumpDir, `${baseId}-request.json`));
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    )
+      retained = false;
+    else throw error;
+  }
   logger.debug(() => `Response context dumped to: ${filepath}`);
 
-  return { responseFilename, dumpDir };
+  return { responseFilename, dumpDir, retained };
 }
 
 /**

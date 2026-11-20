@@ -53,6 +53,7 @@ export interface ModelMetrics {
     totalErrors: number;
     /** Attempts that ended with the canonical finish reason `refusal` (#4036). */
     totalRefusals: number;
+    refusalsByCategory?: Array<{ category: string | null; count: number }>;
     totalLatencyMs: number;
   };
   tokens: {
@@ -389,6 +390,7 @@ export class UiTelemetryService
           totalRequests: breakdown.totalRequests,
           totalErrors: breakdown.totalErrors,
           totalRefusals: breakdown.totalRefusals,
+          refusalsByCategory: breakdown.refusalsByCategory ?? [],
           totalLatencyMs: breakdown.totalLatencyMs,
         },
         tokens: {
@@ -462,6 +464,7 @@ export class UiTelemetryService
       provider: event.provider ?? 'unknown',
       isError,
       isRefusal,
+      refusalCategory: event.refusal_category,
       hasUsage: event.usage_metadata_present === true,
       inputTokens,
       outputTokens,

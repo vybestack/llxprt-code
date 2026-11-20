@@ -227,7 +227,6 @@ function buildSessionBaseArgs(
     fileFiltering: context.fileFiltering,
     checkpointing:
       argv.checkpointing ?? profileSettingsWithTools.checkpointing?.enabled,
-    dumpOnError: argv.dumponerror ?? false,
 
     proxy: resolveProxy(argv.proxy),
 

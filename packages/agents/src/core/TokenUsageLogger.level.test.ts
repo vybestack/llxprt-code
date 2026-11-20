@@ -116,6 +116,7 @@ const DEBUG_RETAINED_DETAIL_KEYS = [
   'user_turn',
   'step',
   'cache_read_tokens',
+  'request_id',
 ];
 
 const SESSION_ID =

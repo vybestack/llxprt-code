@@ -58,6 +58,7 @@ export class ApiErrorEvent {
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number;
   usage_metadata_present?: boolean;
+  refusal_category?: string | null;
   /** True when emitted by the canonical provider wrapper (sole local-aggregation source). Agent/logical events leave this unset. */
   provider_owned?: boolean;
 
@@ -102,6 +103,7 @@ export class ApiResponseEvent {
   response_text?: string;
   prompt_id: string;
   finish_reasons: string[];
+  refusal_category?: string | null;
   /** Stable per-attempt ID for deduplication */
   attempt_id?: string;
   provider?: string;

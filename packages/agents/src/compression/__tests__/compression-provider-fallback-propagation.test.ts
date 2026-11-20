@@ -497,7 +497,7 @@ async function testBody3(): Promise<void> {
   ).rejects.toThrow(/context limit/i);
 
   expect(suite0Handler['compressionFailureCount']).toBe(4);
-  expect(suite0Handler['compressionSummary']).toBeUndefined();
+  expect(suite0Handler['auditState'].summary).toBeUndefined();
   expect(suite0Handler['lastSuccessfulCompressionTime']).toBeNull();
   expect(suite0Handler.isCompressionInCooldown()).toBe(true);
   expect(suite0Handler.wasRecentlyCompressed()).toBe(false);
@@ -533,7 +533,7 @@ async function testBody4(): Promise<void> {
   ).rejects.toThrow(/context limit/i);
 
   expect(suite0Handler['compressionFailureCount']).toBe(4);
-  expect(suite0Handler['compressionSummary']).toBeUndefined();
+  expect(suite0Handler['auditState'].summary).toBeUndefined();
   expect(suite0Handler['lastSuccessfulCompressionTime']).toBeNull();
   expect(suite0Handler.isCompressionInCooldown()).toBe(true);
   expect(suite0Handler.wasRecentlyCompressed()).toBe(false);
@@ -559,7 +559,7 @@ async function testBody5(): Promise<void> {
   expect(suite0Handler['compressionFailureCount']).toBe(0);
   // Truncation keeps the stored, chronology-stamped snapshot; it produced no
   // summary of its own, so none is handed to recording (#4067).
-  expect(suite0Handler['compressionSummary']).toBeUndefined();
+  expect(suite0Handler['auditState'].summary).toBeUndefined();
   expect(suite0Handler['lastSuccessfulCompressionTime']).not.toBeNull();
   expect(suite0Handler.isCompressionInCooldown()).toBe(false);
   expect(suite0Handler.wasRecentlyCompressed()).toBe(true);
@@ -599,7 +599,7 @@ async function testBody6(): Promise<void> {
   expect(suite0Handler['compressionFailureCount']).toBe(0);
   // Truncation keeps the stored, chronology-stamped snapshot; it produced no
   // summary of its own, so none is handed to recording (#4067).
-  expect(suite0Handler['compressionSummary']).toBeUndefined();
+  expect(suite0Handler['auditState'].summary).toBeUndefined();
   expect(suite0Handler['lastSuccessfulCompressionTime']).not.toBeNull();
   expect(suite0Handler.isCompressionInCooldown()).toBe(false);
   expect(suite0Handler.wasRecentlyCompressed()).toBe(true);

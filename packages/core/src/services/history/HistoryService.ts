@@ -31,7 +31,6 @@ import type {
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import type { CompressionInputSnapshot } from './compressionInput.js';
-import type { ConversationStatistics } from './curationDebugLogger.js';
 import { notifyDetachedRows } from './detachedHistoryAPI.js';
 import { isCuratedContent } from './historyCuration.js';
 import type { HistoryDensityRows } from './historyDensityRows.js';
@@ -48,6 +47,7 @@ import type {
 import type { HistoryMediaDrop } from './journalMediaDrop.js';
 import { estimateTokenRange } from './estimate-token-range.js';
 import type { IContent } from './IContent.js';
+import type { CompressionAuditProvenance } from '../../core/compression/types.js';
 import { streamProviderContentSnapshot } from './provider-request-snapshot.js';
 export type { HistoryJsonSink } from './history-export.js';
 export type {
@@ -62,11 +62,7 @@ import {
   writeHistoryJson,
   type HistoryJsonSink,
 } from './history-export.js';
-import {
-  ChronologyStamper,
-  projectChronologyTraceEntry,
-  type ChronologyTraceEntry,
-} from './historyChronology.js';
+import { ChronologyStamper } from './historyChronology.js';
 import { HistoryServiceReads } from './HistoryServiceReads.js';
 
 import type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
@@ -918,6 +914,7 @@ export class HistoryService extends HistoryServiceReads {
     summary?: IContent,
     itemsCompressed?: number,
     origin?: object,
+    provenance?: CompressionAuditProvenance,
   ): void {
     this.logger.debug('Compression complete - unlocking history', {
       pendingCount: this.pendingOperations.length,
@@ -936,7 +933,13 @@ export class HistoryService extends HistoryServiceReads {
           this.emit('compressionLockReleased', origin);
 
           if (summary && itemsCompressed !== undefined) {
-            this.emit('compressionEnded', summary, itemsCompressed, origin);
+            this.emit(
+              'compressionEnded',
+              summary,
+              itemsCompressed,
+              origin,
+              provenance,
+            );
           }
         });
       });
@@ -956,31 +959,9 @@ export class HistoryService extends HistoryServiceReads {
     await this.queuedClears.settle();
   }
 
-  /**
-   * Get conversation statistics
-   */
-  getStatistics(): ConversationStatistics {
-    return this.journal.statistics();
-  }
-
-  get compressionRowCount(): number | undefined {
-    return this.journal.compressionRowCount?.();
-  }
-
-  /**
-   * Get an ordered chronology trace: one compact, JSON-safe entry per history
-   * item carrying its marker fields and structural descriptors. No message
-   * text, tool parameters, or tool results appear in the trace.
-   */
-  async *getChronologyTrace(): AsyncGenerator<
-    ChronologyTraceEntry,
-    void,
-    unknown
-  > {
-    for await (const content of this.journal.streamRows()) {
-      const entry = projectChronologyTraceEntry(content);
-      if (entry !== undefined) yield entry;
-    }
+  /** Highest chronology seq stamped so far; refusal audit baselines compare against it. */
+  getChronologyWatermark(): number {
+    return this.chronology.snapshot().nextSeq - 1;
   }
 
   /**

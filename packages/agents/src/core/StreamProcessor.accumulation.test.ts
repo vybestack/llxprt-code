@@ -22,6 +22,7 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { arrivalHistoryFixture } from './__tests__/support/arrival-history-fixture.js';
+import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -82,6 +83,7 @@ function createProcessor(): StreamProcessor {
     compressionHandler: createMockCompressionHandler(),
     conversationManager: createMockConversationManager(),
     historyService: createMockHistoryService(),
+    refusalStreamAudit: new RefusalStreamAudit(),
     logger: new DebugLogger('test'),
     eagerlyRecordedToolResponseCallIds: new Set<string>(),
     _finalizeStreamProcessing: vi.fn().mockResolvedValue(undefined),
@@ -278,6 +280,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       compressionHandler: createMockCompressionHandler(),
       conversationManager: createMockConversationManager(),
       historyService: createMockHistoryService(),
+      refusalStreamAudit: new RefusalStreamAudit(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });

@@ -21,6 +21,7 @@ function apiResponse(opts: {
   model?: string;
   finishReasons: string[];
   outputTokens?: number;
+  refusalCategory?: string | null;
 }) {
   return {
     'event.name': 'llxprt_code.api_response' as const,
@@ -35,6 +36,7 @@ function apiResponse(opts: {
     tool_token_count: 0,
     total_token_count: 120 + (opts.outputTokens ?? 0),
     finish_reasons: opts.finishReasons,
+    refusal_category: opts.refusalCategory,
     prompt_id: 'prompt-test',
     attempt_id: `att_${attemptCounter++}`,
     provider: 'claudecode',
@@ -111,6 +113,39 @@ describe('refusal counting in session metrics (issue #4036)', () => {
     service.addEvent(event);
 
     expect(service.getSessionSnapshot().totalRefusals).toBe(1);
+  });
+
+  it('counts refusal categories once and keeps null as an unlabeled bucket', () => {
+    service.addEvent(
+      apiResponse({ finishReasons: ['refusal'], refusalCategory: 'cyber' }),
+    );
+    const duplicate = apiResponse({
+      finishReasons: ['refusal'],
+      refusalCategory: 'cyber',
+    });
+    service.addEvent({ ...duplicate, attempt_id: 'att_distinct' });
+    service.addEvent(
+      apiResponse({ finishReasons: ['refusal'], refusalCategory: null }),
+    );
+    service.addEvent(
+      apiResponse({
+        finishReasons: ['refusal'],
+        refusalCategory: 'future_category',
+      }),
+    );
+    service.addEvent(
+      apiResponse({ finishReasons: ['safety'], refusalCategory: 'bio' }),
+    );
+
+    expect(
+      service.getSessionSnapshot().models['claude-opus-5-5'].refusalsByCategory,
+    ).toStrictEqual([
+      { category: 'cyber', count: 2 },
+      { category: null, count: 1 },
+      { category: 'future_category', count: 1 },
+    ]);
+    expect(service.getSessionSnapshot().totalRefusals).toBe(4);
+    expect(service.getSessionSnapshot().totalApiErrors).toBe(0);
   });
 
   it('clears refusals when the session metrics are reset', () => {

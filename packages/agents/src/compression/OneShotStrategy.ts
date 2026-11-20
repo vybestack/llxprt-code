@@ -13,6 +13,7 @@ import {
 } from './compressionAttempt.js';
 import { bindCompressionProvider } from './utils.js';
 import { summaryOutput, type SummaryOutput } from './summaryOutput.js';
+import { summarizerProvenance } from './compressionAuditProvenance.js';
 /**
  * @plan PLAN-20260211-HIGHDENSITY.P03
  * @plan PLAN-20260211-HIGHDENSITY.P05
@@ -28,7 +29,6 @@ import { summaryOutput, type SummaryOutput } from './summaryOutput.js';
  * above the preserved messages.
  */
 
-import { readFileSync } from 'node:fs';
 import type {
   IContent,
   UsageStats,
@@ -43,14 +43,15 @@ import type {
   CompressionStrategy,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
-  EmptySummaryError,
-  PromptResolutionError,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { aggregateTextFromBlocks, runVerificationPass } from './utils.js';
-import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
+  aggregateTextFromBlocks,
+  buildContextInjections,
+  buildSummaryRequestFrame,
+  runVerificationPass,
+} from './utils.js';
+import { stripScratchpadSections } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
-import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 function destructureProviderResult(result: CompressionProviderResult): {
   provider: IProvider;
@@ -138,12 +139,12 @@ export class OneShotStrategy implements CompressionStrategy {
     const request = diskSummaryRequestSelection(
       context.history,
       { top: 0, bottom, injection: [] },
-      this.resolvePrompt(context),
-      this.buildContextInjections(context),
+      buildSummaryRequestFrame(context),
+      buildContextInjections(context),
       this.summaryRequestOwnership,
     );
     const {
-      text: summary,
+      text: rawSummary,
       usage,
       diagnostics,
     } = await this.callProvider(
@@ -155,6 +156,7 @@ export class OneShotStrategy implements CompressionStrategy {
       result.resolvedOptions,
       result.invocation,
     );
+    const summary = stripScratchpadSections(rawSummary);
     if (!summary.trim()) throw new EmptySummaryError('one-shot', diagnostics);
     const finalSummary = await this.maybeVerifySummary(
       context,
@@ -170,6 +172,11 @@ export class OneShotStrategy implements CompressionStrategy {
       0,
       bottom,
       this.summaryRows(finalSummary, usage, context.activeTodos),
+      summarizerProvenance(
+        'one-shot',
+        result.provider.name,
+        result.resolvedOptions?.model ?? null,
+      ),
     );
   }
 
@@ -232,28 +239,6 @@ export class OneShotStrategy implements CompressionStrategy {
   // -------------------------------------------------------------------------
   // Private helpers
   // -------------------------------------------------------------------------
-
-  private resolvePrompt(context: Omit<CompressionContext, 'history'>): string {
-    const resolved = context.promptResolver.resolveFile(
-      context.promptBaseDir,
-      'compression.md',
-      context.promptContext,
-    );
-
-    if (resolved.found && resolved.path) {
-      try {
-        return readFileSync(resolved.path, 'utf-8');
-      } catch {
-        // Fall through to hardcoded default
-      }
-    }
-
-    const fallback = getCompressionPrompt();
-    if (!fallback) {
-      throw new PromptResolutionError('compression.md');
-    }
-    return fallback;
-  }
 
   private bindProvider(
     provider: IProvider,
@@ -352,43 +337,5 @@ export class OneShotStrategy implements CompressionStrategy {
         });
       }
     });
-  }
-
-  /**
-   * @plan PLAN-20260211-HIGHDENSITY.P23
-   * @requirement REQ-HD-011.3, REQ-HD-012.2
-   */
-  private buildContextInjections(
-    context: Omit<CompressionContext, 'history'>,
-  ): IContent[] {
-    const injections: IContent[] = [];
-
-    if (context.activeTodos && context.activeTodos.trim().length > 0) {
-      injections.push({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: `The following are the current active todo/task items. When summarizing, preserve context about why each task exists and what has been tried:
-
-${context.activeTodos}`,
-          },
-        ],
-      });
-    }
-
-    if (context.transcriptPath) {
-      injections.push({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: buildTranscriptPathNotice(context.transcriptPath),
-          },
-        ],
-      });
-    }
-
-    return injections;
   }
 }

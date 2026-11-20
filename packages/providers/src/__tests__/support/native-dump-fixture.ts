@@ -17,6 +17,8 @@ import {
 } from './wireBodyCapture.js';
 
 const parent = join(import.meta.dir, '../../../../../tmp/dump-native');
+const TEMPORARY_DUMP =
+  /^(.+-(?:request|response)\.json)\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
 const rows: readonly IContent[] = [
   {
     speaker: 'human',
@@ -165,9 +167,14 @@ async function assertArtifacts(
     expect(expected).not.toContain('AQI=');
     expect(expected).not.toContain('test-api-key');
     expect(expected).toContain('[REDACTED]');
-    expect(new Set(created.files).size).toBe(artifacts);
+    // A dump is written to a unique temporary sibling and renamed into place;
+    // the directory listing proves no temporary file is left behind.
+    const dumps = created.files.map(
+      (file) => TEMPORARY_DUMP.exec(file)?.[1] ?? file,
+    );
+    expect(new Set(dumps).size).toBe(artifacts);
     expect(await readdir(join(cache, 'dumps'))).toHaveLength(artifacts);
-    for (const file of created.files) {
+    for (const file of dumps) {
       expect(file.startsWith(join(cache, 'dumps/'))).toBe(true);
       expect(file).toMatch(/-(request|response)\.json$/);
     }

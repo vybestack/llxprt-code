@@ -1,0 +1,419 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { createTestScratchOwner } from '@vybestack/llxprt-code-core/storage/__tests__/support/scratch-owner.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
+import {
+  isCompressionSummary,
+  stripScratchpadSections,
+} from './compressionSummaryScratchpad.js';
+
+const SNAPSHOT =
+  '<state_snapshot><overall_goal>Ship #4128</overall_goal></state_snapshot>';
+const REAL_SNAPSHOT = '<state_snapshot>REAL</state_snapshot>';
+const SCRATCHPAD_NAMING_SNAPSHOT =
+  '<scratchpad>I will now write the <state_snapshot> carefully.</scratchpad>';
+const UNTERMINATED_SCRATCHPAD_NAMING_SNAPSHOT =
+  '<scratchpad>I will now write the <state_snapshot> carefully.';
+
+/**
+ * A summary as compression produced it before summaries were tagged (#2768):
+ * a human entry whose only metadata is the summarizer's token usage.
+ */
+function untaggedSummary(text: string): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text }],
+    metadata: {
+      usage: { promptTokens: 9000, completionTokens: 600, totalTokens: 9600 },
+    },
+  };
+}
+
+function textOf(content: IContent | undefined): string {
+  return (content?.blocks ?? [])
+    .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+    .join('');
+}
+
+describe('stripScratchpadSections', () => {
+  it('removes a complete scratchpad block before the snapshot', () => {
+    expect(
+      stripScratchpadSections(
+        `<scratchpad>I should keep the goal.</scratchpad>\n${SNAPSHOT}`,
+      ),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('removes every complete scratchpad block', () => {
+    expect(
+      stripScratchpadSections(
+        `<SCRATCHPAD>one</SCRATCHPAD>${SNAPSHOT}<scratchpad>two</scratchpad>`,
+      ),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('removes an unterminated leading scratchpad up to the snapshot', () => {
+    expect(
+      stripScratchpadSections(
+        `  <scratchpad>\nFirst I review the history.\n\n${SNAPSHOT}`,
+      ),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('reduces an unterminated scratchpad without a snapshot to nothing', () => {
+    expect(stripScratchpadSections('<scratchpad>only reasoning')).toBe('');
+  });
+
+  it('returns text without a scratchpad unchanged, whitespace included', () => {
+    const text = `\n${SNAPSHOT}\n`;
+    expect(stripScratchpadSections(text)).toBe(text);
+  });
+
+  it('keeps a quoted scratchpad pair inside the snapshot verbatim', () => {
+    const snapshot =
+      '<state_snapshot>Removed the <scratchpad> request from compression.md. IMPORTANT-FACT-1. IMPORTANT-FACT-2. Strip </scratchpad> blocks.</state_snapshot>';
+
+    expect(
+      stripScratchpadSections(`<scratchpad>notes</scratchpad>\n${snapshot}`),
+    ).toBe(snapshot);
+  });
+
+  it('keeps a quoted opening scratchpad tag inside the snapshot verbatim', () => {
+    const snapshot =
+      '<state_snapshot>The old prompt asked for a private <scratchpad> first.</state_snapshot>';
+
+    expect(stripScratchpadSections(snapshot)).toBe(snapshot);
+  });
+
+  it('removes a scratchpad block after the snapshot element', () => {
+    expect(
+      stripScratchpadSections(
+        `${SNAPSHOT}\n<scratchpad>afterthought</scratchpad>`,
+      ),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('removes an unterminated scratchpad after the snapshot to the end', () => {
+    expect(
+      stripScratchpadSections(`${SNAPSHOT}\n<scratchpad>trailing notes`),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('drops everything before the snapshot when an unterminated scratchpad follows other text', () => {
+    expect(
+      stripScratchpadSections(`Let me think.\n<scratchpad>notes\n${SNAPSHOT}`),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('removes a scratchpad block whose opening tag carries attributes', () => {
+    expect(
+      stripScratchpadSections(`<scratchpad type="x">a</scratchpad>${SNAPSHOT}`),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('removes an unterminated scratchpad whose opening tag carries attributes', () => {
+    expect(
+      stripScratchpadSections(`<scratchpad mode="private">a\n${SNAPSHOT}`),
+    ).toBe(SNAPSHOT);
+  });
+
+  it('leaves tags that only start with the word scratchpad alone', () => {
+    const text = `<scratchpads>list</scratchpads>${SNAPSHOT}`;
+
+    expect(stripScratchpadSections(text)).toBe(text);
+  });
+
+  it('finds the snapshot after a scratchpad block that names the snapshot tag', () => {
+    expect(
+      stripScratchpadSections(
+        `${SCRATCHPAD_NAMING_SNAPSHOT}\n${REAL_SNAPSHOT}`,
+      ),
+    ).toBe(REAL_SNAPSHOT);
+  });
+
+  it('finds the snapshot on its own line after an unterminated scratchpad that names the snapshot tag', () => {
+    expect(
+      stripScratchpadSections(
+        `${UNTERMINATED_SCRATCHPAD_NAMING_SNAPSHOT}\n${REAL_SNAPSHOT}`,
+      ),
+    ).toBe(REAL_SNAPSHOT);
+  });
+
+  it('falls back to the first snapshot tag after an unterminated scratchpad when none starts a line', () => {
+    expect(stripScratchpadSections(`<scratchpad>notes ${REAL_SNAPSHOT}`)).toBe(
+      REAL_SNAPSHOT,
+    );
+  });
+
+  it('keeps the snapshot boundary exact when the text holds characters whose lowercase form is longer', () => {
+    const snapshot = `<state_snapshot>${'İ'.repeat(20)}</state_snapshot>`;
+
+    expect(
+      stripScratchpadSections(`${snapshot}
+<scratchpad>reasoning`),
+    ).toBe(snapshot);
+  });
+});
+
+describe('scratchpad detection on many repeated tags', () => {
+  const REPEATS = 50_000;
+  const BOUND_MS = 500;
+
+  function timed<T>(run: () => T): { result: T; elapsedMs: number } {
+    const start = performance.now();
+    const result = run();
+    return { result, elapsedMs: performance.now() - start };
+  }
+
+  function humanText(text: string): IContent {
+    return { speaker: 'human', blocks: [{ type: 'text', text }] };
+  }
+
+  it('rejects an untagged message of repeated snapshot tags after a scratchpad quickly', () => {
+    const text = '<scratchpad>' + '<state_snapshot>'.repeat(REPEATS);
+
+    const { result, elapsedMs } = timed(() =>
+      isCompressionSummary(humanText(text)),
+    );
+
+    expect(result).toBe(false);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('recognizes an untagged legacy summary of repeated snapshot tags quickly', () => {
+    const text =
+      '<scratchpad>' + '<state_snapshot>'.repeat(REPEATS) + '</state_snapshot>';
+
+    const { result, elapsedMs } = timed(() =>
+      isCompressionSummary(untaggedSummary(text)),
+    );
+
+    expect(result).toBe(true);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('strips an unterminated scratchpad before repeated snapshot tags quickly', () => {
+    const snapshots = '<state_snapshot>'.repeat(REPEATS);
+
+    const { result, elapsedMs } = timed(() =>
+      stripScratchpadSections(`<scratchpad>${snapshots}`),
+    );
+
+    expect(result).toBe(snapshots);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('strips repeated unterminated scratchpad tags quickly', () => {
+    const { result, elapsedMs } = timed(() =>
+      stripScratchpadSections('<scratchpad>'.repeat(REPEATS)),
+    );
+
+    expect(result).toBe('');
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('leaves repeated scratchpad tag names without a closing bracket alone quickly', () => {
+    const text = '<scratchpad'.repeat(REPEATS);
+
+    const { result, elapsedMs } = timed(() => stripScratchpadSections(text));
+
+    expect(result).toBe(text);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+
+  it('finds the real snapshot after repeated scratchpads that name the snapshot tag quickly', () => {
+    const text =
+      '<scratchpad><state_snapshot></scratchpad>'.repeat(REPEATS) +
+      REAL_SNAPSHOT;
+
+    const { result, elapsedMs } = timed(() => stripScratchpadSections(text));
+
+    expect(result).toBe(REAL_SNAPSHOT);
+    expect(elapsedMs).toBeLessThan(BOUND_MS);
+  });
+});
+
+describe('provider requests recover summaries that carry a scratchpad', () => {
+  const scratchRoots = createTestScratchOwner();
+  const services: HistoryService[] = [];
+
+  afterEach(async () => {
+    for (const service of services.splice(0)) await service.dispose();
+  });
+
+  async function serviceWith(...contents: IContent[]): Promise<HistoryService> {
+    const service = new HistoryService({ scratchRoots });
+    services.push(service);
+    for (const content of contents) {
+      service.add(content);
+    }
+    await service.waitForCommit();
+    return service;
+  }
+
+  function providerRows(service: HistoryService): Promise<IContent[]> {
+    return Array.fromAsync(service.getCuratedForProviderStream());
+  }
+
+  const legacySummary: IContent = {
+    speaker: 'human',
+    blocks: [
+      {
+        type: 'text',
+        text: `<scratchpad>\nI will now review the conversation.\n</scratchpad>\n\n${SNAPSHOT}`,
+      },
+    ],
+    metadata: {
+      isSummary: true,
+      synthetic: true,
+      reason: 'compression-state-snapshot',
+    },
+  };
+
+  it('sends a tagged summary with its scratchpad removed and the snapshot intact', async () => {
+    const service = await serviceWith(legacySummary, {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Continuing.' }],
+    });
+
+    const [summary] = await providerRows(service);
+
+    expect(textOf(summary)).toBe(SNAPSHOT);
+  });
+
+  it('sends only the real snapshot of a summary whose scratchpad names the snapshot tag', async () => {
+    const service = await serviceWith({
+      ...legacySummary,
+      blocks: [
+        {
+          type: 'text',
+          text: `${SCRATCHPAD_NAMING_SNAPSHOT}\n${REAL_SNAPSHOT}`,
+        },
+      ],
+    });
+
+    expect(textOf((await providerRows(service))[0])).toBe(REAL_SNAPSHOT);
+  });
+
+  it('recovers summaries tagged only by the isSummary flag', async () => {
+    const service = await serviceWith({
+      ...legacySummary,
+      blocks: [{ type: 'text', text: `<scratchpad>notes\n${SNAPSHOT}` }],
+      metadata: { isSummary: true },
+    });
+
+    expect(textOf((await providerRows(service))[0])).toBe(SNAPSHOT);
+  });
+
+  it('recovers summaries tagged only by the snapshot reason', async () => {
+    const service = await serviceWith({
+      ...legacySummary,
+      metadata: { reason: 'compression-state-snapshot' },
+    });
+
+    expect(textOf((await providerRows(service))[0])).toBe(SNAPSHOT);
+  });
+
+  it('recovers an untagged summary recorded before summaries were tagged', async () => {
+    const service = await serviceWith(
+      untaggedSummary(
+        `\n  <scratchpad>old reasoning</scratchpad>\n${SNAPSHOT}`,
+      ),
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Got it.' }] },
+    );
+
+    expect(textOf((await providerRows(service))[0])).toBe(SNAPSHOT);
+  });
+
+  it('never alters a user message shaped like an untagged summary', async () => {
+    const userText =
+      '<scratchpad>example notes</scratchpad><state_snapshot>example output</state_snapshot>';
+    const service = await serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
+  });
+
+  it('never alters an untagged user message that does not open with a scratchpad', async () => {
+    const userText = `Compare this with the summary: <scratchpad>x</scratchpad>${SNAPSHOT}`;
+    const service = await serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
+  });
+
+  it('never alters an untagged user message that opens with a scratchpad but has no snapshot', async () => {
+    const userText = '<scratchpad>is this tag allowed?</scratchpad> asking';
+    const service = await serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
+  });
+
+  it('never alters an untagged user message that opens with a scratchpad and mentions the snapshot tag', async () => {
+    const userText =
+      '<scratchpad> tags caused refusals; does the fix keep <state_snapshot> intact?';
+    const service = await serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
+  });
+
+  it('leaves the stored history untouched', async () => {
+    const service = await serviceWith(legacySummary);
+
+    await providerRows(service);
+
+    const [stored] = await Array.fromAsync(service.streamRawHistory());
+    expect(textOf(stored)).toBe(textOf(legacySummary));
+  });
+
+  it('never alters an ordinary user message that mentions a scratchpad', async () => {
+    const userText =
+      'Why does the summary start with <scratchpad>notes</scratchpad>?';
+    const service = await serviceWith({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: userText }],
+    });
+
+    expect(textOf((await providerRows(service))[0])).toBe(userText);
+  });
+
+  it('never alters an assistant reply that mentions a scratchpad', async () => {
+    const aiText = '<scratchpad> is the tag the old prompt asked for.';
+    const service = await serviceWith(
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Explain it.' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: aiText }] },
+    );
+
+    expect(textOf((await providerRows(service))[1])).toBe(aiText);
+  });
+
+  it('drops a tagged summary that held nothing but an unterminated scratchpad', async () => {
+    const service = await serviceWith(
+      {
+        ...legacySummary,
+        blocks: [{ type: 'text', text: '<scratchpad>truncated reasoning' }],
+      },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Next request' }] },
+    );
+
+    const contents = await providerRows(service);
+
+    expect(contents.map(textOf)).toStrictEqual(['Next request']);
+  });
+});

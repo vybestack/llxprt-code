@@ -4,7 +4,10 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyIndexedRows.js';
 import { diskSummaryRequestSelection } from '../middleOutDiskPlan.js';
-import { referenceSummaryRequest } from './summary-request-reference.js';
+import {
+  referenceSummaryRequest,
+  testSummaryFrame,
+} from './summary-request-reference.js';
 
 function text(speaker: 'human' | 'ai', value: string): IContent {
   return { speaker, blocks: [{ type: 'text', text: value }] };
@@ -69,7 +72,7 @@ describe('disk summary request selection', () => {
       const selection = diskSummaryRequestSelection(
         indexed(history),
         { top, bottom, injection: planRows },
-        'compress this',
+        testSummaryFrame('compress this'),
         injections,
         new RowOwnership(),
       );
@@ -77,7 +80,7 @@ describe('disk summary request selection', () => {
         history,
         top,
         bottom,
-        'compress this',
+        testSummaryFrame('compress this'),
         [...injections, ...planRows],
       );
       const streamed = await drain({
@@ -108,7 +111,7 @@ describe('disk summary request selection', () => {
     const selection = diskSummaryRequestSelection(
       indexed(history),
       { top: 0, bottom: 5, injection: [] },
-      'p',
+      testSummaryFrame('p'),
       [],
       ownership,
     );
@@ -125,7 +128,7 @@ describe('disk summary request selection', () => {
     const selection = diskSummaryRequestSelection(
       indexed(history),
       { top: 0, bottom: 5, injection: [] },
-      'p',
+      testSummaryFrame('p'),
       [],
       ownership,
     );
@@ -154,7 +157,7 @@ describe('disk summary request selection', () => {
     const selection = diskSummaryRequestSelection(
       indexed(history),
       { top: 0, bottom: 5, injection: [] },
-      'p',
+      testSummaryFrame('p'),
       [],
       ownership,
     );
@@ -196,7 +199,7 @@ describe('disk summary request selection', () => {
         },
       },
       { top: 0, bottom: 5, injection: [] },
-      'p',
+      testSummaryFrame('p'),
       [],
       new RowOwnership(),
     );
@@ -220,7 +223,7 @@ describe('disk summary request selection', () => {
     const selection = diskSummaryRequestSelection(
       indexed(history),
       { top: 0, bottom: 5, injection: [] },
-      'p',
+      testSummaryFrame('p'),
       [],
       new RowOwnership(),
     );

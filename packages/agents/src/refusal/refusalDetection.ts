@@ -10,6 +10,11 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
+  unavailableContextFingerprint,
+  type PartialOutputSnapshot,
+  type RefusalContextFingerprint,
+} from './refusalAudit.js';
+import {
   ModelRefusalSignal,
   type RefusalAttempt,
   type RefusalEvidence,
@@ -27,13 +32,29 @@ export function isRefusalFinishReason(
 }
 
 /**
+ * Terminal facts of one streamed attempt. The output itself is never held:
+ * the stream feeds a bounded recorder and only its snapshot reaches here.
+ */
+export type RefusalTerminal = Pick<
+  ModelOutput,
+  | 'finishReason'
+  | 'rawStopReason'
+  | 'stopDetails'
+  | 'requestId'
+  | 'dumpBaseId'
+  | 'usage'
+  | 'firstByteToRefusalMs'
+> & { partialOutput(): PartialOutputSnapshot };
+
+/**
  * Raises the typed refusal outcome for an accumulated attempt that ended in a
  * refusal. Called by the stream finalizer before response validation, history
  * commit and success accounting, so none of them see the refused output.
  */
 export function throwIfRefused(
-  accumulated: Pick<ModelOutput, 'finishReason' | 'rawStopReason' | 'usage'>,
+  accumulated: RefusalTerminal,
   turnId: string,
+  contextFingerprint?: RefusalContextFingerprint,
 ): void {
   if (!isRefusalFinishReason(accumulated.finishReason)) return;
   throw new ModelRefusalSignal({
@@ -41,7 +62,30 @@ export function throwIfRefused(
     ...(accumulated.rawStopReason !== undefined && {
       rawStopReason: accumulated.rawStopReason,
     }),
+    ...(accumulated.stopDetails !== undefined && {
+      stopDetails: accumulated.stopDetails,
+    }),
+    ...(accumulated.requestId !== undefined && {
+      requestId: accumulated.requestId,
+    }),
+    ...(accumulated.dumpBaseId !== undefined && {
+      dumpBaseId: accumulated.dumpBaseId,
+    }),
     ...(accumulated.usage !== undefined && { usage: accumulated.usage }),
+    partialOutput: accumulated.partialOutput(),
+    ...(accumulated.usage !== undefined && {
+      outputTokens: accumulated.usage.completionTokens,
+    }),
+    firstByteToRefusalMs: accumulated.firstByteToRefusalMs ?? null,
+    contextFingerprint: {
+      ...(contextFingerprint ??
+        unavailableContextFingerprint(accumulated.usage)),
+      prompt_tokens: accumulated.usage?.promptTokens ?? null,
+      cache_read_tokens:
+        accumulated.usage?.cache_read_input_tokens ??
+        accumulated.usage?.cachedTokens ??
+        null,
+    },
     turnId,
   });
 }

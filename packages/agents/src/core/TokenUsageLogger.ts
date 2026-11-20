@@ -439,6 +439,11 @@ export class TokenUsageLogger {
         backendProfile: actual.backendProfile,
         finishReason: actual.finishReason,
         rawStopReason: actual.rawStopReason,
+        refusalCategory: actual.refusalCategory,
+        refusalExplanation: actual.refusalExplanation,
+        recommendedModel: actual.recommendedModel,
+        requestId: actual.requestId,
+        dumpBaseId: actual.dumpBaseId,
       },
     };
     await this._writeTurnRecord(record);
@@ -698,6 +703,19 @@ export class TokenUsageLogger {
       ...(extras.rawStopReason !== undefined && {
         raw_stop_reason: extras.rawStopReason,
       }),
+      ...(extras.refusalCategory !== undefined && {
+        refusal_category: extras.refusalCategory,
+      }),
+      ...(extras.refusalExplanation !== undefined && {
+        refusal_explanation: extras.refusalExplanation,
+      }),
+      ...(extras.recommendedModel !== undefined && {
+        recommended_model: extras.recommendedModel,
+      }),
+      request_id: extras.requestId ?? null,
+      ...(extras.dumpBaseId === undefined
+        ? {}
+        : { dump_base_id: extras.dumpBaseId }),
     };
   }
 

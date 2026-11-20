@@ -581,7 +581,7 @@ export function isApplicationOwnedKey(key: string): boolean {
 export function getProfilePersistableKeys(): string[] {
   // The per-spec `persistToProfile` flag is the single source of truth. A key
   // that must not live in a profile sets it to false explicitly (as
-  // emojifilter/dumponerror/dumpcontext now do). Deliberately NOT filtering by
+  // emojifilter/dumpcontext now do). Deliberately NOT filtering by
   // `owner === 'application'` as well: that would silently override the flag
   // for application-owned keys that legitimately persist (e.g.
   // `token-usage-log`), producing a spec/runtime contract mismatch.

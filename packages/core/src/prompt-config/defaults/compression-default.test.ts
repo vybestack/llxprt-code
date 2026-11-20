@@ -3,10 +3,10 @@
  * @requirement REQ-HD-010.1, REQ-HD-010.2, REQ-HD-010.3, REQ-HD-010.4, REQ-HD-010.5
  */
 import { describe, it, expect } from 'bun:test';
-import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { CORE_DEFAULTS } from './core-defaults.js';
 
-describe('getCompressionPrompt enriched sections', () => {
-  const prompt = getCompressionPrompt();
+describe('shipped compression.md enriched sections', () => {
+  const prompt = CORE_DEFAULTS['compression.md'];
 
   it('contains <task_context> section inside <state_snapshot>', () => {
     expect(prompt).toContain('<task_context>');
@@ -51,14 +51,15 @@ describe('getCompressionPrompt enriched sections', () => {
   it('preserves all 5 original sections', () => {
     expect(prompt).toContain('<overall_goal>');
     expect(prompt).toContain('<key_knowledge>');
-    expect(prompt).toContain('<current_progress>');
-    expect(prompt).toContain('<active_tasks>');
-    expect(prompt).toContain('<open_questions>');
+    expect(prompt).toContain('<file_system_state>');
+    expect(prompt).toContain('<recent_actions>');
+    expect(prompt).toContain('<current_plan>');
   });
 
   it('new sections appear after original sections', () => {
-    const openQuestionsEnd = prompt.indexOf('</open_questions>');
+    const currentPlanEnd = prompt.indexOf('</current_plan>');
     const taskContextStart = prompt.indexOf('<task_context>');
-    expect(taskContextStart).toBeGreaterThan(openQuestionsEnd);
+    expect(currentPlanEnd).toBeGreaterThan(-1);
+    expect(taskContextStart).toBeGreaterThan(currentPlanEnd);
   });
 });

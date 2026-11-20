@@ -15,6 +15,7 @@
  */
 
 import { ContentValidation, type IContent } from './IContent.js';
+import { isEmptiedCompressionSummary } from './compressionSummaryScratchpad.js';
 import type { DebugLogger } from '../../debug/index.js';
 import {
   logAiMessageAnalysis,
@@ -22,12 +23,18 @@ import {
   logCurationSummary,
 } from './curationDebugLogger.js';
 
-/** The row-wise inclusion rule shared by eager and journal-backed reads. */
+/**
+ * The row-wise inclusion rule shared by eager and journal-backed reads. A
+ * compression summary that strips to nothing is excluded here, at the
+ * row's admission, so request counts, positions and stored length facts
+ * all agree that it is never sent.
+ */
 export function isCuratedContent(content: IContent): boolean {
   return (
-    content.speaker === 'human' ||
-    content.speaker === 'tool' ||
-    ContentValidation.hasContent(content)
+    (content.speaker === 'human' ||
+      content.speaker === 'tool' ||
+      ContentValidation.hasContent(content)) &&
+    !isEmptiedCompressionSummary(content)
   );
 }
 

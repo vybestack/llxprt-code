@@ -18,6 +18,8 @@ import type {
 } from './compressionLifecycleTelemetry.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
+import type { CompressionAuditProvenance } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { unauthoredProvenance } from './compressionAuditProvenance.js';
 
 export async function fallbackDisk(
   context: Parameters<TopDownTruncationStrategy['compressDisk']>[0] & {
@@ -29,10 +31,7 @@ export async function fallbackDisk(
   origin?: object,
   onCommitted?: () => void,
   runReport?: CompressionRunReport,
-): Promise<{
-  readonly outcome: 'applied' | 'noop' | 'failed';
-  readonly summary?: IContent;
-}> {
+): Promise<DiskSummaryOutcome> {
   try {
     runReport?.countAttempt();
     const fallback = await new TopDownTruncationStrategy().compressDisk(
@@ -49,7 +48,11 @@ export async function fallbackDisk(
       { origin, onCommitted },
     );
     runReport?.recordApplied(fallback.metadata);
-    return { outcome: 'applied', summary };
+    return {
+      outcome: 'applied',
+      summary,
+      provenance: unauthoredProvenance('top-down-truncation'),
+    };
   } catch (fallbackError) {
     context.logger.error('Fallback disk compression failed', {
       primaryError,
@@ -59,10 +62,13 @@ export async function fallbackDisk(
   }
 }
 
-type DiskSummaryOutcome = {
-  readonly outcome: 'applied' | 'noop' | 'failed';
-  readonly summary?: IContent;
-};
+export type DiskSummaryOutcome =
+  | { readonly outcome: 'noop' | 'failed' }
+  | {
+      readonly outcome: 'applied';
+      readonly summary: IContent | undefined;
+      readonly provenance: CompressionAuditProvenance;
+    };
 
 export interface SummaryTransport {
   readonly mediaResolver: ConstructorParameters<typeof MiddleOutStrategy>[0];
@@ -204,7 +210,7 @@ async function runDiskSummary(
       { origin, onCommitted },
     );
     runReport?.recordApplied(summaryReport(strategyUsed, summary));
-    return { outcome: 'applied', summary };
+    return { outcome: 'applied', summary, provenance: result.provenance };
   };
   let result:
     | { readonly outcome: DiskSummaryOutcome }

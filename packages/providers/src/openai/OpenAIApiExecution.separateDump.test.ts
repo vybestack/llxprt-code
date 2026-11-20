@@ -169,6 +169,75 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
   });
 
+  it('records non-streaming content-filter responses as refusals in on mode', async () => {
+    const recordDump = vi.fn();
+    const client = createMockClient({
+      id: 'chatcmpl-filtered',
+      choices: [{ finish_reason: 'content_filter' }],
+    });
+
+    await executeApiRequest(
+      createBaseOptions({
+        client,
+        attemptContext: {
+          promptId: 'prompt-filtered',
+          attemptIndex: 0,
+          runtimeId: 'runtime-filtered',
+          pairedSuccess: false,
+          recordDump,
+        },
+      }),
+    );
+
+    expect(recordDump).toHaveBeenCalledWith(
+      'refusal',
+      '20260101-120000-openai-test12',
+    );
+  });
+
+  it('records streaming content-filter responses as refusals in on mode', async () => {
+    const recordDump = vi.fn();
+    const mockStream = (async function* () {
+      yield {
+        id: 'chatcmpl-filtered',
+        choices: [{ delta: { content: 'blocked' }, finish_reason: null }],
+      };
+      yield {
+        id: 'chatcmpl-filtered',
+        choices: [{ delta: {}, finish_reason: 'content_filter' }],
+      };
+    })();
+    const client = withRawPostAdapter({
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue(mockStream),
+        },
+      },
+    });
+
+    const result = await executeApiRequest(
+      createBaseOptions({
+        client,
+        streamingEnabled: true,
+        attemptContext: {
+          promptId: 'prompt-filtered',
+          attemptIndex: 0,
+          runtimeId: 'runtime-filtered',
+          pairedSuccess: false,
+          recordDump,
+        },
+      }),
+    );
+    for await (const _chunk of result as AsyncIterable<unknown>) {
+      void _chunk;
+    }
+
+    expect(recordDump).toHaveBeenCalledWith(
+      'refusal',
+      '20260101-120000-openai-test12',
+    );
+  });
+
   it('should wrap streaming response to capture chunks and dump after stream completes', async () => {
     const chunks = [
       { id: 'chatcmpl-test', choices: [{ delta: { content: 'Hello' } }] },

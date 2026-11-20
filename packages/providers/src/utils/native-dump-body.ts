@@ -1,6 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { StreamedDumpBody, bestEffortDump } from './dumpSDKContext.js';
-import type { DumpRequest, DumpRequestResult } from './dumpContext.js';
+import type {
+  DumpAttemptCorrelation,
+  DumpRequest,
+  DumpRequestResult,
+} from './dumpContext.js';
 import {
   openNativeDumpWriter,
   type NativeDumpWriter,
@@ -70,7 +74,8 @@ export class NativeDumpBody {
   ) {
     this.dump = new StreamedDumpBody(
       () => this.diagnosticBytes(),
-      (request, provider) => this.start(request, provider),
+      (request, provider, correlation, deferRetention) =>
+        this.start(request, provider, correlation, deferRetention),
     );
   }
 
@@ -81,8 +86,16 @@ export class NativeDumpBody {
   private async start(
     request: DumpRequest,
     provider: string,
+    correlation: DumpAttemptCorrelation | undefined,
+    deferRetention: boolean,
   ): Promise<DumpRequestResult> {
-    const writer = await openNativeDumpWriter(request, provider, this.pretty);
+    const writer = await openNativeDumpWriter(
+      request,
+      provider,
+      this.pretty,
+      correlation,
+      deferRetention,
+    );
     if (this.sent) {
       try {
         for await (const chunk of this.diagnosticBytes())

@@ -91,6 +91,10 @@ import {
   restorePreparedSourceInputs,
 } from './OpenAISourceRoute.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import {
+  readDumpAttemptContext,
+  resolveDumpRetentionLimits,
+} from '../utils/dumpAttemptContext.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import {
   finishMediaRequest,
@@ -139,6 +143,21 @@ interface DispatchResponseOptions {
    * #3473). Undefined when no attempt-lifecycle observer is attached.
    */
   onRawTokenDelta: (() => void) | undefined;
+}
+
+function getReasoningFieldName(
+  invocation: NormalizedGenerateChatOptions['invocation'],
+): string | undefined {
+  return invocation.getEphemeral<string>('reasoning.fieldName');
+}
+
+function readProviderAttemptContext(
+  options: NormalizedGenerateChatOptions,
+): ReturnType<typeof readDumpAttemptContext> {
+  return readDumpAttemptContext(
+    options.metadata,
+    options.invocation.ephemerals,
+  );
 }
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
@@ -740,10 +759,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     preparedRequestContext?: RequestContext,
   ): AsyncGenerator<IContent, void, unknown> {
     const abortSignal = getRequestSignal(options);
-    const ephemeralSettings = (
-      options.invocation as { ephemerals?: Readonly<Record<string, unknown>> }
-    ).ephemerals;
-
     const { executeApiRequest } = await import('./OpenAIApiExecution.js');
     const { mergeInvocationHeaders } = await import('./OpenAIClientFactory.js');
 
@@ -766,7 +781,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     const customHeaders = this.getCustomHeaders();
     const mergedHeaders = mergeInvocationHeaders(options, customHeaders);
-    const dumpMode = ephemeralSettings?.dumpcontext as DumpMode | undefined;
+    const dumpMode = options.invocation.ephemerals.dumpcontext as
+      | DumpMode
+      | undefined;
 
     reportRequestSize(options.metadata, spool.byteLength);
     const response = await executeApiRequest({
@@ -780,13 +797,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       model,
       formattedTools,
       streamingEnabled,
+      attemptContext: readProviderAttemptContext(options),
+      retentionLimits: resolveDumpRetentionLimits(
+        options.invocation.ephemerals,
+      ),
       logger,
       getBaseURL: () => this.getBaseURL(),
     });
-
-    const reasoningFieldName = options.invocation.getEphemeral<string>(
-      'reasoning.fieldName',
-    );
 
     yield* this.dispatchResponse({
       response,
@@ -799,7 +816,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       mergedHeaders,
       baseURL,
       logger,
-      reasoningFieldName,
+      reasoningFieldName: getReasoningFieldName(options.invocation),
       onRawTokenDelta: resolveRawTokenDeltaNotifier(options.metadata),
     });
   }

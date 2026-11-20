@@ -8,6 +8,7 @@ import { JournalSession } from '../../../../core/src/services/history/journalSes
 import { JournalDumpSnapshot } from '../../../../core/src/services/history/journalDumpSnapshot.js';
 import { annotateCompressionSpan } from '../../../../core/src/services/history/historyChronology.js';
 import type { IContent } from '../../../../core/src/services/history/IContent.js';
+import { unauthoredProvenance } from '../compressionAuditProvenance.js';
 import { summaryOutput } from '../summaryOutput.js';
 import { replacedSpan } from '../diskTruncation.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
@@ -58,7 +59,13 @@ describe('native summary chronology membership', () => {
           [0, 6, 0],
           [2, 4, 1],
         ]) {
-          const output = summaryOutput(dump, top, bottom, [summary]);
+          const output = summaryOutput(
+            dump,
+            top,
+            bottom,
+            [summary],
+            unauthoredProvenance('one-shot'),
+          );
           if (output.kind !== 'applied')
             throw new Error('Expected summary descriptor');
           const kept = [
@@ -108,7 +115,13 @@ describe('native summary chronology membership', () => {
     await session.append(rows);
     const dump = new JournalDumpSnapshot(await session.store.snapshot());
     try {
-      const output = summaryOutput(dump, 0, 3, [summary]);
+      const output = summaryOutput(
+        dump,
+        0,
+        3,
+        [summary],
+        unauthoredProvenance('one-shot'),
+      );
       if (output.kind !== 'applied')
         throw new Error('Expected summary descriptor');
       await session.store.commit([{ kind: 'clear' }]);
@@ -160,7 +173,13 @@ describe('native summary chronology membership', () => {
     await session.append(rows);
     const dump = new JournalDumpSnapshot(await session.store.snapshot());
     try {
-      const output = summaryOutput(dump, 2, 3, [summary]);
+      const output = summaryOutput(
+        dump,
+        2,
+        3,
+        [summary],
+        unauthoredProvenance('one-shot'),
+      );
       if (output.kind !== 'applied')
         throw new Error('Expected summary descriptor');
       expect(

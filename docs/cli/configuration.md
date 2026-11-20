@@ -226,6 +226,26 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `undefined`
   - **Requires restart:** Yes
 
+#### `dumpcontext`
+
+- **`dumpcontext`** (enum):
+  - **Description:** Default context dump mode for new sessions. Dumps can contain prompt content and are stored in the LLxprt cache directory.
+  - **Default:** `"off"`
+  - **Values:** `"off"`, `"error"`, `"on"`
+  - **Requires restart:** Yes
+
+#### `dumpRetention`
+
+- **`dumpRetention.maxBytes`** (number):
+  - **Description:** Maximum total size of managed dump files.
+  - **Default:** `2147483648`
+  - **Requires restart:** Yes
+
+- **`dumpRetention.maxAgeDays`** (number):
+  - **Description:** Maximum age of managed dump files in days.
+  - **Default:** `14`
+  - **Requires restart:** Yes
+
 #### `sessionRetention`
 
 - **`sessionRetention.enabled`** (boolean):

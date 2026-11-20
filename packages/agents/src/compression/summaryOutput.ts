@@ -3,6 +3,8 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { CompressionSourceRange } from '@vybestack/llxprt-code-core/services/history/compressionChronology.js';
 import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { CompressionAuditProvenance } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { stampCompressionProvenance } from '@vybestack/llxprt-code-core/services/history/compressionProvenance.js';
 
 export type CompressionOutputRows = CompressionInputRows;
 
@@ -30,14 +32,17 @@ export type SummaryOutput =
       readonly kind: 'applied';
       readonly top: number;
       readonly candidate: CompressionOutputRows;
+      readonly provenance: CompressionAuditProvenance;
     };
 
 export function summaryOutput(
   source: CompressionOutputRows,
   top: number,
   bottom: number,
-  summary: readonly IContent[],
+  summaryRows: readonly IContent[],
+  provenance: CompressionAuditProvenance,
 ): SummaryOutput {
+  const summary = stampCompressionProvenance(summaryRows, provenance);
   const length = top + summary.length + source.length - bottom;
   const sourcePosition = (index: number): number | undefined => {
     assertRowIndex(index, length);
@@ -48,6 +53,7 @@ export function summaryOutput(
   return {
     kind: 'applied',
     top,
+    provenance,
     candidate: {
       length,
       async chronologySelection(start) {

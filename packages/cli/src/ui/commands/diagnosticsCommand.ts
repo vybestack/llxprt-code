@@ -337,18 +337,20 @@ function appendDumpContextInfo(
   ephemeralSettings: Record<string, unknown>,
 ): void {
   const dumpcontextSetting = ephemeralSettings['dumpcontext'];
-  const dumpcontextFallback =
-    ephemeralSettings['dumponerror'] === 'enabled' ? 'error' : 'off';
   const dumpcontextMode =
-    typeof dumpcontextSetting === 'string' && dumpcontextSetting.length > 0
+    typeof dumpcontextSetting === 'string' &&
+    ['off', 'error', 'on'].includes(dumpcontextSetting)
       ? dumpcontextSetting
-      : dumpcontextFallback;
-  if (dumpcontextMode !== 'off') {
-    diagnostics.push(`\n## Context Dumping`);
-    diagnostics.push(`- Mode: ${dumpcontextMode}`);
-    diagnostics.push(
-      `- Dump Directory: ${path.join(Storage.getGlobalCacheDir(), 'dumps')}`,
-    );
+      : 'off';
+  diagnostics.push(`\n## Context Dumping`);
+  diagnostics.push(`- Mode: ${dumpcontextMode}`);
+  diagnostics.push(
+    `- Dump Directory: ${path.join(Storage.getGlobalCacheDir(), 'dumps')}`,
+  );
+  const maxBytes = ephemeralSettings['dump-retention-max-bytes'];
+  const maxAgeDays = ephemeralSettings['dump-retention-max-age-days'];
+  if (typeof maxBytes === 'number' && typeof maxAgeDays === 'number') {
+    diagnostics.push(`- Retention: ${maxBytes} bytes, ${maxAgeDays} days`);
   }
 }
 

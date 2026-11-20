@@ -7,7 +7,10 @@ import type {
 } from '@vybestack/llxprt-code-core/journal/idKeys.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { diskSummaryRequestSelection } from '../middleOutDiskPlan.js';
-import { referenceSummaryRequest } from './summary-request-reference.js';
+import {
+  referenceSummaryRequest,
+  testSummaryFrame,
+} from './summary-request-reference.js';
 import { observeCompressionIndexRows } from './support/compression-index-observer.js';
 import { journalSendFixture } from '../../../../providers/src/__tests__/support/journal-send-fixture.js';
 import {
@@ -61,7 +64,7 @@ describe('indexed compression tool-text projection', () => {
             [Symbol.asyncIterator]: () => fixture.selection.openReader(),
           },
           { top: 2, bottom: size - 2, injection: [] },
-          'Summarize',
+          testSummaryFrame('Summarize'),
           [],
           ownership,
         );
@@ -106,7 +109,13 @@ describe('indexed compression tool-text projection', () => {
               'rows',
               undefined,
               rowsSelection(
-                referenceSummaryRequest(original, 2, size - 2, 'Summarize', []),
+                referenceSummaryRequest(
+                  original,
+                  2,
+                  size - 2,
+                  testSummaryFrame('Summarize'),
+                  [],
+                ),
               ),
             );
             const legacyRows = observed.state.rows;

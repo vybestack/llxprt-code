@@ -6,6 +6,10 @@ import type {
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
+import {
+  admittedOrigin,
+  droppedImageOf,
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/dropped-media-expectation.js';
 import { toolRankingRow } from './tool-truncation-stream-helpers.js';
 import {
   replaceRankedToolResponse,
@@ -13,6 +17,31 @@ import {
 } from '../toolResponseDiskRanking.js';
 
 export type ValueRoute = 'purge' | 'ranking';
+
+/** Block index of the image a remove purge drops from row 0. */
+export const PURGED_IMAGE_BLOCK = 3;
+
+/**
+ * A remove purge keeps a `media_dropped` reference where the image was, with
+ * the origin admission gives that image and the drop time of the purge.
+ */
+function purgedRow(
+  original: IContent,
+  droppedAt: string | undefined,
+): IContent['blocks'] {
+  if (droppedAt === undefined)
+    throw new Error('A purged row needs the time its image was dropped');
+  const image = original.blocks[PURGED_IMAGE_BLOCK];
+  return original.blocks.map((block, blockIndex) =>
+    blockIndex === PURGED_IMAGE_BLOCK
+      ? droppedImageOf(
+          image,
+          admittedOrigin(original, image, droppedAt),
+          droppedAt,
+        )
+      : block,
+  );
+}
 
 export function purgeRankingRow(index: number, bytes = 2048): IContent {
   const row = toolRankingRow(index, 0);
@@ -70,14 +99,19 @@ export function expectedPurgeRankingRow(
   index: number,
   size: number,
   bytes = 2048,
+  droppedAt?: string,
 ): IContent {
   const original = purgeRankingRow(index, bytes);
   const metadata = { ...original.metadata };
   if (original.speaker === 'ai') delete metadata.responsesStored;
   if (route === 'purge' && index === 0)
-    metadata.semanticMediaPurgeFrontier = { contentIndex: 0, blockIndex: 2 };
+    // The frontier stays on the image's position, now its kept reference.
+    metadata.semanticMediaPurgeFrontier = {
+      contentIndex: 0,
+      blockIndex: PURGED_IMAGE_BLOCK,
+    };
   if (route === 'purge' && index === 0)
-    return { ...original, blocks: original.blocks.slice(0, 3), metadata };
+    return { ...original, blocks: purgedRow(original, droppedAt), metadata };
   if (
     route === 'ranking' &&
     index === Math.max(0, 2 * Math.floor((size - 2) / 2))
@@ -96,11 +130,12 @@ export async function* purgeRankingRows(
   size: number,
   bytes = 2048,
   route?: ValueRoute,
+  droppedAt?: string,
 ): AsyncGenerator<IContent, void, unknown> {
   for (let index = 0; index < size; index++)
     yield route === undefined
       ? purgeRankingRow(index, bytes)
-      : expectedPurgeRankingRow(route, index, size, bytes);
+      : expectedPurgeRankingRow(route, index, size, bytes, droppedAt);
 }
 
 export async function prepareValueRoute(

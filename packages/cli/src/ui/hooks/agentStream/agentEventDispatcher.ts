@@ -169,7 +169,10 @@ function computeFinishNotice(
   finished: FinishedValue | undefined,
 ): string | null | undefined {
   if (!finished) return null;
-  const refusal = buildRefusalNoticeMessage(finished.stopReason);
+  const refusal = buildRefusalNoticeMessage(
+    finished.stopReason,
+    finished.stopDetails,
+  );
   if (refusal) return refusal;
   if (!finished.reason) return undefined;
   return buildFinishReasonMessage(

@@ -14,6 +14,17 @@
  * limitations under the License.
  */
 
+import type { DumpRequest } from '../utils/dumpContext.js';
+import {
+  readDumpAttemptContext,
+  resolveDumpRetentionLimits,
+  type DumpAttemptContext,
+} from '../utils/dumpAttemptContext.js';
+import type { DumpMode } from '../utils/dumpContext.js';
+import {
+  writeVercelDumpPair,
+  type VercelDumpCapture,
+} from './vercelDumpCapture.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { forwardPreconnect } from '../utils/fetchPreconnect.js';
@@ -46,6 +57,14 @@ export interface CaptureBuffer {
   parseError?: Error;
   fieldName?: string;
   actualFieldName?: string;
+  events: unknown[];
+  finishReason?: string;
+  dumpCapture?: VercelDumpCapture;
+  dumpMode?: DumpMode;
+  attemptContext?: DumpAttemptContext;
+  retentionLimits?: { readonly maxBytes: number; readonly maxAgeDays: number };
+  providerName?: string;
+  status?: number;
 }
 
 export function createCaptureBuffer(fieldName?: string): CaptureBuffer {
@@ -57,32 +76,97 @@ export function createCaptureBuffer(fieldName?: string): CaptureBuffer {
     parsePromise: undefined,
     parseError: undefined,
     fieldName,
+    events: [],
   };
+}
+export function configureDumpCapture(
+  captureBuffer: CaptureBuffer,
+  options: {
+    readonly invocation: {
+      getEphemeral<T>(key: string): T | undefined;
+    };
+  },
+  metadata: Readonly<Record<string, unknown>>,
+): void {
+  captureBuffer.dumpMode =
+    options.invocation.getEphemeral<DumpMode>('dumpcontext');
+  captureBuffer.retentionLimits = resolveDumpRetentionLimits({
+    'dump-retention-max-bytes': options.invocation.getEphemeral<number>(
+      'dump-retention-max-bytes',
+    ),
+    'dump-retention-max-age-days': options.invocation.getEphemeral<number>(
+      'dump-retention-max-age-days',
+    ),
+  });
+  captureBuffer.attemptContext = readDumpAttemptContext(metadata);
+}
+
+async function captureVercelRequest(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+): Promise<DumpRequest> {
+  const original = input instanceof Request ? input : undefined;
+  const headers = new Headers(init?.headers ?? original?.headers);
+  const headerRecord = Object.fromEntries(headers.entries());
+  const rawBody =
+    init?.body ?? (original ? await original.clone().text() : undefined);
+  let body: unknown = rawBody;
+  if (typeof rawBody === 'string') {
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      body = rawBody;
+    }
+  }
+  return {
+    url: original?.url ?? String(input),
+    method: init?.method ?? original?.method ?? 'GET',
+    headers: headerRecord,
+    ...(body === undefined ? {} : { body }),
+    transport: { type: 'http' },
+  };
+}
+
+function responseHeadersRecord(headers: Headers): Record<string, string> {
+  return Object.fromEntries(headers.entries());
 }
 
 /**
  * Parses a single SSE `data:` JSON line and extracts reasoning from
  * the configured delta field (default: reasoning_content).
  */
+function readDelta(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return undefined;
+  if (!('delta' in value)) return undefined;
+  const delta = value.delta;
+  if (typeof delta !== 'object' || delta === null || Array.isArray(delta))
+    return undefined;
+  return Object.fromEntries(Object.entries(delta));
+}
+
 function captureReasoningFromJson(
   jsonStr: string,
   captureBuffer: CaptureBuffer,
   logger: DebugLogger,
 ): void {
-  let parsed: {
-    choices?: Array<{ delta?: Record<string, unknown> }>;
-  };
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(jsonStr) as typeof parsed;
+    parsed = JSON.parse(jsonStr);
   } catch {
-    // Ignore JSON parse errors (malformed chunks)
     return;
   }
-
-  if (parsed.choices === undefined || parsed.choices.length === 0) {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
     return;
+  if (captureBuffer.dumpMode === 'on' || captureBuffer.dumpMode === 'error')
+    captureBuffer.events.push(parsed);
+  if (!('choices' in parsed) || !Array.isArray(parsed.choices)) return;
+  for (const choice of parsed.choices) {
+    if (typeof choice !== 'object' || choice === null) continue;
+    if ('finish_reason' in choice && typeof choice.finish_reason === 'string')
+      captureBuffer.finishReason = choice.finish_reason;
   }
-  const delta = parsed.choices[0]?.delta;
+  const delta = readDelta(parsed.choices[0]);
   if (delta === undefined) return;
 
   const resolved = resolveReasoningField({
@@ -105,6 +189,28 @@ function captureReasoningFromJson(
         `[ReasoningCaptureFetch] Captured ${resolved.actualFieldName} chunk: ${resolved.value.length} chars`,
     );
   }
+}
+function captureSseLine(
+  line: string,
+  captureBuffer: CaptureBuffer,
+  logger: DebugLogger,
+): void {
+  if (!line.startsWith('data: ')) return;
+  const jsonStr = line.slice(6).trim();
+  if (jsonStr === '[DONE]') {
+    if (captureBuffer.dumpMode === 'on' || captureBuffer.dumpMode === 'error')
+      captureBuffer.events.push('[DONE]');
+    return;
+  }
+  captureReasoningFromJson(jsonStr, captureBuffer, logger);
+}
+
+function captureSseLines(
+  lines: readonly string[],
+  captureBuffer: CaptureBuffer,
+  logger: DebugLogger,
+): void {
+  for (const line of lines) captureSseLine(line, captureBuffer, logger);
 }
 
 /**
@@ -144,14 +250,7 @@ export async function parseReasoningFromSseStream(
       buffer = lines.pop() ?? '';
       assertSseLinesWithinLimit(lines, buffer);
 
-      const dataLines = lines.filter(
-        (line) =>
-          line.startsWith('data: ') && line.slice(6).trim() !== '[DONE]',
-      );
-      for (const line of dataLines) {
-        const jsonStr = line.slice(6).trim();
-        captureReasoningFromJson(jsonStr, captureBuffer, logger);
-      }
+      captureSseLines(lines, captureBuffer, logger);
     }
   } catch (err) {
     if (err instanceof ProviderStreamProtocolError) {
@@ -179,6 +278,19 @@ export async function parseReasoningFromSseStream(
     // synchronously; the cancellation lands whenever the tee lets it.
     void reader.cancel().catch(() => undefined);
     reader.releaseLock();
+    if (captureBuffer.dumpCapture !== undefined) {
+      await writeVercelDumpPair(
+        captureBuffer.dumpCapture,
+        {
+          status: captureBuffer.status ?? 200,
+          headers: responseHeadersRecord(
+            captureBuffer.headers ?? new Headers(),
+          ),
+          body: { streaming: true, events: captureBuffer.events },
+        },
+        captureBuffer.finishReason,
+      );
+    }
   }
 }
 
@@ -200,12 +312,53 @@ export function createReasoningCaptureFetch(
 ): NetworkFetch & ReturnType<typeof forwardPreconnect> {
   return Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit) => {
+      captureBuffer.events.length = 0;
+      captureBuffer.finishReason = undefined;
+      const shouldCaptureDump =
+        captureBuffer.dumpMode === 'on' || captureBuffer.dumpMode === 'error';
+      const request = shouldCaptureDump
+        ? await captureVercelRequest(input, init)
+        : undefined;
       const response = await requestFetch(input, init);
 
       captureBuffer.headers = response.headers;
+      captureBuffer.status = response.status;
+      if (request !== undefined && captureBuffer.dumpMode !== undefined) {
+        captureBuffer.dumpCapture = {
+          mode: captureBuffer.dumpMode,
+          ...(captureBuffer.attemptContext === undefined
+            ? {}
+            : { attemptContext: captureBuffer.attemptContext }),
+          ...(captureBuffer.retentionLimits === undefined
+            ? {}
+            : { retentionLimits: captureBuffer.retentionLimits }),
+          request,
+          providerName: captureBuffer.providerName ?? 'openaivercel',
+          responseHeaders: responseHeadersRecord(response.headers),
+        };
+      }
 
       const contentType = response.headers.get('content-type') ?? '';
       if (!contentType.includes('text/event-stream') || !response.body) {
+        if (captureBuffer.dumpCapture !== undefined) {
+          const bodyText = await response.clone().text();
+          let body: unknown = bodyText;
+          try {
+            body = JSON.parse(bodyText);
+            captureReasoningFromJson(bodyText, captureBuffer, logger);
+          } catch {
+            captureBuffer.events.push(bodyText);
+          }
+          await writeVercelDumpPair(
+            captureBuffer.dumpCapture,
+            {
+              status: response.status,
+              headers: responseHeadersRecord(response.headers),
+              body,
+            },
+            captureBuffer.finishReason,
+          );
+        }
         return response;
       }
 

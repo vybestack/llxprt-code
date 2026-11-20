@@ -3,8 +3,12 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
+  beginRequestDumpRetention,
+  dumpCorrelationFields,
+  endRequestDumpRetention,
   generateDumpBaseId,
   redactSensitiveData,
+  type DumpAttemptCorrelation,
   type DumpRequest,
   type DumpRequestResult,
 } from './dumpContext.js';
@@ -20,10 +24,12 @@ export async function dumpRequestContextBodyBytes(
   provider: string,
   body: AsyncIterable<Uint8Array>,
   signal?: AbortSignal,
+  correlation?: DumpAttemptCorrelation,
+  deferRetention = false,
 ): Promise<DumpRequestResult> {
   signal?.throwIfAborted();
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
-  await fs.mkdir(dumpDir, { recursive: true });
+  await fs.mkdir(dumpDir, { recursive: true, mode: 0o700 });
   const baseId = generateDumpBaseId(provider);
   const requestFilename = `${baseId}-request.json`;
   const filepath = path.join(dumpDir, requestFilename);
@@ -31,6 +37,7 @@ export async function dumpRequestContextBodyBytes(
     {
       provider,
       timestamp: new Date().toISOString(),
+      ...dumpCorrelationFields(correlation),
       request: redactSensitiveData(request),
     },
     null,
@@ -40,7 +47,8 @@ export async function dumpRequestContextBodyBytes(
   const closing = '\n  }\n}';
   if (!envelope.endsWith(closing))
     throw new Error('Unexpected dump envelope shape');
-  const file = await fs.open(filepath, 'w');
+  await beginRequestDumpRetention(dumpDir, baseId, correlation, deferRetention);
+  const file = await fs.open(filepath, 'w', 0o600);
   try {
     await file.writeFile(
       `${envelope.slice(0, -closing.length)},\n    "body": `,
@@ -57,5 +65,6 @@ export async function dumpRequestContextBodyBytes(
     throw error;
   }
   await file.close();
+  await endRequestDumpRetention(dumpDir, correlation, deferRetention);
   return { baseId, requestFilename, dumpDir };
 }

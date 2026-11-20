@@ -308,6 +308,36 @@ describe('review reply parsing', () => {
     ).toContain('drops src/core/a.ts');
   });
 
+  it('reports dropped literals for every rewritten entry', async () => {
+    const window = await windowOf();
+    const summary = window.entries.find((entry) => entry.kind === 'summary');
+    const tool = window.entries.find((entry) => entry.kind === 'tool_result');
+
+    const parsed = parseReviewReply(
+      reply({
+        verdict: 'rewrite',
+        explanation: 'Plain wording.',
+        rewrites: [
+          {
+            id: summary?.id,
+            newText:
+              'Mutation run: the agent terminates mutants in another file.',
+          },
+          { id: tool?.id, newText: 'tool printed some output' },
+        ],
+      }),
+      window,
+    );
+
+    expect(parsed).toMatchObject({
+      ok: false,
+      dropped: [
+        { id: summary?.id, literals: ['src/core/a.ts', '42'] },
+        { id: tool?.id, literals: ['7'] },
+      ],
+    });
+  });
+
   it('rejects an empty replacement', async () => {
     expect(
       await reasonFor((window) =>

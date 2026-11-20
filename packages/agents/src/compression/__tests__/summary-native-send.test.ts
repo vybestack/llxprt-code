@@ -3,7 +3,10 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { diskSummaryRequestSelection } from '../middleOutDiskPlan.js';
-import { referenceSummaryRequest } from './summary-request-reference.js';
+import {
+  referenceSummaryRequest,
+  testSummaryFrame,
+} from './summary-request-reference.js';
 import { operationFileCreates } from './support/operation-file-creates.js';
 import { journalSendFixture } from '../../../../providers/src/__tests__/support/journal-send-fixture.js';
 import {
@@ -63,7 +66,7 @@ describe.each([65])('summary native send at %i rows', (count) => {
             [Symbol.asyncIterator]: () => fixture.selection.openReader(),
           },
           { top: 0, bottom: fixture.selection.count, injection: [] },
-          'Summarize',
+          testSummaryFrame('Summarize'),
           [],
           ownership,
         );
@@ -74,7 +77,7 @@ describe.each([65])('summary native send at %i rows', (count) => {
           pinned,
           0,
           pinned.length,
-          'Summarize',
+          testSummaryFrame('Summarize'),
           [],
         );
         try {

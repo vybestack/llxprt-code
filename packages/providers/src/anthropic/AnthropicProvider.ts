@@ -38,8 +38,17 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
+  dumpAttemptResultContent,
+  readDumpAttemptContext,
+  resolveDumpRetentionLimits,
+} from '../utils/dumpAttemptContext.js';
+import {
+  observeFirstResponseByte,
+  readRefusalAuditTiming,
+} from '../utils/refusalAuditTiming.js';
+import {
   type AnthropicRateLimitInfo,
-  calculateWaitTime,
+  applyRateLimitThrottling,
 } from './AnthropicRateLimitHandler.js';
 import { processAnthropicStream } from './AnthropicStreamProcessor.js';
 import { parseAnthropicResponse } from './AnthropicResponseParser.js';
@@ -113,6 +122,7 @@ export class AnthropicProvider extends BaseProvider {
 
   // Rate limit state tracking - updated on each API response
   private lastRateLimitInfo?: AnthropicRateLimitInfo;
+  private sleep = delay;
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
     PreparedAnthropicPromptEnvelope
@@ -338,11 +348,16 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     authLogger.debug(() => 'Creating fresh client instance (stateless)');
+    const refusalAuditTiming = readRefusalAuditTiming(options.metadata);
+    const fetcher = observeFirstResponseByte(
+      options.invocation.fetch,
+      refusalAuditTiming,
+    );
     const client = instantiateClient(
       (token) => this.classifyOAuthToken(token),
       authToken,
       baseURL,
-      options.invocation.fetch,
+      fetcher,
     );
 
     telemetry?.record?.('stateless-provider.call', {
@@ -676,7 +691,13 @@ export class AnthropicProvider extends BaseProvider {
       thinking: request.thinking,
     });
     const rateLimitLogger = this.getRateLimitLogger();
-    await this.applyRateLimitThrottling(request.facts, rateLimitLogger, signal);
+    await applyRateLimitThrottling(
+      this.lastRateLimitInfo ?? {},
+      request.facts.configEphemerals,
+      rateLimitLogger,
+      signal,
+      (ms, sleepSignal) => this.sleep(ms, sleepSignal),
+    );
 
     const executed = await this.executeWithImageRecovery(
       effectiveOptions,
@@ -689,7 +710,7 @@ export class AnthropicProvider extends BaseProvider {
       authToken,
       mediaRequest,
     );
-    const { response, rateLimitInfo } = executed;
+    const { response, rateLimitInfo, requestId } = executed;
 
     if (rateLimitInfo) this.lastRateLimitInfo = rateLimitInfo;
     yield* this.yieldResponse(
@@ -698,6 +719,7 @@ export class AnthropicProvider extends BaseProvider {
       effectiveOptions,
       isOAuth,
       rateLimitLogger,
+      requestId,
     );
   }
 
@@ -772,9 +794,10 @@ export class AnthropicProvider extends BaseProvider {
   ): Promise<{
     response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
     rateLimitInfo: AnthropicRateLimitInfo | undefined;
+    requestId: string | null;
   }> {
     try {
-      const result = await this.executeApiCall(
+      const { response, rateLimitInfo, requestId } = await this.executeApiCall(
         options,
         request,
         apiCallWithResponse,
@@ -783,7 +806,7 @@ export class AnthropicProvider extends BaseProvider {
         isOAuth,
         authToken,
       );
-      return { response: result.response, rateLimitInfo: result.rateLimitInfo };
+      return { response, rateLimitInfo, requestId };
     } catch (error) {
       const recovered = await executeImageDimensionRecovery(
         {
@@ -926,31 +949,6 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
-  private async applyRateLimitThrottling(
-    requestContext: AnthropicRequestFacts,
-    rateLimitLogger: { debug: (fn: () => string) => void },
-    signal?: AbortSignal,
-  ): Promise<void> {
-    const waitDecision = calculateWaitTime(this.lastRateLimitInfo ?? {}, {
-      throttleEnabled:
-        (requestContext.configEphemerals['rate-limit-throttle'] as
-          | string
-          | undefined) ?? 'on',
-      thresholdPercentage:
-        (requestContext.configEphemerals['rate-limit-throttle-threshold'] as
-          | number
-          | undefined) ?? 5,
-      maxWaitMs:
-        (requestContext.configEphemerals['rate-limit-max-wait'] as
-          | number
-          | undefined) ?? 60000,
-    });
-    if (waitDecision.shouldWait) {
-      rateLimitLogger.debug(() => waitDecision.reason);
-      await this.sleep(waitDecision.waitMs, signal);
-    }
-  }
-
   private async executeApiCall(
     options: NormalizedGenerateChatOptions,
     request: AnthropicSendRequest,
@@ -977,6 +975,13 @@ export class AnthropicProvider extends BaseProvider {
       baseURL,
       requestBody: requestBodyForDump(dumpMode, request),
       streamingEnabled: request.facts.streamingEnabled,
+      attemptContext: readDumpAttemptContext(
+        options.metadata,
+        options.invocation.ephemerals,
+      ),
+      retentionLimits: resolveDumpRetentionLimits(
+        options.invocation.ephemerals,
+      ),
       headers: dumpHeaders,
       rateLimitLogger,
     });
@@ -988,7 +993,10 @@ export class AnthropicProvider extends BaseProvider {
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
     rateLimitLogger: { debug: (fn: () => string) => void },
+    requestId: string | null,
   ): AsyncGenerator<IContent> {
+    if (requestId !== null)
+      yield { speaker: 'ai', blocks: [], metadata: { requestId } };
     if (requestContext.streamingEnabled) {
       if (!isAnthropicMessageStream(response)) {
         throw new Error('Anthropic streaming response was not an event stream');
@@ -1003,6 +1011,7 @@ export class AnthropicProvider extends BaseProvider {
         rateLimitLogger,
         includeThinkingInResponse: requestContext.includeThinkingInResponse,
         commitState: findRequestCommitState(options),
+        refusalAuditTiming: readRefusalAuditTiming(options.metadata),
       });
       for await (const content of stream) {
         yield withSemanticMediaPurgeCacheEvidence(content, requestContext);
@@ -1021,10 +1030,7 @@ export class AnthropicProvider extends BaseProvider {
       });
       yield withSemanticMediaPurgeCacheEvidence(content, requestContext);
     }
-  }
-
-  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
-    return delay(ms, signal);
+    yield* dumpAttemptResultContent(readDumpAttemptContext(options.metadata));
   }
 }
 

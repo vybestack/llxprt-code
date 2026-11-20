@@ -12,7 +12,18 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { buildTranscriptPathNotice } from './transcriptPathNotice.js';
+import { buildTranscriptPathNotice as buildNotice } from './transcriptPathNotice.js';
+import { PromptResolver } from '../../prompt-config/prompt-resolver.js';
+
+const shippedDefaults = {
+  promptResolver: new PromptResolver(),
+  promptBaseDir: '',
+  promptContext: {},
+};
+
+function buildTranscriptPathNotice(transcriptPath: string): string {
+  return buildNotice(shippedDefaults, transcriptPath);
+}
 
 describe('buildTranscriptPathNotice', () => {
   it('embeds the supplied path verbatim', () => {

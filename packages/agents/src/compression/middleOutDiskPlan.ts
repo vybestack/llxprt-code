@@ -15,11 +15,12 @@ import {
   forwardDiskToolBoundary,
 } from './truncationDiskBoundary.js';
 import {
-  buildTriggerInstruction,
-  COMPRESSION_SECURITY_PREAMBLE,
+  buildLargeLastPromptInjection,
   mediaBlockToCompressionPlaceholder,
   sanitizeHistoryForCompression,
+  type SummaryRequestFrame,
 } from './utils.js';
+import { stripScratchpadFromCompressionSummaries } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 
 export interface MiddleOutDiskPlan {
   readonly top: number;
@@ -35,8 +36,13 @@ async function lastHumanIndex(rows: HistoryIndexedRows): Promise<number> {
   return -1;
 }
 
+/**
+ * The last human row can be an older compression summary; its text is taken
+ * without scratchpad sections, as in the compressed span (#4128).
+ */
 function extractText(row: IContent): string {
-  return row.blocks
+  return stripScratchpadFromCompressionSummaries([row])
+    .flatMap((cleaned) => cleaned.blocks)
     .map((block) => {
       if (block.type === 'text') return block.text;
       if (block.type === 'media')
@@ -85,11 +91,12 @@ export async function planDiskMiddleOut(
   }
   bottom = await adjustDiskToolBoundary(rows, bottom);
   if (top >= bottom || bottom - top < 4) return undefined;
-  return preserveLastPrompt(rows, top, bottom);
+  return preserveLastPrompt(rows, context, top, bottom);
 }
 
 async function preserveLastPrompt(
   rows: HistoryIndexedRows,
+  context: Omit<CompressionContext, 'history'>,
   top: number,
   originalBottom: number,
 ): Promise<MiddleOutDiskPlan | undefined> {
@@ -103,16 +110,7 @@ async function preserveLastPrompt(
       (text.length > 200 ? text.slice(0, 200) + '...' : text) || undefined;
     if (index >= top && index < bottom) {
       if (estimateTokens(text) < 500) bottom = index;
-      else
-        injection.push({
-          speaker: 'human',
-          blocks: [
-            {
-              type: 'text',
-              text: `IMPORTANT — The user's most recent message (summarized because it was too long to preserve literally). Summarize this user request faithfully and completely, preserving their exact intent, problems described, and any specific instructions:\n\n${text}`,
-            },
-          ],
-        });
+      else injection.push(buildLargeLastPromptInjection(context, text));
     }
   }
   if (bottom - top < 4) return undefined;
@@ -127,25 +125,11 @@ function hasStateSnapshot(row: IContent): boolean {
   );
 }
 
-function summaryTriggerRow(priorSnapshot: boolean): IContent {
-  return {
-    speaker: 'human',
-    blocks: [
-      {
-        type: 'text',
-        text: buildTriggerInstruction(
-          priorSnapshot
-            ? [
-                {
-                  speaker: 'human',
-                  blocks: [{ type: 'text', text: '<state_snapshot>' }],
-                },
-              ]
-            : [],
-        ),
-      },
-    ],
-  };
+function summaryTriggerRow(
+  frame: SummaryRequestFrame,
+  priorSnapshot: boolean,
+): IContent {
+  return priorSnapshot ? frame.triggerWithPriorSnapshot : frame.trigger;
 }
 
 function compressionRowReader(
@@ -201,7 +185,7 @@ function snapshotQuery(
 
 /**
  * The complete summarization request as a repeatable selection: the security
- * preamble, the compression prompt, the sanitized journal rows in
+ * preamble, the compression instructions, the sanitized journal rows in
  * [plan.top, plan.bottom), the context injections and the trigger instruction.
  * Only the small framing rows live in memory; journal rows are read one at a
  * time while a reader advances and each is owned only until the next pull.
@@ -209,7 +193,7 @@ function snapshotQuery(
 export function diskSummaryRequestSelection(
   rows: HistoryIndexedRows,
   plan: MiddleOutDiskPlan,
-  prompt: string,
+  frame: SummaryRequestFrame,
   injections: IContent[],
   ownership: RowOwnership,
 ): ProviderRequestSelection {
@@ -217,10 +201,7 @@ export function diskSummaryRequestSelection(
     'Compression request selection is closed',
   );
   const tail = [...injections, ...plan.injection];
-  const promptRow: IContent = {
-    speaker: 'human',
-    blocks: [{ type: 'text', text: prompt }],
-  };
+  const promptRow = frame.instructions;
   const count = SUMMARY_FRAME_ROWS + (plan.bottom - plan.top) + tail.length;
   const journalEnd = 2 + (plan.bottom - plan.top);
   const sanitized = compressionRowReader(rows, scope);
@@ -229,7 +210,7 @@ export function diskSummaryRequestSelection(
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
     signal?.throwIfAborted();
-    yield COMPRESSION_SECURITY_PREAMBLE;
+    yield frame.preamble;
     yield promptRow;
     let priorSnapshot = false;
     for (let index = plan.top; index < plan.bottom; index++) {
@@ -246,12 +227,12 @@ export function diskSummaryRequestSelection(
       }
     }
     yield* tail;
-    yield summaryTriggerRow(priorSnapshot);
+    yield summaryTriggerRow(frame, priorSnapshot);
   }
   return {
     index: compressionRequestIndex(
       count,
-      [COMPRESSION_SECURITY_PREAMBLE, promptRow, ...tail],
+      [frame.preamble, promptRow, ...tail],
       scope,
     ),
     count,
@@ -260,7 +241,7 @@ export function diskSummaryRequestSelection(
       return scope.read(async () => {
         signal?.throwIfAborted();
         assertRowIndex(index, count);
-        if (index === 0) return COMPRESSION_SECURITY_PREAMBLE;
+        if (index === 0) return frame.preamble;
         if (index === 1) return promptRow;
         if (index < journalEnd) {
           const row = await sanitized.read(plan.top + index - 2);
@@ -270,7 +251,7 @@ export function diskSummaryRequestSelection(
         if (index < count - 1) return tail[index - journalEnd];
         const found = await journalHasSnapshot(signal);
         signal?.throwIfAborted();
-        return summaryTriggerRow(found);
+        return summaryTriggerRow(frame, found);
       });
     },
     close: () => sanitized.close(),

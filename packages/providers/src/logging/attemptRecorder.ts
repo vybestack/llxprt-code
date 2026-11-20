@@ -68,6 +68,7 @@ interface ActiveAttempt {
   chunkCount: number;
   hasEmittedTerminal: boolean;
   finishReasons: string[];
+  refusalCategory?: string | null;
 }
 
 /**
@@ -218,6 +219,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     usage: UsageStats | undefined,
     text: string,
     finishReason?: string,
+    refusalCategory?: string | null,
   ): void {
     const attempt = this.attempts.get(attemptId);
     if (!attempt) return;
@@ -236,6 +238,8 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     if (finishReason && !attempt.finishReasons.includes(finishReason)) {
       attempt.finishReasons.push(finishReason);
     }
+    if (refusalCategory !== undefined)
+      attempt.refusalCategory = refusalCategory;
   }
 
   /**
@@ -278,6 +282,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     attemptId: string,
     usage: UsageStats | undefined,
     finishReason?: string,
+    refusalCategory?: string | null,
   ): void {
     if (!usage && !finishReason) return;
     const attempt = this.attempts.get(attemptId);
@@ -289,6 +294,8 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     if (finishReason && !attempt.finishReasons.includes(finishReason)) {
       attempt.finishReasons.push(finishReason);
     }
+    if (refusalCategory !== undefined)
+      attempt.refusalCategory = refusalCategory;
   }
 
   /**
@@ -578,6 +585,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
           lastTokenMs,
           hasUsage: attempt.latestTokenUsage !== undefined,
           startMs: attempt.requestStartMs,
+          refusalCategory: attempt.refusalCategory,
         },
       );
     } else {
@@ -595,6 +603,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
           lastTokenMs,
           hasUsage: attempt.latestTokenUsage !== undefined,
           startMs: attempt.requestStartMs,
+          refusalCategory: attempt.refusalCategory,
         },
       );
     }

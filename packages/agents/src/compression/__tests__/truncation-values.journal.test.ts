@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { unauthoredProvenance } from '../compressionAuditProvenance.js';
 import { describe, expect, it } from 'bun:test';
 import {
   transformProbes,
@@ -61,8 +62,11 @@ async function ownership(size: number, rollback: boolean): Promise<void> {
     const operation = rejectedValue(
       executeTruncation(history, size).then((result) => {
         returned = true;
-        expect(result.outcome).toBe('applied');
-        expect(result.summary).toBeUndefined();
+        expect(result).toStrictEqual({
+          outcome: 'applied',
+          summary: undefined,
+          provenance: unauthoredProvenance('top-down-truncation'),
+        });
       }),
     );
     try {

@@ -318,7 +318,7 @@ describe('profileParser', () => {
 
     it('the application keys are excluded from profile persistence', () => {
       const keys = getProfilePersistableKeys();
-      for (const key of ['emojifilter', 'dumponerror', 'dumpcontext']) {
+      for (const key of ['emojifilter', 'dumpcontext']) {
         expect(keys).not.toContain(key);
       }
     });

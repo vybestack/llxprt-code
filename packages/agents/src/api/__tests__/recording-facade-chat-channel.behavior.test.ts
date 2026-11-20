@@ -23,13 +23,39 @@ import { isDeepStrictEqual } from 'node:util';
 import { drain } from './helpers/agentHarness.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
+import { unauthoredProvenance } from '../../compression/compressionAuditProvenance.js';
 import { summaryOutput } from '../../compression/summaryOutput.js';
 import {
   withNativeRecordingFixture,
   nativeRows,
   rowTexts,
 } from './helpers/native-session-fixture.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { expectedDroppedImage } from '../../../../core/src/services/history/__tests__/support/dropped-media-expectation.js';
+
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/**
+ * Row blocks with each admitted image's read time checked and then fixed:
+ * every facade admits its own copy of the seed at its own wall clock.
+ */
+function blocksAdmittedAtOneTime(rows: readonly IContent[]): ContentBlock[][] {
+  return rows.map((row) =>
+    row.blocks.map((block): ContentBlock => {
+      if (
+        block.type !== 'media' ||
+        block.encoding !== 'reference' ||
+        block.origin === undefined
+      )
+        return block;
+      expect(block.origin.readAt).toMatch(ISO_TIME);
+      return { ...block, origin: { ...block.origin, readAt: 'admitted' } };
+    }),
+  );
+}
 
 function pathOf(state: { enabled: boolean; path?: string }): string {
   if (!state.enabled || state.path === undefined) {
@@ -65,13 +91,23 @@ function compressionSeed(label: string): IContent[] {
   }));
 }
 
+/** First-row blocks after a remove purge: the pasted image becomes its reference in place. */
+function purgedSeedBlocks(actual: readonly ContentBlock[]): ContentBlock[] {
+  const seed = mediaSeed();
+  expect(actual[0]).toMatchObject({ origin: { kind: 'pasted' } });
+  return [expectedDroppedImage(seed.blocks[0], actual[0]), seed.blocks[1]];
+}
+
 async function expectNativePurge(
   path: string,
   ownTurn: string,
   foreignTurn: string,
+  firstBlocks: (
+    actual: readonly ContentBlock[],
+  ) => ContentBlock[] = purgedSeedBlocks,
 ): Promise<void> {
   const rows = await nativeRows(path);
-  expect(rows[0].blocks).toStrictEqual([mediaSeed().blocks[1]]);
+  expect(rows[0].blocks).toStrictEqual(firstBlocks(rows[0].blocks));
   expect(rowTexts(rows)).toContain(ownTurn);
   expect(rowTexts(rows)).not.toContain(foreignTurn);
 }
@@ -132,17 +168,23 @@ describe('native facade recording chat execution on a borrowed client', () => {
         'prepareDisk',
       ).mockImplementation(async (context) => {
         seenPaths.push(context.transcriptPath);
-        return summaryOutput(context.history, 0, context.history.length, [
-          {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'text',
-                text: `summary-path:${context.transcriptPath ?? 'absent'}`,
-              },
-            ],
-          },
-        ]);
+        return summaryOutput(
+          context.history,
+          0,
+          context.history.length,
+          [
+            {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'text',
+                  text: `summary-path:${context.transcriptPath ?? 'absent'}`,
+                },
+              ],
+            },
+          ],
+          unauthoredProvenance('one-shot'),
+        );
       });
       try {
         await agent.setHistory(compressionSeed('A'));
@@ -204,8 +246,8 @@ describe('native facade recording chat execution on a borrowed client', () => {
       const pathB = pathOf(sibling.session.getRecording());
       expect(pathA).not.toBe(pathB);
       expect((await nativeRows(pathA))[0].blocks).toHaveLength(2);
-      expect((await nativeRows(pathB)).map((row) => row.blocks)).toStrictEqual(
-        (await nativeRows(pathA)).map((row) => row.blocks),
+      expect(blocksAdmittedAtOneTime(await nativeRows(pathB))).toStrictEqual(
+        blocksAdmittedAtOneTime(await nativeRows(pathA)),
       );
       const eventsA = await drain(agent.stream('native-purge-A'));
       expect(eventsA.filter((event) => event.type === 'error')).toStrictEqual(
@@ -294,9 +336,9 @@ describe('native facade recording chat execution on a borrowed client', () => {
       expect(isDeepStrictEqual(await nativeRows(pathB), siblingBefore)).toBe(
         true,
       );
-      expect(
-        (await Array.fromAsync(agent.streamHistory()))[0].blocks,
-      ).toStrictEqual([mediaSeed().blocks[1]]);
+      const liveBlocks = (await Array.fromAsync(agent.streamHistory()))[0]
+        .blocks;
+      expect(liveBlocks).toStrictEqual(purgedSeedBlocks(liveBlocks));
     });
   }, 30000);
   it('publishes unowned native media replacement to both recorders while routing owned rows separately', async () => {
@@ -336,8 +378,10 @@ describe('native facade recording chat execution on a borrowed client', () => {
         );
         await agent.session.flushRecording();
         await sibling.session.flushRecording();
-        await expectNativePurge(pathA, 'owned A', 'owned B');
-        await expectNativePurge(pathB, 'owned B', 'owned A');
+        // The replacement above removes stored image bytes outright.
+        const urlOnly = () => [mediaSeed().blocks[1]];
+        await expectNativePurge(pathA, 'owned A', 'owned B', urlOnly);
+        await expectNativePurge(pathB, 'owned B', 'owned A', urlOnly);
       },
     );
   }, 30000);

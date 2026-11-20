@@ -103,7 +103,15 @@ async function buildCompressionHandler(
     await historyService.waitForCommit();
     await historyService.waitForTokenUpdates();
   }
-  const { handler, transport } = middleoutSetup(historyService);
+  // The compression profile resolves the summarizing model; the record names
+  // the author the applied strategy reports.
+  const { handler, transport } = middleoutSetup(
+    historyService,
+    undefined,
+    undefined,
+    undefined,
+    { model: COMPRESSION_MODEL },
+  );
   const logger = new TokenUsageLogger('debug', logFile);
   handler.tokenUsageLogger = logger;
   return { handler, transport, logger, historyService };

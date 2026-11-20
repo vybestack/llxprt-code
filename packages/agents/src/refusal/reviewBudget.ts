@@ -29,9 +29,12 @@ export interface ReviewBudgetShortfall {
 export function reviewBudgetShortfall(
   data: string,
   contextLimit: number,
+  feedback = '',
 ): ReviewBudgetShortfall | undefined {
   const requestTokens =
-    estimateTokens(REFUSAL_REVIEW_PROMPT) + estimateTokens(data);
+    estimateTokens(REFUSAL_REVIEW_PROMPT) +
+    estimateTokens(feedback) +
+    estimateTokens(data);
   const budgetTokens = Math.floor(contextLimit * REVIEW_INPUT_FRACTION);
   return requestTokens > budgetTokens
     ? { requestTokens, budgetTokens }

@@ -72,6 +72,7 @@ import { runCleanupSteps } from '../core/subagent-cleanup.js';
 
 export interface AgentPostConfigSettings {
   writeUserParameter(key: string, value: unknown): void;
+  writeSessionOverride(key: string, value: unknown): void;
   readNamedParameter(key: string): unknown;
   chooseModel(model: string): void;
 }
@@ -375,7 +376,10 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
   }
 
   async applyArgumentOverrides(
-    owner: Pick<SessionSettingsOwner, 'writeUserParameter'>,
+    owner: Pick<
+      SessionSettingsOwner,
+      'writeUserParameter' | 'writeSessionOverride'
+    >,
     argv: Parameters<typeof applyCliArgumentOverrides>[0],
     bootstrap: Parameters<typeof applyCliArgumentOverrides>[1],
   ): Promise<void> {
@@ -385,7 +389,9 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
       bootstrap,
       {
         setEphemeralSetting: (key, value) =>
-          owner.writeUserParameter(key, value),
+          key === 'dumpcontext'
+            ? owner.writeSessionOverride(key, value)
+            : owner.writeUserParameter(key, value),
       },
       this.#manager.getProviderKeys(),
       this.#settings,
@@ -549,6 +555,13 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     if (this.#sessionSettings === undefined)
       throw new Error('Post-config preflight is not prepared');
     this.#sessionSettings.writeUserParameter(key, value);
+  }
+
+  writeSessionOverride(key: string, value: unknown): void {
+    this.#assertOpen();
+    if (this.#sessionSettings === undefined)
+      throw new Error('Post-config preflight is not prepared');
+    this.#sessionSettings.writeSessionOverride(key, value);
   }
 
   readNamedParameter(key: string): unknown {

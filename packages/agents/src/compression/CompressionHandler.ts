@@ -18,6 +18,7 @@ import type { CompressionHandlerRuntime } from '../core/chatSessionPorts.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
+  CompressionAuditProvenance,
   CompressionProviderResult,
   CompressionStrategyName,
   DensityConfig,
@@ -44,6 +45,14 @@ import {
   CompressionRunReport,
   recordCompressionTelemetry,
 } from './compressionLifecycleTelemetry.js';
+import { completeCompressionAttempt } from './compressionCompletion.js';
+import { unauthoredProvenance } from './compressionAuditProvenance.js';
+import { CompressionAuditState } from './CompressionAuditState.js';
+import {
+  notifyCompressionCooldown,
+  compressionCooldownResult,
+  wasRecentlyCompressed as isRecentlyCompressed,
+} from './compressionCooldown.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -74,7 +83,7 @@ import {
 } from './contextLimitPolicy.js';
 
 import { runDiskProviderFallback } from './diskProviderFallback.js';
-import { ProviderFallbackInvariantError } from './providerFallbackCandidate.js';
+import { providerFallbackFailure } from './providerFallbackCandidate.js';
 import {
   ProviderSourceEnforcer,
   type ProviderSourceLimits,
@@ -133,9 +142,7 @@ export class CompressionHandler {
   private compressionFailureCount: number = 0;
   private lastCompressionFailureTime: number | null = null;
   private lastSuccessfulCompressionTime: number | null = null;
-  private compressionSummary: IContent | undefined;
-  /** #4067: compression telemetry comes from the applied strategy result. */
-  private readonly runReport = new CompressionRunReport();
+  private readonly auditState = new CompressionAuditState();
   densityDirty: boolean = true;
   private _suppressDensityDirty: boolean = false;
   private _suppressDensityDirtyDepth: number = 0;
@@ -154,6 +161,12 @@ export class CompressionHandler {
       this.providerFileBindings,
       this.providerFileLifecycle,
     );
+  }
+
+  setCompressionAuditListener(
+    listener: (provenance: CompressionAuditProvenance) => void,
+  ): () => void {
+    return this.auditState.setListener(listener);
   }
 
   rebindHistory(
@@ -626,9 +639,10 @@ export class CompressionHandler {
       await this.historyService.waitForCommit();
     } finally {
       this.historyService.endCompression(
-        outcome === 'noop' ? undefined : this.compressionSummary,
+        outcome === 'noop' ? undefined : this.auditState.summary,
         outcome === 'noop' ? undefined : count,
         origin,
+        outcome === 'noop' ? undefined : this.auditState.provenance,
       );
     }
   }
@@ -725,16 +739,15 @@ export class CompressionHandler {
   ): Promise<PerformCompressionResult> {
     // Cooldown: skip compression if we have too many recent failures
     // When bypassCooldown is true (called from enforceContextWindow), skip this check
-    if (options?.bypassCooldown !== true && this.isCompressionInCooldown()) {
-      this.logger.debug(
-        'Skipping compression — in cooldown after repeated failures',
-        {
-          failureCount: this.compressionFailureCount,
-          lastFailureTime: this.lastCompressionFailureTime,
-        },
-      );
-      return PerformCompressionResult.SKIPPED_COOLDOWN;
-    }
+    const cooldownResult = compressionCooldownResult(
+      options?.bypassCooldown === true,
+      this.compressionFailureCount,
+      this.lastCompressionFailureTime,
+      CompressionHandler.COMPRESSION_FAILURE_THRESHOLD,
+      CompressionHandler.COMPRESSION_COOLDOWN_MS,
+      this.logger,
+    );
+    if (cooldownResult !== null) return cooldownResult;
 
     // Trigger PreCompress hook (fail-open) before checking history.
     // This ensures automatic/manual compression attempts emit PreCompress hooks
@@ -759,8 +772,9 @@ export class CompressionHandler {
     // On 'noop', we must avoid history mutation, recording events, and
     // counter/timestamp changes entirely. (Issue #2602)
     let compressionOutcome: 'applied' | 'noop' | 'failed' = 'failed';
-    this.compressionSummary = undefined;
-    this.runReport.begin();
+    this.auditState.reset();
+    const runReport = new CompressionRunReport();
+    runReport.begin();
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -769,6 +783,7 @@ export class CompressionHandler {
       preCompressionCount = await countCompressionRows(this.historyService);
       compressionOutcome = await this.runCompressionWithRetryAndFallback(
         prompt_id,
+        runReport,
         options?.transcriptPathProvider,
         options?.modelParameters,
         options?.historyOrigin,
@@ -786,32 +801,22 @@ export class CompressionHandler {
       );
     }
 
-    if (compressionOutcome === 'noop') {
-      this.logger.debug(
-        'Compression was a structural no-op — no history mutation or recording',
-      );
-      return PerformCompressionResult.NOOP;
-    }
-
-    await this.historyService.waitForTokenUpdates();
-    if (compressionOutcome === 'applied') {
-      await recordCompressionTelemetry(
-        this.logger,
-        this.tokenUsageLogger,
-        this.ports,
-        this.historyService,
-        (profileName) => this.providerResolver(profileName),
-        tokensBefore,
-        this.runReport.telemetry(),
-      );
-      return PerformCompressionResult.COMPRESSED;
-    }
-
-    this.logger.warn(
-      'Compression strategy reported failure without applying history updates',
+    return completeCompressionAttempt(
+      compressionOutcome,
+      this.logger,
+      () => this.historyService.waitForTokenUpdates(),
+      () =>
+        recordCompressionTelemetry(
+          this.logger,
+          this.tokenUsageLogger,
+          this.ports,
+          this.historyService,
+          (profileName) => this.providerResolver(profileName),
+          tokensBefore,
+          runReport.telemetry(),
+          this.auditState.provenance,
+        ),
     );
-
-    return PerformCompressionResult.FAILED;
   }
 
   /**
@@ -821,17 +826,14 @@ export class CompressionHandler {
    * @requirement REQ-CR-005
    */
   isCompressionInCooldown(): boolean {
-    if (
-      this.compressionFailureCount <
-      CompressionHandler.COMPRESSION_FAILURE_THRESHOLD
-    ) {
-      return false;
-    }
-    if (this.lastCompressionFailureTime === null) {
-      return false;
-    }
-    const elapsed = Date.now() - this.lastCompressionFailureTime;
-    return elapsed < CompressionHandler.COMPRESSION_COOLDOWN_MS;
+    return notifyCompressionCooldown(
+      true,
+      this.compressionFailureCount,
+      CompressionHandler.COMPRESSION_FAILURE_THRESHOLD,
+      this.lastCompressionFailureTime,
+      CompressionHandler.COMPRESSION_COOLDOWN_MS,
+      () => undefined,
+    );
   }
 
   /**
@@ -839,12 +841,9 @@ export class CompressionHandler {
    * Used to distinguish ALREADY_COMPRESSED from NOOP in the /compress command.
    */
   wasRecentlyCompressed(): boolean {
-    if (this.lastSuccessfulCompressionTime === null) {
-      return false;
-    }
-    return (
-      Date.now() - this.lastSuccessfulCompressionTime <
-      CompressionHandler.RECENT_COMPRESSION_WINDOW_MS
+    return isRecentlyCompressed(
+      this.lastSuccessfulCompressionTime,
+      CompressionHandler.RECENT_COMPRESSION_WINDOW_MS,
     );
   }
 
@@ -862,6 +861,7 @@ export class CompressionHandler {
    */
   private async runCompressionWithRetryAndFallback(
     promptId: string,
+    runReport: CompressionRunReport,
     transcriptPathProvider?: () => string | undefined,
     modelParameters?: AdmittedModelParameters,
     historyOrigin?: object,
@@ -870,7 +870,6 @@ export class CompressionHandler {
     const strategyName = parseCompressionStrategyName(
       this.ports.ephemerals.compressionStrategy(),
     );
-    const { runReport } = this;
     const args: Parameters<typeof buildCompressionMetadata> = [
       promptId,
       this.ports,
@@ -895,16 +894,16 @@ export class CompressionHandler {
         return runDiskOneShot(transport, ...args);
       return diskRunners[strategyName](...args);
     };
-    const { outcome, summary } = await run();
-    if (outcome === 'applied') {
+    const outcome = await run();
+    if (outcome.outcome === 'applied') {
       this.lastPromptTokenCount = null;
-      this.compressionSummary = summary;
+      this.auditState.record(outcome.summary, outcome.provenance);
       this.compressionFailureCount = 0;
       this.lastCompressionFailureTime = null;
       this.lastSuccessfulCompressionTime = Date.now();
     }
-    if (outcome === 'failed') this.recordCompressionFailure();
-    return outcome;
+    if (outcome.outcome === 'failed') this.recordCompressionFailure();
+    return outcome.outcome;
   }
 
   private async runDiskFallback(
@@ -928,7 +927,10 @@ export class CompressionHandler {
       { targetTokenCount, modelParameters: owners?.modelParameters },
     );
     if (outcome === 'noop') return false;
-    this.compressionSummary = summary;
+    this.auditState.record(
+      summary,
+      unauthoredProvenance('top-down-truncation'),
+    );
     this.compressionFailureCount = 0;
     this.lastCompressionFailureTime = null;
     this.lastSuccessfulCompressionTime = Date.now();
@@ -959,16 +961,7 @@ export class CompressionHandler {
         'Provider truncation fallback failed during hard-limit enforcement',
         { primaryError, fallbackError },
       );
-      if (fallbackError instanceof ProviderFallbackInvariantError)
-        throw fallbackError;
-      const fallbackMessage =
-        fallbackError instanceof Error
-          ? fallbackError.message
-          : String(fallbackError);
-      throw new AggregateError(
-        [primaryError, fallbackError],
-        `Provider truncation fallback failed during hard-limit enforcement. Primary failure: ${primaryError.message}. Fallback failure: ${fallbackMessage}`,
-      );
+      throw providerFallbackFailure(primaryError, fallbackError);
     }
   }
 
