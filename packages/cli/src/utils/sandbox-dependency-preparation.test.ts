@@ -197,18 +197,35 @@ describe('buildSourceDependencyPreparationRunArgs', () => {
   });
 });
 
+function findHostTool(name: string): string {
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    const candidate = path.join(dir, name);
+    if (dir !== '' && fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error(`Host tool '${name}' is not on PATH`);
+}
+
 describe('the preparation script', () => {
   describe.skipIf(!POSIX)('under real bash', () => {
     let root = '';
     let repo = '';
     let binDir = '';
+    let toolsDir = '';
 
     beforeEach(() => {
       root = fs.mkdtempSync(path.join(os.tmpdir(), 'source-prep-script-'));
       repo = path.join(root, 'repo');
       binDir = path.join(root, 'bin');
+      toolsDir = path.join(root, 'tools');
       fs.mkdirSync(repo);
       fs.mkdirSync(binDir);
+      fs.mkdirSync(toolsDir);
+      // The script's command is `env ... bash ...`; these two are the only
+      // host tools it needs. Nothing else from the host PATH is reachable, so
+      // a Bun installed in /usr/bin or /bin cannot leak into a case.
+      for (const tool of ['env', 'bash']) {
+        fs.symlinkSync(findHostTool(tool), path.join(toolsDir, tool));
+      }
       fs.writeFileSync(path.join(repo, 'package.json'), '{}\n');
       fs.writeFileSync(path.join(repo, 'bun.lock'), '{}\n');
     });
@@ -236,8 +253,8 @@ describe('the preparation script', () => {
       const result = spawnSync(command, args, {
         cwd: repo,
         encoding: 'utf8',
-        // No Bun except the stand-in: the test host's own Bun must not leak in.
-        env: { PATH: `${binDir}:/usr/bin:/bin` },
+        // No Bun except the stand-in in binDir, whatever the host has.
+        env: { PATH: `${binDir}${path.delimiter}${toolsDir}` },
       });
       return { status: result.status, stderr: result.stderr };
     }
