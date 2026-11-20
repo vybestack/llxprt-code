@@ -1346,7 +1346,29 @@ Andrew's decision (issue #854): reading the same image many times must not store
 
 Measured by `packages/core/src/storage/media-repeat-read.journal.test.ts`: a 64 KiB PNG read 900 times through `processSingleFileContent` (the read_file image path), admitted as a tool result and appended one row per read to a real journal leaves one object of 65,536 bytes in the store. The journal holds no base64 of the image, and its size exceeds a control journal of the same 900 rows without the media block by less than 1 KiB per row. Inline storage would have added about 79 MB of base64. No production change was needed for this part.
 
-Dropping an image (retirement, purge, compression, density) replaces the block with a source reference (path or tool call, mime, size, SHA-256, time read) and releases the row's reservation. That work is tracked in `tmp/img/remaining.txt` until it lands; this section will describe it when it does.
+**Origin at admission.** Every admitted image records where it came from as `MediaOrigin` (`IContent.ts`): a `file` origin with the absolute path it was read from (read_file, read_many_files and `@file` images resolve the path before admission), a `tool` origin with the tool name and call id, `pasted`, or `model-output`, each with the ISO time it was read. The origin is stored on the `MediaReferenceBlock` (`media-admission-service.ts`, `mediaOriginFor`).
+
+**Dropping an image keeps a reference.** Andrew's decision: a dropped image becomes a reference to where it was read from, with no bytes. The `media_dropped` block (`MediaDroppedBlock`: origin, mime type, byte length, `sha256:` content id, ISO drop time) replaces the media block in place, at the same block index. Journal format 14 (`JOURNAL_FORMAT_VERSION`, `fileHeader.ts`) adds the block; older journals are refused as in 2.1. `droppedBlockOf` (`journalMediaDrop.ts`) builds it from a stored reference, or from base64 bytes still inline, and throws for anything else (a URL image has no bytes to drop).
+
+**One drop path.** `HistoryService.dropMedia` takes drops by row position or journal label plus block index and runs `dropMediaOnJournal` as one in-place purge group (4.6): only the affected rows are read and rewritten, under their own labels and owners, and stored Responses parents at or after the first dropped row lose `responsesStored`. The media owner then follows the rows (`prepareMediaReplacement` over `snapshotReferences`), so a blob no row references loses this history's reservation and a blob another row still references keeps it. A failure restores the version the drop started from.
+
+**Drop sites.**
+
+| Site | What happens to the image |
+| --- | --- |
+| Historical image retirement (request media budget, `streamprocessor-disk-source.ts`) | Retired images are dropped through `dropMedia`; the request is reopened from the edited rows. |
+| Media-pressure retirement (`source-image-retirement.ts`) | Same path. |
+| Semantic purge, `remove` mode (`semantic-media-purge.ts`) | Stored bytes (base64 or reference) become `media_dropped` in place; the row stays. URL images are not purge targets. `summary` mode is unchanged. |
+| Compression request (`sanitizeHistoryForCompression`) | Not a drop. The summarization request carries a text placeholder; the stored rows keep their media. |
+| Density (array and native policies) | Not a drop. Read/write pruning, file dedupe and recency pruning remove or rewrite tool calls and responses only; media blocks in a rewritten row are kept. |
+
+**Provider text.** Every route converts `media_dropped` to text with `droppedMediaModelText` (`droppedMediaText.ts`): `[image dropped: <source>, <mime>, <N> KB]`, plus, for a file origin, an instruction to read the absolute path again. On a tool row the text rides with its tool response, as media does, on both the array route (`historyToolNormalization.ts`) and the journal route (`journal-orphan-units.ts`). Stored per-row native estimates include the text.
+
+**Transcript line.** The UI renders the block as the same `[image dropped: ...]` line (`describeDroppedMedia`, used by `iContentToHistoryItems.ts`).
+
+**Blob release and reclaim.** The store is shared by every session of a project. A history holds one reservation per content id; dropping the last row reference of a content id releases that reservation, and `reclaimUnreferenced` deletes the object only when no reservation of any session and no protected id covers it. The janitor (`mediaReclamation.ts`) protects every content id a remaining session of the project still owns (`collectOwnedContentIds`), so deleting a session reclaims only blobs no other session references. The cross-session cases (a second session keeps the blob after the first drops it, the blob goes after both drop it, deletion reclaims only unshared blobs) and `resumeSession()` returning stored references do not have dedicated tests yet.
+
+**Not yet done.** Rows that compression removes from context keep their original body in the transcript (16.3). Their media blocks still name the blob after the context release, so the transcript copy can name a reclaimed blob. Rewriting those transcript copies to `media_dropped` in the compression group needs a transcript-row revision that the journal does not write yet; it is tracked in `tmp/img/remaining.txt`.
 
 ## 11. Telemetry
 
