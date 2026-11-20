@@ -36,9 +36,11 @@ async function droppedAtOf(
 ): Promise<string | undefined> {
   if (route !== 'purge') return undefined;
   for await (const row of history.streamRawHistory()) {
-    const block = row.blocks.at(PURGED_IMAGE_BLOCK);
-    if (block?.type !== 'media_dropped')
-      throw new Error(`Expected a dropped image, found ${block?.type}`);
+    if (row.blocks.length <= PURGED_IMAGE_BLOCK)
+      throw new Error(`Row 0 has no block ${PURGED_IMAGE_BLOCK}`);
+    const block = row.blocks[PURGED_IMAGE_BLOCK];
+    if (block.type !== 'media_dropped')
+      throw new Error(`Expected a dropped image, found ${block.type}`);
     expect(block.droppedAt).toMatch(ISO_TIME);
     return block.droppedAt;
   }

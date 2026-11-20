@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import {
   isMediaReferenceBlock,
   type IContent,
+  type MediaOrigin,
   type MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -20,6 +21,13 @@ import {
 } from '../../../../__tests__/stream-media-agent-fixture.js';
 
 const imageBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+// Admission stamps an origin-less image with the wall-clock read time, so
+// each runtime admitting the same paste at a different moment would record a
+// different origin. One supplied origin keeps the references comparable.
+const imageOrigin: MediaOrigin = {
+  kind: 'pasted',
+  readAt: '2026-11-19T18:00:00.000Z',
+};
 
 function imageHistory(bytes: Uint8Array): IContent[] {
   return [
@@ -31,6 +39,7 @@ function imageHistory(bytes: Uint8Array): IContent[] {
           mimeType: 'image/png',
           data: Buffer.from(bytes).toString('base64'),
           encoding: 'base64',
+          origin: imageOrigin,
         },
       ],
     },

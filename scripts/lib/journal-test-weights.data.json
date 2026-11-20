@@ -479,7 +479,6 @@
   "packages/agents/src/core/__tests__/compression-boundary.test.ts": 3,
   "packages/agents/src/core/__tests__/compression-dispatcher.test.ts": 2,
   "packages/agents/src/core/__tests__/compression-logic.test.ts": 2,
-  "packages/agents/src/core/__tests__/compression-prompts.test.ts": 1,
   "packages/agents/src/core/__tests__/compression-threshold-system-prompt.test.ts": 1,
   "packages/agents/src/core/__tests__/compression.test.ts": 2,
   "packages/agents/src/core/__tests__/config-regression-guard.test.ts": 1,

@@ -6,6 +6,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { expectedDroppedRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/dropped-media-expectation.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -22,9 +23,9 @@ const image: IContent = {
     { type: 'text', text: 'retained text' },
     {
       type: 'media',
-      encoding: 'url',
+      encoding: 'base64',
       mimeType: 'image/png',
-      data: 'https://example.test/image.png',
+      data: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64'),
       caption: 'image caption',
     },
   ],
@@ -100,7 +101,7 @@ describe('journal history persistence', () => {
               cancel,
             );
             expect(rows[0].blocks).toStrictEqual(
-              cancel ? image.blocks : [image.blocks[0]],
+              cancel ? image.blocks : expectedDroppedRow(image, rows[0], 1),
             );
           });
         } finally {
