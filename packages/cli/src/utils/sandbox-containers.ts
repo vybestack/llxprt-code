@@ -20,6 +20,12 @@ import type {
 } from './sandbox-ssh.js';
 import { containerMountSources } from './sandbox-capability.js';
 import {
+  buildCapabilityFileCapture,
+  CAPABILITY_CONTAINER_DIR,
+  CAPABILITY_FD_REOPEN,
+  shellSingleQuote,
+} from './sandbox-capability-container.js';
+import {
   getContainerPath,
   mountGitConfigFiles,
   buildSandboxEnvArgs,
@@ -505,14 +511,22 @@ const CURRENT_USER_CAPABILITIES = ['CHOWN', 'SETUID', 'SETGID'] as const;
  * safe-representation for sh. The same escaping is applied to the wrapped
  * inner script below, so quoted values nest correctly.
  */
-function shQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+const shQuote = shellSingleQuote;
+
+export interface ContainerUserOptions {
+  /**
+   * Where the capability directory is mounted in the container; must match
+   * the `capabilityMountDir` the wrapped entrypoint was generated with.
+   * Production uses the fixed private path.
+   */
+  readonly capabilityMountDir?: string;
 }
 
 /** Configures user/UID for the container and modifies entrypoint if needed. */
 export async function setupContainerUser(
   args: string[],
   finalEntrypoint: string[],
+  options: ContainerUserOptions = {},
 ): Promise<string> {
   let userFlag = '';
 
@@ -545,19 +559,28 @@ export async function setupContainerUser(
       `mkdir -p ${quotedHome} && chown ${uid}:${gid} ${quotedHome}`,
     ].join(' && ');
 
-    // Current-user path (AC3): root captures token, opens fd 3, runs setup
-    // with fd 3 closed, then su forwards fd 3 through a clean env.
+    // Current-user path (AC3, #3573): root tries to open and unlink the
+    // capability file first, runs setup with fd 3 closed, then reopens fd 3
+    // on a pipe and su forwards it through a clean env. Root without
+    // CAP_DAC_OVERRIDE cannot read a file owned by the host uid (rootful
+    // Docker), so when root cannot open it the file stays for the inner
+    // entrypoint stanza, which runs as the user su drops to. On rootless
+    // Podman the host uid is container root, so root opens it here and the
+    // dropped user needs no access. No capability is added for either case.
+    const capabilityMountDir =
+      options.capabilityMountDir ?? CAPABILITY_CONTAINER_DIR;
     const scriptIdx = finalEntrypoint.length - 1;
     const escapedInnerScript = finalEntrypoint[scriptIdx].replace(
       /'/g,
       "'\\''",
     );
     finalEntrypoint[scriptIdx] = [
-      '__llxprt_cap="${LLXPRT_CAPABILITY_TOKEN-}"',
-      'unset LLXPRT_CAPABILITY_TOKEN',
+      "__llxprt_cap=''",
+      'unset LLXPRT_CAPABILITY_TOKEN LLXPRT_CAPABILITY_FD',
+      buildCapabilityFileCapture(capabilityMountDir, 'opportunistic'),
       `{ ${setupUserCommands}; } 3<&-`,
       'if [ -n "${__llxprt_cap}" ]; then',
-      '  exec 3<<<"${__llxprt_cap}"',
+      `  ${CAPABILITY_FD_REOPEN}`,
       '  unset __llxprt_cap',
       '  export LLXPRT_CAPABILITY_FD=3',
       `  exec su -p ${username} -c '${escapedInnerScript}'`,
@@ -734,8 +757,9 @@ export function wireCleanupHandlers(
   if (credentialProxyBridgeCleanup !== undefined) {
     // #3524: wireCleanupHandlers runs immediately after the sandbox process
     // has spawned, so this is where the no-handshake fallback countdown
-    // starts — before the spawn the runtime cannot have read --env-file.
-    credentialProxyBridgeCleanup.armCapabilityEnvFileFallback?.();
+    // starts — before the spawn the container cannot have mounted the
+    // capability directory.
+    credentialProxyBridgeCleanup.armCapabilityFileFallback?.();
     let bridgeCleanedUp = false;
     const runBridgeCleanup = (): void => {
       if (bridgeCleanedUp) return;

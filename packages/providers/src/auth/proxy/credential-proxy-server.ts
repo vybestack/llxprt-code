@@ -95,7 +95,7 @@ export interface CredentialProxyServerOptions {
    * Notification that a connection has authenticated as a sandbox.
    * Fired on EVERY handshake that presents a valid capability token,
    * so a consumer must be idempotent (the intended one — releasing
-   * the capability env file that delivered the token into the
+   * the capability directory that delivered the token into the
    * container — already tolerates repeated cleanup). Never fired for
    * unauthorized handshakes or for servers constructed without a
    * capabilityToken (non-sandbox connections never authenticate as

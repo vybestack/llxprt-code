@@ -9,6 +9,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import {
+  CAPABILITY_CONTAINER_DIR,
+  CAPABILITY_TOKEN_FILE_NAME,
+} from './sandbox-capability-container.js';
+import {
   canonicalizeExistingPath,
   hasFilesystemErrorCode,
 } from './sandbox-path-canonicalization.js';
@@ -17,10 +21,21 @@ const DEFAULT_ORPHAN_MAX_AGE_MS = 86_400_000;
 const CAPABILITY_DIR_PREFIX = 'llxprt-code-cap-';
 const LEGACY_CAPABILITY_DIR_PREFIX = '.llxprt-code-cap-';
 
-export interface HostOnlyCapabilityResult {
+export interface HostOnlyCapabilityMount {
+  /** `docker run`/`podman run` arguments that mount the host-only directory. */
   readonly args: readonly string[];
-  readonly envFilePath: string;
+  /** The token file inside the host-only directory. */
+  readonly tokenFilePath: string;
+  /** Removes the token file (if the container left it) and the directory. */
   readonly cleanup: () => void;
+}
+
+export interface HostOnlyCapabilityMountOptions {
+  /**
+   * Adds the shared SELinux label (`z`) to the mount. Podman relabels the
+   * host-only directory so a labelled container process can open the file.
+   */
+  readonly selinuxLabel?: boolean;
 }
 
 function isIdempotentCleanupError(err: unknown): boolean {
@@ -283,24 +298,29 @@ function closeAfterWrite(fd: number, writeError?: unknown): void {
     if (isIdempotentCleanupError(closeError)) return;
     if (writeError === undefined) {
       throw new Error(
-        `Capability env file could not be closed: ${closeError instanceof Error ? closeError.message : String(closeError)}`,
+        `Capability token file could not be closed: ${closeError instanceof Error ? closeError.message : String(closeError)}`,
       );
     }
     throw new AggregateError(
       [writeError, closeError],
-      'Capability env file could not be written and closed',
+      'Capability token file could not be written and closed',
     );
   }
 }
 
-function writeCapabilityEnvFile(
-  envFilePath: string,
+/**
+ * Writes the bare token and its newline delimiter, the exact bytes the CLI
+ * reads from fd 3 (credential-store-factory.ts). There is no variable name:
+ * the container entrypoint reads the file with the shell `read` builtin.
+ */
+function writeCapabilityTokenFile(
+  tokenFilePath: string,
   capabilityToken: string,
 ): void {
-  const fd = fs.openSync(envFilePath, 'w', 0o600);
+  const fd = fs.openSync(tokenFilePath, 'w', 0o600);
   let writeError: unknown;
   try {
-    fs.writeSync(fd, `LLXPRT_CAPABILITY_TOKEN=${capabilityToken}\n`, 0, 'utf8');
+    fs.writeSync(fd, `${capabilityToken}\n`, 0, 'utf8');
     if (process.platform !== 'win32') fs.fchmodSync(fd, 0o600);
   } catch (err) {
     writeError = err;
@@ -317,24 +337,34 @@ function removePath(remove: () => void): void {
   }
 }
 
-export function createHostOnlyCapabilityEnvFile(
+/**
+ * Writes the capability token to a file in a new host-only directory and
+ * returns the `--volume` argument that mounts that directory (not the file,
+ * so the container can unlink the file) read-write at
+ * {@link CAPABILITY_CONTAINER_DIR}. The token is never part of the container's
+ * create configuration. The container entrypoint opens the file and deletes
+ * it before any other process starts; `cleanup` removes whatever remains and
+ * is the host's backstop (#3524 release paths).
+ */
+export function createHostOnlyCapabilityMount(
   capabilityToken: string | undefined,
   mountSources: readonly string[],
-): HostOnlyCapabilityResult | undefined {
+  options: HostOnlyCapabilityMountOptions = {},
+): HostOnlyCapabilityMount | undefined {
   if (capabilityToken === undefined) return undefined;
   if (/[\r\n=]/.test(capabilityToken)) {
     throw new Error(
-      'Capability token contains invalid characters for env file',
+      'Capability token contains invalid characters for the capability file',
     );
   }
   const hostOnlyDir = createHostOnlyDir(mountSources);
-  const envFilePath = path.join(hostOnlyDir, 'capability.env');
+  const tokenFilePath = path.join(hostOnlyDir, CAPABILITY_TOKEN_FILE_NAME);
   try {
-    writeCapabilityEnvFile(envFilePath, capabilityToken);
+    writeCapabilityTokenFile(tokenFilePath, capabilityToken);
   } catch (err) {
     const errors: unknown[] = [err];
     runCapabilityCleanupStep(
-      () => removePath(() => fs.unlinkSync(envFilePath)),
+      () => removePath(() => fs.unlinkSync(tokenFilePath)),
       errors,
     );
     runCapabilityCleanupStep(
@@ -343,14 +373,14 @@ export function createHostOnlyCapabilityEnvFile(
     );
     throw errors.length === 1
       ? err
-      : new AggregateError(errors, 'Capability env file creation failed');
+      : new AggregateError(errors, 'Capability token file creation failed');
   }
   let cleanedUp = false;
   const cleanup = (): void => {
     if (cleanedUp) return;
     const errors: unknown[] = [];
     runCapabilityCleanupStep(
-      () => removePath(() => fs.unlinkSync(envFilePath)),
+      () => removePath(() => fs.unlinkSync(tokenFilePath)),
       errors,
     );
     runCapabilityCleanupStep(
@@ -362,5 +392,13 @@ export function createHostOnlyCapabilityEnvFile(
     }
     cleanedUp = true;
   };
-  return { args: ['--env-file', envFilePath], envFilePath, cleanup };
+  const mountOptions = options.selinuxLabel === true ? 'rw,z' : 'rw';
+  return {
+    args: [
+      '--volume',
+      `${hostOnlyDir}:${CAPABILITY_CONTAINER_DIR}:${mountOptions}`,
+    ],
+    tokenFilePath,
+    cleanup,
+  };
 }

@@ -401,7 +401,7 @@ async function startCredentialProxyGuarded(
     );
   } catch (error) {
     // setupCredentialProxy releases everything it acquired on its own
-    // failure paths (proxy server, bridge, env file, tmpdir); the launch
+    // failure paths (proxy server, bridge, capability mount, tmpdir); the launch
     // lifecycle owns nothing from it yet.
     if (error instanceof FatalSandboxError) throw error;
     // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container

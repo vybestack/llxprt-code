@@ -20,7 +20,7 @@ import {
 } from './sandbox-ssh.js';
 import {
   containerMountSources,
-  createHostOnlyCapabilityEnvFile,
+  createHostOnlyCapabilityMount,
   runCapabilityCleanupStep,
 } from './sandbox-capability.js';
 import { setupCredentialProxyPodmanMacOS } from './sandbox-podman.js';
@@ -107,35 +107,38 @@ function assertSupportedCredentialNetwork(config: SandboxConfig): void {
 }
 
 /**
- * Milliseconds after the sandbox process spawns that the capability env
- * file is deleted even when no sandbox handshake ever arrives (#3524). A
- * sandbox that never requests credentials never handshakes; without this
- * bound its env file would live until session exit — exactly the path that
- * does not run under SIGKILL, `tmux kill-session`, an OOM kill or a crash.
- * The bound errs long on purpose: deleting late only widens the window in
- * which the token is exposed, while deleting early breaks the launch,
- * because a remote or VM-backed runtime may not have read --env-file yet.
- * Ten minutes is ~20x the proxy-sidecar readiness budget and still bounds
- * exposure far below a session's lifetime.
+ * Milliseconds after the sandbox process spawns that the capability
+ * directory is deleted even when no sandbox handshake ever arrives (#3524).
+ * A sandbox that never requests credentials never handshakes; without this
+ * bound its token directory would live until session exit — exactly the path
+ * that does not run under SIGKILL, `tmux kill-session`, an OOM kill or a
+ * crash. In the normal case the container entrypoint has already unlinked
+ * the token file within seconds of the start (#3573), so the countdown
+ * bounds the host-side copy for a container that never started its
+ * entrypoint. The bound errs long on purpose: deleting early breaks the
+ * launch, because a remote or VM-backed runtime may not have started the
+ * container and mounted the directory yet. Ten minutes is ~20x the
+ * proxy-sidecar readiness budget and still bounds exposure far below a
+ * session's lifetime.
  */
-const CAPABILITY_ENV_FILE_FALLBACK_MS = 10 * 60 * 1000;
+const CAPABILITY_FILE_FALLBACK_MS = 10 * 60 * 1000;
 
 /**
- * Bridge cleanup returned by setupCredentialProxy. When a capability env
- * file exists the cleanup also carries armCapabilityEnvFileFallback so the
+ * Bridge cleanup returned by setupCredentialProxy. When a capability mount
+ * exists the cleanup also carries armCapabilityFileFallback so the
  * post-spawn wiring (wireCleanupHandlers) can start the no-handshake
  * release countdown without widening every launch-path signature (#3524).
  */
 export interface CredentialProxyBridgeCleanup {
-  /** Runs the composed bridge and env-file cleanup (idempotent). */
+  /** Runs the composed bridge and capability-directory cleanup (idempotent). */
   (): void;
-  /** Starts the bounded no-handshake env-file release countdown. */
-  armCapabilityEnvFileFallback?(): void;
+  /** Starts the bounded no-handshake capability-directory release countdown. */
+  armCapabilityFileFallback?(): void;
 }
 
 /**
- * Mutable holder for the capability env-file cleanup (#3524). The proxy
- * handshake callback is registered before the env file exists, so it reads
+ * Mutable holder for the capability directory cleanup (#3524). The proxy
+ * handshake callback is registered before the capability mount exists, so it reads
  * the holder at fire time rather than capturing the cleanup eagerly.
  * Handshake, fallback expiry, and the composed exit cleanup all go through
  * release(), so every deletion path clears the holder and cancels the
@@ -145,13 +148,13 @@ export interface CredentialProxyBridgeCleanup {
  * both fire in contexts that must not throw; the exit-time composed cleanup
  * calls release() strict and still surfaces filesystem failures.
  */
-interface CapabilityEnvFileRelease {
+interface CapabilityFileRelease {
   release: (bestEffort?: boolean) => void;
   adopt: (cleanup: () => void) => void;
   armFallback: () => void;
 }
 
-function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
+function createCapabilityFileRelease(): CapabilityFileRelease {
   let held: (() => void) | undefined;
   let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
   // bestEffort is the early-release mode: the handshake callback fires on
@@ -173,7 +176,7 @@ function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
       cleanup();
     } catch (err) {
       if (!bestEffort) throw err;
-      debugLogger.error('Early capability env-file release failed:', err);
+      debugLogger.error('Early capability file release failed:', err);
     }
   };
   return {
@@ -186,7 +189,7 @@ function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
       // Best-effort release: a throw from this timer callback would be an
       // unhandled exception, so expiry logs filesystem failures (#3524).
       const onExpire = (): void => release(true);
-      fallbackTimer = setTimeout(onExpire, CAPABILITY_ENV_FILE_FALLBACK_MS);
+      fallbackTimer = setTimeout(onExpire, CAPABILITY_FILE_FALLBACK_MS);
       // Unref so the fallback can never hold the process open.
       fallbackTimer.unref();
     },
@@ -194,18 +197,18 @@ function createCapabilityEnvFileRelease(): CapabilityEnvFileRelease {
 }
 
 /**
- * Composes the bridge cleanup and the env-file release and, when an env
- * file exists, exposes armCapabilityEnvFileFallback on the result so
+ * Composes the bridge cleanup and the capability directory release and,
+ * when a capability mount exists, exposes armCapabilityFileFallback on the result so
  * wireCleanupHandlers can start the no-handshake release countdown once the
  * sandbox process has spawned (#3524). The exit-time cleanup stays
  * registered as the backstop; early deletion only makes it a no-op. The
- * env-file leg is release() itself — the same path the handshake and the
+ * capability leg is release() itself — the same path the handshake and the
  * fallback take, so running the composed cleanup also cancels the armed
  * fallback timer and stops this launch's proxy.
  */
 function composeArmableBridgeCleanup(
   bridgeCleanup: (() => void) | undefined,
-  envFileRelease: CapabilityEnvFileRelease,
+  capabilityRelease: CapabilityFileRelease,
   sessionTmpdirCleanup: () => void,
   proxy: SandboxProxyHandle,
 ): CredentialProxyBridgeCleanup {
@@ -220,12 +223,12 @@ function composeArmableBridgeCleanup(
     // the optional call only satisfies composeCleanups' union return type.
     composeCleanups(
       bridgeCleanup,
-      envFileRelease.release,
+      capabilityRelease.release,
       sessionTmpdirCleanup,
     )?.();
   };
   return Object.assign(launchTeardown, {
-    armCapabilityEnvFileFallback: envFileRelease.armFallback,
+    armCapabilityFileFallback: capabilityRelease.armFallback,
   });
 }
 
@@ -284,7 +287,7 @@ export async function setupCredentialProxy(
   const socketRuntime = prepareCredentialSocketRuntime(config, sessionTmpdir);
   const sessionTmpdirCleanup = (): void =>
     cleanupCredentialSocketRuntime(socketRuntime, sessionTmpdir);
-  const envFileRelease = createCapabilityEnvFileRelease();
+  const capabilityRelease = createCapabilityFileRelease();
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
   let proxy: SandboxProxyHandle;
@@ -294,7 +297,7 @@ export async function setupCredentialProxy(
       sessionTmpdirCleanup,
       // bestEffort: the handshake fires on the proxy's frame-processing path,
       // where a throw would destroy this sandbox's credential connection.
-      () => envFileRelease.release(true),
+      () => capabilityRelease.release(true),
     );
   } catch (error) {
     throwCredentialProxySetupError(error, sessionTmpdirCleanup);
@@ -324,18 +327,21 @@ export async function setupCredentialProxy(
       const prefix = credentialProxyBridgeResult.entrypointPrefix;
       if (prefix !== undefined) entrypointPrefixes.push(prefix);
     }
-    // @plan project-plans/issue-1954-sandbox-hardening.md (AC1): host-only env file.
-    const envFileResult = createHostOnlyCapabilityEnvFile(
+    // @plan project-plans/issue-1954-sandbox-hardening.md (AC1): host-only
+    // capability directory, bind-mounted so the token is never part of the
+    // container's create configuration (#3573).
+    const capabilityMount = createHostOnlyCapabilityMount(
       proxy.capabilityToken,
       containerMountSources(args),
+      { selinuxLabel: config.command === 'podman' },
     );
-    if (envFileResult !== undefined) {
-      args.push(...envFileResult.args);
-      envFileRelease.adopt(envFileResult.cleanup);
+    if (capabilityMount !== undefined) {
+      args.push(...capabilityMount.args);
+      capabilityRelease.adopt(capabilityMount.cleanup);
     }
   } catch (err) {
     const errors: unknown[] = [err];
-    runCapabilityCleanupStep(() => envFileRelease.release(), errors);
+    runCapabilityCleanupStep(() => capabilityRelease.release(), errors);
     runCapabilityCleanupStep(() => credentialProxyBridgeCleanup?.(), errors);
     try {
       await proxy.stop();
@@ -349,7 +355,7 @@ export async function setupCredentialProxy(
     credentialProxyBridgeResult,
     credentialProxyBridgeCleanup: composeArmableBridgeCleanup(
       credentialProxyBridgeCleanup,
-      envFileRelease,
+      capabilityRelease,
       sessionTmpdirCleanup,
       proxy,
     ),

@@ -275,14 +275,35 @@ describe('sandbox entrypoint', () => {
       delete process.env.NODE_ENV;
     });
 
+    /**
+     * Creates the directory the host bind-mounts into the container and puts
+     * the token file in it, the way createHostOnlyCapabilityMount does.
+     */
+    function createCapabilityMount(tmpDir: string): string {
+      const mountDir = path.join(tmpDir, 'capability-mount');
+      fs.mkdirSync(mountDir, { mode: 0o700 });
+      fs.writeFileSync(path.join(mountDir, 'token'), `${VALID_TOKEN}\n`, {
+        mode: 0o600,
+      });
+      return mountDir;
+    }
+
     function buildRecorderEntrypoint(
       tmpDir: string,
       marker: string,
       binDir: string,
       prefixes?: string[],
+      capabilityMountDir?: string,
     ): string[] {
       installRecorder(binDir, marker, 'llxprt');
-      return entrypoint(tmpDir, [], undefined, prefixes);
+      return entrypoint(
+        tmpDir,
+        [],
+        undefined,
+        prefixes,
+        undefined,
+        capabilityMountDir === undefined ? undefined : { capabilityMountDir },
+      );
     }
 
     /** Builds the env for recorder entrypoint tests: inherits process.env,
@@ -331,11 +352,14 @@ describe('sandbox entrypoint', () => {
         const tmpDir = getTmpDir();
         const binDir = path.join(tmpDir, 'bin');
         const marker = path.join(tmpDir, 'rec.json');
-        const cmd = buildRecorderEntrypoint(tmpDir, marker, binDir);
-        const result = runCmd(
-          cmd,
-          recorderEnv(binDir, { LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN }),
+        const cmd = buildRecorderEntrypoint(
+          tmpDir,
+          marker,
+          binDir,
+          undefined,
+          createCapabilityMount(tmpDir),
         );
+        const result = runCmd(cmd, recorderEnv(binDir));
         expect(result.exit).toBe(0);
         const rec = readJson<{
           tokenValid: boolean;
@@ -389,14 +413,17 @@ describe('sandbox entrypoint', () => {
           const binDir = path.join(tmpDir, 'bin');
           const marker = path.join(tmpDir, 'rec.json');
           const stealerSentinel = path.join(tmpDir, 'stolen.json');
-          const cmd = buildRecorderEntrypoint(tmpDir, marker, binDir);
+          const cmd = buildRecorderEntrypoint(
+            tmpDir,
+            marker,
+            binDir,
+            undefined,
+            createCapabilityMount(tmpDir),
+          );
           const overrides = setup(tmpDir, stealerSentinel);
           const result = runCmd(
             cmd,
-            recorderEnv(binDir, {
-              LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN,
-              ...overrides,
-            }),
+            recorderEnv(binDir, overrides),
             recorderWorkingDirectory(overrides, tmpDir),
           );
           expect(result.exit).toBe(0);
@@ -465,13 +492,14 @@ describe('sandbox entrypoint', () => {
         const marker = path.join(tmpDir, 'rec.json');
         const prefixSentinel = path.join(tmpDir, 'prefix-env.json');
         const fakePrefix = `python3 - > ${JSON.stringify(prefixSentinel)} 2>/dev/null <<'LLXPRT_PREFIX_PROBE_EOF'\nimport os, json, sys\nout = {"tokenPresent": os.environ.get("LLXPRT_CAPABILITY_TOKEN") is not None}\nsys.stdout.write(json.dumps(out))\nLLXPRT_PREFIX_PROBE_EOF`;
-        const cmd = buildRecorderEntrypoint(tmpDir, marker, binDir, [
-          fakePrefix,
-        ]);
-        const result = runCmd(
-          cmd,
-          recorderEnv(binDir, { LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN }),
+        const cmd = buildRecorderEntrypoint(
+          tmpDir,
+          marker,
+          binDir,
+          [fakePrefix],
+          createCapabilityMount(tmpDir),
         );
+        const result = runCmd(cmd, recorderEnv(binDir));
         expect(result.exit).toBe(0);
         expect(
           readJson<{ tokenPresent: boolean }>(prefixSentinel).tokenPresent,
@@ -501,6 +529,17 @@ describe('sandbox entrypoint', () => {
       expect(script.indexOf('unset LLXPRT_CAPABILITY_TOKEN')).toBeLessThan(
         script.indexOf('PREFIX_MARKER'),
       );
+    });
+
+    it('#3573: the script reopens fd 3 from a pipe and never from a here-string or env value', () => {
+      const script = entrypoint(getTmpDir(), ['llxprt'])[7];
+      // A here-string may be backed by a temporary file (bash before 5.1),
+      // which would leave a copy of the token on disk.
+      expect(script).not.toContain('<<<');
+      expect(script).toContain('exec 3< <(');
+      // The token is never read from the container environment.
+      expect(script).not.toContain('${LLXPRT_CAPABILITY_TOKEN');
+      expect(script).toContain('/run/llxprt-capability');
     });
 
     it('F10: uses the numeric DEBUG_PORT in the debug command (not the literal template string)', () => {

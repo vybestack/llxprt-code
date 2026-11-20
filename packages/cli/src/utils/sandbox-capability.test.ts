@@ -5,7 +5,7 @@
  */
 
 /**
- * Behavioral tests for host-only capability env-file placement, reclamation,
+ * Behavioral tests for host-only capability file placement, reclamation,
  * permissions, and failure cleanup.
  *
  * @plan project-plans/issue-3440-capability-env-reclamation.md
@@ -17,9 +17,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import {
-  createHostOnlyCapabilityEnvFile,
+  createHostOnlyCapabilityMount,
   reclaimOrphanCapabilityDirs,
-  type HostOnlyCapabilityResult,
+  type HostOnlyCapabilityMount,
 } from './sandbox-capability.js';
 import { containerMountSources } from './sandbox-containers.js';
 
@@ -38,11 +38,11 @@ function useTempDir(
 }
 
 function requireCapabilityResult(
-  result: HostOnlyCapabilityResult | undefined,
-): HostOnlyCapabilityResult {
+  result: HostOnlyCapabilityMount | undefined,
+): HostOnlyCapabilityMount {
   expect(result).toBeDefined();
   if (result === undefined) {
-    throw new Error('Expected capability env-file result');
+    throw new Error('Expected capability mount result');
   }
   return result;
 }
@@ -81,7 +81,7 @@ function expectedCapabilityRoot(temporaryRoot: string): string {
   return temporaryRoot;
 }
 
-describe('host-only capability env-file (AC1, F4)', () => {
+describe('host-only capability mount (AC1, F4, #3573)', () => {
   const getTmpDir = useTempDir(beforeEach, afterEach);
   let environmentSnapshot: NodeJS.ProcessEnv;
   let runtimeRoot = '';
@@ -110,28 +110,60 @@ describe('host-only capability env-file (AC1, F4)', () => {
 
   it('writes under the platform capability root outside HOME and the session mount; raw token not in argv', () => {
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
-    const hostDir = path.dirname(result.envFilePath);
+    const hostDir = path.dirname(result.tokenFilePath);
 
     try {
       expect(path.dirname(hostDir)).toBe(expectedCapabilityRoot(runtimeRoot));
       expect(hostDir.startsWith(`${isolatedHome}${path.sep}`)).toBe(false);
       expect(hostDir.startsWith(`${sessionMount}${path.sep}`)).toBe(false);
       for (const arg of result.args) expect(arg).not.toContain(VALID_TOKEN);
-      expect(result.args).toStrictEqual(['--env-file', result.envFilePath]);
+      expect(result.args).toStrictEqual([
+        '--volume',
+        `${hostDir}:/run/llxprt-capability:rw`,
+      ]);
+      expect(result.args).not.toContain('--env-file');
     } finally {
       result.cleanup();
     }
   });
 
-  it('writes the token as a single LLXPRT_CAPABILITY_TOKEN line', () => {
+  it('mounts a directory that holds only the token file, so nothing else is exposed', () => {
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
     try {
-      expect(fs.readFileSync(result.envFilePath, 'utf8')).toBe(
-        `LLXPRT_CAPABILITY_TOKEN=${VALID_TOKEN}\n`,
+      expect(path.basename(result.tokenFilePath)).toBe('token');
+      expect(fs.readdirSync(path.dirname(result.tokenFilePath))).toStrictEqual([
+        'token',
+      ]);
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('adds the shared SELinux label to the mount when asked (Podman)', () => {
+    const result = requireCapabilityResult(
+      createHostOnlyCapabilityMount(VALID_TOKEN, [], { selinuxLabel: true }),
+    );
+    try {
+      expect(result.args).toStrictEqual([
+        '--volume',
+        `${path.dirname(result.tokenFilePath)}:/run/llxprt-capability:rw,z`,
+      ]);
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('writes only the token and a newline, with no variable name', () => {
+    const result = requireCapabilityResult(
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
+    );
+    try {
+      expect(fs.readFileSync(result.tokenFilePath, 'utf8')).toBe(
+        `${VALID_TOKEN}\n`,
       );
     } finally {
       result.cleanup();
@@ -143,13 +175,13 @@ describe('host-only capability env-file (AC1, F4)', () => {
     'restricts the capability directory to mode 0700 and the file to 0600',
     () => {
       const result = requireCapabilityResult(
-        createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+        createHostOnlyCapabilityMount(VALID_TOKEN, []),
       );
       try {
-        expect(fs.statSync(path.dirname(result.envFilePath)).mode & 0o777).toBe(
-          0o700,
-        );
-        expect(fs.statSync(result.envFilePath).mode & 0o777).toBe(0o600);
+        expect(
+          fs.statSync(path.dirname(result.tokenFilePath)).mode & 0o777,
+        ).toBe(0o700);
+        expect(fs.statSync(result.tokenFilePath).mode & 0o777).toBe(0o600);
       } finally {
         result.cleanup();
       }
@@ -159,8 +191,8 @@ describe('host-only capability env-file (AC1, F4)', () => {
   it.each(['has\rreturn', 'has\nnewline', 'has=equals'])(
     'rejects a token containing a line break or equals sign (%j) before creating a directory',
     (token) => {
-      expect(() => createHostOnlyCapabilityEnvFile(token, [])).toThrow(
-        'Capability token contains invalid characters for env file',
+      expect(() => createHostOnlyCapabilityMount(token, [])).toThrow(
+        'Capability token contains invalid characters for the capability file',
       );
       expect(fs.readdirSync(runtimeRoot)).toStrictEqual([
         path.basename(sessionMount),
@@ -175,10 +207,10 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
     try {
-      expect(path.dirname(path.dirname(result.envFilePath))).toBe(
+      expect(path.dirname(path.dirname(result.tokenFilePath))).toBe(
         process.env.XDG_RUNTIME_DIR,
       );
     } finally {
@@ -190,10 +222,12 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
     try {
-      expect(path.dirname(path.dirname(result.envFilePath))).toBe(runtimeRoot);
+      expect(path.dirname(path.dirname(result.tokenFilePath))).toBe(
+        runtimeRoot,
+      );
     } finally {
       result.cleanup();
     }
@@ -204,10 +238,12 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
     try {
-      expect(path.dirname(path.dirname(result.envFilePath))).toBe(runtimeRoot);
+      expect(path.dirname(path.dirname(result.tokenFilePath))).toBe(
+        runtimeRoot,
+      );
     } finally {
       result.cleanup();
     }
@@ -219,10 +255,10 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('win32');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
     try {
-      expect(path.dirname(path.dirname(result.envFilePath))).toBe(
+      expect(path.dirname(path.dirname(result.tokenFilePath))).toBe(
         path.join(localAppData, 'llxprt-code'),
       );
     } finally {
@@ -234,35 +270,37 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('darwin');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
     try {
-      expect(path.dirname(path.dirname(result.envFilePath))).toBe(runtimeRoot);
+      expect(path.dirname(path.dirname(result.tokenFilePath))).toBe(
+        runtimeRoot,
+      );
     } finally {
       result.cleanup();
     }
   });
 
   it('returns undefined when no capability token (tokenless path)', () => {
-    expect(createHostOnlyCapabilityEnvFile(undefined, [])).toBeUndefined();
+    expect(createHostOnlyCapabilityMount(undefined, [])).toBeUndefined();
   });
 
   it('cleanup removes file+dir and is idempotent', () => {
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
-    expect(fs.existsSync(result.envFilePath)).toBe(true);
+    expect(fs.existsSync(result.tokenFilePath)).toBe(true);
     result.cleanup();
-    expect(fs.existsSync(result.envFilePath)).toBe(false);
-    expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(false);
+    expect(fs.existsSync(result.tokenFilePath)).toBe(false);
+    expect(fs.existsSync(path.dirname(result.tokenFilePath))).toBe(false);
     expect(() => result.cleanup()).not.toThrow();
   });
 
   it('a concurrent attacker cannot discover the host-only file via the narrowed session mount', () => {
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
-    const hostDir = path.dirname(result.envFilePath);
+    const hostDir = path.dirname(result.tokenFilePath);
 
     try {
       const probeEntries = fs.readdirSync(sessionMount);
@@ -285,7 +323,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     expect(() =>
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, [mountedWorkdir]),
+      createHostOnlyCapabilityMount(VALID_TOKEN, [mountedWorkdir]),
     ).toThrow(/XDG_RUNTIME_DIR.*mount source/i);
     expect(
       fs
@@ -308,7 +346,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     expect(() =>
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, [mountedWorkdir]),
+      createHostOnlyCapabilityMount(VALID_TOKEN, [mountedWorkdir]),
     ).toThrow(FatalSandboxError);
     expect(fs.existsSync(staleCapabilityDir)).toBe(true);
   });
@@ -333,7 +371,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     const mountSources = containerMountSources(buildArgs(runtimeRoot));
 
     expect(() =>
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, mountSources),
+      createHostOnlyCapabilityMount(VALID_TOKEN, mountSources),
     ).toThrow(FatalSandboxError);
   });
 
@@ -346,11 +384,11 @@ describe('host-only capability env-file (AC1, F4)', () => {
     ]);
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, mountSources),
+      createHostOnlyCapabilityMount(VALID_TOKEN, mountSources),
     );
     try {
       expect(mountSources).toStrictEqual([]);
-      expect(fs.existsSync(result.envFilePath)).toBe(true);
+      expect(fs.existsSync(result.tokenFilePath)).toBe(true);
     } finally {
       result.cleanup();
     }
@@ -392,7 +430,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     expect(() =>
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, [mountedWorkdir]),
+      createHostOnlyCapabilityMount(VALID_TOKEN, [mountedWorkdir]),
     ).toThrow(/XDG_RUNTIME_DIR.*mount source/i);
     expect(
       fs
@@ -409,17 +447,19 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, [
+      createHostOnlyCapabilityMount(VALID_TOKEN, [
         siblingMount,
         nonexistentMount,
       ]),
     );
 
     try {
-      expect(path.dirname(path.dirname(result.envFilePath))).toBe(runtimeRoot);
+      expect(path.dirname(path.dirname(result.tokenFilePath))).toBe(
+        runtimeRoot,
+      );
       expect(
         path
-          .dirname(result.envFilePath)
+          .dirname(result.tokenFilePath)
           .startsWith(`${siblingMount}${path.sep}`),
       ).toBe(false);
     } finally {
@@ -441,13 +481,13 @@ describe('host-only capability env-file (AC1, F4)', () => {
     fs.utimesSync(staleLegacyDir, twoDaysAgo, twoDaysAgo);
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
     try {
       expect(fs.existsSync(staleRuntimeDir)).toBe(false);
       expect(fs.existsSync(staleLegacyDir)).toBe(false);
       expect(fs.existsSync(freshRuntimeDir)).toBe(true);
-      expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(true);
+      expect(fs.existsSync(path.dirname(result.tokenFilePath))).toBe(true);
     } finally {
       result.cleanup();
     }
@@ -485,10 +525,10 @@ describe('host-only capability env-file (AC1, F4)', () => {
     process.env.XDG_RUNTIME_DIR = missingRuntimeRoot;
     vi.spyOn(os, 'platform').mockReturnValue('linux');
 
-    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN, [])).toThrow(
+    expect(() => createHostOnlyCapabilityMount(VALID_TOKEN, [])).toThrow(
       FatalSandboxError,
     );
-    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN, [])).toThrow(
+    expect(() => createHostOnlyCapabilityMount(VALID_TOKEN, [])).toThrow(
       /XDG_RUNTIME_DIR|LOCALAPPDATA|tmpdir permissions/i,
     );
   });
@@ -503,7 +543,7 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('linux');
     overrideOsTmpdir(blockedRuntimeRoot);
 
-    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN, [])).toThrow(
+    expect(() => createHostOnlyCapabilityMount(VALID_TOKEN, [])).toThrow(
       /host-only directory/i,
     );
   });
@@ -526,13 +566,13 @@ describe('host-only capability env-file (AC1, F4)', () => {
     vi.spyOn(os, 'platform').mockReturnValue('win32');
 
     const result = requireCapabilityResult(
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []),
+      createHostOnlyCapabilityMount(VALID_TOKEN, []),
     );
     try {
       expect(fs.existsSync(staleWinDir)).toBe(false);
       expect(fs.existsSync(staleLegacyDir)).toBe(false);
       expect(fs.existsSync(freshWinDir)).toBe(true);
-      expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(true);
+      expect(fs.existsSync(path.dirname(result.tokenFilePath))).toBe(true);
     } finally {
       result.cleanup();
     }
@@ -667,7 +707,7 @@ describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () =>
       throw new Error('simulated mkdtemp failure');
     });
 
-    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN, [])).toThrow(
+    expect(() => createHostOnlyCapabilityMount(VALID_TOKEN, [])).toThrow(
       /host-only directory.*mkdtemp failure/i,
     );
     expect(
@@ -677,9 +717,9 @@ describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () =>
     ).toStrictEqual([]);
   });
 
-  it('aggregates env-file write and directory cleanup failures', () => {
+  it('aggregates capability file write and directory cleanup failures', () => {
     vi.spyOn(fs, 'openSync').mockImplementation(() => {
-      throw new Error('simulated env-file write failure');
+      throw new Error('simulated capability file write failure');
     });
     vi.spyOn(fs, 'rmdirSync').mockImplementation(() => {
       throw new Error('simulated rmdir failure');
@@ -687,7 +727,7 @@ describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () =>
 
     let thrown: unknown;
     try {
-      createHostOnlyCapabilityEnvFile(VALID_TOKEN, []);
+      createHostOnlyCapabilityMount(VALID_TOKEN, []);
     } catch (error) {
       thrown = error;
     }
@@ -699,7 +739,9 @@ describe('createHostOnlyDir: cleans up directory on setup failure (AC10)', () =>
       error instanceof Error ? error.message : String(error),
     );
     expect(
-      messages.some((message) => /env-file write failure/i.test(message)),
+      messages.some((message) =>
+        /capability file write failure/i.test(message),
+      ),
     ).toBe(true);
     expect(messages.some((message) => /rmdir failure/i.test(message))).toBe(
       true,

@@ -5,12 +5,13 @@
  */
 
 /**
- * Behavioral tests for the capability env-file early release on the launch
- * path (issue #3524). The env file that delivers LLXPRT_CAPABILITY_TOKEN via
- * --env-file must be deleted as soon as a sandbox handshake proves the token
+ * Behavioral tests for the capability file early release on the launch
+ * path (issues #3524 and #3573). The token file that the container entrypoint
+ * reads from the bind-mounted host-only directory must be deleted, with its
+ * directory, as soon as a sandbox handshake proves the token
  * reached the container, with a bounded no-handshake fallback after the
  * sandbox process spawns. Only the credential-proxy module boundary is
- * mocked; env-file creation, cleanup composition, and the wiring are real.
+ * mocked; capability file creation, cleanup composition, and the wiring are real.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -72,8 +73,8 @@ function restoreIsolatedEnvironment(
 interface LaunchedCredentialProxy {
   readonly handshake: () => void;
   readonly exitCleanup: () => void;
-  readonly envFilePath: string;
-  readonly envFileDir: string;
+  readonly tokenFilePath: string;
+  readonly hostDir: string;
 }
 
 /**
@@ -97,7 +98,7 @@ function isTimer(value: unknown): value is NodeJS.Timeout {
   return 'refresh' in value && typeof value.refresh === 'function';
 }
 
-describe('#3524 capability env-file early release', () => {
+describe('#3524 capability file early release', () => {
   let originalEnvironment: ReadonlyMap<string, string | undefined>;
   let tmpDir = '';
   let isolatedHome = '';
@@ -174,14 +175,16 @@ describe('#3524 capability env-file early release', () => {
       [],
     );
     activeLaunchCleanup = result.credentialProxyBridgeCleanup;
-    const flagIndex = args.indexOf('--env-file');
-    const envFilePath = flagIndex === -1 ? undefined : args[flagIndex + 1];
+    const mountSuffix = ':/run/llxprt-capability:rw';
+    const mountSpec = args.find((arg) => arg.endsWith(mountSuffix));
     if (
-      envFilePath === undefined ||
+      mountSpec === undefined ||
       result.credentialProxyBridgeCleanup === undefined
     ) {
-      throw new Error('setupCredentialProxy produced no capability env file');
+      throw new Error('setupCredentialProxy produced no capability mount');
     }
+    const hostDirPath = mountSpec.slice(0, -mountSuffix.length);
+    const tokenFilePath = path.join(hostDirPath, 'token');
     // mock.calls[0] is the argument tuple of the first call; the single
     // config object is its first element.
     const launched =
@@ -197,20 +200,20 @@ describe('#3524 capability env-file early release', () => {
     return {
       handshake,
       exitCleanup: result.credentialProxyBridgeCleanup,
-      envFilePath,
-      envFileDir: path.dirname(envFilePath),
+      tokenFilePath,
+      hostDir: hostDirPath,
     };
   }
 
   it('removes the capability env file and its directory when the sandbox handshake fires', async () => {
     const launched = await launchCredentialProxy();
-    expect(fs.existsSync(launched.envFilePath)).toBe(true);
-    expect(fs.existsSync(launched.envFileDir)).toBe(true);
+    expect(fs.existsSync(launched.tokenFilePath)).toBe(true);
+    expect(fs.existsSync(launched.hostDir)).toBe(true);
 
     launched.handshake();
 
-    expect(fs.existsSync(launched.envFilePath)).toBe(false);
-    expect(fs.existsSync(launched.envFileDir)).toBe(false);
+    expect(fs.existsSync(launched.tokenFilePath)).toBe(false);
+    expect(fs.existsSync(launched.hostDir)).toBe(false);
   });
 
   it('treats a second handshake after the holder is cleared as a no-op (at-least-once delivery)', async () => {
@@ -219,7 +222,7 @@ describe('#3524 capability env-file early release', () => {
 
     expect(() => launched.handshake()).not.toThrow();
 
-    expect(fs.existsSync(launched.envFilePath)).toBe(false);
+    expect(fs.existsSync(launched.tokenFilePath)).toBe(false);
   });
 
   it('keeps the composed exit cleanup as a non-throwing backstop after early deletion', async () => {
@@ -231,7 +234,19 @@ describe('#3524 capability env-file early release', () => {
     expect(capabilityArtifacts(capabilityRuntimeRoot)).toStrictEqual([]);
   });
 
-  it('removes the env file via the bounded fallback when no handshake ever arrives', async () => {
+  it('still removes the host directory when the container entrypoint already unlinked the file (#3573)', async () => {
+    const launched = await launchCredentialProxy();
+    // The entrypoint unlinks the token through the bind mount, which is the
+    // same inode entry the host sees.
+    fs.unlinkSync(launched.tokenFilePath);
+
+    launched.handshake();
+
+    expect(fs.existsSync(launched.hostDir)).toBe(false);
+    expect(() => launched.exitCleanup()).not.toThrow();
+  });
+
+  it('removes the token file via the bounded fallback when no handshake ever arrives', async () => {
     vi.useFakeTimers();
     try {
       const launched = await launchCredentialProxy();
@@ -243,12 +258,12 @@ describe('#3524 capability env-file early release', () => {
         launched.exitCleanup,
         () => {},
       );
-      expect(fs.existsSync(launched.envFilePath)).toBe(true);
+      expect(fs.existsSync(launched.tokenFilePath)).toBe(true);
 
       vi.advanceTimersByTime(FALLBACK_BOUND_MS);
 
-      expect(fs.existsSync(launched.envFilePath)).toBe(false);
-      expect(fs.existsSync(launched.envFileDir)).toBe(false);
+      expect(fs.existsSync(launched.tokenFilePath)).toBe(false);
+      expect(fs.existsSync(launched.hostDir)).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -293,14 +308,14 @@ describe('#3524 capability env-file early release', () => {
     const second = await launchCredentialProxy();
     try {
       expect(capabilityArtifacts(capabilityRuntimeRoot)).toHaveLength(2);
-      expect(first.envFilePath).not.toBe(second.envFilePath);
+      expect(first.tokenFilePath).not.toBe(second.tokenFilePath);
       first.handshake();
-      expect(fs.existsSync(first.envFilePath)).toBe(false);
-      expect(fs.existsSync(second.envFilePath)).toBe(true);
+      expect(fs.existsSync(first.tokenFilePath)).toBe(false);
+      expect(fs.existsSync(second.tokenFilePath)).toBe(true);
       first.exitCleanup();
-      expect(fs.existsSync(second.envFilePath)).toBe(true);
+      expect(fs.existsSync(second.tokenFilePath)).toBe(true);
       second.handshake();
-      expect(fs.existsSync(second.envFilePath)).toBe(false);
+      expect(fs.existsSync(second.tokenFilePath)).toBe(false);
     } finally {
       first.exitCleanup();
       second.exitCleanup();
@@ -315,7 +330,7 @@ describe('#3524 capability env-file early release', () => {
 
       vi.advanceTimersByTime(FALLBACK_BOUND_MS);
 
-      expect(fs.existsSync(launched.envFilePath)).toBe(true);
+      expect(fs.existsSync(launched.tokenFilePath)).toBe(true);
 
       wireCleanupHandlers(
         spawnSandboxStandin(),
@@ -326,7 +341,7 @@ describe('#3524 capability env-file early release', () => {
         () => {},
       );
       vi.advanceTimersByTime(FALLBACK_BOUND_MS);
-      expect(fs.existsSync(launched.envFilePath)).toBe(false);
+      expect(fs.existsSync(launched.tokenFilePath)).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -347,12 +362,12 @@ describe('#3524 capability env-file early release', () => {
 
       launched.exitCleanup();
 
-      expect(fs.existsSync(launched.envFileDir)).toBe(false);
+      expect(fs.existsSync(launched.hostDir)).toBe(false);
       expect(vi.getTimerCount()).toBe(0);
 
       vi.advanceTimersByTime(FALLBACK_BOUND_MS);
 
-      expect(fs.existsSync(launched.envFileDir)).toBe(false);
+      expect(fs.existsSync(launched.hostDir)).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -370,7 +385,7 @@ describe('#3524 capability env-file early release', () => {
   function forceRealCleanupFailure(
     launched: LaunchedCredentialProxy,
   ): () => void {
-    return denyDeletion(launched.envFilePath, launched.envFileDir);
+    return denyDeletion(launched.tokenFilePath, launched.hostDir);
   }
 
   it('does not throw when the handshake release fails on a real filesystem error', async () => {
@@ -383,9 +398,9 @@ describe('#3524 capability env-file early release', () => {
 
       // The release genuinely failed (file survives) and the failure was
       // logged rather than propagated into the proxy connection handler.
-      expect(fs.existsSync(launched.envFilePath)).toBe(true);
+      expect(fs.existsSync(launched.tokenFilePath)).toBe(true);
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('capability env-file release failed'),
+        expect.stringContaining('capability file release failed'),
         expect.any(Error),
       );
     } finally {
@@ -411,7 +426,7 @@ describe('#3524 capability env-file early release', () => {
       // exception; the guard must keep the fallback best-effort.
       expect(() => vi.advanceTimersByTime(FALLBACK_BOUND_MS)).not.toThrow();
 
-      expect(fs.existsSync(launched.envFilePath)).toBe(true);
+      expect(fs.existsSync(launched.tokenFilePath)).toBe(true);
     } finally {
       vi.useRealTimers();
       restoreCleanup();
@@ -426,10 +441,10 @@ describe('#3524 capability env-file early release', () => {
         /Credential proxy cleanup failed/,
       );
 
-      // The throw reports a genuinely failed deletion: the env file is
+      // The throw reports a genuinely failed deletion: the token file is
       // still on disk, proving the early-release guard did not silently
       // weaken the exit path.
-      expect(fs.existsSync(launched.envFilePath)).toBe(true);
+      expect(fs.existsSync(launched.tokenFilePath)).toBe(true);
     } finally {
       restoreCleanup();
     }
