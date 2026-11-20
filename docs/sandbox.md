@@ -751,9 +751,19 @@ before the main container and is removed when the install ends:
   mounts and none of the host passthrough variables.
 - On the current-user path it runs directly as your UID and GID with
   `HOME=/tmp`, because it needs neither the root setup stage nor `su`.
-- Whatever the install leaves behind, including daemons, ends with that
-  container. Nothing project-controlled runs in the main container's
-  entrypoint between the token capture and the final `exec`.
+- When the install ends, the preparation container is removed and every
+  process it started, including daemons, ends with it. Nothing
+  project-controlled runs in the main container's entrypoint between the token
+  capture and the final `exec`.
+
+Process cleanup does not undo file changes. The private dependency volumes and
+the read-write workspace bind are mounted into the main container, so any file
+the install wrote to either one is there when the main container starts. That
+includes modified dependencies in `node_modules` and any edits that a
+lifecycle script made to source files in the checkout. The main container runs
+the checked-out CLI, which is the intended recipient of the capability, so
+review the checkout and its lockfile as you would before running its code
+directly.
 
 A failed install fails the launch with `Failed to prepare isolated Linux
 dependencies for LLxprt source development`; a missing `package.json` or
@@ -762,7 +772,9 @@ names that cause. The main container is never started, and the dependency
 volumes, the preparation container and the capability directory are released
 as for any other failed launch. A proxied-network launch starts the proxy
 sidecar first, so the install reaches the network the same way the main
-container does. Installer output appears in your terminal while the install runs.
+container does. If that sidecar exits while the install runs, the launch fails
+with the sidecar's error and the main container is not started. Installer
+output appears in your terminal while the install runs.
 
 ### SSH agent forwarding
 
@@ -1193,11 +1205,22 @@ can open and delete the file. The entrypoint refuses to start without the file
 rather than run the CLI with no credential channel or leave a readable copy.
 
 **"Failed to prepare isolated Linux dependencies for LLxprt source development"**
-— the separate preparation container's `bun install --no-save` failed. The
-install output is printed above the message. The failure is in the checkout's
-dependencies or in the container's network access, since the preparation
-container gets the same network settings as the main container (a
-`network: off` session cannot install). See
+— the separate preparation container did not finish its install. Two causes
+produce this message:
+
+- The install ran and `bun install --no-save` failed. The install output is
+  printed above the message. The failure is in the checkout's dependencies or
+  in the container's network access, since the preparation container gets the
+  same network settings as the main container (a `network: off` session cannot
+  install).
+- The container engine could not start the preparation container, so no
+  install ran. The message then ends with the engine's exit status or with the
+  reason it could not be started, and the dependencies and the network are not
+  the cause. Check the engine's own error output printed above the message
+  (for example from `docker run` or `podman run`), and check that the engine is
+  running, the image is present and any `SANDBOX_FLAGS` are valid for it.
+
+See
 [Source-checkout dependency preparation](#source-checkout-dependency-preparation).
 
 **SSH not working in Podman on macOS** — use a stable socket path. The default
