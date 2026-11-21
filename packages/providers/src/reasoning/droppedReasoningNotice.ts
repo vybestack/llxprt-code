@@ -22,29 +22,30 @@ export interface DroppedReasoningNotice {
   readonly message: string;
 }
 
-// coreEvents is process-wide, so the record of what was announced is too.
-// Each entry is one (session, endpoint, setting, reason) combination.
-const announcedNotices = new Set<string>();
-
 /**
- * Tell the user, through the user-feedback channel (interactive UI history
+ * Tells the user, through the user-feedback channel (interactive UI history
  * and headless stderr), that a configured reasoning setting is not being
- * sent. Requests repeat every turn, so each distinct notice is shown once.
+ * sent. Requests repeat every turn, so each distinct (session, endpoint,
+ * setting, reason) notice is shown once for the lifetime of the owner.
  */
-export function announceDroppedReasoningSetting(
-  notice: DroppedReasoningNotice,
-): void {
-  const key = JSON.stringify([
-    notice.sessionKey,
-    notice.providerName,
-    notice.model,
-    notice.baseUrl ?? null,
-    notice.setting,
-    notice.reason,
-  ]);
-  if (announcedNotices.has(key)) {
-    return;
+export class DroppedReasoningAnnouncer {
+  private readonly announced = new Set<string>();
+
+  announce(notices: readonly DroppedReasoningNotice[]): void {
+    for (const notice of notices) {
+      const key = JSON.stringify([
+        notice.sessionKey,
+        notice.providerName,
+        notice.model,
+        notice.baseUrl ?? null,
+        notice.setting,
+        notice.reason,
+      ]);
+      if (this.announced.has(key)) {
+        continue;
+      }
+      this.announced.add(key);
+      coreEvents.emitFeedback('warning', notice.message);
+    }
   }
-  announcedNotices.add(key);
-  coreEvents.emitFeedback('warning', notice.message);
 }

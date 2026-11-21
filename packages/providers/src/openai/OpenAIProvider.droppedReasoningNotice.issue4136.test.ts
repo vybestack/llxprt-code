@@ -89,16 +89,17 @@ interface SessionHarness {
 }
 
 /**
- * One provider and one runtime stand for one user session; each sendTurn()
- * drives a full generateChatCompletion request through the provider.
+ * One runtime stands for one user session; each sendTurn() drives a full
+ * generateChatCompletion request through the provider. Sessions get their own
+ * provider unless one is passed in to be shared.
  */
 function createLocalSession(
   runtimeId: string,
   modelBehavior: Readonly<Record<string, unknown>>,
   feedback: UserFeedbackPayload[],
   chatBodies: Array<Record<string, unknown>>,
+  provider = new OpenAIProvider('local-key', LOCAL_BASE_URL),
 ): SessionHarness {
-  const provider = new OpenAIProvider('local-key', LOCAL_BASE_URL);
   const settings = new SettingsService();
   settings.setProviderSetting('openai', 'model', LOCAL_MODEL);
   for (const [key, value] of Object.entries(modelBehavior)) {
@@ -236,6 +237,32 @@ describe('OpenAI Chat dropped reasoning settings reach the user (issue #4136)', 
       'warning',
       'warning',
     ]);
+  });
+
+  it('tells each session that shares one provider', async () => {
+    const provider = new OpenAIProvider('local-key', LOCAL_BASE_URL);
+    const first = createLocalSession(
+      'issue4136-shared-provider-first',
+      { 'reasoning.effort': 'low' },
+      feedback,
+      chatBodies,
+      provider,
+    );
+    const second = createLocalSession(
+      'issue4136-shared-provider-second',
+      { 'reasoning.effort': 'low' },
+      feedback,
+      chatBodies,
+      provider,
+    );
+
+    await first.sendTurn();
+    await second.sendTurn();
+    await first.sendTurn();
+    await second.sendTurn();
+
+    expect(chatBodies.map(reasoningFields)).toStrictEqual([{}, {}, {}, {}]);
+    expect(feedback).toHaveLength(2);
   });
 
   it('sends template kwargs effort and stays silent when the wire format is explicit', async () => {

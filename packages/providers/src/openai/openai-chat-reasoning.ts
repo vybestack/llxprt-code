@@ -28,7 +28,7 @@ import {
   type ReasoningResolution,
   type ResolvedReasoningConfiguration,
 } from '../reasoning/reasoning-config-resolver.js';
-import { announceDroppedReasoningSetting } from '../reasoning/droppedReasoningNotice.js';
+import type { DroppedReasoningNotice } from '../reasoning/droppedReasoningNotice.js';
 import { hasExplicitReasoningField } from './openaiReasoningDialect.js';
 
 export interface OpenAIChatReasoningInput {
@@ -54,12 +54,16 @@ interface ParsedReasoningBehavior {
   readonly enabledMap?: ReasoningEnabledMap;
 }
 
-/** Resolve and apply generic reasoning settings to an OpenAI Chat body. */
+/**
+ * Resolve and apply generic reasoning settings to an OpenAI Chat body.
+ * Returns the configured settings that were left out of the body, for the
+ * caller to report to the user when the request is sent.
+ */
 export function applyOpenAIChatReasoning(
   input: OpenAIChatReasoningInput,
-): void {
+): readonly DroppedReasoningNotice[] {
   if (hasExplicitReasoningField(input.body)) {
-    return;
+    return [];
   }
 
   const behavior = parseReasoningBehavior(input.modelBehavior);
@@ -73,8 +77,9 @@ export function applyOpenAIChatReasoning(
     enabledMap: behavior.enabledMap,
   });
 
-  warnForDroppedReasoning(input, behavior, resolved);
+  const dropped = warnForDroppedReasoning(input, behavior, resolved);
   applyResolvedReasoning(input.body, resolved);
+  return dropped;
 }
 
 function parseReasoningBehavior(
@@ -111,13 +116,16 @@ function warnForDroppedReasoning(
   input: OpenAIChatReasoningInput,
   behavior: ParsedReasoningBehavior,
   resolved: ResolvedReasoningConfiguration,
-): void {
+): DroppedReasoningNotice[] {
+  const dropped: Array<DroppedReasoningNotice | undefined> = [];
   if (behavior.reasoning.effort !== undefined) {
-    warnForOutcome(
-      input,
-      'reasoning.effort',
-      resolved.effortFormat,
-      resolved.effort,
+    dropped.push(
+      warnForOutcome(
+        input,
+        'reasoning.effort',
+        resolved.effortFormat,
+        resolved.effort,
+      ),
     );
   }
   // A direct budget is consumed in Chat only by the anthropic-budget effort
@@ -127,16 +135,19 @@ function warnForDroppedReasoning(
   // outcome, so a suppressed or unrepresentable budget is still reported
   // (issue #3255).
   if (behavior.reasoning.budgetTokens !== undefined) {
-    warnForDroppedBudget(input, resolved);
+    dropped.push(warnForDroppedBudget(input, resolved));
   }
   if (behavior.reasoning.enabled !== undefined) {
-    warnForOutcome(
-      input,
-      'reasoning.enabled',
-      resolved.enabledFormat,
-      resolved.enabled,
+    dropped.push(
+      warnForOutcome(
+        input,
+        'reasoning.enabled',
+        resolved.enabledFormat,
+        resolved.enabled,
+      ),
     );
   }
+  return dropped.filter((notice) => notice !== undefined);
 }
 
 function warnForOutcome(
@@ -144,11 +155,11 @@ function warnForOutcome(
   setting: 'reasoning.effort' | 'reasoning.enabled',
   selectedFormat: string,
   outcome: ReasoningResolution<string | number | boolean>,
-): void {
+): DroppedReasoningNotice | undefined {
   if (outcome.state !== 'suppressed' && outcome.state !== 'unrepresentable') {
-    return;
+    return undefined;
   }
-  warnDropped(input, {
+  return warnDropped(input, {
     setting,
     selectedFormat,
     reason: outcome.reason,
@@ -160,27 +171,26 @@ function warnForOutcome(
 function warnForDroppedBudget(
   input: OpenAIChatReasoningInput,
   resolved: ResolvedReasoningConfiguration,
-): void {
+): DroppedReasoningNotice | undefined {
   if (resolved.effortFormat !== 'anthropic-budget') {
-    warnDropped(input, {
+    return warnDropped(input, {
       setting: 'reasoning.budgetTokens',
       selectedFormat: resolved.effortFormat,
       reason: 'budget-not-supported',
       detail:
         'direct budgets are only supported by the anthropic-budget effort format',
     });
-    return;
   }
   if (resolved.effort.state === 'emitted') {
-    return;
+    return undefined;
   }
   if (
     resolved.effort.state !== 'suppressed' &&
     resolved.effort.state !== 'unrepresentable'
   ) {
-    return;
+    return undefined;
   }
-  warnDropped(input, {
+  return warnDropped(input, {
     setting: 'reasoning.budgetTokens',
     selectedFormat: resolved.effortFormat,
     reason: resolved.effort.reason,
@@ -198,7 +208,7 @@ interface DroppedSettingWarning {
 function warnDropped(
   input: OpenAIChatReasoningInput,
   warning: DroppedSettingWarning,
-): void {
+): DroppedReasoningNotice {
   input.logger.warn(
     () =>
       `OpenAI Chat omitted configured ${warning.setting} because ${warning.detail}`,
@@ -212,7 +222,7 @@ function warnDropped(
   );
   // The debug log above is invisible in normal use; the user must also learn
   // that the server will fall back to its own default (issue #4136).
-  announceDroppedReasoningSetting({
+  return {
     sessionKey: input.sessionKey,
     providerName: input.providerName,
     model: input.model,
@@ -220,7 +230,7 @@ function warnDropped(
     setting: warning.setting,
     reason: warning.reason,
     message: formatUserNotice(input, warning),
-  });
+  };
 }
 
 function formatUserNotice(

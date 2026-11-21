@@ -23,6 +23,7 @@ import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 import { applyOpenAIChatReasoning } from './openai-chat-reasoning.js';
+import type { DroppedReasoningNotice } from '../reasoning/droppedReasoningNotice.js';
 import {
   parseOutputLimits,
   type OutputLimitConfig,
@@ -40,6 +41,8 @@ export interface RequestContext {
   streamingEnabled: boolean;
   requestBody: OpenAI.Chat.ChatCompletionCreateParams;
   messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[];
+  /** Configured reasoning settings left out of requestBody (issue #4136). */
+  droppedReasoningNotices: readonly DroppedReasoningNotice[];
 }
 
 /**
@@ -108,14 +111,14 @@ function resolveReasoningConfig(
   model: string,
   providerName: string,
   logger: DebugLogger,
-): void {
+): readonly DroppedReasoningNotice[] {
   const baseUrl =
     options.resolved.baseURL ??
     (typeof ephemeralSettings['base-url'] === 'string'
       ? ephemeralSettings['base-url']
       : undefined);
 
-  applyOpenAIChatReasoning({
+  return applyOpenAIChatReasoning({
     body: requestBody,
     modelBehavior: readInvocationRecord(options.invocation.modelBehavior),
     baseUrl,
@@ -128,7 +131,7 @@ function resolveReasoningConfig(
 
 /**
  * Apply model-param overrides, reasoning config, and stream-options to the
- * request body.
+ * request body. Returns the reasoning settings that were left out.
  */
 function applyRequestBodyOverrides(
   requestBody: OpenAIChatRequestBody,
@@ -138,7 +141,7 @@ function applyRequestBodyOverrides(
   streamingEnabled: boolean,
   providerName: string,
   logger: DebugLogger,
-): void {
+): readonly DroppedReasoningNotice[] {
   // Apply request overrides, sanitizing prompt_cache_key at the transport
   // boundary so an overlong value (e.g. a subagent runtimeId) never reaches
   // the API (issue #2853). Non-string or empty cache keys are dropped.
@@ -159,7 +162,7 @@ function applyRequestBodyOverrides(
     }
   }
 
-  resolveReasoningConfig(
+  const droppedReasoningNotices = resolveReasoningConfig(
     requestBody,
     options,
     ephemeralSettings,
@@ -176,6 +179,7 @@ function applyRequestBodyOverrides(
   if (streamingEnabled) {
     Object.assign(requestBody, { stream_options: streamOptions });
   }
+  return droppedReasoningNotices;
 }
 
 /**
@@ -292,7 +296,7 @@ export async function prepareRequest(
   }
 
   // Apply model params, reasoning, and stream-options overrides
-  applyRequestBodyOverrides(
+  const droppedReasoningNotices = applyRequestBodyOverrides(
     requestBody,
     options,
     ephemeralSettings,
@@ -314,5 +318,6 @@ export async function prepareRequest(
     streamingEnabled,
     requestBody,
     messagesWithSystem,
+    droppedReasoningNotices,
   };
 }

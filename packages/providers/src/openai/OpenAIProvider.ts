@@ -75,6 +75,7 @@ import {
   OpenAIPromptEnvelopeStore,
   prepareOpenAIPromptProjection,
 } from './OpenAIPromptEnvelopeStore.js';
+import { DroppedReasoningAnnouncer } from '../reasoning/droppedReasoningNotice.js';
 import {
   prepareOpenAIChatProjection,
   readOpenAIMediaSupport,
@@ -159,6 +160,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
   private readonly preparedPromptEnvelopes = new OpenAIPromptEnvelopeStore();
+  private readonly droppedReasoning = new DroppedReasoningAnnouncer();
   private readonly getUnallowedModelParameters: ReturnType<typeof makeResolver>;
 
   protected getLogger(): DebugLogger {
@@ -700,18 +702,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
   }
 
-  private async *generateChatCompletionImpl(
+  /**
+   * Use the context prepared for prompt projection, or prepare one now, and
+   * report any configured reasoning settings it leaves off the wire.
+   */
+  private async resolveChatRequestContext(
     options: NormalizedGenerateChatOptions,
-    toolFormatter: ToolFormatter,
     client: OpenAI,
     logger: DebugLogger,
     mediaRequest: ResolvedMediaRequest,
     preparedRequestContext?: Awaited<ReturnType<typeof prepareRequest>>,
-  ): AsyncGenerator<IContent, void, unknown> {
-    const abortSignal = getRequestSignal(options);
+  ): Promise<Awaited<ReturnType<typeof prepareRequest>>> {
     const { prepareRequest } = await import('./OpenAIRequestPreparation.js');
-    const { executeApiRequest } = await import('./OpenAIApiExecution.js');
-    const { mergeInvocationHeaders } = await import('./OpenAIClientFactory.js');
 
     // Kimi media pre-pass: upload PDFs via the Files API and replace them
     // with file-id references so large documents stay out of the token budget.
@@ -737,6 +739,28 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         this.getMediaTransportCapabilities(),
       ));
     registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
+    this.droppedReasoning.announce(requestContext.droppedReasoningNotices);
+    return requestContext;
+  }
+
+  private async *generateChatCompletionImpl(
+    options: NormalizedGenerateChatOptions,
+    toolFormatter: ToolFormatter,
+    client: OpenAI,
+    logger: DebugLogger,
+    mediaRequest: ResolvedMediaRequest,
+    preparedRequestContext?: Awaited<ReturnType<typeof prepareRequest>>,
+  ): AsyncGenerator<IContent, void, unknown> {
+    const abortSignal = getRequestSignal(options);
+    const { executeApiRequest } = await import('./OpenAIApiExecution.js');
+    const { mergeInvocationHeaders } = await import('./OpenAIClientFactory.js');
+    const requestContext = await this.resolveChatRequestContext(
+      options,
+      client,
+      logger,
+      mediaRequest,
+      preparedRequestContext,
+    );
 
     const {
       model,
