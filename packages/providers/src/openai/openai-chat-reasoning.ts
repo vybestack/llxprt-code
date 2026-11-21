@@ -22,10 +22,13 @@ import {
   readOptionalPositiveInteger,
 } from '../reasoning/reasoning-behavior-parsing.js';
 import {
+  emittingEffortWireFormats,
+  emittingEnabledWireFormats,
   resolveReasoningConfiguration,
   type ReasoningResolution,
   type ResolvedReasoningConfiguration,
 } from '../reasoning/reasoning-config-resolver.js';
+import { announceDroppedReasoningSetting } from '../reasoning/droppedReasoningNotice.js';
 import { hasExplicitReasoningField } from './openaiReasoningDialect.js';
 
 export interface OpenAIChatReasoningInput {
@@ -35,6 +38,8 @@ export interface OpenAIChatReasoningInput {
   readonly model: string;
   readonly providerName: string;
   readonly logger: DebugLogger;
+  /** Session (or agent runtime) the request belongs to; scopes user notices. */
+  readonly sessionKey: string;
 }
 
 interface ParsedReasoningBehavior {
@@ -205,6 +210,38 @@ function warnDropped(
       reason: warning.reason,
     },
   );
+  // The debug log above is invisible in normal use; the user must also learn
+  // that the server will fall back to its own default (issue #4136).
+  announceDroppedReasoningSetting({
+    sessionKey: input.sessionKey,
+    providerName: input.providerName,
+    model: input.model,
+    baseUrl: input.baseUrl,
+    setting: warning.setting,
+    reason: warning.reason,
+    message: formatUserNotice(input, warning),
+  });
+}
+
+function formatUserNotice(
+  input: OpenAIChatReasoningInput,
+  warning: DroppedSettingWarning,
+): string {
+  const notice = `${warning.setting} is set but was not sent to ${input.providerName} model ${input.model} because ${warning.detail} (${warning.reason}).`;
+  const remedy = describeWireFormatRemedy(warning.reason);
+  return remedy === undefined ? notice : `${notice} ${remedy}`;
+}
+
+/** Name the explicit selector values that would put the setting on the wire. */
+function describeWireFormatRemedy(reason: string): string | undefined {
+  switch (reason) {
+    case 'effort-format-undetected':
+      return `To send it, set reasoning.effortWireFormat to one of: ${emittingEffortWireFormats('openai-chat').join(', ')}.`;
+    case 'enabled-format-undetected':
+      return `To send it, set reasoning.enabledWireFormat to one of: ${emittingEnabledWireFormats('openai-chat').join(', ')}.`;
+    default:
+      return undefined;
+  }
 }
 
 type DroppedOutcome = Extract<

@@ -122,6 +122,7 @@ function resolveReasoningConfig(
     model,
     providerName,
     logger,
+    sessionKey: options.invocation.sessionId ?? options.invocation.runtimeId,
   });
 }
 
