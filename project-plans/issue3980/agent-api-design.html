@@ -352,10 +352,11 @@ type AgentSnapshot = {
 <script type="text/plain" class="code">
 type AgentEvent = { readonly seq: Sequence; readonly at: number; readonly agent: AgentId; readonly turn?: TurnId } & (
   | { type: 'turn.started'; input: UserInput }
-  | { type: 'model.attempt'; step: number; attempt: AttemptId; model: ModelRef; tokens: number }
-  | { type: 'model.text' | 'model.thinking'; attempt: AttemptId; delta: string }   // provisional
-  | { type: 'model.attempt.discarded'; attempt: AttemptId; error: ModelErrorKind }  // UI drops its deltas
-  | { type: 'model.response'; attempt: AttemptId; usage: Usage; finish: FinishReason } // commits the attempt
+  | ({ type: 'model.attempt'; step: number; attempt: AttemptId; model: ModelRef; tokens: number } & ModelAttemptSource)
+  | { type: 'model.text' | 'model.thinking'; attempt: AttemptId; part: string; delta: string } // provisional append only
+  | { type: 'model.part.replaced'; attempt: AttemptId; part: TranscriptPart } // revise a provisional snapshot by ID
+  | { type: 'model.attempt.discarded'; attempt: AttemptId; error: ModelErrorKind }  // UI drops all provisional parts
+  | ({ type: 'model.response'; attempt: AttemptId; usage: Usage; finish: FinishReason } & ModelAttemptSource) // commits the attempt
   | { type: 'tool.proposed'; call: ToolCall }
   | { type: 'policy.evaluated'; call: CallId; outcome: 'allow' | 'deny' | 'ask'; rule: RuleId; layer: string }
   | { type: 'decision.requested'; request: DecisionRequest }
@@ -471,6 +472,7 @@ interface ToolDescriptor {
   readonly concurrency: 'parallel' | 'exclusive'; // assigned by the host adapter
   readonly resources?: readonly string[]; // lock keys for cross-agent exclusion, e.g. 'fs:/repo'
   readonly shell?: { readonly commandArg: string }; // host-assigned shell semantics, never from model/MCP text
+  readonly policyIdentity: { readonly name: string; readonly server?: string }; // trusted source-tool matching facts
 }
 type Effect = 'read' | 'write' | 'execute' | 'network' | 'spawn';
 interface PreparedCall {
@@ -480,9 +482,14 @@ interface PreparedCall {
   readonly preconditions?: readonly Precondition[]; // e.g. file hash at preparation
   readonly shell?: PreparedShell;         // required for descriptors declaring shell semantics
 }
-type PreparedShell =
-  | { readonly parsed: false; readonly command: string; readonly error: string }
-  | { readonly parsed: true; readonly command: string; readonly segments: readonly ShellSegment[] };
+type PreparedShell = {
+  readonly command: string;               // exact raw final argument, before trimming or argv parsing
+  readonly policySplit: readonly { readonly command: string; readonly hasRedirection: boolean }[];
+  readonly hasRedirection: boolean;        // whole-command fact; pipes do not count
+} & (
+  | { readonly parsed: false; readonly error: string }
+  | { readonly parsed: true; readonly segments: readonly ShellSegment[] }
+);
 interface ShellSegment {
   readonly command: string;
   readonly argv: readonly string[];
@@ -494,7 +501,7 @@ type ToolOutcome =
   | { status: 'stale' };                  // preconditions failed; the agent re-prepares and re-asks
 </script>
 <ul>
-  <li><b>Trust.</b> A tool's effects and concurrency class come from the host adapter that wraps it, not from the tool's own description. The adapter for an MCP server assigns conservative defaults (<code>execute</code>, <code>network</code>, <code>write</code>, exclusive) unless the host's own settings for that server say otherwise. Tool ids are qualified by source, so two servers cannot impersonate each other or a built-in.</li>
+  <li><b>Trust.</b> P12/P13 populate required <code>policyIdentity = {name, server?}</code> from the registered builtin name or trusted MCP connection/server namespace and original source tool name, never qualified ToolId parsing or untrusted descriptions/arguments. Validate the closed identity shape, with nonempty name and optional string server, when pinning descriptors; core rejects a nonempty server whose name does not start with <code>server + '__'</code> before dispatch. An absent or empty server retains today's no-server-check behavior. Literal stars remain literal. A tool's effects and concurrency class come from the host adapter that wraps it, not from the tool's own description. The adapter for an MCP server assigns conservative defaults (<code>execute</code>, <code>network</code>, <code>write</code>, exclusive) unless the host's own settings for that server say otherwise. Tool ids are qualified by source, so two servers cannot impersonate each other or a built-in.</li>
   <li><b>Policy is not a sandbox.</b> Policy decides whether the agent asks the tool to act. The host's executor and sandbox enforce what the action can actually touch. A path rule is checked against the resolved real path that <code>prepare</code> returns, not against the text the model wrote.</li>
   <li><b>Dispatch enforcement.</b> A call naming a tool outside the pinned set gets an error result. Advertising only certain tools is not the enforcement mechanism; dispatch is.</li>
   <li><b>Catalog changes.</b> A new or updated tool appears from the next turn. A revocation (server disconnected, trust withdrawn) aborts <code>ToolSet.revoked</code>. Pending decisions for revoked tools resolve as rejected, running calls see their signal abort, and later calls get a <code>revoked</code> error result.</li>
@@ -537,31 +544,76 @@ interface ToolResult {
 <h2 id="policy">8. Policy and decisions</h2>
 <h3>Two kinds of policy, evaluated in a fixed order</h3>
 <script type="text/plain" class="code">
+type ApprovalMode = 'default' | 'autoEdit' | 'yolo'; // separate from normal/plan execution mode
 interface PolicyDocument {
-  readonly authority: readonly PolicyRule[];     // host restrictions: trust, organization; only deny or ask
-  readonly preferences: readonly PolicyLayer[];  // approval modes and user rules; first match wins
+  readonly authority: readonly RestrictionRule[]; // independent host restrictions; never allow
+  readonly preferences: readonly PolicyLayer[];   // independently editable, excludes source-stack copies
+  readonly sourceStacks: readonly PolicySourceStack[]; // paired source-owned restrictions/preferences
+  readonly approvalMode: ApprovalMode;
   readonly fallback: 'allow' | 'deny' | 'ask';
 }
 interface PolicyLayer { readonly name: string; readonly rules: readonly PolicyRule[] }
+interface PolicySourceStack {
+  readonly id: string;                         // stable authority-owned group, not an individual file
+  readonly restrictions: readonly RestrictionRule[];
+  readonly preferences: readonly PolicyLayer[]; // complete ranked source rules for this group
+}
 interface PolicyRule {
   readonly id: RuleId;
   readonly match: PolicyMatch;
   readonly outcome: 'allow' | 'deny' | 'ask';
-  readonly reason?: string;                      // to the model on deny, to the person on ask
+  readonly priority: number;                    // finite; descending, omitted old priority becomes zero
+  readonly order: number;                       // original insertion order; ascending on ties
+  readonly allowRedirection?: boolean;          // only the winning allow's exemption applies
+  readonly provenance: PolicyProvenance;
+  readonly reason?: string;
 }
-interface PolicyMatch {                          // every present field must match
-  readonly tools?: readonly ToolPattern[];       // 'builtin/*', 'mcp:github/*'
-  readonly effects?: readonly Effect[];          // matches if the call has any listed effect
-  readonly args?: readonly ArgMatcher[];         // all must match; a missing argument never matches
+type RestrictionRule = PolicyRule & { readonly outcome: 'deny' | 'ask' };
+interface PolicyProvenance {
+  readonly source: 'default' | 'user' | 'admin' | 'settings' | 'confirmed' | 'host';
+  readonly sourceId: string;                    // opaque diagnostic identity, not a file capability
+  readonly ruleIndex: number;
+  readonly tier?: 1 | 2 | 3;
+  readonly sourcePriority?: number;
+  readonly expansionIndex: number;
 }
+interface PolicyMatch {                         // all present fields must match
+  readonly tools?: readonly ToolPattern[];      // new authored qualified patterns
+  readonly sourceTool?: { readonly exact?: string; readonly prefix?: string }; // exact OR prefix; host-resolved identity
+  readonly effects?: readonly Effect[];
+  readonly modes?: readonly ApprovalMode[];     // absent/empty means all; also valid on authority
+  readonly args?: readonly ArgMatcher[];        // AND; a missing named arg never matches
+  readonly unless?: readonly PolicyMatch[];    // no listed predicate may match; authority-owned exceptions
+}
+interface PolicyRegex {
+  readonly flavor: 'ecmascript';            // native JavaScript RegExp, as in today's engine
+  readonly source: string;                      // effective pattern, not slash-delimited
+  readonly flags: string;                       // validated ECMAScript flags; TOML supplies ''
+  readonly input: PolicyRegexInput;             // replayable validation/transform evidence, not a callback
+}
+type PolicyRegexInput =
+  | { readonly path: 'directory-argsPattern' | 'single-file-argsPattern'; readonly text: string }
+  | { readonly path: 'directory-commandRegex' | 'single-file-commandRegex' | 'utils-commandRegex'; readonly text: string }
+  | { readonly path: 'directory-commandPrefix' | 'single-file-commandPrefix' | 'utils-commandPrefix' | 'dynamic-commandPrefix'; readonly text: string }
+  | { readonly path: 'utils-argsPattern' | 'direct'; readonly source: string; readonly flags: string };
+declare function normalizePolicyRegex(input: PolicyRegexInput): PolicyRegex;
+declare function derivePolicySourceStack(id: string, preferences: readonly PolicyLayer[]): PolicySourceStack;
 type ArgMatcher =
-  | { arg: string; pathUnder: string }           // checked on the real path from prepare()
-  | { arg: string; commandPrefix: readonly string[] } // parsed argv prefix, not string prefix
+  | { arg: string; pathUnder: string }
+  | { arg: string; commandPrefix: readonly string[] } // parsed argv; not a replacement for TOML text prefixes
   | { arg: string; equals: string | number | boolean }
-  | { arg: string; urlHost: readonly string[] };
+  | { arg: string; urlHost: readonly string[] }
+  | { serializedArgs: PolicyRegex };            // stable sorted-key JSON, including commandRegex wrappers
 </script>
-<div class="rule"><b>Evaluation.</b> For a prepared call: (1) every authority rule that matches applies, and the strictest one wins (deny before ask). (2) If authority did not deny, the first match among grants, then preference layers, then the fallback, gives the preference outcome. (3) The final outcome is the stricter of the authority outcome and the preference outcome, ordered deny, ask, allow. So no approval mode, grant or "yolo" preset can get past an authority deny, and an authority ask always asks.</div>
-<p>Approval modes are preference presets that the host builds, for example auto-edit as a layer that allows <code>write</code> under the workspace. <code>set-preferences</code> swaps the preference layers. <code>set-authority</code> replaces authority, and the agent then revokes every grant that conflicts with the new authority. A policy change applies at the next policy evaluation, or at the end of the turn if no evaluation happens first. Calls already waiting on a decision are evaluated again: if the new outcome is allow, the decision resolves with <code>by: 'policy'</code>, and if it is deny, the decision resolves as rejected.</p>
+<div class="rule"><b>Evaluation.</b> Core alone evaluates policy. First validate the pinned descriptor's trusted policyIdentity, never infer it from ToolId or model arguments, and apply the non-bypassable destructive-command deny to the raw shell text. At one policy revision and approval-mode snapshot, evaluate independent authority and every source stack's effective restrictions and take the strictest result (deny before ask). Then rank independently editable preferences, source-stack preference copies and remembered approvals by descending priority and ascending insertion order, falling back only if none matches. Layer order supplies stable insertion order, not a priority override. New remembered approvals occupy priority 2.95 after pre-existing rules at that priority. The final result is the stricter of authority and preference. No priority, preset, redirection exemption or grant can override an applicable authority restriction. Shell traversal below is part of this same evaluator, not an executor check.</div>
+<p><b>Priority and authority.</b> The TOML loader uses tier + priority/1000, with integer priority 0..999: defaults 1.000..1.999, user 2.000..2.999, admin 3.000..3.999. Within an admin stack, a higher-priority allow or ask can precede a lower deny today. Preserve that exception by giving each derived admin restriction an <code>unless</code> list containing the complete match predicates of every earlier admin rule in sorted order, including modes. The trusted builder places these predicates and the full ordered admin ask/deny/allow source-rule copy in one <code>PolicySourceStack</code>. Combine all admin files sharing the priority domain into that stack so cross-file exceptions remain intact. Its preference copy ensures an admin ask is not accidentally strengthened by a lower user deny. An admin allow opens only its own authority domain; independent organization/trust restrictions still apply. This derived duplication is builder-owned and tested, not two handwritten policy sources.</p>
+<p><b>Atomic source replacement.</b> <code>set-source-stacks({stacks})</code> replaces the source-stack collection at one policy application point and one policy revision. Definition and command validation verify that each pair contains the complete ranked source rules and exactly their derived restrictions/exception predicates; reject duplicate group IDs, mismatched pairs or invalid patterns before installing anything. Rule order is the original global insertion order, not field concatenation order. Missing groups or rules are removed from both copies together. The command preserves independent authority, independently editable preferences and approvalMode. <code>set-authority</code> changes only independent authority; <code>set-preferences</code> changes only independently editable layers plus approvalMode. Neither may edit a source-owned copy. Publish the entire replacement before rechecking grants or re-evaluating/settling pending decisions. No observer or dispatch sees a hybrid of old exceptions and new ranked source rules. Invalid replacement leaves the previous revision and pending decisions unchanged.</p>
+<p>For example, admin allow 3.9 for a particular operation and deny 3.1 for its tool becomes a deny that excludes the operation, plus the original ranked allow/deny preferences. Admin ask 3.9 likewise masks the lower deny and still asks even under grants. Ordinary user/default tiers cannot outrank admin. Raw <code>PolicyEngine</code> rules have no enforced tier or provenance authority, so a caller-supplied allow at 4 can beat an admin-labelled deny at 3 today. The engine ignores the source label. Andrew chose Q4 Option A: independent authority cannot be overridden by any priority. That exact raw allow-4/admin-labelled deny-3 case changes from allow to deny; an independent ask remains ask. Retain both rules and diagnose the changed outcome with both rules' provenance and priorities. Identify authority from the trusted source owner, never from an arbitrary label. Within-admin exceptions remain as described above. P05a asserts the old and new outcomes separately; P16 identifies affected runtime inputs. This is an explicit behavior change, not parity.</p>
+<p><b>Mode changes.</b> Presets remain preferences, but <code>PolicyDocument.approvalMode</code> is also an input to every rule predicate, including restrictions and their exception predicates. <code>set-preferences</code> atomically updates layers and approvalMode. All inactive rules remain loaded and validated. At the section 10 policy application point, core applies the command, increments policy revision, rechecks grants against the now-active restrictions, and re-evaluates pending decisions. No evaluation combines old-mode authority with new-mode preferences, including across compound segments. Already dispatched effects settle under their prepared token; subsequent dispatch uses the new revision. No two-command authority/preset race is permitted.</p>
+<p><b>Serialized matching.</b> Core serializes final arguments using the existing <code>stableStringify</code> behavior: sorted object keys, stable array order and JSON escaping. The host translator emits strings, never RegExp objects. For the directory TOML loader, argsPattern replaces each literal <code>.*</code> in the pattern source with <code>[^&quot;]*</code>; commandRegex produces <code>&quot;command&quot;:&quot;(?:PATTERN)</code> without that rewrite. Both run against the entire serialized argument object, not decoded argv or only the raw command. Preserve even anchor, alternation and escaping consequences. TOML commandPrefix uses JSON-escaped text plus its existing whitespace/quote/end boundary, expressed by serializedArgs. The single-file loader and dynamic rules have different transformations; the plan records them by provenance. New parsed-argv matchers remain available without being substituted for existing text regexes.</p>
+<p><b>Native regex parity.</b> Core compiles PolicyRegex with native JavaScript <code>RegExp</code>, using the same flavor and flags as today's policy engine. Native RegExp is pure computation and fits agent-core's import rule without a new dependency or host callback. Preserve d/g/i/m/s/u/v/y as supported by the runtime, reject duplicate/unknown flags and u+v, and start each test with lastIndex zero, as the existing fresh-RegExp behavior does. Existing stableStringify subjects, loader wrappers and source rewrites stay unchanged. Definition validation compiles all effective patterns, including inactive rules and exception predicates; invalid syntax/flags and source-validation errors fail before effects with sourceId/ruleIndex/field provenance.</p>
+<p>Retain <code>MAX_POLICY_REGEX_SOURCE_LENGTH = 1,024</code> UTF-16 units and the adjacent-quantifier heuristic exactly where each current path applies them. Directory argsPattern validates authored text, compiles it, validates native <code>.source</code> again, then rewrites dot-star and recompiles. Directory/utils commandRegex validates authored text before its grouped wrapper; directory/utils commandPrefix adds no length/heuristic check. The single-file loader first builds its ungrouped commandRegex wrapper or regex-escaped commandPrefix pattern, then validates that generated pattern and compiles; its argsPattern validates authored text once, without the directory rewrite or second source check. Direct/dynamic regexes and dynamic prefixes only compile, with no added length/heuristic check. A direct utils argsPattern validates its supplied native source before rewriting, without a loader-authored check. <code>PolicyRegex.input</code> retains the selected expanded input and path, plus flags for native-source inputs. The shared pure normalizer reproduces these stages and produces effective source/flags; definition and command validation rerun them and reject an effective-pattern mismatch. No caller-provided list of checks can omit a required stage. Empty optional scalar TOML fields produce no matcher as today; preserve array expansion, including empty array elements, exactly as each loader does before per-pattern normalization. Test a 1,024-unit commandRegex rejected by the single-file generated-pattern check (1,035 units), but accepted on the directory path, and 513 forward slashes accepted at the authored argsPattern check but rejected at the directory native-source check (1,026 units). There is no universal pre-wrapper cap, new subject limit or new cap on paths that currently have none. See <code>packages/policy/src/utils.ts:15,62-77</code>, <code>toml-loader.ts:284,584</code> and <code>policy-engine.ts:19</code>. Catastrophic backtracking behaves as today, including possible delay of cancellation; the source cap and heuristic do not bound runtime. Resource-safe regex evaluation is a possible follow-up issue, outside this plan. No custom interpreter or step budget is included.</p>
+<p><b>Shell traversal and exemptions.</b> Preserve the actual policy-engine branches: a matching deny or ask returns directly; a matching allow evaluates every split subcommand (deny beats ask beats allow), or for a single command asks on redirection unless that winning allow has allowRedirection true. The outer allow's exemption does not transfer to a segment with a different winner. With no match, a non-deny fallback checks compound subcommands and retains an ask fallback even if all segments allow. A single-command fallback allow has no redirection floor today. A matched allow whose nonempty command splits to zero segments asks; do not describe this lightweight splitter as a full shell parser. Pipes are segments, not redirections. Preserve all other arguments when substituting segment command text. Andrew chose Q5 Option A: keep the initial matched whole-command ask, then after approval and before dispatch evaluate every segment under one mode and policy revision. Any segment deny prevents the whole prepared call from dispatching, including echo ok &amp;&amp; restricted-cmd. Approval satisfies only asks for that exact prepared compound call, not denied segments or other calls. If the preparation, mode or policy revision changes while waiting, invalidate that approval and re-evaluate the whole call and every segment together before dispatch. This explicitly strengthens post-approval behavior while preserving the initial ask. Grants cover every segment on an allow path and cannot bypass destructive deny or effective authority. Specific human approval can satisfy an ask; it does not install an exemption for unrelated calls.</p>
 
 <h3>Grants: what an approval remembers</h3>
 <script type="text/plain" class="code">
@@ -569,7 +621,8 @@ interface Grant {
   readonly id: GrantId;
   readonly scope: GrantScope;              // offered in the request; the person picks one
   readonly duration: 'turn' | 'session';
-  readonly policyRevision: number;         // grants are dropped when authority changes against them
+  readonly policyRevision: number;         // recheck on authority or approval-mode change
+  readonly order: number;                  // stable position at remembered-approval priority 2.95
 }
 type GrantScope =
   | { kind: 'exact'; tool: ToolId; args: unknown }                  // this exact operation
@@ -658,8 +711,9 @@ type DecidedBy = 'policy' | 'human' | 'headless-rule' | 'timeout' | 'cancelled';
 <script type="text/plain" class="code">
 type AgentCommand = { readonly id?: CommandId } & (
   | { type: 'set-model'; selection: ModelSelection }
-  | { type: 'set-preferences'; layers: readonly PolicyLayer[] }
-  | { type: 'set-authority'; rules: readonly PolicyRule[] }
+  | { type: 'set-preferences'; layers: readonly PolicyLayer[]; approvalMode: ApprovalMode }
+  | { type: 'set-authority'; rules: readonly RestrictionRule[] } // independent authority only
+  | { type: 'set-source-stacks'; stacks: readonly PolicySourceStack[] } // atomically install both derived copies
   | { type: 'set-limits'; limits: Limits }
   | { type: 'set-mode'; mode: 'normal' | 'plan' }
   | { type: 'set-instructions'; instructions: readonly InstructionBlock[] }
@@ -676,7 +730,7 @@ type CommandResult = { status: 'applied'; at: Sequence } | { status: 'rejected';
 <tr><th>Input</th><th>Idle</th><th>While a turn runs</th><th>On cancel</th><th>On close</th></tr>
 <tr><td><code>submit</code></td><td>Starts a turn.</td><td><code>BusyError</code>.</td><td><code>BusyError</code> until cancelling finishes.</td><td><code>ClosedError</code>.</td></tr>
 <tr><td><code>steer</code></td><td><code>NotRunningError</code>.</td><td>Applied at the next boundary.</td><td>Dropped; counted in the result.</td><td><code>ClosedError</code>.</td></tr>
-<tr><td><code>set-preferences</code>, <code>set-authority</code>, <code>revoke-grant</code></td><td>Applied now.</td><td>Applied at the next policy evaluation, including pending decisions. If the turn ends first, applied at the turn's end, before the agent returns to idle.</td><td>Applied when cancelling finishes.</td><td>Rejected.</td></tr>
+<tr><td><code>set-preferences</code>, <code>set-authority</code>, <code>set-source-stacks</code>, <code>revoke-grant</code></td><td>Applied now.</td><td>Applied at the next policy evaluation, including pending decisions. If the turn ends first, applied at the turn's end, before the agent returns to idle.</td><td>Applied when cancelling finishes.</td><td>Rejected.</td></tr>
 <tr><td><code>set-limits</code>, <code>set-context</code>, <code>remove-context</code>, <code>set-mode</code></td><td>Applied now.</td><td>Applied at the next boundary.</td><td>Applied when cancelling finishes.</td><td>Rejected.</td></tr>
 <tr><td><code>set-model</code>, <code>set-instructions</code></td><td>Applied now.</td><td>Applied when the turn ends.</td><td>Applied when cancelling finishes.</td><td>Rejected.</td></tr>
 <tr><td><code>compact</code></td><td>Runs now.</td><td>Runs when the turn ends.</td><td>Runs when cancelling finishes.</td><td>Rejected.</td></tr>
@@ -696,8 +750,10 @@ interface ModelChoice { readonly ref: ModelRef; readonly parameters: ModelParame
 type ModelRef = { readonly provider: string; readonly model: string }; // opaque to the agent
 interface ModelParameters {
   readonly temperature?: number;
+  readonly topP?: number;
+  readonly responseJsonSchema?: JsonSchema;
   readonly maxOutputTokens?: number;
-  readonly reasoning?: { readonly effort?: 'low' | 'medium' | 'high'; readonly budgetTokens?: number };
+  readonly reasoning?: { readonly effort?: 'low' | 'medium' | 'high'; readonly budgetTokens?: number; readonly includeInOutput?: boolean };
   readonly extra?: Readonly<Record<string, string | number | boolean>>;  // passed through to the adapter
 }
 interface Limits {
@@ -747,7 +803,16 @@ type JournalRecord =
   | { kind: 'compacted'; replaces: { from: CheckpointId; to: CheckpointId }; summary: TranscriptEntry }
   | { kind: 'attempt-budget'; attempt: string; phase: 'reserved' | 'settled'; reported: UsageReport; charged: Usage; estimated: boolean }
   | { kind: 'model-recovery'; attempt: string; recovery: ModelRecovery }
-  | { kind: 'turn-ended'; result: TurnResult };
+  | ({ kind: 'model-attempt'; attempt: string } & ModelAttemptSource)
+  | { kind: 'hook-change'; attempt: string; frame?: string; provenance: HookProvenance; point: 'before-tool-selection' | 'before-model' | 'after-model'; audit: BlobRef; invalidatedReplay: readonly { readonly entry: string; readonly replay: string }[] }
+  | { kind: 'turn-ended'; result: TurnResult }
+  | { kind: 'imported-history'; sourceDigest: string; format: string; audit?: BlobRef; notices: readonly ImportNotice[] };
+interface ImportNotice {
+  readonly code: 'indeterminate-effect' | 'grants-dropped' | 'replay-excluded' | 'compressed-history';
+  readonly sourceSequence?: number;
+  readonly call?: CallId;
+  readonly message: string;
+}
 </script>
 <ul>
   <li><b>The journal is the source of truth.</b> The agent writes a record before each externally visible step. <code>tool-started</code> is written before <code>execute()</code> is called.</li>
@@ -765,6 +830,8 @@ type JournalRecord =
 </ul>
 
 <!-- ============================================================ -->
+<p><b>Explicit old-session import, approved for 0.12.0.</b> Run <code>llxprt sessions import &lt;old-file&gt;</code> while the source is offline. This host-only subcommand validates the old recording, writes a new journal/session atomically, prints its new ID and leaves the source bytes untouched. It performs no model, tool, hook or network work. It imports only proven content, drops old grants, labels unmatched calls indeterminate without inventing a durable start, and never repeats effects. Malformed histories fail without publishing a session. Compressed summaries stay summaries; missing history, signatures and identity scopes are never invented. Provider replay is active only when its payload and complete scope can be proven. Unscoped historical metadata stays in the imported-history audit blob, never a fabricated scoped replay envelope. Every host reports import-required for an explicitly requested old session, with this command in the message; no automatic legacy load or empty-session fallback remains. The offline reader handles all current event types explicitly, including audit-only <code>refusal</code> and history-replacing <code>refusal_rewrite</code>. Validate each rewrite payload and its <code>resultingHistory</code> before replacing active history, without invoking a reviewer, hook or model. Keep original/rewritten text and reviewer evidence in the audit blob, not appended model history. Fold replacements before checking active call/result uniqueness: a completed pair repeated from the replaced history is not a duplicate, but duplicate results within the replacement or later active tail remain errors. Reject malformed replacements before publication. P14 owns the importer, the complete event-type folding table and seven behavior fixtures.</p>
+
 <h2 id="subagents">14. Subagents</h2>
 <ul>
   <li><b>Templates.</b> The definition lists subagent templates (name, instructions, tool ids, policy, limits). With any templates, the agent offers the built-in <code>start_subagent</code> tool with the <code>spawn</code> effect, and policy governs it like any other tool.</li>
@@ -802,6 +869,7 @@ interface ModelRequest {
   readonly messages: readonly TranscriptEntry[];
   readonly tools: readonly { readonly id: ToolId; readonly description: string; readonly inputSchema: JsonSchema }[];
   readonly parameters: ModelParameters;
+  readonly toolChoice?: ModelToolChoice; // D20: request-local selection
   readonly recovery?: ModelRecovery;      // core-retained reconstruction for this logical request and compatible scope; not dispatch authorization
 }
 type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -852,6 +920,7 @@ type ModelChunk =
   | { kind: 'tool-call'; id: CallId; tool: ToolId; argsDelta: string }
   | { kind: 'replay'; value: ProviderReplayData }
   | { kind: 'usage'; report: UsageReport }  // accounting only; never commits output
+  | { kind: 'response-frame'; frame: ModelResponseFrame } // D20: exact source projection; fold once, separately from presentation
   | { kind: 'finish'; reason: FinishReason; usage: UsageReport };
 
 type ModelErrorKind = 'auth' | 'quota' | 'rate-limit' | 'overloaded' | 'invalid-request' | 'context-length' | 'network' | 'aborted' | 'other';
@@ -862,7 +931,7 @@ interface ModelError {
   readonly recovery?: ModelRecovery;
 }
 interface ToolError { readonly kind: 'invalid-args' | 'failed' | 'aborted' | 'revoked' | 'unavailable'; readonly message: string }
-interface StoreError { readonly kind: 'unavailable' | 'corrupt' | 'aborted'; readonly message: string }
+interface StoreError { readonly kind: 'unavailable' | 'corrupt' | 'aborted' | 'import-required'; readonly message: string }
 
 interface DiagnosticSink { emit(record: DiagnosticRecord): void } // synchronous, never throws, never blocks
 interface Clock { now(): number; sleep(ms: number, signal: AbortSignal): Promise<void> }
@@ -878,13 +947,99 @@ interface Clock { now(): number; sleep(ms: number, signal: AbortSignal): Promise
 <h3>Interceptors: constrained hooks at fixed points</h3>
 <script type="text/plain" class="code">
 interface Interceptors {
-  readonly deadlineMs: number;   // per call; a timeout counts as 'continue' and is reported
+  readonly deadlineMs: number;   // single-hook default; never a configured event's batch cutoff
   beforeTurn?(input: UserInput, signal: AbortSignal): Promise<Continue | Block | { addContext: readonly ContextItem[] }>;
-  beforeModel?(view: ModelRequestView, signal: AbortSignal): Promise<Continue | Block | { addContext: readonly ContextItem[] }>;
+  beforeToolSelection?(view: ModelRequestView, signal: AbortSignal): Promise<HookEventResult<HookToolSelection>>;
+  beforeModel?(view: ModelRequestView, signal: AbortSignal): Promise<HookEventResult<BeforeModelEffect>>;
+  afterModel?(view: ModelResponseView, signal: AbortSignal): Promise<HookEventResult<AfterModelEffect>>;
   beforeTool?(call: PreparedCallView, signal: AbortSignal): Promise<Continue | Block | { patchArgs: JsonPatch }>;
   afterTool?(call: PreparedCallView, result: ToolResult, signal: AbortSignal): Promise<Continue | { redact: readonly Redaction[]; note?: string }>;
   beforeCompact?(signal: AbortSignal): Promise<Continue | Block>;
   afterTurn?(view: AfterTurnView, signal: AbortSignal): Promise<Continue | { continueWith: UserInput }>;
+}
+interface HookProvenance {
+  readonly id: string;
+  readonly event: string;
+  readonly source: string;               // opaque configuration source identity, not credentials
+  readonly order: number;
+}
+type ModelAttemptSource = { readonly source: 'provider' } | { readonly source: 'hook'; readonly hook: HookProvenance };
+interface ModelToolChoice {
+  readonly mode: 'auto' | 'required' | 'none';
+  readonly allowedToolIds?: readonly ToolId[];
+}
+interface HookToolSelection {
+  readonly toolChoice: ModelToolChoice;
+}
+interface HookAuditEntry {
+  readonly provenance: HookProvenance;
+  readonly status: 'success' | 'timeout' | 'process-error' | 'cancelled';
+  readonly output?: JsonValue;           // validated wire output, audit only, even on exit 2
+  readonly diagnostic?: string;
+}
+interface HookEventResult<T> {
+  readonly effective: {
+    readonly control: Continue | Block | HookStop;
+    readonly value?: T;                  // retained for audit even when control prohibits application
+    readonly reason?: string;
+    readonly stopReason?: string;
+    readonly systemMessage?: string;
+    readonly suppressOutput?: boolean;
+    readonly addContext?: readonly ContextItem[];
+    readonly producers: readonly { readonly path: string; readonly provenance: HookProvenance }[];
+  };
+  readonly audit: readonly HookAuditEntry[]; // configured order, not completion order or patches to apply
+}
+type RequestBoundary =
+  | { readonly status: 'absent' }
+  | { readonly status: 'valid'; readonly boundary: { readonly version?: 2; readonly pendingMessageStartIndex: number; readonly pendingMessageCount?: number; readonly onInvalidBoundary?: 'skip-compression' | 'throw' } }
+  | { readonly status: 'malformed'; readonly onInvalidBoundary: 'skip-compression' | 'throw' };
+interface ModelRequestView extends ModelRequest {
+  readonly model: ModelRef;
+}
+interface HookRequestPatch {
+  readonly messages?: readonly TranscriptEntry[];
+  readonly instructions?: readonly InstructionBlock[];
+  readonly toolIds?: readonly ToolId[];   // subset only, descriptors remain pinned
+  readonly model?: ModelRef;             // selection request, never a direct adapter override
+  readonly parameters?: Partial<ModelParameters>;
+  readonly toolChoice?: ModelToolChoice;
+  readonly boundary: RequestBoundary;
+}
+interface HookResponsePart {
+  readonly value: TranscriptPart;
+  readonly accumulation: 'append' | 'replace'; // replace upserts at the stable part's first position
+  readonly stream?: { readonly id: string; readonly status: 'delta' | 'complete' };
+  readonly hookFields?: { readonly format: string; readonly data: JsonValue }; // versioned hook-only block fields
+}
+interface HookModelResponse {
+  readonly parts: readonly HookResponsePart[]; // actual source blocks, including cumulative snapshots
+  readonly finishReason?: FinishReason;
+  readonly rawStopReason?: string;
+  readonly declaredUsage?: UsageReport;   // hook-visible metadata, not measured provider usage
+}
+interface BeforeModelEffect {
+  readonly request?: HookRequestPatch;
+  readonly synthetic?: HookModelResponse;
+}
+interface ModelResponseFrame {
+  readonly id: string;
+  readonly response: HookModelResponse;   // lossless source-chunk projection, not reconstructed from deltas
+}
+interface ModelResponseView {
+  readonly attempt: string;
+  readonly origin: ModelAttemptSource;
+  readonly request: ModelRequestView;
+  readonly frame: ModelResponseFrame;
+}
+interface AfterModelEffect {
+  readonly replacement?: HookModelResponse;
+}
+type HookStop = { readonly action: 'stop'; readonly reason: string; readonly systemMessage?: string };
+interface HookError {
+  readonly kind: 'model-not-allowed' | 'tool-set-widened' | 'invalid-request-boundary' | 'invalid-hook-output';
+  readonly provenance: HookProvenance;
+  readonly message: string;
 }
 interface AfterTurnView {
   readonly result: TurnResult;            // candidate result, not yet turn.completed
@@ -893,9 +1048,19 @@ interface AfterTurnView {
   readonly tools: readonly { readonly call: CallId; readonly tool: ToolId; readonly outcome: ToolOutcome }[]; // settled calls in this turn
 }
 type Continue = { action: 'continue' };
-type Block = { action: 'block'; reason: string };
+type Block = { action: 'block'; reason: string; systemMessage?: string; response?: HookModelResponse };
 </script>
-<p>Interceptors cannot replace what the agent owns. They can add context, block, patch arguments or redact results. A patched call is validated, prepared and evaluated against policy again. A redacted result keeps the raw output in the journal blob for audit, with the redaction recorded. <code>afterTurn</code> may ask for one more pass with new input, which counts as steering and is bounded by the turn's limits. This covers hooks that block or rewrite. Hooks that only watch subscribe to events. Anything beyond these points is not a hook.</p>
+<p><b>D20, approved Q1: retain model-changing hooks within agent ownership.</b> The eight fixed points include BeforeToolSelection and AfterModel as well as the six delivered points. The host runs hooks and translates the existing v2 wire shapes; core applies the effective result, owns selection, attempts, budgets, history and policy, and never delegates the loop. HookEventResult separates that result from the ordered per-hook audit list. Audit every producer, including superseded mutations, informational messages and mutations preceding a final stop/block; never fold audit entries into effective request patches. Persist audit before publishing a result or dispatching effects, including when control stops the turn. Preserve context, tool patches, redaction, lifecycle hooks and observers. A patched tool call retains its attempt's tool restriction, is validated, prepared and evaluated against policy again; redaction retains raw output in an audit blob. afterTurn continuation remains bounded by the same turn.</p>
+<p><b>Aggregation and propagation are distinct.</b> Preserve hookPlanner order after matching/deduplication. Parallel is the default; Promise.all result order, not completion order, determines aggregation. Any matching sequential definition makes the whole event sequential. For BeforeModel and AfterModel, later present top-level fields replace earlier ones and hookSpecificOutput is shallow-merged: a later llm_request or llm_response replaces that entire nested object. Apply only the resulting request patch to the original request; only its settings shallow-merge with original settings. Thus contents from hook A followed by settings-only llm_request from hook B leaves original contents effective. Successful sequential BeforeModel output still updates the next hook's input through mergeHookLLMRequest, independently of final aggregation; sequential AfterModel hooks all see the original frame, not earlier replacements. Failed executions do not propagate inputs, but any output they produced still participates in aggregation. A final response replacement inherits omitted optional finish/raw-stop/usage fields from the source frame, not a superseded hook response. Preserve later allow/deny/continue fields exactly; resolve effective.control only after aggregation using the caller's existing direct or streamed semantics below. Do not collapse simultaneous wire stop/block into a shared stop-first result before that translation. Carry final-field provenance separately from the complete audit, including the producer of a synthetic response. Other events retain their existing event-specific merge rules.</p>
+<p><b>Deadlines belong to individual hooks.</b> For configured hook events, host-kit uses each hook's configured timeout or the existing default and completes sibling cleanup before returning the aggregate. Interceptors.deadlineMs is a single-hook/default deadline, not an outer race around a whole event. Do not impose a batch deadline that can erase completed results or truncate a valid sequential sequence; the turn deadline and cancellation still bound the whole operation. An individual timeout contributes no output, records a diagnostic and leaves completed sibling outputs intact; sequential execution proceeds to later hooks while the turn remains active. Spawn/process failures without output are nonblocking. Aggregate existing outputs even when success is false: exit 2 denies, including with empty stderr, using the runner's default reason; other nonzero exits retain their warning/no-output behavior. Invalid optional wire fields remain decoder no-ops, distinct from typed D20 invariant failures. On turn cancellation/deadline, stop admission, abort and join children, preserve completed audit under finalization, and settle cancelled/limit rather than successful continue. P03 owns this common model-interceptor execution seam; P17 owns subprocess deadlines and aggregation.</p>
+<p><b>Preserve direct and streamed control behavior separately.</b> DirectMessageProcessor._handleBeforeModelHook checks block/deny first, then synthetic response, then request-content changes; it does not check continue: false. A direct BeforeModel stop alone therefore still dispatches the provider with any applied content change; stop plus synthetic returns that synthetic output without dispatch or an AfterModel call. Block/deny, including stop plus block and a synthetic response, instead returns reason text with finishReason stop and rawStopReason, without dispatch. Direct _fireAfterModelAndApply/_applyAfterModelResult reads only getModifiedResponse: AfterModel stop, block/deny or both leave the original response when no replacement exists, or return the request-tool-filtered replacement when present. Those flags do not suppress content or otherwise eligible tool calls, and do not turn that response into a blocking outcome. Preserve these cases as P17 old/new parity, subject to the approved D20 selection, subset, accounting, replay and policy limits. Streamed BeforeModel and AfterModel retain stop-before-block after aggregation; controls prevent synthetic/replacement content and tool effects, BeforeModel prevents dispatch, and AfterModel retains original measured usage and audit. Streamed AfterModel block retains reason-text output and helper fallback 'Execution blocked by AfterModel hook'. Preserve getEffectiveReason: stopReason precedes reason, and an absent or empty selected reason becomes 'No reason provided'. An allowed synthetic response with no blocks retains effective-reason text; helper-only undefined uses 'Execution blocked', while an explicitly empty helper reason stays empty under the existing nullish rule. Preserve optional response metadata and systemMessage independently. Making the three direct controls behave like streamed controls is outside this implementation contract and would require separate approval.</p>
+<p><b>Request changes last for one model call.</b> BeforeModel may add, remove or rewrite request messages without editing committed history or the definition. A tool replacement selects unchanged descriptors from the pinned set and cannot restore tools excluded by BeforeToolSelection; widening or descriptor substitution fails with a typed HookError. A model override is resolved through the active definition's ModelSelection (primary or listed fallback), not passed directly to a provider. A model outside that selection fails with model-not-allowed and hook provenance before provider dispatch; it is not a retryable provider error or a reason to silently fall back. Core checks ModelClient.info against the final request, performs context preparation and budget reservation for the selected model, and uses the configured fallback order and fallbackOn rules. It does not change snapshot.model. Retries and fallbacks rebuild their own requests; no hook patch leaks into a later call. Journal every request/settings/tool/model change and its provenance before dispatch. Request-local edits also exclude D14 replay for changed parts and any entry-scoped replay whose entry changed, without erasing the original history.</p>
+<p><b>Synthetic responses are attempts.</b> BeforeModel may short-circuit provider dispatch. Record a model attempt with source hook and producing-hook provenance, a complete measured UsageReport containing zero for every counter, zero charge and no provider replay data. Do not price or reserve a fictitious provider call; release any unused provisional reservation. The attempt still consumes attempt/step limits and shares the turn deadline. Ignore hook-declared usage for measured accounting, retaining it as audit metadata. Emit hook-sourced attempt and response events, with zero tokens on the synthetic attempt event and complete zero measured usage on its response/accounting records. Validate its tool calls against the narrowed pinned set, prepare them and run normal policy/decision checks before effects. A synthetic response never grants permission.</p>
+<p><b>Source frames and presentation deltas have different jobs.</b> ModelResponseFrame carries the exact ordered source-block projection for one AfterModel invocation, including cumulative thinking snapshots and identical-text completion frames. HookResponsePart specifies append versus replace accumulation and retains stream ID/status. Its versioned, JSON-only hookFields preserves remaining hook-visible block fields, including signature, hidden/redacted/encrypted content and provider metadata; P11/P17 validate the format and map it losslessly without importing legacy types into core. These fields are hook visibility/audit data only, never replay authority, measured accounting or executable calls. Only separately validated D14 envelopes can enter provider replay. Do not reconstruct hook input from presentation deltas or the entire accumulated response. For source snapshots A, AB, completed AB, hooks see A, AB, AB with the exact status/fields, even though append presentation is A, B, then no new text.</p>
+<p><b>AfterModel replacement is supported before commitment.</b> Preserve per-source-chunk invocation and one direct-response invocation. Buffer provider presentation deltas until their frame; apply only the effective hook response and request-tool filter, then fold its parts once. The source frame is authoritative for this fold; never accumulate its content a second time from the deltas. Replace upserts the same thinking stream at its first position, as StreamOutputAccumulator does. A replacement lacking a stream ID uses the existing append behavior; an empty replacement removes this frame's contribution, not an earlier accepted snapshot. Derive visible events from the transformed accumulator: append deltas only for a true extension, otherwise emit model.part.replaced for the full revised provisional part. Identical-text completion updates fields without repeating text. Only finish commits the resulting model entry. For every changed, removed or replaced source part, drop its D14 replay envelopes; any entry-scoped envelope is dropped if that entry changed. Track invalidated targets through the attempt so replay arriving on a later completion cannot revive a changed part. Stable IDs alone do not prove unchanged content. Keep replay only for provably unchanged parts under the same scope, and never accept new provider replay supplied by a hook. Keep originals, projections and every hook output in audit blobs; with a store require blob support before admitting mutating hooks and durably store blobs before their references, publication or dispatch; without a store retain equivalent in-memory audit data. Commit transformed history and validate its tool calls against the originating request subset and policy. Provider usage is charged once from original reports even if hooks change content or declared usage. A later failed attempt discards both original and transformed provisional content, without discarding accounting or audit evidence.</p>
+<p><b>Every call is bound to its originating request.</b> Core freezes the final effective ToolId subset after BeforeToolSelection, BeforeModel and toolChoice, plus the existing stream-only scope-local emitter exception if already pinned. Preserve that binding across response replacement, argument edits, preparation and approval waits. Filter excluded provider calls/results before hook visibility, and filter synthetic/replacement calls/results again before visible publication, history commitment or scheduling. Filter as today: excluded blocks remain audit-only, with no active transcript call/result, tool lifecycle event, decision prompt or execution; retain a filtering diagnostic. Membership in the turn catalog or policy allow is insufficient. The scheduler checks the retained attempt subset again before dispatch, including after argument edits; no later catalog state or hook can restore an excluded tool. Unknown/unpinned calls retain normal invalid-call handling, never execution. Test the pinned stream emitter separately from ordinary restricted tools; an unpinned emitter is never introduced and direct mode has no exception.</p>
+<p><b>Tool choice and settings.</b> Existing toolChoice modes remain auto, required and none; none beats required beats auto, and supplied allowlists intersect with stable sorting and existing name normalization. Translate names to pinned ToolIds in host-kit and carry the result in ModelRequest.toolChoice, alongside the narrowed ModelRequest.tools. It does not fit ModelParameters.extra, which only accepts scalar values. None yields no tools. Preserve the streaming path's scope-local emitter exception only if that emitter was already pinned; it cannot widen the set. The current callers mostly consume none and allowedToolNames, without forwarding required as a provider constraint. D20 carries the declared mode explicitly rather than silently losing it. Existing settings shallow-merge for this call: temperature, topP, maxOutputTokens, responseJsonSchema and reasoning map to ModelParameters; settings.toolChoice maps to ModelRequest.toolChoice; systemInstruction maps to request-local instructions. Required provider system prompts remain in the system prompt. No settings field can bypass model selection, policy or budgets.</p>
+<p><b>Keep llm_request_boundary semantics.</b> The adapter preserves v2 indices over modified contents through an order-preserving message conversion, rather than guessing them from final text. Missing or explicit undefined is absent; present null, false, zero or an empty string is malformed. Unmodified projection uses the caller's pending suffix first, as boundaryRecovery.ts does. For modified contents, structurally valid metadata must have nonnegative integer indices and describe an exact suffix (start plus count equals length; omitted count means the rest). Invalid or malformed metadata obeys onInvalidBoundary: skip-compression by default or throw, with no differential fallback. Only absent metadata permits differential recovery from a pre-hook snapshot: preserve append/modified-pending recovery, duplicate ambiguity, pending-tail validation and the unrecoverable prepend case. Compression preserves the declared pending suffix verbatim but replaces its prefix with compressed real history. An unrecoverable boundary sends the changed request as-is under the context limit and fails clearly over it. Preserve the existing contents-less and empty replacement-array no-op guards in streamRequestHelpers.ts, and detect in-place changes on a detached hook view so they cannot mutate committed history. P17 runs the existing boundary and hook fixtures through both routes.</p>
 
 <!-- ============================================================ -->
 <h2 id="hosts">16. Host sketches, testing and decisions</h2>
@@ -918,7 +1083,7 @@ render(<App view={view} input={inputPort(agent)} decisions={host.decisions} />);
 //   /model x     -> agent.command({ type: 'set-model', selection })
 //   /compress    -> agent.command({ type: 'compact' })
 //   /plan        -> agent.command({ type: 'set-mode', mode: 'plan' })
-//   /auto-edit   -> agent.command({ type: 'set-preferences', layers: presets.autoEdit(sources) })
+//   /auto-edit   -> agent.command({ type: 'set-preferences', layers: presets.autoEdit(sources), approvalMode: 'autoEdit' })
 //   /auth        -> host re-auths its adapter; the user submits again
 </script>
 <h3>Non-interactive CLI</h3>
@@ -963,19 +1128,21 @@ decisions: { presence: 'human', decide: (r, signal) => connection.requestPermiss
 <div class="decision"><b>D3. No application configuration object and no service locator.</b> A closed, validated definition describes behavior, and ports carry capabilities. Changing what the agent is means a command or a new agent.</div>
 <div class="decision"><b>D4. Creation is asynchronous and complete.</b> An existing agent is always ready.</div>
 <div class="decision"><b>D5. Credentials never enter the agent.</b> An auth failure is a typed model error.</div>
-<div class="decision"><b>D6. Authority is separate from preferences.</b> Authority can only deny or ask, and always wins. Preferences and grants are first-match. Grants are scoped by what the person chose.</div>
+<div class="decision"><b>D6. Authority is separate from preferences.</b> Effective authority can only deny or ask, and always wins. D19 preserves authority-owned priority exceptions and ranks preferences and remembered approvals. Grants are scoped by what the person chose.</div>
 <div class="decision"><b>D7. Tool metadata used by policy comes from host adapters,</b> and tool ids are qualified by source. Policy is not a sandbox.</div>
 <div class="decision"><b>D8. One path to a person.</b> Request-specific responses, plus <code>unavailable</code> for headless failure. The interaction tools are agent built-ins.</div>
 <div class="decision"><b>D9. Children belong to the turn that started them,</b> and their policy is the intersection with the parent's. There are no detached children.</div>
-<div class="decision"><b>D10. The journal is the source of truth.</b> Recovery never re-runs a call that may have acted.</div>
+<div class="decision"><b>D10. The journal is the source of truth.</b> Recovery never re-runs a call that may have acted. Approved Q2 Option A adds an explicit offline import into a new journal, with the source untouched; no old runtime or automatic reader survives.</div>
 <div class="decision"><b>D11. Output is one event stream with a cursor, a snapshot and a transcript reader.</b> Text is provisional until its attempt commits.</div>
 <div class="decision"><b>D12. Diagnostics are push-only.</b> Debug filtering happens once, in the host's sink.</div>
 <div class="decision"><b>D13. Configuration loading lives in a shared host-kit,</b> neither in the agent nor separately in each host.</div>
-<div class="decision"><b>D14. Port completion: provider replay belongs to core history.</b> Replay chunks replace an envelope by id within the provisional attempt; tool-call part ids equal their call ids. Finish commits envelopes with the model entry, and SessionStore preserves them on resume and fork. Discard drops them. The adapter validates versioned payloads for signed thinking, encrypted reasoning, provider ids and Gemini AFC metadata. Core matches provider, model, endpoint and principal exactly; an envelope with a connection identity also requires that same connection. Durable envelopes omit connection identity. A model, endpoint, principal or connection change excludes incompatible envelopes without erasing the journal. Compaction never attaches old signatures to new text. No adapter owns a conversation cache, and replay metadata cannot execute tools.</div>
+<div class="decision"><b>D14. Port completion: provider replay belongs to core history.</b> Replay chunks replace an envelope by id within the provisional attempt; tool-call part ids equal their call ids. Finish commits envelopes with the model entry, and SessionStore preserves them on resume and fork. Discard drops them. The adapter validates versioned payloads for signed thinking, encrypted reasoning, provider ids and Gemini AFC metadata. Core matches provider, model, endpoint and principal exactly; an envelope with a connection identity also requires that same connection. Durable envelopes omit connection identity. A model, endpoint, principal or connection change excludes incompatible envelopes without erasing the journal. Compaction never attaches old signatures to new text. D20 applies the same rule to hook edits: changed parts lose their replay, changed entries lose entry-scoped replay, and synthetic responses carry none. Original responses remain audit blobs, while replacement history contains only still-valid replay. No adapter owns a conversation cache, and replay metadata cannot execute tools.</div>
 <div class="decision"><b>D15. Port completion: usage is independent of successful completion.</b> Usage reports are cumulative per attempt; later counters replace earlier counters, they are not added to them. Finish supplies its final accounting report, which may still be incomplete; a typed failure may also supply a final report without committing content. Incomplete final usage on a finished, sent or unknown request retains the larger of the reservation and reported usage, component by component, as an explicitly estimated budget charge. A proven not-sent request releases its unused reservation. Reported totals and budget charges stay distinct in attempt-budget records and accounting events; only reported totals enter Usage aggregates. A reservation is journaled before dispatch; recovery settles an unfinished reservation conservatively without resending. Complete reports release unused reservation, including on failure. Invalid or decreasing counters fail conformance, not silently reset.</div>
 <div class="decision"><b>D16. Port completion: recovery instructions do not issue requests.</b> An adapter returns a scoped ModelRecovery value with the error and stops. Core journals it and discards provisional output. Dispatch authorization covers one attempt only; core retains validated reconstruction instructions for every remaining attempt of the same logical request and compatible scope, including ordinary retries after a repaired successor fails. Each later request is rebuilt from ModelRequest messages plus those instructions, without an adapter conversation/request cache or another repair cycle, with SDK retries disabled. Core clears retained reconstruction state when the logical request ends or the scope becomes incompatible; it cannot transfer to a fallback model. Before every stream call, core separately checks cancellation, retry kind, maxAttempts and budgets, admits the attempt and charges its usage once. Retained instructions grant no extra retry, and repeated repair of the same condition is rejected; reapplying retained instructions is not a new repair cycle. Image repair, rejected Responses parents and transport changes cannot conceal a second generation request; every stream call issues at most one generation. The invalidates list references entry/envelope ids from the request, so core records and applies invalidation without interpreting provider payloads; no retry runs automatically after restart.</div>
 <div class="decision"><b>D17. Port completion: afterTurn receives a read-only candidate view.</b> The result, committed thinking-only status, settled tool outcomes and continuation ordinal let built-in continuation run without reading an Agent or reconstructing a host model loop. A continueWith response stays inside the current turn, shares its deadline and budgets, and precedes the single terminal turn.completed event. Failed, cancelled and limit outcomes cannot continue. User hooks may be disabled independently of the built-in continuation adapter.</div>
-<div class="decision"><b>D18. Port completion: shell preparation returns facts, never policy decisions.</b> A host-trusted shell descriptor requires parsed command segments, argv and redirection facts bound to the prepared token. Patches and edited approvals recompute them. Core alone evaluates the existing destructive-command deny before any grants, checks every compound-command segment with the same authority/preferences, and uses an ask floor for redirection or parse failure. Missing or inconsistent required preparation data fails the port contract. The adaptation plan's Q3 records unsupported persisted policy forms and the choice needed for legacy redirection exemptions; no executor calls a second policy engine.</div>
+<div class="decision"><b>D18. Port completion: shell preparation returns facts, never policy decisions.</b> A host-trusted descriptor requires exact raw final command text, whole-command redirection facts, the current policy splitter's ordered text segments and per-segment redirection facts, plus parsed argv or an explicit parse failure. All are bound to the prepared token and recomputed after edits. Core creates serialized argument subjects and performs every permission decision. Keep policySplit distinct from richer argv parsing to preserve current quoting/separator behavior. Missing or inconsistent facts fail the port contract. D19 specifies exemptions and evaluation branches; no executor calls a second policy engine.</div>
+<div class="decision"><b>D19. Every existing policy form has a plain-data representation.</b> Approved Q3 retains serialized argument/command regexes, priorities and tiers, stable ties, mode filters on both policy kinds, redirection exemptions, destructive deny and compound traversal. Section 8 defines PolicyRegex with replayable path/input evidence, provenance, priority/order, paired source stacks and authority-owned exception predicates, atomic source-stack and preset/mode changes, and native RegExp compilation with the existing path-specific validation stages and subject handling. Core remains the sole evaluator. Source translation preserves the actual directory-loader, single-file-loader and dynamic-rule transformations, not guessed equivalents. Invalid definitions fail before effects with provenance. Andrew chose Option A for Q4 and Q5. Independent authority wins over every preference/grant priority, with both rules' provenance in changed-outcome diagnostics. Preserve the initial whole-command ask, then check every segment after approval under the same mode/revision and deny the call if any segment denies. Approval covers only asks for that prepared compound call. P05a/P05b/P16 test these explicit changes separately from parity; no policy form is removed. Catastrophic backtracking remains as today and is only a possible follow-up issue. P01 is already delivered by merged PR #4076 (issue4039) with pre-D19 PolicyDocument, PolicyRule, PolicyMatch, ArgMatcher and PreparedShell. P01a amends those types plus required ToolDescriptor.policyIdentity, validation and fixtures before runtime work; P05a/P05b implement evaluation and decisions.</div>
+<div class="decision"><b>D20. Keep model-changing hooks with request-local authority.</b> Approved Q1 extends section 15 with BeforeModel request changes and synthetic attempts, AfterModel replacement and BeforeToolSelection toolChoice. Requests may rewrite messages and narrow pinned tools, never widen them. Bind provider, synthetic and replacement calls to the final originating request subset through dispatch and edits, in addition to policy. Model changes pass through allowed selection, ModelClient.info, fallback and budget admission; disallowed models fail typed. Synthetic attempts have source hook, zero measured usage and no replay. Exact source frames preserve cumulative thinking and completion fields separately from presentation deltas; hook-only fields never authorize replay. Replacements retain original audit blobs, drop changed-part and changed-entry replay including late arrivals, and commit transformed history. Apply only the effective aggregate, preserving whole-object replacement and event-specific input propagation; journal every producer independently. Individual hook timeouts cannot erase sibling results, and turn cancellation cannot become continue. Preserve today's direct BeforeModel and AfterModel control behavior, existing streamed controls and empty-synthetic reason-text fallback as P17 parity; D20 does not approve changing the three direct controls. Keep v2 boundary/compression behavior and per-chunk cadence. P01a supplies types/fixtures; P03 owns model-interceptor execution and attempts/accounting; P07 owns journal records; P11 supplies source projections; P17 proves parity and stated changes, including issue1749.</div>
 
 <!-- ============================================================ -->
 <h2 id="llxprt">17. Adapting llxprt (later)</h2>
@@ -987,7 +1154,7 @@ decisions: { presence: 'human', decide: (r, signal) => connection.requestPermiss
 <tr><td><code>ProviderManager</code>, providers, OAuth, token stores, proxy</td><td><code>ModelPort</code> adapters owned by the host.</td></tr>
 <tr><td><code>ToolRegistry</code>, built-in tools, MCP client manager, MCP prompts and resources</td><td><code>ToolCatalog</code> adapters with host-assigned descriptors. Prompts and resources become content.</td></tr>
 <tr><td><code>PolicyEngine</code>, confirmation <code>MessageBus</code>, approval modes, folder trust</td><td>Authority and preferences evaluated by the agent, plus a <code>DecisionPort</code> per host.</td></tr>
-<tr><td>Hooks system</td><td>The six interceptor points, plus event subscribers.</td></tr>
+<tr><td>Hooks system</td><td>The eight D20 interceptor points, plus event subscribers; core owns request changes, synthetic attempts and replacement history.</td></tr>
 <tr><td><code>HistoryService</code>, recording, resume</td><td>The agent journal and a <code>SessionStore</code> adapter.</td></tr>
 <tr><td>Compression, todo and plan tools</td><td><code>ContextStrategy</code>, the <code>compact</code> command, and plan mode.</td></tr>
 <tr><td>Subagent orchestrator, task tool, async tasks</td><td>Turn-owned children through <code>start_subagent</code>. Background work becomes separate host-managed agents.</td></tr>
@@ -1022,7 +1189,7 @@ decisions: { presence: 'human', decide: (r, signal) => connection.requestPermiss
        ev:{type:'turn.started',turn:'t1',input:{parts:[{kind:'text',text:'fix the typo in README'}]}},
        x:'Admission reserves the turn. The agent pins the turn\'s tool set from the catalog.'},
       {from:'agent',to:'model',label:'Model attempt 1',status:'running',
-       ev:{type:'model.attempt',turn:'t1',step:1,attempt:'a1',model:{provider:'p',model:'m'},tokens:2140},
+       ev:{type:'model.attempt',turn:'t1',step:1,attempt:'a1',source:'provider',model:{provider:'p',model:'m'},tokens:2140},
        x:'Limits are reserved before the call. Streamed text stays provisional until the attempt commits.'},
       {from:'model',to:'agent',label:'Attempt commits; model proposes read_file',status:'running',
        ev:{type:'tool.proposed',turn:'t1',call:{id:'c1',tool:'builtin/read_file',args:{path:'README.md'}}},
@@ -1052,7 +1219,7 @@ decisions: { presence: 'human', decide: (r, signal) => connection.requestPermiss
        ev:{type:'tool.finished',turn:'t1',call:'c2',result:{parts:[{kind:'text',text:'1 replacement'}]}},
        x:'The file hash still matches, so the approved change is the one applied.'},
       {from:'model',to:'agent',label:'Attempt 3 ends with text; boundary',status:'running',
-       ev:{type:'model.response',turn:'t1',attempt:'a3',finish:'stop',usage:{input:6400,output:38}},
+       ev:{type:'model.response',turn:'t1',attempt:'a3',source:'provider',finish:'stop',usage:{input:6400,output:38}},
        x:'This is the last step, and it still ends at a boundary. No steering is queued, so the turn ends.'},
       {from:'agent',to:'host',label:'Turn completed',status:'idle',
        ev:{type:'turn.completed',turn:'t1',result:{outcome:'done',finalText:'Fixed the typo.',checkpoint:'k7',usage:{input:14560,output:212}}},
