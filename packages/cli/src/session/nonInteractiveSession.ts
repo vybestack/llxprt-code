@@ -10,10 +10,7 @@ import {
   OutputFormat,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  getStartupWarnings,
-  getSandboxHandoffWarning,
-} from '../utils/startupWarnings.js';
+import { getSandboxHandoffWarning } from '../utils/startupWarnings.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { initializeOutputListenersAndFlush } from './outputListeners.js';
 import { installNonInteractiveSigintHandler } from './signalHandlers.js';
@@ -48,13 +45,9 @@ export async function dispatchInteractiveOrNonInteractive(
   if (isInteractive()) {
     if (recordingOwner !== 'agent')
       throw new Error('Interactive Agent recording owner was not initialized');
-    const [systemWarnings, userWarnings] = await Promise.all([
-      getStartupWarnings(),
-      readUserWarnings(),
-    ]);
+    const userWarnings = await readUserWarnings();
     await launchInteractive([
       ...(handoff !== undefined ? [handoff] : []),
-      ...systemWarnings,
       ...userWarnings,
       ...recordingWarnings,
     ]);

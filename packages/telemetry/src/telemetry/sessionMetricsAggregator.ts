@@ -34,6 +34,7 @@ export interface ApiAttemptRecord {
    * latency count like any other attempt.
    */
   isRefusal?: boolean;
+  refusalCategory?: string | null;
   /** True when the provider reported valid usage data for this attempt.
    * Requests without usage must not contribute to rate numerators or
    * denominators. */
@@ -61,6 +62,7 @@ export interface ModelBreakdown {
   totalRequests: number;
   totalErrors: number;
   totalRefusals: number;
+  refusalsByCategory?: Array<{ category: string | null; count: number }>;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCachedTokens: number;
@@ -73,6 +75,7 @@ export interface SessionMetricsSnapshot {
   totalApiRequests: number;
   totalApiErrors: number;
   totalRefusals: number;
+  refusalsByCategory?: Array<{ category: string | null; count: number }>;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCachedTokens: number;
@@ -172,6 +175,18 @@ function sanitizeFinite(value: number): number {
   return value;
 }
 
+function incrementRefusalCategory(
+  counts: Array<{ category: string | null; count: number }>,
+  category: string | null,
+): void {
+  const existing = counts.find((entry) => entry.category === category);
+  if (existing !== undefined) {
+    existing.count++;
+    return;
+  }
+  counts.push({ category, count: 1 });
+}
+
 const MAX_DEDUP_ENTRIES = 1024;
 
 /**
@@ -211,6 +226,10 @@ export class SessionMetricsAggregator {
   private totalApiRequests = 0;
   private totalApiErrors = 0;
   private totalRefusals = 0;
+  private readonly refusalsByCategory: Array<{
+    category: string | null;
+    count: number;
+  }> = [];
   private totalInputTokens = 0;
   private totalOutputTokens = 0;
   private totalCachedTokens = 0;
@@ -260,7 +279,13 @@ export class SessionMetricsAggregator {
   private countOutcome(record: ApiAttemptRecord): void {
     this.totalApiRequests++;
     if (record.isError) this.totalApiErrors++;
-    if (record.isRefusal === true) this.totalRefusals++;
+    if (record.isRefusal === true) {
+      this.totalRefusals++;
+      incrementRefusalCategory(
+        this.refusalsByCategory,
+        record.refusalCategory ?? null,
+      );
+    }
   }
 
   recordApiAttempt(record: ApiAttemptRecord): boolean {
@@ -469,7 +494,7 @@ export class SessionMetricsAggregator {
   }
 
   private updateModelBreakdown(
-    { model, isError, isRefusal }: ApiAttemptRecord,
+    { model, isError, isRefusal, refusalCategory }: ApiAttemptRecord,
     tokens: {
       inputTokens: number;
       outputTokens: number;
@@ -484,6 +509,7 @@ export class SessionMetricsAggregator {
       totalRequests: 0,
       totalErrors: 0,
       totalRefusals: 0,
+      refusalsByCategory: [],
       totalInputTokens: 0,
       totalOutputTokens: 0,
       totalCachedTokens: 0,
@@ -496,7 +522,13 @@ export class SessionMetricsAggregator {
     }
     breakdown.totalRequests++;
     if (isError) breakdown.totalErrors++;
-    if (isRefusal === true) breakdown.totalRefusals++;
+    if (isRefusal === true) {
+      breakdown.totalRefusals++;
+      incrementRefusalCategory(
+        (breakdown.refusalsByCategory ??= []),
+        refusalCategory ?? null,
+      );
+    }
     breakdown.totalInputTokens += tokens.inputTokens;
     breakdown.totalOutputTokens += tokens.outputTokens;
     breakdown.totalCachedTokens += tokens.cachedTokens;
@@ -571,6 +603,7 @@ export class SessionMetricsAggregator {
       totalApiRequests: this.totalApiRequests,
       totalApiErrors: this.totalApiErrors,
       totalRefusals: this.totalRefusals,
+      refusalsByCategory: [...this.refusalsByCategory],
       totalInputTokens: this.totalInputTokens,
       totalOutputTokens: this.totalOutputTokens,
       totalCachedTokens: this.totalCachedTokens,
@@ -601,7 +634,15 @@ export class SessionMetricsAggregator {
       requestsWithCacheReads: this.requestsWithCacheReads,
       requestsWithCacheWrites: this.requestsWithCacheWrites,
       models: Object.fromEntries(
-        Object.entries(this.models).map(([k, v]) => [k, { ...v }]),
+        Object.entries(this.models).map(([k, v]) => [
+          k,
+          {
+            ...v,
+            ...(v.refusalsByCategory === undefined
+              ? {}
+              : { refusalsByCategory: [...v.refusalsByCategory] }),
+          },
+        ]),
       ),
     };
   }
@@ -699,6 +740,7 @@ export class SessionMetricsAggregator {
     this.totalApiRequests = 0;
     this.totalApiErrors = 0;
     this.totalRefusals = 0;
+    this.refusalsByCategory.length = 0;
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.totalCachedTokens = 0;

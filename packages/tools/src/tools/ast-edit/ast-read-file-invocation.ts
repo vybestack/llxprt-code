@@ -304,7 +304,7 @@ export class ASTReadFileToolInvocation
   private handleReadError(error: unknown): ToolResult {
     const errorMsg = error instanceof Error ? error.message : String(error);
 
-    let errorType = ToolErrorType.READ_CONTENT_FAILURE;
+    let errorType: ToolErrorType;
     if (isNodeError(error)) {
       switch (error.code) {
         case 'ENOENT':

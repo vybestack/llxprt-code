@@ -43,6 +43,12 @@ export interface UserRetentionSettings {
   minRetention?: string;
   /** Machine-wide aggregate size limit in MiB (defaults to 4096 = 4 GiB). */
   maxTotalSizeMB?: number;
+  /**
+   * Machine-wide size limit in MiB for per-session token-usage logs
+   * (`<project tmp>/token-usage/*.jsonl`), separate from the recording budget
+   * (defaults to 1024).
+   */
+  tokenUsageMaxTotalSizeMB?: number;
 }
 
 /**
@@ -54,6 +60,8 @@ export interface UserRetentionSettings {
 export interface ResolvedRetentionConfig {
   readonly enabled: boolean;
   readonly maxTotalSizeBytes: number;
+  /** Byte budget for all token-usage log files (#4068). */
+  readonly tokenUsageMaxTotalSizeBytes: number;
   readonly maxAgeMs: number | null;
   readonly maxCount: number | null;
   readonly minRetentionMs: number;

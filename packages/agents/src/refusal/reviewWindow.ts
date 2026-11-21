@@ -115,7 +115,7 @@ function windowIndexes(history: readonly IContent[]): number[] {
     .filter((i) => i >= Math.max(boundary, 0));
   const summaryIndex = lastIndexWhere(history, isSummary);
   if (summaryIndex < 0 || summaryIndex > boundary) return after;
-  const boundarySeq = boundary < 0 ? undefined : seqOf(history[boundary]);
+  const boundarySeq = seqOf(history[boundary]);
   const summarySeq = seqOf(history[summaryIndex]);
   const written =
     boundarySeq === undefined ||

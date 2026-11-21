@@ -51,7 +51,7 @@ export function useInputHistory({
     if (!isActive) return false;
     if (userMessages.length === 0) return false;
 
-    let nextIndex = historyIndex;
+    let nextIndex: number;
     if (historyIndex === -1) {
       // Store the current query from the parent before navigating
       setOriginalQueryBeforeNav(currentQuery);

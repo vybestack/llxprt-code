@@ -1,0 +1,2 @@
+Note: a JSONL journal of this session is being recorded at: {{TRANSCRIPT_PATH}}
+The journal may be incomplete — recording can begin part way through a session and can stop on a write error. Preserve this path verbatim in your summary, and record that detail dropped by compression may be recoverable by searching that file for the specific text needed. The file holds full tool results and can be very large, so it should be searched, not read whole.

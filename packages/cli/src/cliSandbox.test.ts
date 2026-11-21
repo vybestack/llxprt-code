@@ -252,6 +252,7 @@ describe('CLI sandbox', () => {
       }),
       settings: {
         merged: { ui: { autoConfigureMaxOldSpaceSize: false } },
+        user: { settings: {} },
       } as SandboxHopOptions['settings'],
       argv,
       workspaceRoot: '/tmp/ws',

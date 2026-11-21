@@ -479,7 +479,6 @@
       "src/ui/themes/theme.test.ts",
       "src/utils/cleanup.test.ts",
       "src/utils/handleAutoUpdate.test.ts",
-      "src/utils/startupWarnings.test.ts",
       "src/validateNonInteractiveAuth.test.ts"
     ],
     "packages/core/tsconfig.json": [

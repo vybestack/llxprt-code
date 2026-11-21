@@ -66,16 +66,9 @@ describe('HistoryService - Behavioral Tests', () => {
       service.add(aiToolCall);
 
       // 3. Tool responds with file contents
-      const toolResponse = createToolResponse(
-        'call_123',
-        'read_file',
-        {
-          content:
-            'This is a test file.\nIt contains sample data.\nEnd of file.',
-        },
-        undefined,
-        { timestamp: Date.now() },
-      );
+      const toolResponse = createToolResponse('call_123', 'read_file', {
+        content: 'This is a test file.\nIt contains sample data.\nEnd of file.',
+      });
 
       service.add(toolResponse);
 

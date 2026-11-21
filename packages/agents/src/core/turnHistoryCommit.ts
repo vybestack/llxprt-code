@@ -162,6 +162,10 @@ export async function commitTurnHistory(
           promptId: options.promptId,
           finishReason: options.response.finishReason,
           rawStopReason: options.response.rawStopReason,
+          refusalCategory: options.response.stopDetails?.category,
+          refusalExplanation: options.response.stopDetails?.explanation,
+          recommendedModel: options.response.stopDetails?.recommendedModel,
+          requestId: options.response.requestId,
         });
         await settlePublishedMediaAdmissions(options, mediaAdmissions);
       },

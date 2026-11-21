@@ -15,6 +15,7 @@
  */
 
 import type { CanonicalFinishReason } from '../../llm-types/finishReasons.js';
+import type { StopDetails } from '../../llm-types/finishReasons.js';
 
 /**
  * Universal content representation that is provider-agnostic.
@@ -104,6 +105,14 @@ export interface ContentMetadata {
   /** When this content was created */
   timestamp?: number;
 
+  refusalAuditToolInputs?: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly input: string;
+    readonly complete: boolean;
+  }>;
+  firstByteToRefusalMs?: number | null;
+
   /** Which model generated this (for AI responses) */
   model?: string;
 
@@ -164,6 +173,11 @@ export interface ContentMetadata {
 
   /** Provider-native stop reason retained for diagnostics. */
   rawStopReason?: string;
+
+  /** Provider-reported refusal classifier details. */
+  stopDetails?: StopDetails;
+  requestId?: string | null;
+  dumpBaseId?: string;
 
   /** Reason the response was incomplete (e.g., max_output_tokens) */
   incompleteReason?: string;

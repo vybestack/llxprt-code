@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { z } from 'zod';
+
 /**
  * Neutral finish-reason type layer — provider-agnostic canonical reasons.
  * Providers own their raw→canonical mapping tables locally.
@@ -32,6 +34,16 @@ export type CanonicalFinishReason =
   | 'refusal'
   | 'error'
   | 'other';
+
+/** Provider-neutral refusal classifier details; nulls are evidence. */
+export const StopDetailsSchema = z.object({
+  type: z.string(),
+  category: z.string().nullable(),
+  explanation: z.string().nullable(),
+  recommendedModel: z.string().optional(),
+});
+
+export type StopDetails = z.infer<typeof StopDetailsSchema>;
 
 /** @plan PLAN-20260702-LLMTYPES.P03 @requirement REQ-001.5 @pseudocode line 11 */
 export interface FinishInfo {

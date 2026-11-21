@@ -54,6 +54,12 @@ const execAsync = promisify(exec);
 export interface ProxyContainerHandle {
   process: ChildProcess;
   command: string;
+  /**
+   * True once this launcher began removing the sidecar on purpose (a host
+   * stop signal, process exit or a failed launch), so a close that follows is
+   * the stop taking effect and not the sidecar failing.
+   */
+  isStopRequested: () => boolean;
 }
 
 export interface ContainerSandboxPrepared {
@@ -324,6 +330,25 @@ export function addContainerVolumeMounts(args: string[]): void {
   }
 }
 
+/**
+ * Writes the empty podman auth file inside a fresh 0700 directory so a file or
+ * symlink another local user planted in the shared temp dir can neither be
+ * overwritten nor substituted. The directory is removed when the CLI exits.
+ */
+function createEmptyAuthFile(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-podman-auth-'));
+  const file = path.join(dir, 'empty_auth.json');
+  fs.writeFileSync(file, '{}', { encoding: 'utf-8', mode: 0o600, flag: 'wx' });
+  process.once('exit', () => {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup of a scratch directory at process exit.
+    }
+  });
+  return file;
+}
+
 /** Adds environment variable flags for non-secret config, term, proxy, etc. */
 export function addContainerEnvVars(
   args: string[],
@@ -383,9 +408,7 @@ export function addContainerEnvVars(
   args.push('--env', `SANDBOX=${containerName}`);
 
   if (config.command === 'podman') {
-    const emptyAuthFilePath = path.join(os.tmpdir(), 'empty_auth.json');
-    fs.writeFileSync(emptyAuthFilePath, '{}', 'utf-8');
-    args.push('--authfile', emptyAuthFilePath);
+    args.push('--authfile', createEmptyAuthFile());
   }
 }
 
@@ -634,23 +657,55 @@ export async function startProxyContainer(
   await execAsync(
     `${config.command} network connect ${SANDBOX_NETWORK_NAME} ${SANDBOX_PROXY_NAME}`,
   );
-  return { process: proxyProcess, command: proxyContainerCommand };
+  return {
+    process: proxyProcess,
+    command: proxyContainerCommand,
+    isStopRequested: () => proxyContainerStopped,
+  };
 }
 
+/**
+ * What the proxy sidecar's close handler observed, read by the launch path
+ * after the sandbox child has closed.
+ */
+export interface ProxyContainerWatch {
+  /** Throws the fatal error for a sidecar that exited without being asked to. */
+  throwIfFailed(): void;
+}
+
+const NO_PROXY_CONTAINER_FAILURE: ProxyContainerWatch = {
+  throwIfFailed: () => {},
+};
+
+/**
+ * Ends the sandbox child when the proxy sidecar dies unasked, and records the
+ * failure for the launch path. The launch path raises it after the child has
+ * closed: a throw from this listener would end the host at once, before the
+ * child's close and before the release of the resources the launch owns.
+ */
 export function wireProxyContainerCloseHandler(
   proxyContainer: ProxyContainerHandle | undefined,
   sandboxProcess: ChildProcess,
-): void {
-  if (proxyContainer === undefined) return;
+): ProxyContainerWatch {
+  if (proxyContainer === undefined) return NO_PROXY_CONTAINER_FAILURE;
+  let failure: FatalSandboxError | undefined;
   proxyContainer.process.on('close', (code, signal) => {
-    const sandboxPid = sandboxProcess.pid;
-    if (sandboxPid !== undefined && sandboxPid !== 0) {
-      process.kill(-sandboxPid, 'SIGTERM');
-    }
-    throw new FatalSandboxError(
+    // An intended stop ends the sidecar while the sandboxed child is still
+    // handling the same signal. The host keeps waiting for that child and
+    // exits with its status; only a sidecar that dies unasked is fatal.
+    if (proxyContainer.isStopRequested()) return;
+    failure = new FatalSandboxError(
       `Proxy container command '${proxyContainer.command}' exited with code ${code}, signal ${signal}`,
     );
+    // The sandbox child is not detached, so there is no process group with its
+    // id to signal; address the child itself.
+    sandboxProcess.kill('SIGTERM');
   });
+  return {
+    throwIfFailed: () => {
+      if (failure !== undefined) throw failure;
+    },
+  };
 }
 
 /** Wires all cleanup handlers into the sandbox process lifecycle. */
@@ -694,15 +749,14 @@ export function wireCleanupHandlers(
       } finally {
         bridgeCleanedUp = true;
         process.off('exit', runBridgeCleanup);
-        process.off('SIGINT', runBridgeCleanup);
-        process.off('SIGTERM', runBridgeCleanup);
         sandboxProcess.off('close', runBridgeCleanup);
         setCredentialProxyBridgeCleanup(undefined);
       }
     };
+    // No SIGINT/SIGTERM registration: the signal forwarder keeps the host
+    // alive until the child closes, and a child that handles the signal and
+    // keeps running still needs the bridge. The close handler releases it.
     process.on('exit', runBridgeCleanup);
-    process.on('SIGINT', runBridgeCleanup);
-    process.on('SIGTERM', runBridgeCleanup);
     sandboxProcess.on('close', runBridgeCleanup);
   }
 }

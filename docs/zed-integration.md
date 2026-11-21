@@ -146,6 +146,39 @@ Configure multiple entries to switch between providers in Zed:
 | `--set <key=value>`     | Set ephemeral settings (repeatable)          |
 | `--yolo`                | Auto-approve all actions                     |
 
+## Running in a Sandbox
+
+`--experimental-acp` honors `--sandbox`. When you start it with `--sandbox`, LLxprt Code relaunches itself inside the configured sandbox and runs the ACP server there, so the commands the agent runs are confined. Zed's stdin and stdout stay the ACP transport, and the host process does not read them.
+
+Add `--sandbox` to the agent's `args`, and add `--sandbox-engine` or `--sandbox-profile-load` when you want a specific engine or profile:
+
+```json
+{
+  "agent_servers": {
+    "llxprt-sandboxed": {
+      "command": "/opt/homebrew/bin/llxprt",
+      "args": [
+        "--experimental-acp",
+        "--profile-load",
+        "myprofile",
+        "--sandbox",
+        "--sandbox-profile-load",
+        "myprofile-sandbox",
+        "--yolo"
+      ]
+    }
+  }
+}
+```
+
+To check that the sandbox is active, ask the agent to run `echo SANDBOX=$SANDBOX`. A sandboxed session prints a non-empty value, such as `SANDBOX=sandbox-exec` under Seatbelt.
+
+- Sign-in happens per session, from inside the sandbox. The credential rules of the engine you chose apply. See [Sandboxing](./sandbox.md#credential-handling-in-containers).
+- Seatbelt on macOS restricts writes to an allow-list of paths and grants broad read access to the host filesystem, including with the `permissive-open` profile.
+- Without `--sandbox`, ACP mode runs in the host process.
+
+See [Sandboxing](./sandbox.md) for the engines, profiles and limitations.
+
 ## Debug Logging
 
 Add `LLXPRT_DEBUG` to the environment if something isn't working:
@@ -201,9 +234,16 @@ The terminal is correlated to the originating tool call (by command and working 
 
 When the terminal capability is absent (or `false`), shell output is captured as text and emitted via the standard `content` content block — the same behavior as non-terminal ACP clients.
 
+## Shutdown
+
+The agent process stops itself when the connection ends. Closing the client's end of stdin (for example when the editor exits or crashes), `SIGTERM` and `SIGINT` all start the same sequence: running tool calls are aborted, sessions are released, and the process exits. Shell commands started by tool calls are terminated.
+
+Releasing the sessions and the final cleanup are each waited for at most 10 seconds. If either takes longer, the agent logs a warning and exits anyway. The exit status is 0 after stdin closes or `SIGTERM`, and 130 after `SIGINT`.
+
 ## Related
 
 - [Zed External Agents Documentation](https://zed.dev/docs/ai/external-agents)
 - [Authentication](./cli/authentication.md) — keyring setup
 - [Profiles](./cli/profiles.md) — saving and loading configurations
+- [Sandboxing](./sandbox.md): engines, profiles and limitations
 - [Providers](./cli/providers.md) — provider setup

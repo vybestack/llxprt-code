@@ -190,6 +190,7 @@ export async function maybeHopIntoSandbox(
   const partialConfig = await loadCliConfig(
     {
       settings: settings.merged,
+      userSettings: settings.user.settings,
       extensions: [],
       extensionEnablementManager: new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),

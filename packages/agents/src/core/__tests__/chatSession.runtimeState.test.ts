@@ -146,6 +146,8 @@ function createMockContentGenerator(): ContentGenerator {
  */
 function createMockHistoryService(): HistoryService {
   return {
+    on: vi.fn(),
+    off: vi.fn(),
     getHistory: vi.fn().mockResolvedValue([]),
     addToHistory: vi.fn(),
     add: vi.fn(),

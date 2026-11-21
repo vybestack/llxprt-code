@@ -49,6 +49,19 @@ describe('applyCliSetArguments', () => {
     );
   });
 
+  it('accepts persistent dumpcontext modes and rejects command actions', () => {
+    const target = new TestTarget();
+
+    applyCliSetArguments(target, ['dumpcontext=error']);
+    expect(target.getValue('dumpcontext')).toBe('error');
+    expect(() => applyCliSetArguments(target, ['dumpcontext=now'])).toThrow(
+      /dumpcontext.*off.*error.*on/i,
+    );
+    expect(() => applyCliSetArguments(target, ['dumpcontext=status'])).toThrow(
+      /dumpcontext.*off.*error.*on/i,
+    );
+  });
+
   it('parses authOnly boolean values', () => {
     const target = new TestTarget();
 

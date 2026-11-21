@@ -7,8 +7,13 @@
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  CompressionAuditProvenance,
+  CompressionProviderResult,
+  CompressionResultMetadata,
+  CompressionStrategyName,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 /**
@@ -47,18 +52,47 @@ async function resolveCompressionModelProvider(
 }
 
 /**
- * Extract the compression call's own token usage from the summary content's
- * metadata. Returns undefined when the strategy did not report usage.
+ * What the strategy that produced an applied compression reported about this
+ * run. Usage comes from the applied result, never an older summary in history.
  */
-function extractCompressionUsage(
-  summary: IContent | undefined,
-): { promptTokens: number; outputTokens: number } | undefined {
-  const usage = summary?.metadata?.usage;
-  if (usage === undefined) return undefined;
-  return {
-    promptTokens: usage.promptTokens,
-    outputTokens: usage.completionTokens,
-  };
+export interface AppliedCompressionTelemetry {
+  readonly strategy: CompressionStrategyName;
+  readonly llmCallMade: boolean;
+  readonly usage: UsageStats | undefined;
+  readonly attempts: number;
+}
+
+/** Counts strategy invocations and retains metadata from the applied result. */
+export class CompressionRunReport {
+  private applied: CompressionResultMetadata | undefined;
+  private attempts = 0;
+
+  begin(): void {
+    this.applied = undefined;
+    this.attempts = 0;
+  }
+
+  countAttempt(): void {
+    this.attempts += 1;
+  }
+
+  recordApplied(metadata: CompressionResultMetadata): void {
+    this.applied = metadata;
+  }
+
+  telemetry(): AppliedCompressionTelemetry {
+    if (this.applied === undefined) {
+      throw new Error(
+        'Compression was applied without a recorded strategy result',
+      );
+    }
+    return {
+      strategy: this.applied.strategyUsed,
+      llmCallMade: this.applied.llmCallMade,
+      usage: this.applied.usage,
+      attempts: this.attempts,
+    };
+  }
 }
 
 /**
@@ -82,7 +116,8 @@ function extractCompressionUsage(
  * @param resolveProvider The compression provider resolver
  * @param tokensBefore Token count captured before compression began
  * @param tokensAfter  Token count after compression completed
- * @param summary      The compression summary content (carries usage metadata)
+ * @param applied      The metadata reported by the strategy result that was applied
+ * @param provenance   The summary author attached to the applied strategy result
  */
 export async function emitCompressionLifecycleEvent(
   logger: TokenUsageLogger | null,
@@ -93,7 +128,8 @@ export async function emitCompressionLifecycleEvent(
   ) => CompressionProviderResult | Promise<CompressionProviderResult>,
   tokensBefore: number,
   tokensAfter: number,
-  summary: IContent | undefined,
+  applied: AppliedCompressionTelemetry,
+  provenance?: CompressionAuditProvenance,
 ): Promise<void> {
   if (logger === null) return;
   if (!logger.isEnabled()) return;
@@ -102,18 +138,23 @@ export async function emitCompressionLifecycleEvent(
   const turnMarker = findCurrentTurnMarker(history.getRawHistory());
   const turnId = turnMarker?.turnId ?? null;
 
-  const compressionProfileName = runtimeCtx.ephemerals.compressionProfile();
-  const resolved = await resolveCompressionModelProvider(
-    resolveProvider,
-    compressionProfileName,
-  );
+  const resolved =
+    provenance === undefined
+      ? await resolveCompressionModelProvider(
+          resolveProvider,
+          runtimeCtx.ephemerals.compressionProfile(),
+        )
+      : undefined;
+  const compressionModel =
+    provenance === undefined
+      ? (resolved?.model ?? runtimeCtx.state.model)
+      : provenance.summaryAuthorModel;
+  const compressionProvider =
+    provenance === undefined
+      ? (resolved?.provider ?? null)
+      : provenance.summaryAuthorProvider;
 
-  // Fall back to the session model/provider when the resolved result does not
-  // carry model info (e.g. no compression profile override).
-  const compressionModel = resolved.model ?? runtimeCtx.state.model;
-  const compressionProvider = resolved.provider;
-
-  const usage = extractCompressionUsage(summary);
+  const { usage } = applied;
 
   await logger.recordLifecycleEvent({
     type: 'compression',
@@ -123,9 +164,12 @@ export async function emitCompressionLifecycleEvent(
     tokensAfter,
     compressionModel,
     compressionProvider,
+    compressionStrategy: applied.strategy,
+    llmCallMade: applied.llmCallMade,
+    compressionAttempts: applied.attempts,
     ...(usage !== undefined && {
       compressionPromptTokens: usage.promptTokens,
-      compressionOutputTokens: usage.outputTokens,
+      compressionOutputTokens: usage.completionTokens,
     }),
   });
 }
@@ -139,7 +183,8 @@ export async function recordCompressionTelemetry(
     profileName?: string,
   ) => CompressionProviderResult | Promise<CompressionProviderResult>,
   tokensBefore: number,
-  summary: IContent | undefined,
+  applied: AppliedCompressionTelemetry,
+  provenance?: CompressionAuditProvenance,
 ): Promise<void> {
   // Emit the compression lifecycle event into the token-usage log (#3130
   // AC-7). Exactly-once: this branch runs only on a genuine 'applied'
@@ -154,7 +199,8 @@ export async function recordCompressionTelemetry(
     providerResolver,
     tokensBefore,
     historyService.getTotalTokens(),
-    summary,
+    applied,
+    provenance,
   ).catch((error: unknown) => {
     logger.error('Failed to record compression telemetry', error);
   });

@@ -239,8 +239,10 @@ export async function createConfiguredModel(
   captureBuffer: CaptureBuffer,
   logger: DebugLogger,
 ): Promise<{ model: LanguageModel }> {
+  const dumpEnabled =
+    captureBuffer.dumpMode === 'on' || captureBuffer.dumpMode === 'error';
   const customFetch =
-    streamingEnabled && rsEnabled
+    (streamingEnabled && rsEnabled) || dumpEnabled
       ? createReasoningCaptureFetch(
           captureBuffer,
           logger,

@@ -458,6 +458,25 @@ consume your machine's resources.
 Container mode runs in a separate process namespace. Seatbelt runs directly on
 your host with macOS kernel restrictions applied via `sandbox-exec`.
 
+#### Stopping a sandboxed session
+
+A supervisor, such as an ACP client, stops a sandboxed session by signalling the
+`llxprt` process it started. For Seatbelt, Docker, and Podman, that host process
+relays SIGINT, SIGTERM, and SIGHUP to the sandboxed CLI, waits for the CLI to
+exit, and exits with the CLI's status. A CLI that dies from a signal gives
+128 plus the signal number, so SIGHUP gives 129. A repeated signal is relayed
+again.
+
+The host never escalates to SIGKILL, so a CLI that ignores the signal keeps the
+session running. SIGKILL sent to the host ends the host at once and gives the
+CLI no chance to shut down; the sandboxed process can keep running.
+
+If the network proxy ends on its own while a session runs (the Seatbelt proxy
+command or the Docker or Podman proxy sidecar), the host sends SIGTERM to the
+sandboxed CLI and waits for it to exit. Seatbelt then exits with status 1.
+Docker and Podman release their volumes and report a sandbox error with exit
+status 44. This wait has no time limit either.
+
 ### Privilege hardening (container mode)
 
 Every Docker and Podman sandbox run is started with two privilege-hardening

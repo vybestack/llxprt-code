@@ -28,7 +28,7 @@ describe('Subagent session identity', () => {
     const config = makeForegroundConfig();
     const settings = createSessionSettingsFixture(config);
     const log = join(directory, 'usage.jsonl');
-    const logger = new TokenUsageLogger(true, log);
+    const logger = new TokenUsageLogger('debug', log);
     const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: settings.workspaceTrust,

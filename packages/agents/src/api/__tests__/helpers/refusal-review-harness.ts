@@ -31,6 +31,7 @@ import {
 import { startAnthropicEndpoint } from './anthropic-refusal-endpoint.js';
 import {
   emptyRefusalReply,
+  isolateRefusalStorage,
   readJsonl,
   requestedWaits,
   startScriptedEndpoint,
@@ -76,6 +77,12 @@ export interface ReviewWireData {
   readonly refusal: { readonly provider: string; readonly model: string };
   readonly latestUserGoal: string | null;
   readonly entries: readonly ReviewWireEntry[];
+  readonly previousAnswerRejected?: {
+    readonly entries: ReadonlyArray<{
+      readonly id: string;
+      readonly mustKeepExactly: readonly string[];
+    }>;
+  };
 }
 
 /** The data block a reviewer was shown, read back from its wire request. */
@@ -375,6 +382,7 @@ export async function runReviewScenario(
   const workingDir = realpathSync(
     mkdtempSync(join(tmpdir(), 'llxprt-review-')),
   );
+  const restoreStorage = isolateRefusalStorage(workingDir);
   const env: ScenarioEnv = { workingDir };
   const sessionId = `review-${randomUUID()}`;
   const answerReview =
@@ -432,6 +440,7 @@ export async function runReviewScenario(
     if (profileName !== undefined) {
       await new ProfileManager().deleteProfile(profileName).catch(() => {});
     }
+    restoreStorage();
     rmSync(workingDir, { recursive: true, force: true });
   }
 }

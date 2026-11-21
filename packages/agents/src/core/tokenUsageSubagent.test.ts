@@ -84,7 +84,7 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
 
   beforeEach(() => {
     logFile = makeTempLogPath();
-    logger = new TokenUsageLogger(true, logFile);
+    logger = new TokenUsageLogger('debug', logFile);
   });
 
   afterEach(() => {
@@ -212,7 +212,7 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
   });
 
   it('disabled logger writes nothing', async () => {
-    const disabledLogger = new TokenUsageLogger(false, logFile);
+    const disabledLogger = new TokenUsageLogger('off', logFile);
 
     const state = createAgentRuntimeState({
       runtimeId: 'disabled-rt',

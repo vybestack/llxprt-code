@@ -200,7 +200,7 @@ function buildCompressionHandler(logFile: string): {
     hookTrigger,
   );
 
-  const logger = new TokenUsageLogger(true, logFile);
+  const logger = new TokenUsageLogger('debug', logFile);
   handler.tokenUsageLogger = logger;
 
   return { handler, logger };
@@ -250,6 +250,11 @@ function installCompressingStrategy(): void {
                 originalMessageCount: context.history.length,
                 compressedMessageCount: 3,
                 strategyUsed: 'middle-out',
+                auditProvenance: {
+                  summaryAuthorModel: COMPRESSION_MODEL,
+                  summaryAuthorProvider: COMPRESSION_PROVIDER,
+                  compressionStrategy: 'middle-out',
+                },
                 llmCallMade: true,
                 topPreserved: 0,
                 bottomPreserved: 2,
@@ -397,7 +402,7 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
     const { handler } = buildCompressionHandler(logFile);
 
     // Replace logger with a disabled one
-    handler.tokenUsageLogger = new TokenUsageLogger(false, logFile);
+    handler.tokenUsageLogger = new TokenUsageLogger('off', logFile);
 
     await handler.performCompression('test-prompt-disabled');
 

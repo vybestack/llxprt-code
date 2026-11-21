@@ -167,7 +167,7 @@ export function loadEnvironment(options: { homeDir?: string } = {}): void {
 }
 
 function findEnvFile(startDir: string, homeDir: string): string | null {
-  let currentDir = path.resolve(startDir);
+  let currentDir: string;
   let parentDir = path.resolve(startDir);
   // do/while so the root directory is still probed before exiting,
   // matching the original while(true) traversal that checked currentDir

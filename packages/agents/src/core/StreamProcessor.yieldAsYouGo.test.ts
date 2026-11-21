@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
+import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -80,6 +81,8 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       compressionHandler: compression,
       conversationManager: conversation,
       historyService: history,
+      refusalStreamAudit: new RefusalStreamAudit(),
+      refusalFingerprintByStream: new WeakMap(),
       logger: new DebugLogger('test'),
       eagerlyRecordedToolResponseCallIds: new Set<string>(),
     });

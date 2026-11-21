@@ -23,20 +23,16 @@ import {
   HostCredentialOwner,
   type CredentialAuthority,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
-import { createOAuthSettingsAdapter } from './auth/oauth-settings-adapter.js';
 import {
   type ImageOperationRunner,
   patchStdio,
   ExitCodes,
   type LlxprtExtension,
-  type ProfileDefinitionReads,
   type WorkspaceSkillOperations,
-  type WorkspaceTrustControlPort,
   type Config,
   type IContent,
 } from '@vybestack/llxprt-code-core';
-import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -98,10 +94,7 @@ import {
   registerSyncCleanup,
   registerCleanup,
 } from './utils/cleanup.js';
-import {
-  runZedIntegration,
-  type ZedSessionProviderInputs,
-} from '@vybestack/llxprt-code-zed-acp';
+import { handleAcpMode } from './cliAcpMode.js';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
@@ -120,7 +113,6 @@ import {
   activateConfiguredProvider,
   configureProvidersAndServices,
   connectIdeClientIfEnabled,
-  ensureAcpProviderActivated,
   type ConfiguredProviderActivationResult,
 } from './cliProviderInit.js';
 import {
@@ -157,6 +149,7 @@ import {
   type ValidatedNonInteractiveRun,
 } from './session/nonInteractiveSession.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
+import { recordPromptInstallerWarnings } from './promptInstallerWarnings.js';
 import { validateNonInteractiveAuth } from './validateNonInteractiveAuth.js';
 import {
   createNonInteractiveRun,
@@ -238,30 +231,6 @@ function setupProcessLifecycle(): () => void {
     mkdirSync(llxprtDir, { recursive: true });
   }
   return cleanupStdio;
-}
-
-/**
- * Zed/ACP runs its own runtime; it constructs per-session Agents via fromConfig
- * internally, so the foreground Agent is NOT built in the main flow. Returns
- * true when the Zed/ACP path was taken (main should return immediately).
- */
-
-/**
- * Hands the ACP client the contributions this process already loaded and the
- * same OAuth settings surface the CLI's own provider manager uses, so ACP
- * sessions do not re-discover plugins or read OAuth settings from a different
- * source.
- */
-function createZedProviderInputs(
-  providerContributions: ProviderContributionRegistry,
-  credentialAuthority: CredentialAuthority,
-): ZedSessionProviderInputs {
-  const oauthSettings = createOAuthSettingsAdapter();
-  return {
-    credentialAuthority,
-    providerContributions,
-    ...(oauthSettings !== undefined ? { oauthSettings } : {}),
-  };
 }
 
 function hasExplicitProviderProfileSelector(argv: ParsedCliArgs): boolean {
@@ -357,6 +326,7 @@ class ForegroundSessionHost {
       this.inputs.bootstrapSelection,
       warnings,
     );
+    await recordPromptInstallerWarnings(warnings);
     const input = this.inputs.config.getQuestion();
     await dispatchInteractiveOrNonInteractive(
       input,
@@ -752,6 +722,76 @@ async function prepareConfiguredTerminalSession(
   );
 }
 
+async function runForegroundSession(input: {
+  config: Config;
+  settings: LoadedSettings;
+  argv: ParsedCliArgs;
+  workspaceRoot: string;
+  preflight: Awaited<ReturnType<typeof prepareForegroundPreflight>>;
+  readStdinOnce: () => Promise<string>;
+  hasPipedInput: boolean;
+  bootstrapSelection: Awaited<
+    ReturnType<typeof preparePostParseStartup>
+  >['bootstrapSelection'];
+  authFactories: Awaited<
+    ReturnType<typeof discoverCliProviderContributions>
+  >['authFactories'];
+  authority: CredentialAuthority;
+  terminalHost: TerminalHost;
+  debugConfiguration: ConfigurationManager;
+}): Promise<void> {
+  const {
+    config,
+    settings,
+    argv,
+    workspaceRoot,
+    preflight,
+    readStdinOnce,
+    hasPipedInput,
+    bootstrapSelection,
+    authFactories,
+    authority,
+    terminalHost,
+    debugConfiguration,
+  } = input;
+  // Non-interactive unconfigured-provider gate: exit FATAL_CONFIG_ERROR (52)
+  // before provider activation or Agent construction when no provider is active.
+  const providerActivation = await activateForegroundProvider(
+    config,
+    argv,
+    preflight,
+  );
+  await handleSandboxHop(
+    config,
+    settings,
+    argv,
+    workspaceRoot,
+    () => preflight.forkSandboxPreflight(),
+    providerActivation.authFailed,
+    readStdinOnce,
+    hasPipedInput,
+    bootstrapSelection,
+  );
+  await exitBeforeAgent(providerActivation.authFailed, argv, preflight);
+  await cleanupForegroundSessions(config, settings, preflight);
+  await new ForegroundSessionHost({
+    config,
+    settings,
+    argv,
+    workspaceRoot,
+    providerActivation,
+    owner: createForegroundOwner(preflight),
+    hasPipedInput,
+    readStdinData: readStdinOnce,
+    bootstrapSelection,
+    getMcpAuthProviderFactory: (type) =>
+      authFactories.getAuthProviderFactory(type),
+    credentialAuthority: authority,
+    terminalHost,
+    debugConfiguration,
+  }).run();
+}
+
 export async function main() {
   const capturedEnvPath = captureBootstrapEnvPath();
   const terminalHost = createTerminalHost();
@@ -790,59 +830,35 @@ export async function main() {
     // fromConfig internally; it must be handled BEFORE the general
     // non-interactive unconfigured-provider guard.
     if (
-      await handleActivatedZedIntegration(
+      await handleAcpMode({
         config,
-        cleanupStdio,
+        settings,
+        argv,
+        workspaceRoot,
         preflight,
+        readStdinOnce,
+        bootstrapSelection,
+        cleanupStdio,
         providerContributions,
         authority,
-      )
+      })
     )
       return;
 
-    // Non-interactive unconfigured-provider gate: exit FATAL_CONFIG_ERROR (52)
-    // BEFORE any provider activation or Agent construction when no provider is
-    // active and we are NOT in interactive mode. Uses the shared
-    // guardUnconfiguredProvider helper (single message, single exit code).
-    const providerActivation = await activateForegroundProvider(
-      config,
-      argv,
-      preflight,
-    );
-    // hop into sandbox if outside and sandboxing is enabled
-    await handleSandboxHop(
+    await runForegroundSession({
       config,
       settings,
       argv,
       workspaceRoot,
-      () => preflight.forkSandboxPreflight(),
-      providerActivation.authFailed,
+      preflight,
       readStdinOnce,
       hasPipedInput,
       bootstrapSelection,
-    );
-
-    await exitBeforeAgent(providerActivation.authFailed, argv, preflight);
-
-    // Cleanup sessions before agent construction.
-    await cleanupForegroundSessions(config, settings, preflight);
-
-    await new ForegroundSessionHost({
-      config,
-      settings,
-      argv,
-      workspaceRoot,
-      providerActivation,
-      owner: createForegroundOwner(preflight),
-      hasPipedInput,
-      readStdinData: readStdinOnce,
-      bootstrapSelection,
-      getMcpAuthProviderFactory: (type) =>
-        authFactories.getAuthProviderFactory(type),
-      credentialAuthority: authority,
+      authFactories,
+      authority,
       terminalHost,
       debugConfiguration,
-    }).run();
+    });
     preflightHandedOff = true;
   } finally {
     if (!preflightHandedOff) await preflight.dispose();
@@ -879,50 +895,6 @@ async function prepareValidatedStartup(
   throwIfSettingsErrors(settings);
   redirectConsoleForAcp(argv);
   return startup;
-}
-
-/**
- * The preflight reads the Zed/ACP integration makes: profile application for
- * the ACP sessions, the trust control it hands the connection owner, the
- * profile catalog it lists, the settings snapshot each session starts from, and
- * the activation probe.
- */
-interface ZedIntegrationReads
-  extends AgentProfileApplication,
-    WorkspaceTrustControlPort {
-  hasActiveProvider(): boolean;
-  setActiveProvider(provider: string): void | Promise<void>;
-  listProfiles(): ReturnType<ProfileDefinitionReads['listProfiles']>;
-  captureSettingsSnapshot(): ReturnType<
-    SettingsService['exportForStateSnapshot']
-  >;
-}
-
-async function handleActivatedZedIntegration(
-  config: Config,
-  cleanupStdio: () => void,
-  preflight: ZedIntegrationReads,
-  providerContributions: ProviderContributionRegistry,
-  credentialAuthority: CredentialAuthority,
-): Promise<boolean> {
-  if (!config.getExperimentalZedIntegration()) return false;
-  cleanupStdio();
-  ensureAcpProviderActivated(config, preflight);
-  await runZedIntegration(config, preflight, {
-    profileDefinitions: { listProfiles: () => preflight.listProfiles() },
-    trustPort: preflight,
-    onExitCleanup: runExitCleanup,
-    providerInputs: createZedProviderInputs(
-      providerContributions,
-      credentialAuthority,
-    ),
-    createSessionSettings: () => {
-      const session = new SettingsService();
-      session.restoreFromStateSnapshot(preflight.captureSettingsSnapshot());
-      return session;
-    },
-  });
-  return true;
 }
 
 async function prepareCliStartupInput(capturedEnvPath: string | undefined) {

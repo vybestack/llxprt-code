@@ -335,7 +335,10 @@ export class AgentClient
       this.auxiliary.close(),
       () => modelNotifications.release(this.releaseModelNotifications),
       this._previousHistory,
-      () => this.chat?.clearHistory(),
+      () => {
+        this.chat?.dispose();
+        return this.chat?.clearHistory();
+      },
       () => {
         this.chat = undefined;
       },

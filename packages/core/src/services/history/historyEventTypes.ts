@@ -16,6 +16,7 @@
 
 import type { IContent } from './IContent.js';
 import type { TokensUpdatedEvent } from './HistoryEvents.js';
+import type { CompressionAuditProvenance } from '../../core/compression/types.js';
 
 /**
  * Typed EventEmitter interface for HistoryService events.
@@ -67,6 +68,7 @@ export interface HistoryServiceEventEmitter {
       summary: IContent,
       itemsCompressed: number,
       origin?: object,
+      provenance?: CompressionAuditProvenance,
     ) => void,
   ): this;
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
@@ -85,6 +87,7 @@ export interface HistoryServiceEventEmitter {
     summary: IContent,
     itemsCompressed: number,
     origin?: object,
+    provenance?: CompressionAuditProvenance,
   ): boolean;
   off(
     event: 'tokensUpdated',
@@ -120,6 +123,7 @@ export interface HistoryServiceEventEmitter {
       summary: IContent,
       itemsCompressed: number,
       origin?: object,
+      provenance?: CompressionAuditProvenance,
     ) => void,
   ): this;
 }
