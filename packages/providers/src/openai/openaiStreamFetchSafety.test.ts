@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import OpenAI from 'openai';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import {
   createReaderBasedStreamFetch,
   createReaderIteratedBody,
@@ -273,5 +274,119 @@ describe('reader-based OpenAI fetch', () => {
     );
     expect(chunks[chunks.length - 1]?.usage).toStrictEqual(usage);
     expect(ownedIteratorConsumed).toBe(true);
+  });
+});
+
+/** An SSE response whose body the test feeds one chunk at a time. */
+function controlledEventStream(contentType = 'text/event-stream'): {
+  readonly response: Response;
+  push(text: string): void;
+  close(): void;
+} {
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const body = new ReadableStream<Uint8Array>({
+    start(started) {
+      controller = started;
+    },
+  });
+  const requireController = () => {
+    if (controller === undefined) throw new Error('Stream not started');
+    return controller;
+  };
+  return {
+    response: new Response(body, { headers: { 'content-type': contentType } }),
+    push: (text) => requireController().enqueue(new TextEncoder().encode(text)),
+    close: () => requireController().close(),
+  };
+}
+
+describe('reader-based OpenAI fetch SSE comment liveness (issue #4135)', () => {
+  it('reports each keepalive comment as soon as it is read, before any data event', async () => {
+    const events: StreamLivenessEvent[] = [];
+    const source = controlledEventStream('text/event-stream; charset=utf-8');
+    const wrapped = await createReaderBasedStreamFetch(
+      responseFetch(source.response),
+      (event) => events.push(event),
+    )('http://localhost');
+    const body = requireBody(wrapped);
+    if (!isIterableBody(body)) throw new Error('Expected iterable body');
+    const iterator = body[Symbol.asyncIterator]();
+
+    source.push(': keepalive\n\n');
+    await iterator.next();
+    expect(events).toStrictEqual([
+      { sourceEvent: 'sse-comment', sseObserved: true },
+    ]);
+
+    source.push(': keepalive\n\ndata: [DONE]\n\n');
+    source.close();
+    await iterator.next();
+    expect(await iterator.next()).toStrictEqual({
+      done: true,
+      value: undefined,
+    });
+    expect(events).toHaveLength(2);
+  });
+
+  it('observes event streams even when the body has no native async iterator', async () => {
+    const events: StreamLivenessEvent[] = [];
+    const source = controlledEventStream();
+    Object.defineProperty(requireBody(source.response), Symbol.asyncIterator, {
+      value: undefined,
+    });
+    const wrapped = await createReaderBasedStreamFetch(
+      responseFetch(source.response),
+      (event) => events.push(event),
+    )('http://localhost');
+    source.push(': keepalive\n\n');
+    source.close();
+    await readBodyBytes(wrapped);
+    expect(events).toHaveLength(1);
+  });
+
+  it('does not report liveness for comment-shaped lines in non-SSE bodies', async () => {
+    const events: StreamLivenessEvent[] = [];
+    const source = controlledEventStream('application/json');
+    const wrapped = await createReaderBasedStreamFetch(
+      responseFetch(source.response),
+      (event) => events.push(event),
+    )('http://localhost');
+    source.push(':\n{}\n');
+    source.close();
+    await readBodyBytes(wrapped);
+    expect(events).toStrictEqual([]);
+  });
+
+  it('reports keepalive comments while the real SDK still yields every data frame', async () => {
+    const events: StreamLivenessEvent[] = [];
+    const frame = {
+      id: 'text',
+      object: 'chat.completion.chunk',
+      choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null }],
+    };
+    const source = new Response(
+      ': keepalive\n\n: keepalive\n\n' +
+        `data: ${JSON.stringify(frame)}\n\n` +
+        'data: [DONE]\n\n',
+      { headers: { 'content-type': 'text/event-stream' } },
+    );
+    const client = new OpenAI({
+      apiKey: 'test',
+      baseURL: 'http://localhost/v1',
+      fetch: createReaderBasedStreamFetch(responseFetch(source), (event) =>
+        events.push(event),
+      ),
+    });
+    const stream = await client.chat.completions.create({
+      model: 'test',
+      messages: [],
+      stream: true,
+    });
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    expect(chunks.map((chunk) => JSON.stringify(chunk))).toStrictEqual([
+      JSON.stringify(frame),
+    ]);
+    expect(events).toHaveLength(2);
   });
 });

@@ -333,6 +333,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     return instantiateClient(authToken, baseURL, agents, headers, {
       fetch: options.invocation.fetch,
+      onStreamLiveness: options.onStreamLiveness,
       headersTimeoutMs: agentSettings['openai-headers-timeout-ms'] as
         | number
         | undefined,

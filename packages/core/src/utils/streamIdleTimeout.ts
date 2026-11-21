@@ -26,7 +26,8 @@ export class StreamIdleTimeoutError extends Error {
 export interface StreamLivenessEvent {
   /**
    * The provider event name that established liveness (e.g.
-   * 'response.created', 'response.in_progress', 'http-headers').
+   * 'response.created', 'response.in_progress', 'http-headers', or
+   * 'sse-comment' for an SSE comment line such as `: keepalive`).
    */
   readonly sourceEvent: string;
   /**
