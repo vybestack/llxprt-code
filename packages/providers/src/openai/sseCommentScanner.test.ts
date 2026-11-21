@@ -7,14 +7,15 @@
 import { describe, expect, it } from 'bun:test';
 import { createSseCommentScanner } from './sseCommentScanner.js';
 
-/** Feed the given text chunks through a fresh scanner and count comments. */
-function countComments(chunks: readonly string[]): number {
+/** Feed the given chunks through a fresh scanner and count comments. */
+function countComments(chunks: ReadonlyArray<string | Uint8Array>): number {
   let comments = 0;
   const scan = createSseCommentScanner(() => {
     comments += 1;
   });
   const encoder = new TextEncoder();
-  for (const chunk of chunks) scan(encoder.encode(chunk));
+  for (const chunk of chunks)
+    scan(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
   return comments;
 }
 
@@ -42,6 +43,22 @@ describe('createSseCommentScanner', () => {
 
   it('ignores a colon that is not the first character of a line', () => {
     expect(countComments([' : not a comment\n', 'x:\n'])).toBe(0);
+  });
+
+  it('skips one leading UTF-8 byte order mark, including one split across chunks', () => {
+    expect(countComments(['\uFEFF: keepalive\n'])).toBe(1);
+    expect(
+      countComments([
+        Uint8Array.of(0xef),
+        Uint8Array.of(0xbb, 0xbf, 0x3a),
+        ' keepalive\n',
+      ]),
+    ).toBe(1);
+  });
+
+  it('treats a byte order mark after the start of the stream as line content', () => {
+    expect(countComments([':a\n', '\uFEFF:b\n'])).toBe(1);
+    expect(countComments(['\uFEFF\uFEFF:a\n'])).toBe(0);
   });
 
   it('finds comments interleaved with data events in one chunk', () => {

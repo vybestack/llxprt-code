@@ -184,14 +184,22 @@ async function withBufferingServer(
   ) => Promise<void>,
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'sse-keepalive-'));
+  // The watchdog env overrides take priority over the ephemeral settings
+  // below, so an inherited value would replace the thresholds under test.
   const environment = Object.fromEntries(
-    ['LLXPRT_CONFIG_HOME', 'LLXPRT_DATA_HOME', 'LLXPRT_FAKE_RESPONSES'].map(
-      (key) => [key, process.env[key]],
-    ),
+    [
+      'LLXPRT_CONFIG_HOME',
+      'LLXPRT_DATA_HOME',
+      'LLXPRT_FAKE_RESPONSES',
+      'LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS',
+      'LLXPRT_STREAM_IDLE_TIMEOUT_MS',
+    ].map((key) => [key, process.env[key]]),
   );
   process.env.LLXPRT_CONFIG_HOME = join(directory, 'home');
   process.env.LLXPRT_DATA_HOME = join(directory, 'data');
   delete process.env.LLXPRT_FAKE_RESPONSES;
+  delete process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS;
+  delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
   const workingDir = join(directory, 'work');
   await mkdir(workingDir);
   const targetPath = join(workingDir, 'notes.txt');
