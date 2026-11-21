@@ -48,6 +48,7 @@ export interface PostConfigInput {
   readonly bootstrapArgs: BootstrapProfileArgs;
   readonly argv: CliArgs;
   readonly settings: Settings;
+  readonly userSettings?: Pick<Settings, 'dumpcontext' | 'dumpRetention'>;
   readonly profileSettingsWithTools: Settings & EphemeralSettings;
   readonly profileLoadResult: ProfileLoadResult;
   readonly providerModelResult: ProviderModelResult;
@@ -98,10 +99,93 @@ export interface PostConfigPreflight extends AgentPostConfigSettings {
   readSetting(key: string): unknown;
   writeSetting(key: string, value: unknown): void;
   applyArgumentOverrides(
-    owner: Pick<SessionSettingsOwner, 'writeUserParameter'>,
+    owner: Pick<
+      SessionSettingsOwner,
+      'writeUserParameter' | 'writeSessionOverride'
+    >,
     argv: CliOverrideArguments,
     bootstrap: CliOverrideBootstrap | undefined,
   ): Promise<void>;
+}
+
+export interface DumpContextStartupSettings {
+  readonly userDefault?: unknown;
+  readonly userRetention?: Settings['dumpRetention'];
+  readonly dumponerrorFlag?: boolean;
+  readonly set?: readonly string[];
+}
+
+const PERSISTENT_DUMP_MODES = new Set(['off', 'error', 'on']);
+
+function isPersistentDumpMode(value: unknown): value is 'off' | 'error' | 'on' {
+  return typeof value === 'string' && PERSISTENT_DUMP_MODES.has(value);
+}
+
+function isValidDumpRetention(maxBytes: number, maxAgeDays: number): boolean {
+  return (
+    Number.isSafeInteger(maxBytes) &&
+    maxBytes > 0 &&
+    Number.isFinite(maxAgeDays) &&
+    maxAgeDays > 0
+  );
+}
+
+function readExplicitDumpContextMode(
+  set: readonly string[] | undefined,
+): 'off' | 'error' | 'on' | undefined {
+  const entries = (set ?? []).filter((entry) => {
+    const separatorIndex = entry.indexOf('=');
+    return (
+      separatorIndex >= 0 &&
+      entry.slice(0, separatorIndex).trim() === 'dumpcontext'
+    );
+  });
+  let mode: 'off' | 'error' | 'on' | undefined;
+  for (const entry of entries) {
+    const value = entry.slice(entry.indexOf('=') + 1);
+    if (!isPersistentDumpMode(value)) {
+      throw new Error(
+        `Invalid --set dumpcontext mode '${value}'. Use off, error, or on.`,
+      );
+    }
+    mode = value;
+  }
+  return mode;
+}
+
+export function applyDumpContextStartupSettings(
+  owner: Pick<
+    SessionSettingsOwner,
+    'writeSessionOverride' | 'writeUserParameter'
+  >,
+  startup: DumpContextStartupSettings,
+): void {
+  if (
+    startup.userDefault !== undefined &&
+    !isPersistentDumpMode(startup.userDefault)
+  ) {
+    throw new Error(
+      'Invalid settings.json dumpcontext mode. Use off, error, or on.',
+    );
+  }
+  let mode: 'off' | 'error' | 'on' = isPersistentDumpMode(startup.userDefault)
+    ? startup.userDefault
+    : 'off';
+  if (startup.dumponerrorFlag === true) mode = 'error';
+
+  mode = readExplicitDumpContextMode(startup.set) ?? mode;
+
+  owner.writeSessionOverride('dumpcontext', mode);
+
+  const maxBytes = startup.userRetention?.maxBytes ?? 2_147_483_648;
+  const maxAgeDays = startup.userRetention?.maxAgeDays ?? 14;
+  if (!isValidDumpRetention(maxBytes, maxAgeDays)) {
+    throw new Error(
+      'Invalid dumpRetention settings. Values must be positive finite numbers.',
+    );
+  }
+  owner.writeUserParameter('dump-retention-max-bytes', maxBytes);
+  owner.writeUserParameter('dump-retention-max-age-days', maxAgeDays);
 }
 
 // ─── Narrowed per-function input types ───────────────────────────────────────
@@ -113,7 +197,10 @@ type SetupRuntimeContextInput = Pick<
 > & {
   readonly sessionSettings: Pick<
     AgentPostConfigSettings,
-    'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+    | 'writeUserParameter'
+    | 'writeSessionOverride'
+    | 'readNamedParameter'
+    | 'chooseModel'
   >;
 };
 
@@ -337,7 +424,10 @@ async function reapplyCliOverrides(
   input: ReapplyCliOverridesInput & {
     readonly sessionSettings: Pick<
       AgentPostConfigSettings,
-      'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+      | 'writeUserParameter'
+      | 'writeSessionOverride'
+      | 'readNamedParameter'
+      | 'chooseModel'
     >;
   },
   finalProvider: string | undefined,
@@ -391,7 +481,10 @@ function applyToolPolicies(
   input: ApplyToolPoliciesInput & {
     readonly sessionSettings: Pick<
       AgentPostConfigSettings,
-      'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+      | 'writeUserParameter'
+      | 'writeSessionOverride'
+      | 'readNamedParameter'
+      | 'chooseModel'
     >;
   },
 ): void {
@@ -460,7 +553,10 @@ function applyEphemeralSettings(
   input: PostConfigInput & {
     readonly sessionSettings: Pick<
       AgentPostConfigSettings,
-      'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+      | 'writeUserParameter'
+      | 'writeSessionOverride'
+      | 'readNamedParameter'
+      | 'chooseModel'
     >;
   },
 ): void {
@@ -481,6 +577,13 @@ function applyEphemeralSettings(
   applyGlobalAndProfileEphemeralSettings({
     ...input,
     config: input.sessionSettings,
+  });
+
+  applyDumpContextStartupSettings(input.sessionSettings, {
+    userDefault: input.userSettings?.dumpcontext,
+    userRetention: input.userSettings?.dumpRetention,
+    dumponerrorFlag: argv.dumponerror,
+    set: input.bootstrapArgs.setOverrides ?? argv.set ?? [],
   });
 
   // In non-interactive mode, tool governance is enforced from approval mode,
@@ -504,7 +607,9 @@ function applyEphemeralSettings(
   const cliSetResult = applyCliSetArguments(
     {
       setEphemeralSetting: (key, value) =>
-        input.sessionSettings.writeUserParameter(key, value),
+        key === 'dumpcontext'
+          ? input.sessionSettings.writeSessionOverride(key, value)
+          : input.sessionSettings.writeUserParameter(key, value),
     },
     setArgsForApplication,
   );
@@ -535,7 +640,10 @@ function finalizeMetadata(
   input: PostConfigInput & {
     readonly sessionSettings: Pick<
       AgentPostConfigSettings,
-      'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+      | 'writeUserParameter'
+      | 'writeSessionOverride'
+      | 'readNamedParameter'
+      | 'chooseModel'
     >;
   },
 ): void {

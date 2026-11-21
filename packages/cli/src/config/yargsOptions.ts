@@ -357,7 +357,7 @@ export const innerCommandOptions: Record<string, Options> = {
   dumponerror: {
     type: 'boolean',
     description:
-      'Dump request body to the dumps directory in your LLxprt cache directory on API errors.',
+      'Enable refused-request dumps for this session (equivalent to --set dumpcontext=error).',
     default: false,
   },
   continue: {

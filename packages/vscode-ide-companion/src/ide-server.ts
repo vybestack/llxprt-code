@@ -25,6 +25,11 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import type { DiffManager } from './diff-manager.js';
 import { OpenFilesManager } from './open-files-manager.js';
+import {
+  createPrivateFileWriter,
+  ensurePrivateDirectory,
+  type PrivateFileWriter,
+} from './private-port-file.js';
 
 class CORSError extends Error {
   constructor(message: string) {
@@ -63,6 +68,7 @@ interface WritePortAndWorkspaceArgs {
   portFile: string | undefined;
   authToken: string;
   log: (message: string) => void;
+  writer: PrivateFileWriter;
 }
 
 async function writePortAndWorkspace({
@@ -71,6 +77,7 @@ async function writePortAndWorkspace({
   portFile,
   authToken,
   log,
+  writer,
 }: WritePortAndWorkspaceArgs): Promise<void> {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   const workspacePath =
@@ -105,7 +112,7 @@ async function writePortAndWorkspace({
   log(`Writing port file to: ${portFile}`);
 
   try {
-    await fs.writeFile(portFile, content).then(() => fs.chmod(portFile, 0o600));
+    await writer.write(portFile, content);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log(`Failed to write port to file: ${message}`);
@@ -155,6 +162,7 @@ export class IDEServer {
   private authToken: string | undefined;
   private transports: Map<string, StreamableHTTPServerTransport> = new Map();
   private openFilesManager: OpenFilesManager | undefined;
+  private portFileWriter: PrivateFileWriter = createPrivateFileWriter();
   diffManager: DiffManager;
 
   constructor(log: (message: string) => void, diffManager: DiffManager) {
@@ -166,6 +174,7 @@ export class IDEServer {
     return new Promise((resolve, reject) => {
       this.context = context;
       this.authToken = randomUUID();
+      this.portFileWriter = createPrivateFileWriter();
       const sessionContextDelivery: SessionContextDelivery = new Map();
       const app = express();
       app.use(express.json({ limit: '10mb' }));
@@ -668,6 +677,7 @@ export class IDEServer {
           portFile: this.portFile,
           authToken: this.authToken ?? '',
           log: this.log,
+          writer: this.portFileWriter,
         });
       }
       resolve();
@@ -678,8 +688,10 @@ export class IDEServer {
 
   private async createPortFile() {
     try {
-      const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
-      await fs.mkdir(portDir, { recursive: true });
+      const baseDir = path.join(os.tmpdir(), 'llxprt');
+      const portDir = path.join(baseDir, 'ide');
+      await ensurePrivateDirectory(baseDir);
+      await ensurePrivateDirectory(portDir);
       this.portFile = path.join(
         portDir,
         `llxprt-ide-server-${process.ppid}-${this.port}.json`,
@@ -716,12 +728,18 @@ export class IDEServer {
         portFile: this.portFile,
         authToken: this.authToken,
         log: this.log,
+        writer: this.portFileWriter,
       });
       this.broadcastIdeContextUpdate();
     }
   }
 
   async stop(): Promise<void> {
+    // Close port file admission before anything yields, then let replacements
+    // already queued finish. Otherwise a queued syncEnvVars write could
+    // recreate the credentials file after this method has removed it.
+    const portFileWritesDrained = this.portFileWriter.close();
+
     // Close and clear all tracked session transports first so their
     // keep-alive timers and session state are released promptly rather than
     // lingering for the 60-second keep-alive interval.
@@ -747,6 +765,7 @@ export class IDEServer {
     if (this.context !== undefined) {
       this.context.environmentVariableCollection.clear();
     }
+    await portFileWritesDrained;
     if (this.portFile !== undefined) {
       try {
         await fs.unlink(this.portFile);

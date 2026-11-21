@@ -21,6 +21,10 @@ const MAX_TRACKED_FINGERPRINTS = 64;
 const FINGERPRINT_ALGORITHM = 'sha256';
 const FINGERPRINT_FIELD_SEPARATOR = '\u0000';
 const REPORT_FILE_PATTERN = /^llxprt-client-error-.*\.json$/;
+// Reports can contain request context and live at predictable names in a
+// shared temp directory: create them owner-only and never follow or truncate
+// an existing entry.
+const REPORT_WRITE = { mode: 0o600, flag: 'wx' } as const;
 
 interface RecentReportEntry {
   windowStartMs: number;
@@ -369,7 +373,7 @@ async function writeMinimalReport(
 ): Promise<boolean> {
   try {
     const content = stringifyClamped({ error: errorToReport });
-    await fs.writeFile(reportPath, content);
+    await fs.writeFile(reportPath, content, REPORT_WRITE);
     reportToStderr(
       `${baseMessage} Partial report (excluding context) available at: ${reportPath}`,
     );
@@ -452,7 +456,7 @@ export async function reportError(
 
   const cohort = joinRotationCohort(reportingDir, reportPath);
   try {
-    await fs.writeFile(reportPath, stringifiedReportContent);
+    await fs.writeFile(reportPath, stringifiedReportContent, REPORT_WRITE);
   } catch (writeError) {
     reportToStderr(
       `${baseMessage} Additionally, failed to write detailed error report:`,

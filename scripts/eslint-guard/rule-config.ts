@@ -227,7 +227,7 @@ export function buildRuleState(
     severity = normalizeMultilineSeverity(content);
   } else if (effectiveKey !== null) {
     severity = extractSeverityValue(content);
-    if (effectiveKey !== null && CEILING_RULES.has(effectiveKey)) {
+    if (CEILING_RULES.has(effectiveKey)) {
       const thresholdResult = extractThresholdValue(content, effectiveKey);
       if (thresholdResult !== null) {
         threshold = thresholdResult.value;

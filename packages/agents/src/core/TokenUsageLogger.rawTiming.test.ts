@@ -292,7 +292,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'raw-timing-prompt';
@@ -382,7 +382,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'visible-fallback-prompt';
@@ -470,7 +470,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     const promptId = 'sink-channel-prompt';
@@ -519,7 +519,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
       [],
     );
 
-    const realLogger = new TokenUsageLogger(true, logFile);
+    const realLogger = new TokenUsageLogger('debug', logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
 
     realLogger.recordEstimate(promptId, {

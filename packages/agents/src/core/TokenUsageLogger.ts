@@ -8,6 +8,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { appendFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { TokenUsageLogLevel } from '@vybestack/llxprt-code-settings';
 import {
   TOKEN_USAGE_SCHEMA_VERSION,
   type TokenUsageTurnContext,
@@ -24,6 +25,7 @@ import {
   type TokenUsageAttemptOutcome,
 } from './tokenUsageRecords.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
+import { toSummaryTurnRecord } from './tokenUsageSummaryRecord.js';
 
 // Re-export for backward compatibility — SerializedTokenUsageRecord now lives
 // in the schema module as an alias of SerializedTokenUsageTurnRecord.
@@ -63,6 +65,8 @@ export interface TokenUsageRecord extends PendingTokenEstimate {
   readonly effectiveActualTokens: number;
 }
 
+export type { TokenUsageLogLevel } from '@vybestack/llxprt-code-settings';
+
 export const PENDING_CAP = 100;
 
 /**
@@ -88,6 +92,12 @@ function _finiteMs(value: number | null | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+/** A finite timing value rounded to whole milliseconds (#4068 record size). */
+function _wholeMs(value: number | null | undefined): number | undefined {
+  const finite = _finiteMs(value);
+  return finite === undefined ? undefined : Math.round(finite);
 }
 
 /** True when a pending entry has all the estimate fields required to emit a turn record. */
@@ -175,11 +185,43 @@ export class TokenUsageLogger {
    * the logger is already per-session; bounded internally.
    */
   private readonly shapeMemory = new RequestShapeSessionMemory();
+  /** The level of the request in flight; see {@link beginRequest}. */
+  private level: TokenUsageLogLevel;
 
+  /**
+   * @param level The resolved `token-usage-log` level (#4068) in force until
+   *   the first {@link beginRequest}. Legacy boolean values are mapped by the
+   *   settings accessor before they reach here.
+   * @param readLevel Reads the live level at each request boundary, because
+   *   the setting applies from the next request (`/set` on an existing chat).
+   *   Defaults to the fixed `level`.
+   */
   constructor(
-    private readonly enabled: boolean,
+    level: TokenUsageLogLevel,
     private readonly logFilePath: string | undefined,
-  ) {}
+    private readonly readLevel: () => TokenUsageLogLevel = () => level,
+  ) {
+    this.level = level;
+  }
+
+  /**
+   * Start a provider request: read the live level and apply it to this
+   * request and everything recorded until the next one. Called once per
+   * attempt, before any token-usage work for it.
+   *
+   * Requests of one session are sequential, and each attempt's actual usage
+   * is recorded before the next attempt begins, so an attempt is always
+   * written at the level it started with; a change made mid-attempt takes
+   * effect from the next request. Pending attempts and request-shape memory
+   * survive level changes. A request sent at `off` is not observed, so the
+   * shape memory is told it missed one (see
+   * {@link RequestShapeSessionMemory.noteUnobservedRequest}).
+   */
+  beginRequest(): TokenUsageLogLevel {
+    this.level = this.readLevel();
+    if (this.level === 'off') this.shapeMemory.noteUnobservedRequest();
+    return this.level;
+  }
 
   /**
    * Per-session request-shape memory (callId tracking + fingerprint history).
@@ -214,8 +256,13 @@ export class TokenUsageLogger {
     return { fromProvider: previous.provider, fromModel: previous.model };
   }
 
+  /** The level of the current request; `off` writes nothing. */
+  getLevel(): TokenUsageLogLevel {
+    return this.level;
+  }
+
   isEnabled(): boolean {
-    return this.enabled;
+    return this.level !== 'off';
   }
 
   /**
@@ -229,7 +276,7 @@ export class TokenUsageLogger {
     promptId: string,
     context: Partial<TokenUsageTurnContext>,
   ): void {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     const existing = this.pending.get(promptId);
     if (existing !== undefined) {
       this.pending.set(promptId, {
@@ -266,7 +313,7 @@ export class TokenUsageLogger {
       'ts' | 'promptId' | 'tiktokenTokens' | 'tiktokenEstimationFailed'
     >,
   ): void {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     const existing = this.pending.get(promptId);
     this.recordEstimate(promptId, {
       ...data,
@@ -279,7 +326,7 @@ export class TokenUsageLogger {
     promptId: string,
     data: Omit<PendingTokenEstimate, 'ts' | 'promptId'>,
   ): void {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     if (!this.pending.has(promptId)) {
       this.evictIfFull();
     }
@@ -330,7 +377,7 @@ export class TokenUsageLogger {
     promptId: string,
     actual: TokenUsageActualInput,
   ): Promise<void> {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     const pending = this.pending.get(promptId);
     if (pending === undefined) return;
     // Split guard keeps each expression under the 3-operator complexity limit
@@ -401,6 +448,11 @@ export class TokenUsageLogger {
         backendProfile: actual.backendProfile,
         finishReason: actual.finishReason,
         rawStopReason: actual.rawStopReason,
+        refusalCategory: actual.refusalCategory,
+        refusalExplanation: actual.refusalExplanation,
+        recommendedModel: actual.recommendedModel,
+        requestId: actual.requestId,
+        dumpBaseId: actual.dumpBaseId,
       },
     };
     await this._writeTurnRecord(record);
@@ -421,7 +473,7 @@ export class TokenUsageLogger {
    * the logger is disabled.
    */
   async recordLifecycleEvent(event: TokenUsageLifecycleEvent): Promise<void> {
-    if (!this.enabled) return;
+    if (this.level === 'off') return;
     const record = this._toLifecycleRecord(event);
     await this._appendJsonl(record);
   }
@@ -455,12 +507,33 @@ export class TokenUsageLogger {
   private _toSerializedTurnRecord(
     record: WritableTurnRecord,
   ): SerializedTokenUsageRecord {
-    return {
+    const context = record.turnContext ?? {};
+    const full: SerializedTokenUsageRecord = {
       record_type: 'turn',
       schema_version: TOKEN_USAGE_SCHEMA_VERSION,
       ...this._serializeCoreEstimateFields(record),
-      ...this._serializeContextFields(record.turnContext),
+      ...this._serializeContextFields(context),
       ...this._serializeExtraFields(record.actualExtras),
+      ...this._serializeDerivedFields(context),
+    };
+    return this.level === 'debug' ? full : toSummaryTurnRecord(full);
+  }
+
+  /**
+   * #4068 summary-level aggregates. `fixed_tokens` is the per-request overhead
+   * that does not depend on the conversation (instructions plus tool schemas);
+   * it is written only when both parts were measured.
+   */
+  private _serializeDerivedFields(c: Partial<TokenUsageTurnContext>) {
+    return {
+      ...(c.instructionsTokens !== undefined &&
+        c.toolsSchemaTokens !== undefined && {
+          fixed_tokens: c.instructionsTokens + c.toolsSchemaTokens,
+        }),
+      ...(c.newToolResultCount !== undefined && {
+        new_tool_result_count: c.newToolResultCount,
+      }),
+      ...(c.timingSource !== undefined && { timing_source: c.timingSource }),
     };
   }
 
@@ -515,6 +588,10 @@ export class TokenUsageLogger {
    * lastToken-ttft window in ms, only when both endpoints are measured and
    * the window is strictly positive — never a total-duration fallback
    * (ProviderPerformanceTracker Finding #7).
+   *
+   * Timing is written in whole milliseconds (#4068). The endpoints are
+   * rounded before subtracting, so `ttft_ms + generation_ms` is the rounded
+   * last-token time and never exceeds the rounded `provider_request_ms`.
    */
   private _generationWindowMs(
     ctx: Partial<TokenUsageTurnContext>,
@@ -523,7 +600,9 @@ export class TokenUsageLogger {
     const lastTokenMs = _finiteMs(ctx.lastTokenMs);
     if (ttftMs === undefined || lastTokenMs === undefined) return undefined;
     const windowMs = lastTokenMs - ttftMs;
-    return windowMs > 0 ? windowMs : undefined;
+    return windowMs > 0
+      ? Math.round(lastTokenMs) - Math.round(ttftMs)
+      : undefined;
   }
 
   private _serializeContextFields(
@@ -531,8 +610,8 @@ export class TokenUsageLogger {
   ) {
     const c = ctx ?? {};
     const generationMs = this._generationWindowMs(c);
-    const ttftMs = _finiteMs(c.ttftMs);
-    const providerRequestMs = _finiteMs(c.providerRequestMs);
+    const ttftMs = _wholeMs(c.ttftMs);
+    const providerRequestMs = _wholeMs(c.providerRequestMs);
     const chunkCount = _finiteMs(c.chunkCount);
     return {
       ...(c.sessionId !== undefined && { session_id: c.sessionId }),
@@ -633,6 +712,19 @@ export class TokenUsageLogger {
       ...(extras.rawStopReason !== undefined && {
         raw_stop_reason: extras.rawStopReason,
       }),
+      ...(extras.refusalCategory !== undefined && {
+        refusal_category: extras.refusalCategory,
+      }),
+      ...(extras.refusalExplanation !== undefined && {
+        refusal_explanation: extras.refusalExplanation,
+      }),
+      ...(extras.recommendedModel !== undefined && {
+        recommended_model: extras.recommendedModel,
+      }),
+      request_id: extras.requestId ?? null,
+      ...(extras.dumpBaseId === undefined
+        ? {}
+        : { dump_base_id: extras.dumpBaseId }),
     };
   }
 
@@ -678,6 +770,15 @@ export class TokenUsageLogger {
       }),
       ...(event.compressionOutputTokens !== undefined && {
         compression_output_tokens: event.compressionOutputTokens,
+      }),
+      ...(event.compressionStrategy !== undefined && {
+        compression_strategy: event.compressionStrategy,
+      }),
+      ...(event.llmCallMade !== undefined && {
+        llm_call_made: event.llmCallMade,
+      }),
+      ...(event.compressionAttempts !== undefined && {
+        compression_attempts: event.compressionAttempts,
       }),
     };
   }
@@ -771,13 +872,19 @@ export class TokenUsageLogger {
   }
 }
 
+/**
+ * The session's logger. `readLevel` is the live `token-usage-log` level; the
+ * log path is resolved even when the level starts at `off`, so turning the
+ * level on later in the session writes to the session's file. Nothing is
+ * created on disk until a record is written.
+ */
 export function createTokenUsageLogger(
-  tokenUsageEnabled: boolean,
+  readLevel: () => TokenUsageLogLevel,
   sessionId: string,
   config: Config | undefined,
 ): TokenUsageLogger {
   let logFilePath: string | undefined;
-  if (tokenUsageEnabled && config) {
+  if (config) {
     try {
       const tempDir = config.getProjectTempDir();
       if (tempDir) {
@@ -787,8 +894,6 @@ export function createTokenUsageLogger(
       // Storage unavailable — logging disabled
     }
   }
-  return new TokenUsageLogger(
-    tokenUsageEnabled && logFilePath !== undefined,
-    logFilePath,
-  );
+  if (logFilePath === undefined) return new TokenUsageLogger('off', undefined);
+  return new TokenUsageLogger(readLevel(), logFilePath, readLevel);
 }

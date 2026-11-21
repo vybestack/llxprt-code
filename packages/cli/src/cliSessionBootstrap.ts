@@ -140,6 +140,7 @@ export async function bootstrapRuntimeAndConfig(
     return await loadCliConfig(
       {
         settings: settings.merged,
+        userSettings: settings.user.settings,
         extensions,
         extensionEnablementManager,
         sessionId,

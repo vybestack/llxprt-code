@@ -210,6 +210,7 @@ describe('UiTelemetryService', () => {
           totalRequests: 1,
           totalErrors: 0,
           totalRefusals: 0,
+          refusalsByCategory: [],
           totalLatencyMs: 500,
         },
         tokens: {
@@ -266,6 +267,7 @@ describe('UiTelemetryService', () => {
           totalRequests: 2,
           totalErrors: 0,
           totalRefusals: 0,
+          refusalsByCategory: [],
           totalLatencyMs: 1100,
         },
         tokens: {
@@ -343,6 +345,7 @@ describe('UiTelemetryService', () => {
           totalRequests: 1,
           totalErrors: 1,
           totalRefusals: 0,
+          refusalsByCategory: [],
           totalLatencyMs: 300,
         },
         tokens: {
@@ -391,6 +394,7 @@ describe('UiTelemetryService', () => {
           totalRequests: 2,
           totalErrors: 1,
           totalRefusals: 0,
+          refusalsByCategory: [],
           totalLatencyMs: 800,
         },
         tokens: {

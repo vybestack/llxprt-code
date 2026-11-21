@@ -103,16 +103,13 @@ function tryCreateLock(lockPath: string): string | null {
   });
   try {
     const fd = fs.openSync(lockPath, 'wx', 0o600);
-    let closed = false;
     try {
       fs.writeSync(fd, payload, 0, 'utf8');
       fs.fsyncSync(fd);
       fs.closeSync(fd);
-      closed = true;
     } catch (writeError) {
-      const closeErrors = closed ? [] : closeAfterFailedInitialization(fd);
       const cleanupErrors = [
-        ...closeErrors,
+        ...closeAfterFailedInitialization(fd),
         ...unlinkAfterFailedInitialization(lockPath),
       ];
       if (cleanupErrors.length === 0) {

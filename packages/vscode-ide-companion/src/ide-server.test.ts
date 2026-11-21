@@ -50,6 +50,14 @@ void vi.mock('node:fs/promises', () => ({
   unlink: vi.fn(() => Promise.resolve(undefined)),
   chmod: vi.fn(() => Promise.resolve(undefined)),
   mkdir: vi.fn(() => Promise.resolve(undefined)),
+  lstat: vi.fn(() =>
+    Promise.resolve({
+      isDirectory: () => true,
+      isSymbolicLink: () => false,
+      uid: process.getuid?.() ?? 0,
+      mode: 0o40700,
+    }),
+  ),
 }));
 
 const actual = { ...(await import('node:os')) };
@@ -120,16 +128,19 @@ describe('IDEServer', () => {
   });
 
   describe('R1: Port file consolidation', () => {
-    it('should create port directory with recursive flag', async () => {
+    it('should create the port directories private to the owner', async () => {
       setWorkspaceFolders([
         { uri: { fsPath: '/foo/bar' } } as unknown as vscode.WorkspaceFolder,
       ]);
 
       await ideServer.start(mockContext);
 
+      expect(fs.mkdir).toHaveBeenCalledWith(path.join('/tmp', 'llxprt'), {
+        mode: 0o700,
+      });
       expect(fs.mkdir).toHaveBeenCalledWith(
         path.join('/tmp', 'llxprt', 'ide'),
-        { recursive: true },
+        { mode: 0o700 },
       );
     });
 
@@ -160,8 +171,8 @@ describe('IDEServer', () => {
       expect(fs.writeFile).toHaveBeenCalledWith(
         expectedPortFile,
         expect.any(String),
+        { mode: 0o600, flag: 'wx' },
       );
-      expect(fs.chmod).toHaveBeenCalledWith(expectedPortFile, 0o600);
     });
 
     it('should write port file with correct JSON content (no ppid field)', async () => {

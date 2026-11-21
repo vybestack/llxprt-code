@@ -43,6 +43,7 @@ import {
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
+  compressedRecordPayload,
   type SessionRecordingServiceConfig,
   type SessionEventType,
   type SessionRecordLine,
@@ -103,6 +104,8 @@ export type { PreparedContentBatch };
  * @requirement REQ-REC-003, REQ-REC-004, REQ-REC-005, REQ-REC-006, REQ-REC-007, REQ-REC-008
  * @pseudocode session-recording-service.md lines 40-185
  */
+type CompressedRecordArgs = Parameters<typeof compressedRecordPayload>;
+
 export class SessionRecordingService {
   /** @pseudocode session-recording-service.md lines 40-51 */
   private queue: PendingRecord[] = [];
@@ -916,8 +919,8 @@ export class SessionRecordingService {
    * @requirement REQ-REC-002
    * @pseudocode session-recording-service.md lines 194-196
    */
-  recordCompressed(summary: IContent, itemsCompressed: number): void {
-    this.enqueue('compressed', { summary, itemsCompressed });
+  recordCompressed(...args: CompressedRecordArgs): void {
+    this.enqueue('compressed', compressedRecordPayload(...args));
   }
 
   /**

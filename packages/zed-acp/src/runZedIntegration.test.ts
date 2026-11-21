@@ -158,6 +158,19 @@ describe('runZedIntegration signal-driven disposal (real ACP path)', () => {
     expect(onSignal).toHaveBeenCalledTimes(2);
   });
 
+  it('installDisposalSignalHandlers tells the callback which signal arrived', () => {
+    const received: NodeJS.Signals[] = [];
+    const fakeProcess = new EventEmitter();
+    installDisposalSignalHandlers(
+      (signal) => received.push(signal),
+      ['SIGINT', 'SIGTERM'],
+      fakeProcess,
+    );
+    fakeProcess.emit('SIGTERM');
+    fakeProcess.emit('SIGINT');
+    expect(received).toStrictEqual(['SIGTERM', 'SIGINT']);
+  });
+
   it('installDisposalSignalHandlers removes listeners on dispose (no leak)', () => {
     const onSignal = vi.fn();
     const fakeProcess = new EventEmitter();

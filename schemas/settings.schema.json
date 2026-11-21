@@ -238,6 +238,44 @@
         "$ref": "#/$defs/MCPServerConfig"
       }
     },
+    "dumpcontext": {
+      "title": "Context Dump Mode",
+      "description": "Default context dump mode for new sessions. Dumps can contain prompt content and are stored in the LLxprt cache directory.",
+      "markdownDescription": "Default context dump mode for new sessions. Dumps can contain prompt content and are stored in the LLxprt cache directory.\n\n- Category: `Diagnostics`\n- Requires restart: `yes`\n- Default: `off`",
+      "default": "off",
+      "type": "string",
+      "enum": ["off", "error", "on"]
+    },
+    "dumpRetention": {
+      "title": "Diagnostic Dump Retention",
+      "description": "Retention limits for provider request and response dumps. Files contain prompt content and are written with owner-only permissions.",
+      "markdownDescription": "Retention limits for provider request and response dumps. Files contain prompt content and are written with owner-only permissions.\n\n- Category: `Diagnostics`\n- Requires restart: `yes`\n- Default: `{\n  \"maxBytes\": 2147483648,\n  \"maxAgeDays\": 14\n}`",
+      "default": {
+        "maxBytes": 2147483648,
+        "maxAgeDays": 14
+      },
+      "type": "object",
+      "properties": {
+        "maxBytes": {
+          "title": "Maximum Dump Size (Bytes)",
+          "description": "Maximum total size of managed dump files.",
+          "markdownDescription": "Maximum total size of managed dump files.\n\n- Category: `Diagnostics`\n- Requires restart: `yes`\n- Default: `2147483648`",
+          "default": 2147483648,
+          "type": "number",
+          "minimum": 1,
+          "multipleOf": 1
+        },
+        "maxAgeDays": {
+          "title": "Maximum Dump Age (Days)",
+          "description": "Maximum age of managed dump files in days.",
+          "markdownDescription": "Maximum age of managed dump files in days.\n\n- Category: `Diagnostics`\n- Requires restart: `yes`\n- Default: `14`",
+          "default": 14,
+          "type": "number",
+          "minimum": 5e-324
+        }
+      },
+      "additionalProperties": false
+    },
     "sessionRetention": {
       "title": "Session Retention",
       "description": "Settings for automatic session cleanup. Cleanup is enabled by default with a machine-wide 4 GiB aggregate size budget.",
@@ -258,10 +296,17 @@
           "default": 4096,
           "type": "number"
         },
+        "tokenUsageMaxTotalSizeMB": {
+          "title": "Token Usage Log Max Total Size (MiB)",
+          "description": "Machine-wide size limit for per-session token-usage logs (token-usage/*.jsonl), in MiB. The oldest inactive logs are deleted first when the total exceeds it.",
+          "markdownDescription": "Machine-wide size limit for per-session token-usage logs (token-usage/*.jsonl), in MiB. The oldest inactive logs are deleted first when the total exceeds it.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `1024`",
+          "default": 1024,
+          "type": "number"
+        },
         "maxAge": {
           "title": "Max Age",
-          "description": "Maximum age of sessions to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.",
-          "markdownDescription": "Maximum age of sessions to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.\n\n- Category: `General`\n- Requires restart: `no`",
+          "description": "Maximum age of sessions and token-usage logs to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.",
+          "markdownDescription": "Maximum age of sessions and token-usage logs to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.\n\n- Category: `General`\n- Requires restart: `no`",
           "type": "string"
         },
         "maxCount": {

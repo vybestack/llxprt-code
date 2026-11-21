@@ -49,7 +49,7 @@ describe('TokenUsageLogger refusal records (issue #4036)', () => {
       fs.mkdtempSync(path.join(os.tmpdir(), 'token-usage-refusal-')),
       'usage.jsonl',
     );
-    logger = new TokenUsageLogger(true, logFile);
+    logger = new TokenUsageLogger('debug', logFile);
     logger.recordEstimate('prompt-1', {
       provider: 'claudecode',
       model: 'claude-opus-5-5',
@@ -61,6 +61,91 @@ describe('TokenUsageLogger refusal records (issue #4036)', () => {
 
   afterEach(() => {
     fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
+  });
+
+  it('keeps refusal diagnosis and request lineage in the default summary record', async () => {
+    const summaryLogger = new TokenUsageLogger('summary', logFile);
+    summaryLogger.recordEstimate('prompt-1', {
+      provider: 'claudecode',
+      model: 'claude-opus-5-5',
+      estimatedTokens: 100,
+      estimator: 'anthropic-char',
+      tiktokenTokens: null,
+    });
+    await summaryLogger.recordActual('prompt-1', {
+      ...REFUSED,
+      refusalCategory: 'policy',
+      refusalExplanation: 'The request was blocked by policy.',
+      recommendedModel: 'claude-sonnet-5',
+      requestId: 'req-refused-1',
+      dumpBaseId: 'dump-refused-1',
+    });
+    await summaryLogger.recordActual('prompt-1', {
+      actualPromptTokens: 125,
+      cachedTokens: 0,
+      outputTokens: 402,
+      attemptIndex: 1,
+      attemptOutcome: 'success',
+      requestId: 'req-accepted-1',
+      dumpBaseId: 'dump-accepted-1',
+    });
+    summaryLogger.recordEstimate('prompt-2', {
+      provider: 'claudecode',
+      model: 'claude-opus-5-5',
+      estimatedTokens: 90,
+      estimator: 'anthropic-char',
+      tiktokenTokens: null,
+    });
+    await summaryLogger.recordActual('prompt-2', {
+      actualPromptTokens: 90,
+      cachedTokens: 0,
+      outputTokens: 25,
+      attemptIndex: 0,
+      attemptOutcome: 'success',
+      requestId: 'req-ordinary-1',
+    });
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(3);
+    expect(records[2]).toMatchObject({
+      prompt_id: 'prompt-2',
+      attempt_outcome: 'success',
+    });
+    expect(records[0]).toMatchObject({
+      record_type: 'turn',
+      attempt_outcome: 'refusal',
+      refusal_category: 'policy',
+      refusal_explanation: 'The request was blocked by policy.',
+      recommended_model: 'claude-sonnet-5',
+      request_id: 'req-refused-1',
+      dump_base_id: 'dump-refused-1',
+    });
+    expect(records[1]).toMatchObject({
+      attempt_outcome: 'success',
+      request_id: 'req-accepted-1',
+      dump_base_id: 'dump-accepted-1',
+    });
+    expect(records[2]).not.toHaveProperty('request_id');
+    expect(records[0]).not.toHaveProperty('tool_calls');
+
+    expect(records[0]).not.toHaveProperty('instructions_tokens');
+  });
+
+  it('keeps an unknown request id as null on a default summary refusal', async () => {
+    const summaryLogger = new TokenUsageLogger('summary', logFile);
+    summaryLogger.recordEstimate('prompt-1', {
+      provider: 'claudecode',
+      model: 'claude-opus-5-5',
+      estimatedTokens: 100,
+      estimator: 'anthropic-char',
+      tiktokenTokens: null,
+    });
+    await summaryLogger.recordActual('prompt-1', {
+      ...REFUSED,
+      requestId: null,
+    });
+
+    expect(readJsonl(logFile)[0]).toHaveProperty('request_id', null);
   });
 
   it('writes the refusal outcome with finish_reason and raw_stop_reason', async () => {

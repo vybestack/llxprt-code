@@ -323,7 +323,7 @@ function handleLogicalMove(
   if (dir === 'wordLeft') {
     if (cursorCol === 0 && cursorRow === 0) return state;
     let newCursorRow = cursorRow;
-    let newCursorCol = cursorCol;
+    let newCursorCol: number;
     if (cursorCol === 0) {
       newCursorRow--;
       newCursorCol = cpLen(lines[newCursorRow] ?? '');
@@ -345,7 +345,7 @@ function handleLogicalMove(
       return state;
     }
     let newCursorRow = cursorRow;
-    let newCursorCol = cursorCol;
+    let newCursorCol: number;
     const lineLen = cpLen(lineContent);
     if (cursorCol >= lineLen) {
       newCursorRow++;

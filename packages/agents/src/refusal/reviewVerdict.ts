@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { findDroppedLiterals } from './protectedLiterals.js';
+import type { DroppedLiteralEntry } from './reviewTypes.js';
 import type { ReviewRewrite, ReviewWindow } from './reviewWindow.js';
 
 /**
@@ -33,7 +34,11 @@ export type ReviewDecision =
 
 export type ParsedReview =
   | { readonly ok: true; readonly decision: ReviewDecision }
-  | { readonly ok: false; readonly reason: string };
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly dropped?: readonly DroppedLiteralEntry[];
+    };
 
 const FENCED_JSON = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/;
 
@@ -77,17 +82,19 @@ function checkRewrite(
   if (rewrite.newText === entry.text) {
     return `the edit of ${rewrite.id} changes nothing`;
   }
-  const dropped = findDroppedLiterals(entry.text, rewrite.newText);
-  if (dropped.length > 0) {
-    return `the replacement for ${rewrite.id} drops ${dropped.join(', ')}`;
-  }
   return undefined;
 }
 
 function checkRewrites(
   rewrites: readonly ReviewRewrite[],
   window: ReviewWindow,
-): string | undefined {
+):
+  | string
+  | {
+      readonly reason: string;
+      readonly dropped: readonly DroppedLiteralEntry[];
+    }
+  | undefined {
   if (rewrites.length === 0) {
     return 'the rewrite verdict needs at least one rewrite';
   }
@@ -102,7 +109,24 @@ function checkRewrites(
     const problem = checkRewrite(rewrite, window);
     if (problem !== undefined) return problem;
   }
-  return undefined;
+  const dropped = rewrites.flatMap((rewrite) => {
+    const entry = window.entries.find(
+      (candidate) => candidate.id === rewrite.id,
+    );
+    if (entry === undefined) return [];
+    const literals = findDroppedLiterals(entry.text, rewrite.newText);
+    return literals.length === 0
+      ? []
+      : [{ id: rewrite.id, kind: entry.kind, literals }];
+  });
+  if (dropped.length === 0) return undefined;
+  const reason = dropped
+    .map(
+      ({ id, literals }) =>
+        `the replacement for ${id} drops ${literals.join(', ')}`,
+    )
+    .join('; ');
+  return { reason, dropped };
 }
 
 /**
@@ -140,6 +164,10 @@ export function parseReviewReply(
     return { ok: true, decision: { kind: verdict, explanation } };
   }
   const problem = checkRewrites(rewrites, window);
-  if (problem !== undefined) return rejected(problem);
+  if (problem !== undefined) {
+    return typeof problem === 'string'
+      ? rejected(problem)
+      : { ok: false, reason: problem.reason, dropped: problem.dropped };
+  }
   return { ok: true, decision: { kind: 'rewrite', explanation, rewrites } };
 }

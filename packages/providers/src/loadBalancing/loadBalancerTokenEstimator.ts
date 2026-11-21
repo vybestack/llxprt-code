@@ -80,7 +80,6 @@ export async function estimateRequestTokens(
   try {
     tokenizer = deps.tokenizerFactory?.getTokenizer(providerName, modelName);
   } catch (error) {
-    tokenizerFailureModel = modelName;
     logger.debug(
       () =>
         `Tokenizer retrieval failed, using generic fallback: ${String(error)}`,

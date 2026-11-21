@@ -279,6 +279,12 @@ export interface CompressionResult {
   metadata: CompressionResultMetadata;
 }
 
+export interface CompressionAuditProvenance {
+  readonly summaryAuthorModel: string | null;
+  readonly summaryAuthorProvider: string | null;
+  readonly compressionStrategy: CompressionStrategyName;
+}
+
 export interface CompressionResultMetadata {
   originalMessageCount: number;
   compressedMessageCount: number;
@@ -287,6 +293,8 @@ export interface CompressionResultMetadata {
   topPreserved?: number;
   bottomPreserved?: number;
   middleCompressed?: number;
+  /** Actual author of the summary-producing call; null for structural compression. */
+  auditProvenance?: CompressionAuditProvenance;
   /** Actual token usage returned by the LLM during compression, if available. */
   usage?: UsageStats;
 }
