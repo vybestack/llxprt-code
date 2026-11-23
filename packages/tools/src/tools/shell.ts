@@ -50,6 +50,7 @@ import {
   prepareShellExecution,
   appendClampNoticeToResult,
   bindBackgroundShellHost,
+  scopeShellHost,
   formatShellTimeoutMessage,
   validateGrepFlags,
   validatePositiveInteger,
@@ -800,22 +801,19 @@ export class ShellTool extends BaseDeclarativeTool<
   withBackgroundJobs(
     jobs: Pick<IShellToolHost, 'launchBackgroundJob' | 'tailBackgroundJob'>,
   ): ShellTool {
-    return new ShellTool(
-      bindBackgroundShellHost(this.host, jobs),
-      this.messageBus,
-      this.allowlist,
-    );
+    return this.withHost(bindBackgroundShellHost(this.host, jobs));
   }
 
   /**
    * A view of this tool whose host reads shell execution settings from
-   * `read`. Hosts without session-scoped settings leave the tool unchanged.
+   * `read`. Hosts without session-scoped settings are left as they are.
    */
   withExecutionPolicy(read: () => ToolExecutionPolicy): ShellTool {
-    const scoped = this.host.scopedToExecutionPolicy?.(read);
-    return scoped === undefined
-      ? this
-      : new ShellTool(scoped, this.messageBus, this.allowlist);
+    return this.withHost(scopeShellHost(this.host, read));
+  }
+
+  private withHost(host: IShellToolHost): ShellTool {
+    return new ShellTool(host, this.messageBus, this.allowlist);
   }
 
   protected override validateToolParamValues(

@@ -28,7 +28,16 @@ import {
   describeTimeoutClamp,
   type TimeoutResolution,
 } from '../utils/timeoutResolution.js';
+import type { ToolExecutionPolicy } from '../interfaces/tool-execution-policy.js';
 import type { ToolResult } from './tools.js';
+
+/** The host reading shell settings from `read`, or `host` when it has none. */
+export function scopeShellHost(
+  host: IShellToolHost,
+  read: () => ToolExecutionPolicy,
+): IShellToolHost {
+  return host.scopedToExecutionPolicy?.(read) ?? host;
+}
 
 export function bindBackgroundShellHost(
   host: IShellToolHost,
@@ -44,16 +53,9 @@ export function bindBackgroundShellHost(
         return (id: string) => jobs.tailBackgroundJob(id);
       }
       if (key === 'scopedToExecutionPolicy') {
-        return (
-          read: Parameters<
-            NonNullable<IShellToolHost['scopedToExecutionPolicy']>
-          >[0],
-        ) => {
-          const scoped = target.scopedToExecutionPolicy?.(read);
-          return scoped === undefined
-            ? receiver
-            : bindBackgroundShellHost(scoped, jobs);
-        };
+        // Scoping builds a new host; keep this view's job binding on it.
+        return (read: () => ToolExecutionPolicy) =>
+          bindBackgroundShellHost(scopeShellHost(target, read), jobs);
       }
       const value: unknown = Reflect.get(target, key, receiver);
       return typeof value === 'function' ? value.bind(target) : value;

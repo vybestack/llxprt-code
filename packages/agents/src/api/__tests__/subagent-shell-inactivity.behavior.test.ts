@@ -73,7 +73,8 @@ const requestSchema = z.object({
 /** The shell result text a model request carries back to the child model. */
 function lastToolMessage(rawRequest: string): string {
   const { messages } = requestSchema.parse(JSON.parse(rawRequest));
-  const tool = messages.filter((message) => message.role === 'tool').at(-1);
+  const tools = messages.filter((message) => message.role === 'tool');
+  const tool = tools[tools.length - 1];
   if (tool?.content === undefined || tool.content === null)
     throw new Error('Child request carried no tool result');
   return tool.content;
