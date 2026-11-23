@@ -31,6 +31,24 @@ function historyWithImage(): HistoryService {
   return history;
 }
 
+interface Gate {
+  readonly open: Promise<void>;
+  release(): void;
+}
+
+function gate(): Gate {
+  let release: () => void = () => undefined;
+  const open = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { open, release };
+}
+
+/** Lets every promise continuation that is already runnable run. */
+function flush(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 const usageWithoutCacheWrite: UsageStats = {
   promptTokens: 20,
   completionTokens: 5,
@@ -418,7 +436,7 @@ describe('SemanticMediaPurgeSession', () => {
     ).toBe(false);
   });
 
-  it('keeps the purge lease when committed rollback fails', async () => {
+  it('releases the purge lease when committed rollback fails, and reports the failure', async () => {
     const history = historyWithImage();
     let persistenceAttempt = 0;
     const session = new SemanticMediaPurgeSession({
@@ -442,17 +460,106 @@ describe('SemanticMediaPurgeSession', () => {
     ).toBe(true);
 
     let secondResolved = false;
-    void session.begin(false).then(() => {
+    const secondPromise = session.begin(false).then((attempt) => {
       secondResolved = true;
+      return attempt;
     });
-    await Promise.resolve();
+    await flush();
     expect(secondResolved).toBe(false);
 
-    await expect(first.rollbackCommitted()).rejects.toThrow(
+    await expect(first.failAfterProcessingError()).rejects.toThrow(
       'rollback persistence failed',
     );
-    await Promise.resolve();
+    await flush();
 
-    expect(secondResolved).toBeFalsy();
+    expect(secondResolved).toBe(true);
+    await secondPromise;
+  });
+
+  it('keeps the purge lease of a committed attempt that is retired before its history commit finishes', async () => {
+    const history = historyWithImage();
+    const session = new SemanticMediaPurgeSession({
+      history,
+      mode: () => 'remove',
+      persist: () => Promise.resolve(),
+    });
+    const first = await session.begin(false);
+    assertDefined(first, 'Expected first purge attempt');
+    expect(
+      await first.complete({
+        status: 'success',
+        usage: usageWithoutCacheWrite,
+        retryHandoff: false,
+      }),
+    ).toBe(true);
+
+    first.retire();
+    let secondResolved = false;
+    const secondPromise = session.begin(false).then((attempt) => {
+      secondResolved = true;
+      return attempt;
+    });
+    await flush();
+    const heldWhileCommitted = !secondResolved;
+    const imagesWhileCommitted = history.getAll()[0]?.blocks.length;
+
+    await first.failAfterProcessingError();
+    const second = await secondPromise;
+
+    expect({
+      heldWhileCommitted,
+      imagesWhileCommitted,
+      imagesAfterRollback: history.getAll()[0]?.blocks.length,
+      secondCanPurgeAgain: second !== undefined,
+    }).toStrictEqual({
+      heldWhileCommitted: true,
+      imagesWhileCommitted: 1,
+      imagesAfterRollback: 2,
+      secondCanPurgeAgain: true,
+    });
+  });
+
+  it('releases the purge lease when the rollback of an attempt retired during its commit fails', async () => {
+    const history = historyWithImage();
+    const commitHeld = gate();
+    let persistenceAttempt = 0;
+    const session = new SemanticMediaPurgeSession({
+      history,
+      mode: () => 'remove',
+      persist: async () => {
+        persistenceAttempt += 1;
+        if (persistenceAttempt === 1) {
+          await commitHeld.open;
+          return;
+        }
+        throw new Error('rollback persistence failed');
+      },
+    });
+    const first = await session.begin(false);
+    assertDefined(first, 'Expected first purge attempt');
+    const completion = first.complete({
+      status: 'success',
+      usage: usageWithoutCacheWrite,
+      retryHandoff: false,
+    });
+    const completionOutcome = completion.then(
+      () => 'completed',
+      (error: unknown) => (error instanceof Error ? error.message : 'unknown'),
+    );
+    let secondResolved = false;
+    const secondPromise = session.begin(false).then((attempt) => {
+      secondResolved = true;
+      return attempt;
+    });
+
+    first.retire();
+    await flush();
+    expect(secondResolved).toBe(false);
+    commitHeld.release();
+
+    expect(await completionOutcome).toBe('rollback persistence failed');
+    await flush();
+    expect(secondResolved).toBe(true);
+    await secondPromise;
   });
 });
