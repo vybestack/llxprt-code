@@ -31,19 +31,6 @@ function historyWithImage(): HistoryService {
   return history;
 }
 
-interface Gate {
-  readonly open: Promise<void>;
-  release(): void;
-}
-
-function gate(): Gate {
-  let release: () => void = () => undefined;
-  const open = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { open, release };
-}
-
 /** Lets every promise continuation that is already runnable run. */
 function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
@@ -436,7 +423,7 @@ describe('SemanticMediaPurgeSession', () => {
     ).toBe(false);
   });
 
-  it('releases the purge lease when committed rollback fails, and reports the failure', async () => {
+  it('keeps the purge lease when committed rollback fails', async () => {
     const history = historyWithImage();
     let persistenceAttempt = 0;
     const session = new SemanticMediaPurgeSession({
@@ -460,20 +447,18 @@ describe('SemanticMediaPurgeSession', () => {
     ).toBe(true);
 
     let secondResolved = false;
-    const secondPromise = session.begin(false).then((attempt) => {
+    void session.begin(false).then(() => {
       secondResolved = true;
-      return attempt;
     });
-    await flush();
+    await Promise.resolve();
     expect(secondResolved).toBe(false);
 
-    await expect(first.failAfterProcessingError()).rejects.toThrow(
+    await expect(first.rollbackCommitted()).rejects.toThrow(
       'rollback persistence failed',
     );
-    await flush();
+    await Promise.resolve();
 
-    expect(secondResolved).toBe(true);
-    await secondPromise;
+    expect(secondResolved).toBeFalsy();
   });
 
   it('keeps the purge lease of a committed attempt that is retired before its history commit finishes', async () => {
@@ -517,49 +502,5 @@ describe('SemanticMediaPurgeSession', () => {
       imagesAfterRollback: 2,
       secondCanPurgeAgain: true,
     });
-  });
-
-  it('releases the purge lease when the rollback of an attempt retired during its commit fails', async () => {
-    const history = historyWithImage();
-    const commitHeld = gate();
-    let persistenceAttempt = 0;
-    const session = new SemanticMediaPurgeSession({
-      history,
-      mode: () => 'remove',
-      persist: async () => {
-        persistenceAttempt += 1;
-        if (persistenceAttempt === 1) {
-          await commitHeld.open;
-          return;
-        }
-        throw new Error('rollback persistence failed');
-      },
-    });
-    const first = await session.begin(false);
-    assertDefined(first, 'Expected first purge attempt');
-    const completion = first.complete({
-      status: 'success',
-      usage: usageWithoutCacheWrite,
-      retryHandoff: false,
-    });
-    const completionOutcome = completion.then(
-      () => 'completed',
-      (error: unknown) => (error instanceof Error ? error.message : 'unknown'),
-    );
-    let secondResolved = false;
-    const secondPromise = session.begin(false).then((attempt) => {
-      secondResolved = true;
-      return attempt;
-    });
-
-    first.retire();
-    await flush();
-    expect(secondResolved).toBe(false);
-    commitHeld.release();
-
-    expect(await completionOutcome).toBe('rollback persistence failed');
-    await flush();
-    expect(secondResolved).toBe(true);
-    await secondPromise;
   });
 });

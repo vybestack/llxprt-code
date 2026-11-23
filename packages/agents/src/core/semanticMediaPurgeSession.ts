@@ -197,19 +197,11 @@ export class SemanticMediaPurgeAttempt {
     if (!this.committing && !this.committed) this.release();
   }
 
-  /**
-   * Undoes a committed purge. The lease is released whether or not the
-   * rollback succeeds, so a failed rollback is reported to the caller without
-   * blocking every later attempt.
-   */
   async rollbackCommitted(): Promise<void> {
     if (!this.committed) return;
-    try {
-      await this.coordinator.rollback(this.transaction);
-      this.committed = false;
-    } finally {
-      this.release();
-    }
+    await this.coordinator.rollback(this.transaction);
+    this.committed = false;
+    this.release();
   }
 
   private release(): void {
