@@ -7,6 +7,7 @@
 import {
   CheckAsyncTasksTool,
   ShellTool,
+  type AnyDeclarativeTool,
   type ToolExecutionPolicy,
   type ToolLookup,
   type ToolSelection,
@@ -30,12 +31,15 @@ export function bindChildExecutionPolicy(
   tools: ToolSelection,
   readChildPolicy: () => ToolExecutionPolicy,
 ): ToolSelection {
-  const scope = <T extends ReturnType<ToolSelection['getTool']>>(tool: T): T =>
+  const scope = (tool: AnyDeclarativeTool): AnyDeclarativeTool =>
     tool instanceof ShellTool
-      ? (tool.withExecutionPolicy(readChildPolicy) as unknown as T)
+      ? tool.withExecutionPolicy(readChildPolicy)
       : tool;
   return {
-    getTool: (...args) => scope(tools.getTool(...args)),
+    getTool: (...args) => {
+      const tool = tools.getTool(...args);
+      return tool === undefined ? undefined : scope(tool);
+    },
     getAllToolNames: () => tools.getAllToolNames(),
     getAllTools: () => tools.getAllTools().map(scope),
     getEnabledTools: () => tools.getEnabledTools().map(scope),
