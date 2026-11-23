@@ -74,7 +74,7 @@ const requestSchema = z.object({
 function lastToolMessage(rawRequest: string): string {
   const { messages } = requestSchema.parse(JSON.parse(rawRequest));
   const tools = messages.filter((message) => message.role === 'tool');
-  const tool = tools[tools.length - 1];
+  const tool = tools.at(-1);
   if (tool?.content === undefined || tool.content === null)
     throw new Error('Child request carried no tool result');
   return tool.content;
