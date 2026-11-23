@@ -196,6 +196,41 @@ describe('cancelling during the wait before a resend (issue #4093)', () => {
   });
 });
 
+describe('cancelling after the wait before a resend has started (issue #4093)', () => {
+  it('interrupts the pending wait and sends no further request', async () => {
+    const controller = new AbortController();
+    let abortTimer: ReturnType<typeof setTimeout> | undefined;
+    const started = Date.now();
+
+    const run = await runScriptedPrompt(
+      [stallReply(), stopReply('unrequested')],
+      [PROMPT],
+      {
+        settings: { ...FAST_TIMEOUT, 'refusal.backoff-ms': 120_000 },
+        signal: controller.signal,
+        onEvent: (event) => {
+          // The notice is shown before the wait; the stream resumes into the
+          // 120 s wait as soon as this returns, so the abort lands during it.
+          if (isNoticeEvent(event) && event.message.includes('retrying in'))
+            abortTimer = setTimeout(() => controller.abort(), 1_000);
+          return Promise.resolve();
+        },
+      },
+    );
+    clearTimeout(abortTimer);
+
+    expect({
+      endedSoonAfterTheAbort: Date.now() - started < 15_000,
+      done: doneReasons(run),
+      requests: run.requests.length,
+    }).toStrictEqual({
+      endedSoonAfterTheAbort: true,
+      done: ['aborted'],
+      requests: 1,
+    });
+  });
+});
+
 describe('cancelling while the stream is stalled (issue #4093)', () => {
   it('ends as cancelled without waiting for the watchdog or retrying', async () => {
     const controller = new AbortController();
