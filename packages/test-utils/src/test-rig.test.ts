@@ -351,6 +351,9 @@ describe('TestRig setup and cleanup behavior', () => {
       );
       const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
       profile.ephemeralSettings['stream-first-response-timeout-ms'] = 100;
+      // A timed-out request is resent by default (issue #4093); with no
+      // resends the first timeout ends the run.
+      profile.ephemeralSettings['stream-timeout-retries'] = 0;
       writeFileSync(profilePath, JSON.stringify(profile));
 
       await expect(
