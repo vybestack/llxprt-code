@@ -28,10 +28,11 @@ Tests changed (red before the change, green after):
   commands the user runs with `!` and shell prompt substitutions used the snapshot, so a `--profile-load` or
   `/profile load` value was ignored there. `Config.bindLiveSettingsReader` now lets the CLI hand the Config a live
   view (`loadCliConfig` binds it to the preflight's settings capture).
-- Known limit: a subagent runs its commands through the parent session's shell tool (the child catalog inherits the
-  parent's tools), so the shell inactivity value in a subagent's own profile is not applied to those commands. The
-  child's settings do receive the value. Fixing it needs per-child shell tool construction, which is a larger change
-  than this issue. `docs/reference/ephemerals.md` says so.
+- A subagent's shell commands: the child inherits the parent session's shell tool, whose host read the parent's
+  policy, so a value in the subagent's own profile never reached those commands. `bindChildExecutionPolicy`
+  (`packages/agents/src/session/childToolAssembly.ts`) now gives each child a view of the inherited tools in which the
+  shell tool's host reads the child's own execution policy (`IShellToolHost.scopedToExecutionPolicy`). Proved with
+  real subagents in `subagent-shell-inactivity.behavior.test.ts`.
 
 Tests:
 - `shell-session-settings.test.ts`: registry default 300, startup snapshot value, live reader (red: default test,
