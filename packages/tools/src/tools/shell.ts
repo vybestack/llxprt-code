@@ -30,6 +30,7 @@ import { ToolErrorType } from '../types/tool-error.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 import type { IShellExecutionService } from '../interfaces/IShellExecutionService.js';
+import type { ToolExecutionPolicy } from '../interfaces/tool-execution-policy.js';
 
 import type {
   IShellToolHost,
@@ -804,6 +805,17 @@ export class ShellTool extends BaseDeclarativeTool<
       this.messageBus,
       this.allowlist,
     );
+  }
+
+  /**
+   * A view of this tool whose host reads shell execution settings from
+   * `read`. Hosts without session-scoped settings leave the tool unchanged.
+   */
+  withExecutionPolicy(read: () => ToolExecutionPolicy): ShellTool {
+    const scoped = this.host.scopedToExecutionPolicy?.(read);
+    return scoped === undefined
+      ? this
+      : new ShellTool(scoped, this.messageBus, this.allowlist);
   }
 
   protected override validateToolParamValues(

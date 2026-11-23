@@ -43,6 +43,18 @@ export function bindBackgroundShellHost(
       if (key === 'tailBackgroundJob') {
         return (id: string) => jobs.tailBackgroundJob(id);
       }
+      if (key === 'scopedToExecutionPolicy') {
+        return (
+          read: Parameters<
+            NonNullable<IShellToolHost['scopedToExecutionPolicy']>
+          >[0],
+        ) => {
+          const scoped = target.scopedToExecutionPolicy?.(read);
+          return scoped === undefined
+            ? receiver
+            : bindBackgroundShellHost(scoped, jobs);
+        };
+      }
       const value: unknown = Reflect.get(target, key, receiver);
       return typeof value === 'function' ? value.bind(target) : value;
     },

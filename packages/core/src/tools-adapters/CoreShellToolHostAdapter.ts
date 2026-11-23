@@ -52,6 +52,16 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     private readonly executeTransport?: IShellToolHost['executeShellCommand'],
   ) {}
 
+  scopedToExecutionPolicy(read: () => ToolExecutionPolicy): IShellToolHost {
+    return new CoreShellToolHostAdapter(
+      this.config,
+      this.paths,
+      read,
+      this.summarizeOutput,
+      this.executeTransport,
+    );
+  }
+
   getTargetDir(): string {
     return this.config.getTargetDir();
   }
