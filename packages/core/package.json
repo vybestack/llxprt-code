@@ -196,6 +196,10 @@
       "bun": "./src/services/image/imageOperationDispatch.ts",
       "import": "./dist/src/services/image/imageOperationDispatch.js"
     },
+    "./services/history/compressionSummaryScratchpad.js": {
+      "bun": "./src/services/history/compressionSummaryScratchpad.ts",
+      "import": "./dist/src/services/history/compressionSummaryScratchpad.js"
+    },
     "./services/history/ContentConverters.js": {
       "bun": "./src/services/history/ContentConverters.ts",
       "import": "./dist/src/services/history/ContentConverters.js"
@@ -393,6 +397,10 @@
     "./core/clientContract.js": {
       "bun": "./src/core/clientContract.ts",
       "import": "./dist/src/core/clientContract.js"
+    },
+    "./core/compression/compressionPromptFiles.js": {
+      "bun": "./src/core/compression/compressionPromptFiles.ts",
+      "import": "./dist/src/core/compression/compressionPromptFiles.js"
     },
     "./core/compression/continuationDirective.js": {
       "bun": "./src/core/compression/continuationDirective.ts",
@@ -794,7 +802,7 @@
     "fast-levenshtein": "^2.0.6",
     "fdir": "^6.4.6",
     "fzf": "^0.5.2",
-    "glob": "^12.0.0",
+    "glob": "^14.0.3",
     "ignore": "^7.0.0",
     "js-yaml": "^4.3.2",
     "marked": "^15.0.12",

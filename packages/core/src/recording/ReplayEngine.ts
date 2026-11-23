@@ -35,6 +35,7 @@ import {
 } from './replayCheckpointMetadata.js';
 export { foldCheckpointMetadata } from './replayCheckpointMetadata.js';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
+import { RecordedSummaryBlocksSchema } from './compressedSummaryPayload.js';
 import { RefusalPayloadSchema } from './refusalPayload.js';
 import { RefusalRewritePayloadSchema } from './refusalRewritePayload.js';
 import { formatReplayDiagnostic } from './replayErrorFormatting.js';
@@ -62,6 +63,7 @@ import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '../services/history/IContent.js';
+import { tagRecordedCompressionSummary } from '../services/history/compressionSummaryScratchpad.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
 import { verifyHistoryMedia } from '../storage/media-reference-lifecycle.js';
@@ -246,8 +248,12 @@ function handleCompressed(
 ): void {
   const summary = payload.summary;
   const itemsCompressed = payload.itemsCompressed;
-  if (isSpeakerContent(summary) && itemsCompressed !== undefined) {
-    acc.history = [summary];
+  if (
+    isSpeakerContent(summary) &&
+    RecordedSummaryBlocksSchema.safeParse(summary.blocks).success &&
+    itemsCompressed !== undefined
+  ) {
+    acc.history = [tagRecordedCompressionSummary(summary)];
   } else {
     acc.malformedCount++;
     acc.warnings.push(

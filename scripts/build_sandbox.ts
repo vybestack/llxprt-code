@@ -21,6 +21,7 @@ import { execSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
+  mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -401,14 +402,16 @@ function buildImage(imageName: string, dockerfile: string): void {
   console.log(`building ${imageName} ... (can be slow first time)`);
 
   let buildCommandArgs = '';
-  let tempAuthFile = '';
+  let tempAuthDir = '';
 
   if (sandboxCommand === 'podman') {
     if (isWindows) {
       // PowerShell doesn't support <() process substitution.
-      // Create a temporary auth file that we will clean up after.
-      tempAuthFile = join(os.tmpdir(), `llxprt-auth-${Date.now()}.json`);
-      writeFileSync(tempAuthFile, '{}');
+      // Create a temporary auth file that we will clean up after, inside a
+      // private directory so nothing in the shared temp dir can be targeted.
+      tempAuthDir = mkdtempSync(join(os.tmpdir(), 'llxprt-auth-'));
+      const tempAuthFile = join(tempAuthDir, 'auth.json');
+      writeFileSync(tempAuthFile, '{}', { mode: 0o600 });
       buildCommandArgs = `--authfile="${tempAuthFile}"`;
     } else {
       // Use bash-specific syntax for Linux/macOS
@@ -446,9 +449,9 @@ function buildImage(imageName: string, dockerfile: string): void {
       writeFileSync(argv.outputFile, finalImageName);
     }
   } finally {
-    // If we created a temp file, delete it now.
-    if (tempAuthFile) {
-      rmSync(tempAuthFile, { force: true });
+    // If we created a temp directory, delete it now.
+    if (tempAuthDir) {
+      rmSync(tempAuthDir, { recursive: true, force: true });
     }
   }
 }

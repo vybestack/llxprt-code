@@ -76,4 +76,35 @@ describe('cleanupAgents host-injected exit cleanup', () => {
 
     expect(settled).toBe(true);
   });
+
+  it('stops waiting for an agent whose disposal never settles and still runs the callback', async () => {
+    let invocations = 0;
+
+    await cleanupAgents(
+      [makeAgent(() => new Promise<void>(() => {}))],
+      logger,
+      async () => {
+        invocations += 1;
+      },
+      20,
+    );
+
+    expect(invocations).toBe(1);
+  });
+
+  it('stops waiting for a callback that never settles', async () => {
+    let started = false;
+
+    await cleanupAgents(
+      [makeAgent(async () => {})],
+      logger,
+      () => {
+        started = true;
+        return new Promise<void>(() => {});
+      },
+      20,
+    );
+
+    expect(started).toBe(true);
+  });
 });

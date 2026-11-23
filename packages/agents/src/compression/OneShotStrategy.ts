@@ -23,7 +23,6 @@ import { bindCompressionProvider } from './utils.js';
  * above the preserved messages.
  */
 
-import { readFileSync } from 'node:fs';
 import type {
   IContent,
   UsageStats,
@@ -44,20 +43,23 @@ import type {
 import {
   CompressionExecutionError,
   EmptySummaryError,
-  PromptResolutionError,
   isTransientCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   adjustForToolCallBoundary,
   aggregateTextFromBlocks,
   buildTriggerInstruction,
-  COMPRESSION_SECURITY_PREAMBLE,
+  buildContextInjections,
+  buildSecurityPreamble,
   runVerificationPass,
   sanitizeHistoryForCompression,
 } from './utils.js';
-import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
+import {
+  COMPRESSION_PROMPT_FILES,
+  loadCompressionPromptFile,
+} from '@vybestack/llxprt-code-core/core/compression/compressionPromptFiles.js';
+import { stripScratchpadSections } from '@vybestack/llxprt-code-core/services/history/compressionSummaryScratchpad.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
-import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 function destructureProviderResult(result: CompressionProviderResult): {
   provider: IProvider;
@@ -130,7 +132,7 @@ export class OneShotStrategy implements CompressionStrategy {
     );
 
     const {
-      text: summary,
+      text: rawSummary,
       usage: capturedUsage,
       diagnostics,
     } = await this.callProvider(
@@ -143,6 +145,7 @@ export class OneShotStrategy implements CompressionStrategy {
       invocation,
     );
 
+    const summary = stripScratchpadSections(rawSummary);
     if (!summary.trim()) {
       throw new EmptySummaryError('one-shot', diagnostics);
     }
@@ -173,13 +176,16 @@ export class OneShotStrategy implements CompressionStrategy {
     context: CompressionContext,
     toCompress: IContent[],
   ): IContent[] {
-    const prompt = this.resolvePrompt(context);
-    const triggerInstruction = buildTriggerInstruction(toCompress);
+    const prompt = loadCompressionPromptFile(
+      context,
+      COMPRESSION_PROMPT_FILES.instructions,
+    );
+    const triggerInstruction = buildTriggerInstruction(context, toCompress);
     return [
-      COMPRESSION_SECURITY_PREAMBLE,
+      buildSecurityPreamble(context),
       { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
       ...sanitizeHistoryForCompression(toCompress),
-      ...this.buildContextInjections(context),
+      ...buildContextInjections(context),
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: triggerInstruction }],
@@ -302,28 +308,6 @@ export class OneShotStrategy implements CompressionStrategy {
     };
   }
 
-  private resolvePrompt(context: CompressionContext): string {
-    const resolved = context.promptResolver.resolveFile(
-      context.promptBaseDir,
-      'compression.md',
-      context.promptContext,
-    );
-
-    if (resolved.found && resolved.path) {
-      try {
-        return readFileSync(resolved.path, 'utf-8');
-      } catch {
-        // Fall through to hardcoded default
-      }
-    }
-
-    const fallback = getCompressionPrompt();
-    if (!fallback) {
-      throw new PromptResolutionError('compression.md');
-    }
-    return fallback;
-  }
-
   private bindProvider(
     provider: IProvider,
     config: Config | undefined,
@@ -441,41 +425,5 @@ export class OneShotStrategy implements CompressionStrategy {
         middleCompressed: 0,
       },
     };
-  }
-
-  /**
-   * @plan PLAN-20260211-HIGHDENSITY.P23
-   * @requirement REQ-HD-011.3, REQ-HD-012.2
-   */
-  private buildContextInjections(context: CompressionContext): IContent[] {
-    const injections: IContent[] = [];
-
-    if (context.activeTodos && context.activeTodos.trim().length > 0) {
-      injections.push({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: `The following are the current active todo/task items. When summarizing, preserve context about why each task exists and what has been tried:
-
-${context.activeTodos}`,
-          },
-        ],
-      });
-    }
-
-    if (context.transcriptPath) {
-      injections.push({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: buildTranscriptPathNotice(context.transcriptPath),
-          },
-        ],
-      });
-    }
-
-    return injections;
   }
 }

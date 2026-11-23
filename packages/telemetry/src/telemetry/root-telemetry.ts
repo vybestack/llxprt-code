@@ -150,7 +150,9 @@ async function createProviders(
     release.set('tracer', () => tracer.shutdown());
     const logger = new LoggerProvider({
       resource,
-      processors: [new SimpleLogRecordProcessor(transports.logger)],
+      processors: [
+        new SimpleLogRecordProcessor({ exporter: transports.logger }),
+      ],
     });
     release.set('logger', () => logger.shutdown());
     const meter = new MeterProvider({

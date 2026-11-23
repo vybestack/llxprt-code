@@ -15,6 +15,15 @@ import {
   hashContent,
   getInstalledHash,
 } from './manifest-operations.js';
+import {
+  buildScratchpadNotice,
+  isRetiredDefault,
+  requestsScratchpad,
+} from './retired-defaults.js';
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
 
 export type PromptConflictReason =
   | 'default-newer'
@@ -39,8 +48,13 @@ export interface PromptConflictSummary extends PromptConflictDetails {
 export type ExistingFileDecision =
   | { action: 'same' }
   | { action: 'overwrite' }
-  | { action: 'keep'; conflict: PromptConflictSummary; notice: string | null }
-  | { action: 'resolved' };
+  | {
+      action: 'keep';
+      conflict: PromptConflictSummary;
+      notice: string | null;
+      scratchpadNotice?: string;
+    }
+  | { action: 'resolved'; scratchpadNotice?: string };
 
 /** Default prompt files checked during uninstall (non-user-file mode). */
 const DEFAULT_UNINSTALL_PATHS = [
@@ -53,6 +67,7 @@ const DEFAULT_UNINSTALL_PATHS = [
 
 /**
  * Determine how to handle an existing file when installing a default.
+ * A kept file that still requests a `<scratchpad>` carries an extra notice.
  */
 export async function handleExistingFile(
   expandedBaseDir: string,
@@ -64,10 +79,41 @@ export async function handleExistingFile(
   defaultSourceDirs?: readonly string[],
 ): Promise<ExistingFileDecision> {
   const existingContent = await fs.readFile(fullPath, 'utf-8');
+  const decision = await decideExistingFile(
+    expandedBaseDir,
+    relativePath,
+    existingContent,
+    content,
+    createReviewCopy,
+    manifest,
+    defaultSourceDirs,
+  );
+  if (
+    (decision.action === 'keep' || decision.action === 'resolved') &&
+    requestsScratchpad(existingContent)
+  ) {
+    return { ...decision, scratchpadNotice: buildScratchpadNotice(fullPath) };
+  }
+  return decision;
+}
 
+async function decideExistingFile(
+  expandedBaseDir: string,
+  relativePath: string,
+  existingContent: string,
+  content: string,
+  createReviewCopy: boolean,
+  manifest: InstalledManifest | null,
+  defaultSourceDirs?: readonly string[],
+): Promise<ExistingFileDecision> {
   // 1. Content identical - skip (no change needed)
   if (existingContent === content) {
     return { action: 'same' };
+  }
+
+  // 1b. Untouched copy of a default an earlier release shipped - upgrade it
+  if (isRetiredDefault(relativePath, existingContent)) {
+    return { action: 'overwrite' };
   }
 
   // 2. Check for NO OVERWRITE flag - user explicitly protects this file
@@ -114,6 +160,21 @@ export async function handleExistingFile(
   );
 }
 
+/** Notices a kept or already-resolved existing file reports to the user. */
+export function existingFileNotices(decision: ExistingFileDecision): string[] {
+  if (decision.action === 'keep') {
+    return [decision.notice, decision.scratchpadNotice].filter(
+      (notice): notice is string => notice !== null && notice !== undefined,
+    );
+  }
+  if (decision.action === 'resolved') {
+    return decision.scratchpadNotice === undefined
+      ? []
+      : [decision.scratchpadNotice];
+  }
+  return [];
+}
+
 /** Create a keep decision with optional review file. */
 export async function createKeepDecision(
   expandedBaseDir: string,
@@ -131,17 +192,23 @@ export async function createKeepDecision(
   const reviewRelativePath = generateReviewFilename(relativePath, timestamp);
   const reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
 
-  // Check if review file already exists
-  if (existsSync(reviewFullPath)) {
-    return { action: 'resolved' };
-  }
-
   if (createReviewCopy) {
     await fs.mkdir(path.dirname(reviewFullPath), {
       recursive: true,
       mode: 0o755,
     });
-    await fs.writeFile(reviewFullPath, content, { mode: 0o644 });
+    // Exclusive create doubles as the "review file already exists" check, so
+    // an existing file (or symlink) is never truncated or written through.
+    try {
+      await fs.writeFile(reviewFullPath, content, { mode: 0o644, flag: 'wx' });
+    } catch (error) {
+      if (isErrnoException(error) && error.code === 'EEXIST') {
+        return { action: 'resolved' };
+      }
+      throw error;
+    }
+  } else if (existsSync(reviewFullPath)) {
+    return { action: 'resolved' };
   }
 
   const conflict: PromptConflictSummary = {

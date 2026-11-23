@@ -46,7 +46,7 @@
     "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@vybestack/llxprt-code-tools": "file:../tools",
-    "glob": "^12.0.0",
+    "glob": "^14.0.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {

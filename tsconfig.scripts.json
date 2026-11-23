@@ -22,7 +22,6 @@
     "scripts/build_sandbox.ts",
     "scripts/build_vscode_companion.ts",
     "scripts/bun-native-modules-smoke.ts",
-    "scripts/check-build-status.ts",
     "scripts/check-cli-import-boundary.ts",
     "scripts/check-copyright-year.ts",
     "scripts/check-legacy-paths.ts",

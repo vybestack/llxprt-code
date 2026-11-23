@@ -9,19 +9,19 @@ import { ConfigurationManager } from './ConfigurationManager.js';
 import { FileOutput } from './FileOutput.js';
 import type { LogEntry } from './types.js';
 
-// Configure debug to use console.log instead of stderr for React UI compatibility
-// This ensures debug output goes to the Ctrl+O debug console in the UI
+// The `stderr` target writes through console.warn: it goes to stderr, so
+// headless stdout carries only session output, and the UI's ConsolePatcher
+// still routes it to the Ctrl+O debug console. console.error would do the
+// same but would count every debug line as an error in the UI footer.
 if (typeof window === 'undefined') {
   // Disable colors to respect theme settings
   (createDebug as unknown as { useColors: () => boolean }).useColors = () =>
     false;
 
-  // Use a wrapper function that calls the CURRENT console.log
-  // This works even if console.log is patched later by the UI
+  // Look up console.warn on every call, so a console patched later by the
+  // UI intercepts it.
   createDebug.log = (...args: unknown[]) => {
-    // Call whatever console.log is at the time of logging
-    // This allows the UI's ConsolePatcher to intercept it
-    (console.log as (...args: unknown[]) => void)(...args);
+    (console.warn as (...args: unknown[]) => void)(...args);
   };
 }
 

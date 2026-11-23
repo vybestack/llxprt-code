@@ -127,7 +127,7 @@ async function makeReadableSpan(name: string): Promise<ReadableSpan> {
 async function makeReadableLogRecord(body: string): Promise<ReadableLogRecord> {
   const exporter = new InMemoryLogRecordExporter();
   const loggerProvider = new LoggerProvider({
-    processors: [new SimpleLogRecordProcessor(exporter)],
+    processors: [new SimpleLogRecordProcessor({ exporter })],
   });
   const logger = loggerProvider.getLogger('test-logger');
   logger.emit({
