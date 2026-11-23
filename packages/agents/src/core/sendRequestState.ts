@@ -37,7 +37,7 @@ export class SendRequestState {
   private kept: ProviderReadyRequest | undefined;
   private replay = false;
   private started = 0;
-  private answerInHistory = false;
+  private answerOwner: object | undefined;
 
   /** Marks the start of an attempt; true when an earlier one ran in this send. */
   begin(): boolean {
@@ -68,20 +68,25 @@ export class SendRequestState {
   /**
    * The attempt's answer was published to history. From here a timeout must
    * not send the request again: the answer is already there, and a second
-   * one would sit next to it.
+   * one would sit next to it. `owner` identifies the publication, so that
+   * only the attempt that made it can take it back.
    */
-  markAnswerPublished(): void {
-    this.answerInHistory = true;
+  markAnswerPublished(owner: object): void {
+    this.answerOwner = owner;
   }
 
-  /** The publication was undone, so the request is unanswered again. */
-  markAnswerRevoked(): void {
-    this.answerInHistory = false;
+  /**
+   * The publication was undone, so the request is unanswered again. A
+   * revocation from anyone but the current publisher is ignored: an abandoned
+   * attempt that fails late must not clear the answer of its replacement.
+   */
+  markAnswerRevoked(owner: object): void {
+    if (this.answerOwner === owner) this.answerOwner = undefined;
   }
 
   /** Whether an attempt of this send has its answer in history. */
   hasAnswerInHistory(): boolean {
-    return this.answerInHistory;
+    return this.answerOwner !== undefined;
   }
 
   /** The next attempt builds its request afresh. */

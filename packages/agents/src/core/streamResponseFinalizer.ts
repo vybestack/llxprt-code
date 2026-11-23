@@ -79,11 +79,12 @@ export async function failStreamProcessing(
 
 async function settlePublishedStreamAdmissions(
   options: FinalizeStreamResponseOptions,
+  publication: object,
 ): Promise<void> {
   // Last point at which an abandoned attempt can still be rolled back: an
   // error here undoes the publication, anything later is a completed send.
   options.attemptSignal?.throwIfAborted();
-  options.sendState?.markAnswerPublished();
+  options.sendState?.markAnswerPublished(publication);
   const failures: unknown[] = [];
   try {
     await options.preparedUserTurn?.transferToHistory();
@@ -109,6 +110,8 @@ async function commitFinalizedStreamHistory(
   acc: ModelOutput,
   preparedHistoryUserInput: ReturnType<typeof prepareHistoryUserInput>,
 ): Promise<void> {
+  // Identifies this finalization's publication to the send's answer marker.
+  const publication = {};
   const historyOptions = {
     ...preparedHistoryUserInput.userInputFlags,
     responseId: acc.responseId ?? acc.content.metadata?.id ?? null,
@@ -124,14 +127,14 @@ async function commitFinalizedStreamHistory(
       preparedHistoryUserInput.historyUserInput,
       acc,
       historyOptions,
-      () => settlePublishedStreamAdmissions(options),
+      () => settlePublishedStreamAdmissions(options, publication),
       options.origin,
     );
   } catch (error: unknown) {
-    // An abandoned attempt has been replaced; whatever it failed with late is
-    // no business of the send's current answer.
-    if (options.attemptSignal?.aborted !== true)
-      options.sendState?.markAnswerRevoked();
+    // The history mutation was rolled back, so the marker must follow it, for
+    // an abandoned attempt too: left set, no resend would answer the turn. Only
+    // this finalization's own publication is revoked, never a replacement's.
+    options.sendState?.markAnswerRevoked(publication);
     throw error;
   } finally {
     clearMatchedEagerToolResponseCallIds(

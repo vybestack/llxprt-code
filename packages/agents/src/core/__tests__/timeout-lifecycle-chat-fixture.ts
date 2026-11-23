@@ -60,6 +60,14 @@ export interface TimeoutLifecycleOptions {
   readonly projectPromptEnvelope?: NonNullable<
     IProvider['projectPromptEnvelope']
   >;
+  /**
+   * Builds the media store the chat admits media into, for a scenario that
+   * needs to hold or fail one of its operations. Defaults to a plain
+   * LocalMediaStore.
+   */
+  readonly createMediaStore?: (
+    storeOptions: ConstructorParameters<typeof LocalMediaStore>[0],
+  ) => LocalMediaStore;
 }
 
 function scriptedProvider(
@@ -150,10 +158,13 @@ export function createTimeoutLifecycleChat(
 ): TimeoutLifecycleChat {
   const script = new ProviderState();
   const history = new HistoryService();
-  const store = new LocalMediaStore({
+  const storeOptions = {
     rootDirectory: join(directory, 'media'),
     quotaBytes: 1024 * 1024,
-  });
+  };
+  const store =
+    options.createMediaStore?.(storeOptions) ??
+    new LocalMediaStore(storeOptions);
   const { runtime, config, invocationOwner } = createRuntime(
     scriptedProvider(script, options.projectPromptEnvelope),
     history,
