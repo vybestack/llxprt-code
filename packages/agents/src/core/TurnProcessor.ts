@@ -270,6 +270,14 @@ export class TurnProcessor {
       prompt_id,
       params.logicalSend?.turnId,
     );
+    // An attempt abandoned while its admissions were in flight publishes
+    // nothing: its replacement may already have stored the turn identity the
+    // next resend must use, and this attempt must not overwrite it.
+    try {
+      params.config?.abortSignal?.throwIfAborted();
+    } catch (error: unknown) {
+      return throwAfterFailedTurnCleanup(error, prepared, undefined);
+    }
     this.currentTurnId = prepared.turnId;
     if (params.logicalSend !== undefined)
       params.logicalSend.turnId = prepared.turnId;

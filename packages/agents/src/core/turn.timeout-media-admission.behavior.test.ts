@@ -38,6 +38,11 @@ setDefaultTimeout(60_000);
 
 const DEADLINE_MS = 20_000;
 
+const FIRST_RESPONSE: Readonly<Record<string, number>> = {
+  'stream-first-response-timeout-ms': 300,
+  'refusal.backoff-ms': 1,
+};
+
 const IDLE: Readonly<Record<string, number>> = {
   'stream-idle-timeout-ms': 300,
   'refusal.backoff-ms': 1,
@@ -56,10 +61,28 @@ function gate(): Gate {
   return { open, release };
 }
 
-/** A media store that can fail the next release of a reservation, late. */
-class ReleaseFailingStore extends LocalMediaStore {
+/**
+ * A media store whose next reservation can be held, and whose next release can
+ * fail after a delay. Both apply once and only to the call after they are set.
+ */
+class ScriptedMediaStore extends LocalMediaStore {
+  /** The owner of every reservation asked for, in the order it was asked. */
+  readonly reservationOwners: string[] = [];
+  /** The next reservation waits for this before it is made. */
+  holdNextReserveUntil: Promise<void> | undefined;
   /** The next release waits for this, releases, and then reports a failure. */
   failNextReleaseAfter: Promise<void> | undefined;
+
+  override async reserve(
+    reference: Parameters<LocalMediaStore['reserve']>[0],
+    ownerId: string,
+  ): Promise<void> {
+    this.reservationOwners.push(ownerId);
+    const hold = this.holdNextReserveUntil;
+    this.holdNextReserveUntil = undefined;
+    if (hold !== undefined) await hold;
+    return super.reserve(reference, ownerId);
+  }
 
   override async release(contentId: string, ownerId: string): Promise<void> {
     const hold = this.failNextReleaseAfter;
@@ -109,7 +132,7 @@ async function runTurn(
 describe('an attempt abandoned while its media admissions are settled (issue #4093)', () => {
   let directory = '';
   let setup: TimeoutLifecycleChat | undefined;
-  let store: ReleaseFailingStore | undefined;
+  let store: ScriptedMediaStore | undefined;
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'turn-timeout-admission-'));
@@ -126,7 +149,7 @@ describe('an attempt abandoned while its media admissions are settled (issue #40
 
   function open(policy: Readonly<Record<string, number>>): {
     readonly chat: TimeoutLifecycleChat;
-    readonly store: () => ReleaseFailingStore;
+    readonly store: () => ScriptedMediaStore;
   } {
     const chat = createTimeoutLifecycleChat(
       directory,
@@ -134,7 +157,7 @@ describe('an attempt abandoned while its media admissions are settled (issue #40
       {
         streamTimeoutPolicy: policy,
         createMediaStore: (storeOptions) => {
-          store = new ReleaseFailingStore(storeOptions);
+          store = new ScriptedMediaStore(storeOptions);
           return store;
         },
       },
@@ -198,6 +221,42 @@ describe('an attempt abandoned while its media admissions are settled (issue #40
       human: ['describe it'],
       ai: ['whole answer'],
       images: 1,
+    });
+  });
+
+  it('resends under the turn identity of the request that was sent when an abandoned attempt finishes preparing late', async () => {
+    const { chat, store: mediaStore } = open(FIRST_RESPONSE);
+    const preparationHeld = gate();
+    // The first attempt's image reservation hangs, so its preparation outlasts
+    // the first-response watchdog and is still running when the replacement
+    // has stored its own identity and sent its request.
+    mediaStore().holdNextReserveUntil = preparationHeld.open;
+    chat.provider.onAttempt = (attempt) => {
+      if (attempt.index === 0) preparationHeld.release();
+      if (attempt.index === 1) {
+        attempt.emit('answer');
+        attempt.finish();
+      }
+    };
+
+    await within(
+      DEADLINE_MS,
+      'turn whose first attempt was abandoned while it was preparing',
+      runTurn(chat, 'describe it'),
+    );
+    // The user's image is reserved once per attempt, under an owner derived
+    // from the turn identity the attempt used: the abandoned attempt first,
+    // the replacement that was sent, then the resend. (History adopts it under
+    // a further owner afterwards.)
+    const owners = mediaStore().reservationOwners;
+    expect({
+      reservedByEveryAttempt: owners.length >= 3,
+      abandonedMintedItsOwn: owners[0] !== owners[1],
+      resentUnderTheSentIdentity: owners[2] === owners[1],
+    }).toStrictEqual({
+      reservedByEveryAttempt: true,
+      abandonedMintedItsOwn: true,
+      resentUnderTheSentIdentity: true,
     });
   });
 });
