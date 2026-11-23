@@ -204,16 +204,43 @@ Known follow-ups. Each was found by reading the code and has no reproducing test
 
 ## Verification
 
-Commands run in the issue4093 worktree after merging `origin/main`:
+Final run on Linux on `5b71c8ec7c` (this branch with `origin/main` at `a1a7cf0f2d` merged in), after a frozen-lockfile
+install, the plugin dependency installs CI performs, and a full build. Load average during the run was 13 to 80 on 16
+cores.
 
 | Command | Result |
 | --- | --- |
-| `bun test --timeout 120000 packages/agents/src/api/__tests__/streamTimeoutRetry.behavior.test.ts` | Passed: 13 tests, 0 failures, 30 expectations. |
-| `npm run format` | Passed (exit 0). |
-| `npm run lint` | Failed (exit 1): branch max-lines violation in `packages/core/src/session/session-settings-owner.ts` at line 876; file has 801 lines against the 800-line limit. Policy readers have since been extracted without changing rule limits; focused tests and targeted ESLint pass, with the complete lint rerun still running. |
-| `npm run check:runtime-boundary` | Failed (exit 1). Runtime-state scan completed but reported widened/stale `runtime-service-bundle` baseline entries for `packages/core/src/runtime/AgentRuntimeLoader.ts`. The service-shape scan was `blocked-by-compiler` and ambient-delegation results were `provisional-compiler-errors`; diagnostics include missing `@ai-sdk/google` and `@ai-sdk/google-vertex` modules and incompatible `google-auth-library` `Headers` types in the Google Gemini plugin. |
+| `npm run build` | Passed (exit 0). |
+| `npm run lint` | Passed (exit 0). |
+| `npm run format:check` | Passed (exit 0). |
 | `npm run typecheck` | Passed (exit 0). |
-| `npm run build` | Passed (exit 0), including the compiled lazy-MCP registry coherence check. |
-| `bun scripts/check-test-file-coverage.ts` | Passed: zero uncovered and zero doubly-executed test files. |
+| `npm run check:runtime-boundary` | Passed (exit 0). |
+| `npm run lint:agents-api-surface` | Passed (exit 0). |
+| `bun scripts/check-test-file-coverage.ts` | Passed: zero uncovered, zero doubly-executed. |
+| `bun scripts/generate-settings-schema.ts --check` | Passed (exit 0). |
+| `npm run test` | Exit 1: 14 of 18 workspaces passed every file; 6 files failed in auth, lsp, agents and test-utils (below). |
+| Smoke, `--profile-load sonnet "write me a haiku and nothing else"` | Passed: printed a haiku. The `gpt-6-luna` account returned HTTP 429 (usage limit) and the Fireworks account HTTP 412 (suspended), so those profiles could not be used. |
 
-The stalled-stream cancellation regression is covered by the behavior test in this verification run. The table preserves the initial verification results. The final remediation run is still active, including runtime-boundary after a successful build; these checks are not yet claimed green. The API-surface declaration guard timed out at both its default and extended deadlines under concurrent load and must be rerun after contention subsides.
+The six files that failed in the full run, each rerun on its own three times on this branch:
+
+| File | Alone | Branch changes it? |
+| --- | --- | --- |
+| `agents/src/api/__tests__/settings-surface.spec.ts` | 3 of 3 pass | No |
+| `agents/src/api/__tests__/shell-owner-exit.behavior.test.ts` | 3 of 3 pass | No |
+| `auth/src/__tests__/keyring-token-store.lock-recovery.test.ts` | 3 of 3 pass | No |
+| `auth/src/proxy/__tests__/proxy-socket-client.test.ts` | 3 of 3 pass | No |
+| `lsp/test/orchestrator.test.ts` | 3 of 3 pass | No |
+| `test-utils/src/test-rig.test.ts` | 1 of 3 pass | Only the watchdog test's profile (`8e009dba72`) |
+
+In `test-rig.test.ts`, "includes child output when a process times out" gives a child process 50 ms; it also failed 5 of
+5 runs on a checkout without this branch, where a bun child took a median of over 100 ms to write output. "applies the
+local model E2E SDK request deadline in the real CLI" failed once at load 62 with no CLI output inside its 12 s deadline
+(no retry notice, so the resend path did not run). It takes 10.8 to 11.3 s on this branch at load 35 and 8.9 to 11.8 s
+on `main` at load 39 to 43.
+
+The earlier verification run on `39c69a5a64` found one failure this branch caused: the TestRig first-response watchdog
+test expected the first timeout to end the run, and the default resend kept the CLI running past its deadline.
+`8e009dba72` sets `stream-timeout-retries: 0` in that test's profile. 16 focused timeout, media, refusal and shell
+profile test files pass on the merged code, each run in its own process.
+
+macOS, Windows and container runs were not done locally.
