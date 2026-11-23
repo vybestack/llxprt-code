@@ -306,6 +306,10 @@ describe('timeout replay (issue #4093)', () => {
             requests: provider.attempts.length,
             temperature: resent.request.resolved?.temperature,
             data: JSON.stringify(resent.data),
+            // Both the transport signal and the invocation signal reach the
+            // provider on every attempt; an empty list would make the
+            // freshness check below vacuous.
+            signalsHandedOver: [original.signals.length, resent.signals.length],
             freshSignals: resent.signals.every(
               (signal) => !original.signals.includes(signal),
             ),
@@ -318,6 +322,7 @@ describe('timeout replay (issue #4093)', () => {
             requests: 2,
             temperature: 0.3,
             data: JSON.stringify(original.data),
+            signalsHandedOver: [2, 2],
             freshSignals: true,
             freshTransportToken: true,
             resentSignalsLive: resent.signals.map(() => false),
