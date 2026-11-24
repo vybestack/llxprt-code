@@ -26,11 +26,13 @@ const rejectingFetch: NetworkFetch = () =>
  * directly hand it this parent invocation; its fetch rejects because these
  * suites never reach a network.
  */
-export function makeLoadBalancerInvocation(): RuntimeInvocationContext {
+export function makeLoadBalancerInvocation(
+  ephemeralsSnapshot: Record<string, unknown> = {},
+): RuntimeInvocationContext {
   return createRuntimeInvocationContext({
     fetch: rejectingFetch,
     providerName: 'load-balancer',
-    ephemeralsSnapshot: {},
+    ephemeralsSnapshot,
     fallbackRuntimeId: 'load-balancer-test',
   });
 }

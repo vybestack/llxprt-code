@@ -8,6 +8,7 @@ import type {
   RuntimePromptEstimateMethod,
   RuntimeTokenizerFactory,
 } from './RuntimeTokenizerFactory.js';
+import type { IContent } from '../../services/history/IContent.js';
 
 export type PromptEnvelopeProtocol =
   | 'anthropic-messages'
@@ -44,6 +45,7 @@ export interface PromptEnvelopeProjection {
   readonly projectionRevision: number;
   readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
   readonly transportToken: object;
+  readonly maxOutputTokens?: number;
   readonly finalizedProjection: unknown;
   readonly legacyEstimate: () => Promise<number>;
   readonly accounting?: PromptEnvelopeAccountingProjection;
@@ -67,7 +69,16 @@ export interface PromptEnvelopeEstimate {
   readonly assetRevision: string;
   readonly projectionRevision: number;
   readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
+  readonly maxOutputTokens?: number;
 }
+
+export type PromptEnvelopeBudgetEstimate =
+  | number
+  | Pick<PromptEnvelopeEstimate, 'estimatedPromptTokens' | 'maxOutputTokens'>;
+
+export type PromptEnvelopeBudgetEstimator = (
+  contents: IContent[],
+) => Promise<PromptEnvelopeBudgetEstimate>;
 
 const SUPPORTED_METHODS_BY_PROTOCOL: Readonly<
   Record<PromptEnvelopeProtocol, readonly PromptEnvelopeMethod[]>
@@ -347,13 +358,46 @@ export async function estimatePromptEnvelope(
       effectiveResult = fullHistoryResult;
     }
   }
+  return createPromptEnvelopeEstimate({
+    activeProvider,
+    projection,
+    unsupportedMedia,
+    wireResult,
+    effectiveResult,
+    incrementalTokens,
+    retainedBaselineTokens,
+    effectiveTokens,
+  });
+}
+
+function createPromptEnvelopeEstimate(input: {
+  readonly activeProvider: string;
+  readonly projection: PromptEnvelopeProjection;
+  readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
+  readonly wireResult: Awaited<
+    ReturnType<RuntimeTokenizerFactory['estimatePrompt']>
+  >;
+  readonly effectiveResult: Awaited<
+    ReturnType<RuntimeTokenizerFactory['estimatePrompt']>
+  >;
+  readonly incrementalTokens: number;
+  readonly retainedBaselineTokens: number;
+  readonly effectiveTokens: number;
+}): PromptEnvelopeEstimate {
+  const { activeProvider, projection, unsupportedMedia, wireResult } = input;
+  const {
+    effectiveResult,
+    incrementalTokens,
+    retainedBaselineTokens,
+    effectiveTokens,
+  } = input;
   return Object.freeze({
     estimatedPromptTokens: effectiveTokens,
     transmittedTokens: wireResult.count,
     incrementalTokens,
     retainedBaselineTokens,
     effectiveTokens,
-    statefulParentUsed: accounting?.statefulParentUsed ?? false,
+    statefulParentUsed: projection.accounting?.statefulParentUsed ?? false,
     activeProvider,
     model: projection.model,
     protocol: projection.protocol,
@@ -364,5 +408,8 @@ export async function estimatePromptEnvelope(
     assetRevision: effectiveResult.assetRevision,
     projectionRevision: projection.projectionRevision,
     unsupportedMedia,
+    ...(projection.maxOutputTokens === undefined
+      ? {}
+      : { maxOutputTokens: projection.maxOutputTokens }),
   });
 }

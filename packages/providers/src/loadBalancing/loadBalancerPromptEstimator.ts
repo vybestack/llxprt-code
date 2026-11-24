@@ -12,6 +12,7 @@ export interface LoadBalancerPromptEstimate {
   readonly tokens: number;
   readonly source: string;
   readonly transportToken: object;
+  readonly maxOutputTokens?: number;
 }
 
 export async function estimateSelectedProviderPrompt(
@@ -31,6 +32,9 @@ export async function estimateSelectedProviderPrompt(
   return {
     tokens: estimate.estimatedPromptTokens,
     transportToken: projection.transportToken,
+    ...(estimate.maxOutputTokens === undefined
+      ? {}
+      : { maxOutputTokens: estimate.maxOutputTokens }),
     source: [
       estimate.estimatorMethod,
       estimate.estimatorFamily,

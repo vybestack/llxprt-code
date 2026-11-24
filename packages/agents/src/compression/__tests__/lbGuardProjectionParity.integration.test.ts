@@ -146,6 +146,7 @@ function createProjectingDelegate(options: {
   name: string;
   historyService: HistoryService;
   growGap?: boolean;
+  fixedEstimate?: number;
 }): { provider: IProvider; transport: DelegateTransport } {
   const transport: DelegateTransport = { payloads: [] };
   let baselineContentsTokens: number | null = null;
@@ -184,7 +185,7 @@ function createProjectingDelegate(options: {
         unsupportedMedia: [],
         transportToken: Object.freeze({}),
         finalizedProjection: request.contents,
-        legacyEstimate: () => Promise.resolve(total),
+        legacyEstimate: () => Promise.resolve(options.fixedEstimate ?? total),
       };
     },
   };
@@ -210,6 +211,8 @@ const ownedReleases: Array<() => void | Promise<void>> = [];
 function createLoadBalancer(options: {
   contextLimit: number;
   delegate: IProvider;
+  secondDelegate?: IProvider;
+  maxOutputTokens?: number;
 }): LoadBalancingProvider {
   const settingsService = new SettingsService();
   const config = createRuntimeConfigStub(settingsService);
@@ -233,12 +236,27 @@ function createLoadBalancer(options: {
   );
   providerManager.setTokenizerFactory(tokenizerFactory);
   providerManager.registerProvider(options.delegate);
+  if (options.secondDelegate !== undefined) {
+    providerManager.registerProvider(options.secondDelegate);
+  }
+  const firstMember = {
+    ...createResolvedSubProfile(options.delegate.name),
+    ephemeralSettings:
+      options.maxOutputTokens === undefined
+        ? {}
+        : { maxOutputTokens: options.maxOutputTokens },
+  };
   return new LoadBalancingProvider(
     {
       profileName: 'lb-parity-test',
       strategy: 'round-robin',
       contextLimit: options.contextLimit,
-      subProfiles: [createResolvedSubProfile(options.delegate.name)],
+      subProfiles: [
+        firstMember,
+        ...(options.secondDelegate === undefined
+          ? []
+          : [createResolvedSubProfile(options.secondDelegate.name)]),
+      ],
     },
     providerManager,
   );
@@ -312,11 +330,13 @@ function createEnforcementSession(options: {
     [],
   );
   const handler = chat['compressionHandler'];
-  vi.spyOn(handler, 'performCompression').mockImplementation(async () => {
-    await Promise.resolve();
-    return PerformCompressionResult.NOOP;
-  });
-  return { handler };
+  const performCompression = vi
+    .spyOn(handler, 'performCompression')
+    .mockImplementation(async () => {
+      await Promise.resolve();
+      return PerformCompressionResult.NOOP;
+    });
+  return { handler, performCompression };
 }
 
 describe('LB guard projection parity through real pre-send enforcement (issue #3507)', () => {
@@ -551,5 +571,74 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
       MODEL,
     );
     expect(sentTokens).toBe(reducedTokens);
+  });
+
+  it('applies the admitted member output cap to real preflight compression decisions', async () => {
+    const runPreflight = async (estimatedTokens: number) => {
+      const historyService = new HistoryService();
+      seedHistory(historyService);
+      await historyService.waitForTokenUpdates();
+      const delegate = createProjectingDelegate({
+        name: `budget-delegate-${String(estimatedTokens)}`,
+        historyService,
+        fixedEstimate: estimatedTokens,
+      });
+      const backup = createProjectingDelegate({
+        name: `backup-delegate-${String(estimatedTokens)}`,
+        historyService,
+      });
+      const lb = createLoadBalancer({
+        contextLimit: 131_072,
+        delegate: delegate.provider,
+        secondDelegate: backup.provider,
+        maxOutputTokens: 32_768,
+      });
+      const { handler, performCompression } = createEnforcementSession({
+        historyService,
+        contextLimit: 131_072,
+      });
+      const pending = makePending();
+      const options = {
+        contents: [pending],
+        invocation: makeLoadBalancerInvocation(),
+      };
+      const historyTokensBefore = historyService.getTotalTokens();
+      const prepared = await preparePromptEnvelopeAfterEnforcement({
+        tokenizerFactory,
+        provider: lb as unknown as Parameters<
+          typeof preparePromptEnvelopeAfterEnforcement
+        >[0]['provider'],
+        contents: options.contents,
+        buildOptions: (contents) => ({ ...options, contents }),
+        enforce: (contents, finalizedEstimate) =>
+          handler.enforceProviderContents(
+            { contents, pendingContents: [pending] },
+            `prompt-budget-${String(estimatedTokens)}`,
+            lb,
+            finalizedEstimate,
+          ),
+        fallbackEstimate: (contents) =>
+          historyService.estimateTokensForContents(contents, MODEL),
+      });
+      const projected = prepared.prepared.estimate?.estimatedPromptTokens;
+      await consume(lb.generateChatCompletion(prepared.prepared.options));
+      const historyTokensAfter = historyService.getTotalTokens();
+      await prepared.preparer.releaseUnused();
+      return {
+        historyTokensBefore,
+        historyTokensAfter,
+        projected,
+        maxOutputTokens: prepared.prepared.estimate?.maxOutputTokens,
+        compressionCalls: performCompression.mock.calls.length,
+      };
+    };
+
+    const underThreshold = await runPreflight(65_000);
+    expect(underThreshold.maxOutputTokens).toBe(32_768);
+    expect(underThreshold.projected).toBe(65_000);
+    expect(underThreshold.compressionCalls).toBe(0);
+
+    const overThreshold = await runPreflight(84_000);
+    expect(overThreshold.compressionCalls).toBeGreaterThan(0);
   });
 });

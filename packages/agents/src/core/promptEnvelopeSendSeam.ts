@@ -19,7 +19,10 @@ import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type {
+  PromptEnvelopeEstimate,
+  PromptEnvelopeBudgetEstimator,
+} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { extractSystemInstructionText } from './streamRequestHelpers.js';
@@ -139,7 +142,7 @@ interface EnforcementPreparationInput {
   >;
   enforce: (
     contents: IContent[],
-    estimate: (contents: IContent[]) => Promise<number>,
+    estimate: PromptEnvelopeBudgetEstimator,
   ) => Promise<IContent[]>;
   fallbackEstimate: (contents: IContent[]) => Promise<number>;
 }
@@ -165,10 +168,15 @@ export async function preparePromptEnvelopeAfterEnforcement(
     // load balancers included (issue #3507).
     const contents = await input.enforce(input.contents, async (candidate) => {
       const prepared = await preparer.prepare(candidate);
-      return (
-        prepared.estimate?.estimatedPromptTokens ??
-        input.fallbackEstimate(candidate)
-      );
+      if (prepared.estimate === null) {
+        return input.fallbackEstimate(candidate);
+      }
+      return prepared.estimate.maxOutputTokens === undefined
+        ? prepared.estimate.estimatedPromptTokens
+        : {
+            estimatedPromptTokens: prepared.estimate.estimatedPromptTokens,
+            maxOutputTokens: prepared.estimate.maxOutputTokens,
+          };
     });
     const prepared = await preparer.prepare(contents);
     // Enforcement-candidate projections are estimate-only and must not

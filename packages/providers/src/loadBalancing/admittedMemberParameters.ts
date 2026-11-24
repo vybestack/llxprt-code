@@ -5,10 +5,7 @@
  */
 
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  isSessionScopedSettingKey,
-  separateSettings,
-} from '@vybestack/llxprt-code-settings';
+import { separateSettings } from '@vybestack/llxprt-code-settings';
 import {
   ownModelParameters,
   type AdmittedModelParameters,
@@ -33,11 +30,6 @@ export function captureLoadBalancerParameters(
     settings.getProviderSettings('load-balancer'),
     'load-balancer',
   );
-  const session = Object.fromEntries(
-    Object.entries(settings.getAllGlobalSettings()).filter(([key]) =>
-      isSessionScopedSettingKey(key),
-    ),
-  );
   const members = config.subProfiles.map((member) => {
     if (!isResolvedSubProfile(member)) {
       throw new Error(
@@ -61,7 +53,14 @@ export function captureLoadBalancerParameters(
       },
       member.providerName,
     );
-    const sessionParams = separateSettings(session, member.providerName);
+    const memberGenericMaxOutputTokens = admitModelParameters(
+      {
+        ...member.ephemeralSettings,
+        ...config.lbProfileEphemeralSettings,
+      },
+      {},
+      member.providerName,
+    ).genericMaxOutputTokens;
     const identity = memberIdentities.get(member);
     if (identity === undefined)
       throw new Error('Load-balancer member changed before admission');
@@ -77,9 +76,9 @@ export function captureLoadBalancerParameters(
           ...provider.modelParams,
           ...profile.modelParams,
           ...lb.modelParams,
-          ...sessionParams.modelParams,
         }),
-        genericMaxOutputTokens: lb.genericMaxOutputTokens,
+        genericMaxOutputTokens:
+          lb.genericMaxOutputTokens ?? memberGenericMaxOutputTokens,
       }),
     });
   });

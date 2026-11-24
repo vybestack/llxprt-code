@@ -18,6 +18,7 @@ import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/servic
 import type { CompressionHandlerRuntime } from '../core/chatSessionPorts.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { PromptEnvelopeBudgetEstimator } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type {
   CompressionAuditProvenance,
   CompressionContext,
@@ -445,7 +446,7 @@ export class CompressionHandler {
   }
 
   private createProviderContentEnforcer(
-    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
+    estimateFinalizedPromptTokens?: PromptEnvelopeBudgetEstimator,
     transcriptPathProvider?: () => string | undefined,
     historyOrigin?: object,
     hookOwner?: HookExecutionOwner,
@@ -517,7 +518,7 @@ export class CompressionHandler {
     envelope: ProviderContentEnvelope,
     promptId: string,
     provider?: IProvider,
-    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
+    estimateFinalizedPromptTokens?: PromptEnvelopeBudgetEstimator,
     transcriptPathProvider?: () => string | undefined,
     historyOrigin?: object,
     hookOwner?: HookExecutionOwner,

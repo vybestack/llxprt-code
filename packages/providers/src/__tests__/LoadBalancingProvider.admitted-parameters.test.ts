@@ -84,6 +84,42 @@ describe('Load-balancer admission normalization', () => {
     ).toStrictEqual([0.8, 0.8]);
   });
 
+  it("preserves the selected member's generic output-token limit when the parent has none", () => {
+    const settings = new SettingsService();
+    const config = createRuntimeConfigStub(settings);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
+    );
+    const provider = new LoadBalancingProvider(
+      {
+        profileName: 'member-output-limit',
+        strategy: 'round-robin',
+        subProfiles: [
+          {
+            name: 'bounded',
+            providerName: 'openai',
+            model: 'bounded-model',
+            ephemeralSettings: { maxOutputTokens: 32_768 },
+            modelParams: {},
+          },
+        ],
+      },
+      manager,
+    );
+
+    const admitted = provider.admitModelParameters(settings);
+
+    expect(admitted.genericMaxOutputTokens).toBeUndefined();
+    expect(
+      admitted.loadBalancer?.members[0]?.parameters.genericMaxOutputTokens,
+    ).toBe(32_768);
+  });
+
   it('normalizes an LB invocation without replacing it with a member partition', () => {
     const { settings, provider, manager } = setup();
     const captured = provider.admitModelParameters(settings);

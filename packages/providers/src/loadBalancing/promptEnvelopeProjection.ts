@@ -103,7 +103,24 @@ export async function projectNextSubProfilePromptEnvelope(input: {
   if (delegateProjection === undefined) {
     return undefined;
   }
-  return toEstimateOnlyPromptEnvelopeProjection(delegateProjection);
+  const maxOutputTokens = resolveProjectedOutputLimit(resolvedOptions);
+  const { maxOutputTokens: _delegateLimit, ...projection } = delegateProjection;
+  return toEstimateOnlyPromptEnvelopeProjection({
+    ...projection,
+    ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+  });
+}
+
+function resolveProjectedOutputLimit(
+  options: GenerateChatOptions,
+): number | undefined {
+  const value =
+    options.modelParameters === undefined
+      ? options.invocation?.ephemerals.maxOutputTokens
+      : options.modelParameters.genericMaxOutputTokens;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
 }
 
 /**
@@ -113,6 +130,7 @@ export async function projectNextSubProfilePromptEnvelope(input: {
  * skip traversal, which claims the start index and skips circuit-open or
  * TPM-ineligible backends. When no member is eligible, fall back to the
  * start-index member: the estimate-only seam never throws, and the send
+
  * path keeps sole authority over the all-unhealthy error. The failover
  * state is only read here (getIndex); no claim, advance, or owner change.
  */
@@ -153,6 +171,7 @@ export async function toEstimateOnlyPromptEnvelopeProjection(
     method,
     projectionRevision,
     unsupportedMedia,
+    maxOutputTokens,
     accounting,
     finalizedProjection,
     legacyEstimate,
@@ -164,6 +183,7 @@ export async function toEstimateOnlyPromptEnvelopeProjection(
     method,
     projectionRevision,
     unsupportedMedia,
+    ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
     ...(accounting === undefined ? {} : { accounting }),
     finalizedProjection,
     legacyEstimate,
