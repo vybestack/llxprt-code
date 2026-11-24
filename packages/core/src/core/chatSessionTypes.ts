@@ -7,7 +7,7 @@
 import type { ModelStreamChunk } from '../llm-types/index.js';
 
 /** Which subsystem produced a user-facing notice. Hosts render known sources. */
-export type SystemNoticeSource = 'refusal-recovery';
+export type SystemNoticeSource = 'refusal-recovery' | 'stream-timeout-retry';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */

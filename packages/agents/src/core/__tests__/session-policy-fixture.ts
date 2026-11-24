@@ -107,12 +107,17 @@ export function createOwnerPolicyFixture(
   return { ...fixture, runtime };
 }
 
+/**
+ * Turn-level watchdog tests observe one attempt ending in a timeout, so the
+ * stream-timeout resend (issue #4093) is off unless a test turns it on.
+ */
 export function createTurnStreamPolicy(
   values: Readonly<Record<string, unknown>> = {},
 ): () => ReturnType<
   SessionSettingsOwner['readRuntimePolicy']
 >['streamTimeoutPolicy'] {
   const settings = new SettingsService();
+  settings.set('stream-timeout-retries', 0);
   for (const [key, value] of Object.entries(values)) settings.set(key, value);
   const fixture = createSessionPolicyFixture(settings);
   return () => fixture.owner.readRuntimePolicy().streamTimeoutPolicy;
@@ -133,6 +138,7 @@ export function createChatPolicyFixture(
   getResolvedBaseUrl: () => string | undefined;
 } {
   const settings = new SettingsService();
+  settings.set('stream-timeout-retries', 0);
   for (const [key, value] of Object.entries(values)) settings.set(key, value);
   const fixture = createSessionPolicyFixture(settings);
   return {

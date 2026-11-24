@@ -53,6 +53,25 @@ export function bindPreparedTransportSignal(
   };
 }
 
+/**
+ * Releases the projection of a request that will not be sent: the transport
+ * that would have consumed it is never called. `sendError` is what stopped the
+ * send and stays the primary failure.
+ */
+export async function releaseUnsent(
+  prepared: PreparedPromptEnvelopeSend | undefined,
+  sendError: unknown,
+): Promise<void> {
+  try {
+    await prepared?.releaseIfUnsent?.();
+  } catch (cleanupError: unknown) {
+    throw new AggregateError(
+      [sendError, cleanupError],
+      'Request was not sent and prompt projection cleanup was incomplete',
+    );
+  }
+}
+
 export interface PromptEnvelopePreparer {
   prepare(contents: IContent[]): Promise<PreparedPromptEnvelopeSend>;
   releaseUnused(kept?: PreparedPromptEnvelopeSend): Promise<void>;

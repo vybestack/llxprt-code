@@ -31,6 +31,11 @@ function historyWithImage(): HistoryService {
   return history;
 }
 
+/** Lets every promise continuation that is already runnable run. */
+function flush(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 const usageWithoutCacheWrite: UsageStats = {
   promptTokens: 20,
   completionTokens: 5,
@@ -454,5 +459,48 @@ describe('SemanticMediaPurgeSession', () => {
     await Promise.resolve();
 
     expect(secondResolved).toBeFalsy();
+  });
+
+  it('keeps the purge lease of a committed attempt that is retired before its history commit finishes', async () => {
+    const history = historyWithImage();
+    const session = new SemanticMediaPurgeSession({
+      history,
+      mode: () => 'remove',
+      persist: () => Promise.resolve(),
+    });
+    const first = await session.begin(false);
+    assertDefined(first, 'Expected first purge attempt');
+    expect(
+      await first.complete({
+        status: 'success',
+        usage: usageWithoutCacheWrite,
+        retryHandoff: false,
+      }),
+    ).toBe(true);
+
+    first.retire();
+    let secondResolved = false;
+    const secondPromise = session.begin(false).then((attempt) => {
+      secondResolved = true;
+      return attempt;
+    });
+    await flush();
+    const heldWhileCommitted = !secondResolved;
+    const imagesWhileCommitted = history.getAll()[0]?.blocks.length;
+
+    await first.failAfterProcessingError();
+    const second = await secondPromise;
+
+    expect({
+      heldWhileCommitted,
+      imagesWhileCommitted,
+      imagesAfterRollback: history.getAll()[0]?.blocks.length,
+      secondCanPurgeAgain: second !== undefined,
+    }).toStrictEqual({
+      heldWhileCommitted: true,
+      imagesWhileCommitted: 1,
+      imagesAfterRollback: 2,
+      secondCanPurgeAgain: true,
+    });
   });
 });

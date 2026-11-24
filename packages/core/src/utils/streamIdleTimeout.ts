@@ -14,6 +14,31 @@ export class StreamIdleTimeoutError extends Error {
 }
 
 /**
+ * The abort reason of a stream watchdog abort (issue #4093). It is an
+ * `AbortError` like the default reason, so providers and transports treat it
+ * as any other abort, while code that only sees the signal can still tell it
+ * from a user cancel.
+ */
+export class StreamTimeoutAbortReason extends DOMException {
+  constructor() {
+    super('Stream watchdog timeout', 'AbortError');
+  }
+}
+
+/** Aborts `controller` because a stream watchdog fired. */
+export function abortForStreamTimeout(controller: AbortController): void {
+  controller.abort(new StreamTimeoutAbortReason());
+}
+
+/** Whether `signal` was aborted by {@link abortForStreamTimeout}. */
+export function isStreamTimeoutAbort(signal: AbortSignal | undefined): boolean {
+  return (
+    signal?.aborted === true &&
+    signal.reason instanceof StreamTimeoutAbortReason
+  );
+}
+
+/**
  * A provider-neutral transport/provider liveness signal (issue #2607).
  *
  * Emitted by a provider SSE parser when a raw lifecycle event (e.g. OpenAI
@@ -68,22 +93,23 @@ export const STREAM_IDLE_TIMEOUT_SETTING_KEY = 'stream-idle-timeout-ms';
 export interface StreamTimeoutPolicy {
   readonly 'stream-idle-timeout-ms'?: unknown;
   readonly 'stream-first-response-timeout-ms'?: unknown;
+  /** Resends after a watchdog timeout (issue #4093). */
+  readonly 'stream-timeout-retries'?: unknown;
+  /** Base wait of the backoff schedule shared with refusal recovery. */
+  readonly 'refusal.backoff-ms'?: unknown;
 }
 
 /**
- * Default first-response timeout in milliseconds (5 minutes).
+ * Default first-response timeout in milliseconds: -1, meaning no limit.
  *
- * Unlike the inter-chunk idle timeout (DEFAULT-ON = 0, i.e. disabled), the
- * first-response watchdog is DEFAULT-ON because an unbounded wait from send
- * until the FIRST stream event is never legitimate — it is the exact
- * "Responding" hang seen in issue #2379 when a provider activation never
- * settles. 5 minutes is generous enough that slow reasoning-model activation
- * never false-trips, yet bounded enough that a truly-hung activation surfaces
- * an error instead of hanging the UI forever.
- *
- * A value of 0 (or <=0) explicitly disables this watchdog.
+ * Long prompts on large-context models and slow local models can legitimately
+ * take longer than any fixed bound before the first token, so the watchdog is
+ * opt-in (issue #4092). Set a positive value via the
+ * LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS env var or the
+ * 'stream-first-response-timeout-ms' ephemeral setting to arm it; 0 or any
+ * negative value leaves it disabled.
  */
-export const DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = 300_000;
+export const DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = -1;
 
 /**
  * Environment variable name for first-response timeout override.
@@ -213,20 +239,21 @@ export function resolveStreamIdleTimeoutMsSource(
  *
  * This is the time-to-first-response watchdog: it bounds the ENTIRE window
  * from sending the request until the FIRST stream event is produced
- * (activation + connect + first token). An infinite wait here is never
- * legitimate — it is the exact "Responding" hang in issue #2379 — so this
- * watchdog is DEFAULT-ON (300000ms), unlike the inter-chunk idle timeout.
+ * (activation + connect + first token). It is disabled by default (-1,
+ * issue #4092) because slow first tokens are legitimate; set a positive value
+ * to bound the wait.
  *
  * Priority order (same semantics as resolveStreamIdleTimeoutMs):
  * 1. Environment variable LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS
  * 2. Config ephemeral setting 'stream-first-response-timeout-ms' (hyphenated)
- * 3. DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS (300000 — enabled)
+ * 3. DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS (-1 — disabled)
  *
- * Values <= 0 disable the watchdog (return 0).
+ * Explicit values <= 0 disable the watchdog (return 0); the built-in default
+ * is returned as -1, which the watchdog also treats as disabled.
  * Invalid/empty string values fall back to the next priority level.
  *
  * @param config - Optional Config instance to read ephemeral setting from
- * @returns Resolved timeout in ms, or 0 if watchdog should be disabled
+ * @returns Resolved timeout in ms; a value <= 0 means the watchdog is disabled
  */
 export function resolveStreamFirstResponseTimeoutMs(
   policy?: StreamTimeoutPolicy,

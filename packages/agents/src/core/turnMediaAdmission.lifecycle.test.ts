@@ -68,6 +68,25 @@ class ReleaseReportingStore extends LocalMediaStore {
   }
 }
 
+/** Tells the scenario when a reservation for provider output media is held. */
+class OutputReservationReportingStore extends LocalMediaStore {
+  constructor(
+    options: ConstructorParameters<typeof LocalMediaStore>[0],
+    private readonly onOutputReserved: () => void,
+  ) {
+    super(options);
+  }
+
+  override async reserveAndReadVerified(
+    reference: MediaReferenceBlock,
+    ownerId: string,
+  ): Promise<Uint8Array> {
+    const bytes = await super.reserveAndReadVerified(reference, ownerId);
+    if (reference.mimeType === 'image/jpeg') this.onOutputReserved();
+    return bytes;
+  }
+}
+
 function errorMessages(error: unknown): readonly string[] {
   if (!(error instanceof Error)) return [];
   const nested =
@@ -180,6 +199,8 @@ async function createFixture(
   options: {
     readonly purgeFailure?: boolean;
     readonly releaseFailure?: boolean;
+    /** Runs as soon as the provider's output media has been reserved. */
+    readonly onOutputReserved?: () => void;
   } = {},
 ): Promise<TurnMediaFixture> {
   let markProviderStarted = (): void => undefined;
@@ -251,10 +272,14 @@ async function createFixture(
   const rootDirectory = join(directory, `media-${behavior}`);
   const Store =
     options.releaseFailure === true ? ReleaseReportingStore : LocalMediaStore;
-  const store = new Store({
-    rootDirectory,
-    quotaBytes: 1024 * 1024,
-  });
+  const storeOptions = { rootDirectory, quotaBytes: 1024 * 1024 };
+  const store =
+    options.onOutputReserved === undefined
+      ? new Store(storeOptions)
+      : new OutputReservationReportingStore(
+          storeOptions,
+          options.onOutputReserved,
+        );
   const history = new HistoryService();
   const invocationOwner = new SessionSettingsOwner(setup.settingsService);
   retainedInvocationOwners.push(invocationOwner);
@@ -557,6 +582,47 @@ describe('turn media admission terminal lifecycle', () => {
       Date.now(),
     );
     expect({ owners, reclaimed: reclamation.objectsRemoved }).toStrictEqual({
+      owners: baselineOwners,
+      reclaimed: 2,
+    });
+  });
+
+  it('releases output media admitted while the attempt was being abandoned', async () => {
+    const attempt = new AbortController();
+    const fixture = await createFixture(directory, 'success', {
+      onOutputReserved: () => attempt.abort(),
+    });
+    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+
+    const stream = await fixture.chat.sendMessageStream(
+      {
+        message: [inlineMediaContent(INPUT_PNG, 'image/png')],
+        config: { abortSignal: attempt.signal },
+      },
+      'abandoned-during-output-admission',
+    );
+    const ended = await (async (): Promise<unknown> => {
+      try {
+        for await (const _event of stream) {
+          // Drain until the abandoned attempt ends.
+        }
+        return undefined;
+      } catch (error: unknown) {
+        return error;
+      }
+    })();
+
+    const owners = await reservationOwnerCount(fixture.rootDirectory);
+    const reclamation = await fixture.store.reclaimUnreferenced(
+      new Set(),
+      Date.now(),
+    );
+    expect({
+      endedWithAbort: ended instanceof Error && ended.name === 'AbortError',
+      owners,
+      reclaimed: reclamation.objectsRemoved,
+    }).toStrictEqual({
+      endedWithAbort: true,
       owners: baselineOwners,
       reclaimed: 2,
     });

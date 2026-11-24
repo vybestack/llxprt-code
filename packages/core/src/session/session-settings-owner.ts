@@ -16,76 +16,41 @@ import type {
   TaskExecutionPolicy,
   SubagentRunPolicy,
 } from './session-settings-policies.js';
-import { assembleTaskSchemaPolicy } from '../config/task-schema-policy-assembly.js';
-import type { RegistryPolicy } from '@vybestack/llxprt-code-tools';
 import { UNCONFIGURED_PROVIDER } from '../config/models.js';
 import { captureUserSettings } from './capture-user-settings.js';
 import type { LoopDetectionPolicy } from '../services/loopDetectionService.js';
-import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
+import type {
+  RegistryPolicy,
+  ToolExecutionPolicy,
+  ToolGovernance,
+} from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
-import { z } from 'zod';
 import { captureProviderInvocation } from '../runtime/providerRequestContext.js';
 import type { RuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 import type { AdmittedModelParameters } from '../runtime/admittedModelParameters.js';
 import type { NetworkFetch } from '../utils/fetch.js';
+import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
 
 import { EventEmitter } from 'node:events';
 import { CoreEvent, type ModelProfileInfoPayload } from '../utils/events.js';
 import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { EphemeralDefaultOwnership } from '../config/ephemeralDefaultOwnership.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
-  SettingsService,
-  resolveTokenUsageLogLevel,
-} from '@vybestack/llxprt-code-settings';
-import {
-  buildToolGovernance,
-  type ToolGovernance,
-} from '@vybestack/llxprt-code-tools';
+  readLoopDetectionPolicy,
+  readRegistryPolicy,
+  readRuntimePolicy,
+  readToolExecutionPolicy,
+  readToolGovernance,
+} from './session-settings-policy-reader.js';
 import {
   normalizeContextLimit,
   normalizeStreamingValue,
 } from '../config/ephemeralSettingsHelpers.js';
-
-const runtimePolicySchema = z.object({
-  compressionThreshold: z.number().finite().optional().catch(undefined),
-  contextLimit: z.number().positive().optional(),
-  preserveThreshold: z.number().finite().optional().catch(undefined),
-  topPreserveThreshold: z.number().finite().optional().catch(undefined),
-  toolFormatOverride: z.string().optional(),
-  compressionStrategy: z.string().optional(),
-  compressionProfile: z.string().optional(),
-  compressionVerification: z.boolean().optional().catch(undefined),
-  'media.semantic-purge': z.enum(['off', 'remove', 'summary']).optional(),
-  'refusal.retries': z.number().optional().catch(undefined),
-  'refusal.backoff-ms': z.number().optional().catch(undefined),
-  'refusal.rewrite': z.boolean().optional().catch(undefined),
-  'refusal.review-profile': z.string().optional().catch(undefined),
-  'refusal.max-rewrites': z.number().optional().catch(undefined),
-  'compression.density.readWritePruning': z.boolean().optional(),
-  'compression.density.fileDedupe': z.boolean().optional(),
-  'compression.density.recencyPruning': z.boolean().optional(),
-  'compression.density.recencyRetention': z.number().optional(),
-  'compression.density.compressHeadroom': z.number().optional(),
-  'compression.density.optimizeThreshold': z.number().optional(),
-  'reasoning.enabled': z.boolean().optional(),
-  'reasoning.includeInContext': z.boolean().optional(),
-  'reasoning.includeInResponse': z.boolean().optional(),
-  'reasoning.format': z.enum(['native', 'field']).optional(),
-  'reasoning.stripFromContext': z
-    .enum(['all', 'allButLast', 'none'])
-    .optional(),
-  'reasoning.fieldName': z.string().optional(),
-  'reasoning.effort': z
-    .enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
-    .optional(),
-  'reasoning.maxTokens': z.number().optional(),
-  'reasoning.adaptiveThinking': z.boolean().optional(),
-});
 
 export interface WorkspaceMcpSettings {
   readonly mcpServers: Record<string, MCPServerConfig>;
@@ -354,62 +319,12 @@ export class SessionSettingsOwner {
 
   readRuntimePolicy(): ReadonlySettingsSnapshot {
     this.assertOpen();
-    const values = Object.fromEntries(
-      Object.keys(runtimePolicySchema.shape).map((key) => [
-        key,
-        this.settings.get(key),
-      ]),
+    return readRuntimePolicy(
+      this.settings,
+      (key) => this.readNamedParameter(key),
+      () => this.readToolExecutionPolicy(),
+      () => this.readLoopDetectionPolicy(),
     );
-    const semanticPurge = this.readNamedParameter('media.semantic-purge');
-    if (
-      semanticPurge !== undefined &&
-      semanticPurge !== 'off' &&
-      semanticPurge !== 'remove' &&
-      semanticPurge !== 'summary'
-    )
-      throw new Error(
-        "Invalid media.semantic-purge setting: expected 'off', 'remove', or 'summary'",
-      );
-    return Object.freeze({
-      tools: this.readClientToolPolicy(),
-      ...runtimePolicySchema.parse({
-        ...values,
-        compressionThreshold: this.readNamedParameter('compression-threshold'),
-        contextLimit: this.readNamedParameter('context-limit'),
-        preserveThreshold: this.readNamedParameter(
-          'compression-preserve-threshold',
-        ),
-        topPreserveThreshold: this.readNamedParameter(
-          'compression-top-preserve-threshold',
-        ),
-        toolFormatOverride: this.readNamedParameter('toolFormat'),
-        compressionStrategy: this.readNamedParameter('compression.strategy'),
-        compressionProfile: this.readNamedParameter('compression.profile'),
-      }),
-      toolExecutionPolicy: this.readToolExecutionPolicy(),
-      maxOutputTokens: this.settings.get('maxOutputTokens'),
-      promptCaching: this.settings.get('prompt-caching'),
-      streamTimeoutPolicy: Object.freeze({
-        'stream-idle-timeout-ms': this.settings.get('stream-idle-timeout-ms'),
-        'stream-first-response-timeout-ms': this.settings.get(
-          'stream-first-response-timeout-ms',
-        ),
-      }),
-      showCitations: this.settings.get('ui.showCitations') === true,
-      loopDetection: this.readLoopDetectionPolicy(),
-      tokenUsageLogLevel: resolveTokenUsageLogLevel(
-        this.settings.get('token-usage-log'),
-      ),
-      promptPolicy: Object.freeze({
-        enableToolPrompts: this.settings.get('enable-tool-prompts') === true,
-        allMemoriesAreCore:
-          this.settings.get('model.allMemoriesAreCore') === true,
-        asyncSubagentsEnabled:
-          this.settings.get('subagents.asyncEnabled') !== false,
-        profileAsyncEnabled:
-          this.settings.get('subagents.async.enabled') !== false,
-      }),
-    });
   }
 
   prepareProviderInvocation(
@@ -759,91 +674,22 @@ export class SessionSettingsOwner {
 
   readLoopDetectionPolicy(): LoopDetectionPolicy {
     this.assertOpen();
-    const number = (key: string): number | undefined => {
-      const value = this.settings.get(key);
-      return typeof value === 'number' ? value : undefined;
-    };
-    const enabled = this.settings.get('loopDetectionEnabled');
-    return Object.freeze({
-      loopDetectionEnabled: typeof enabled === 'boolean' ? enabled : undefined,
-      maxTurnsPerPrompt: number('maxTurnsPerPrompt'),
-      toolCallLoopThreshold: number('toolCallLoopThreshold'),
-      contentLoopThreshold: number('contentLoopThreshold'),
-    });
+    return readLoopDetectionPolicy(this.settings);
   }
 
   readToolExecutionPolicy(): ToolExecutionPolicy {
     this.assertOpen();
-    return Object.freeze({
-      'shell-replacement': this.settings.get('shell-replacement'),
-      'shell-output-retention-max-bytes': this.settings.get(
-        'shell-output-retention-max-bytes',
-      ),
-      'shell-inactivity-timeout-seconds': this.settings.get(
-        'shell-inactivity-timeout-seconds',
-      ),
-      emojifilter: this.settings.get('emojifilter'),
-      'file-read-max-lines': this.settings.get('file-read-max-lines'),
-      'tool-output-max-items': this.settings.get('tool-output-max-items'),
-      'tool-output-max-tokens': this.settings.get('tool-output-max-tokens'),
-      'tool-output-truncate-mode': this.settings.get(
-        'tool-output-truncate-mode',
-      ),
-      'tool-output-item-size-limit': this.settings.get(
-        'tool-output-item-size-limit',
-      ),
-      'max-image-dimension': this.settings.get('max-image-dimension'),
-      'max-image-pixels': this.settings.get('max-image-pixels'),
-      'image-resize.enabled': this.settings.get('image-resize.enabled'),
-      'image-resize.maxLongEdge': this.settings.get('image-resize.maxLongEdge'),
-      'image-resize.maxShortEdge': this.settings.get(
-        'image-resize.maxShortEdge',
-      ),
-      'image-resize.maxPixels': this.settings.get('image-resize.maxPixels'),
-      'shell-default-timeout-seconds': this.settings.get(
-        'shell-default-timeout-seconds',
-      ),
-      'shell-max-timeout-seconds': this.settings.get(
-        'shell-max-timeout-seconds',
-      ),
-      'model.canSaveCore': this.settings.get('model.canSaveCore'),
-    });
+    return readToolExecutionPolicy(this.settings);
   }
 
   readRegistryPolicy(excluded: readonly string[]): RegistryPolicy {
     this.assertOpen();
-    return assembleTaskSchemaPolicy(this.settings, excluded)();
-  }
-
-  private readClientToolPolicy(): Readonly<{
-    allowed?: string[];
-    disabled?: string[];
-  }> {
-    this.assertOpen();
-    const list = (value: unknown): string[] | undefined =>
-      Array.isArray(value)
-        ? value
-            .filter(
-              (entry): entry is string =>
-                typeof entry === 'string' && entry.trim().length > 0,
-            )
-            .map((entry) => entry.trim())
-        : undefined;
-    return Object.freeze({
-      allowed: list(this.settings.get('tools.allowed')),
-      disabled: list(this.settings.get('tools.disabled')),
-    });
+    return readRegistryPolicy(this.settings, excluded);
   }
 
   readToolGovernance(excluded: readonly string[]): ToolGovernance {
     this.assertOpen();
-    return buildToolGovernance({
-      getEphemeralSettings: () => ({
-        'tools.allowed': this.settings.get('tools.allowed'),
-        'tools.disabled': this.settings.get('tools.disabled'),
-      }),
-      getExcludeTools: () => [...excluded],
-    });
+    return readToolGovernance(this.settings, excluded);
   }
 
   closeAdmission(): void {

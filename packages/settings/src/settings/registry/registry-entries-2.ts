@@ -556,8 +556,9 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = deepFreezeTable<
     owner: 'agent-policy',
     propagation: 'next-turn',
     description:
-      'Inactivity timeout in seconds for shell commands. Kills commands that produce no output for this duration. Resets on each output event.',
+      'Inactivity timeout in seconds for shell commands. Kills commands that produce no output for this duration. Resets on each output event. Default: 300 (5 minutes). Use -1 for unlimited.',
     type: 'number',
+    default: 300,
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
       if (

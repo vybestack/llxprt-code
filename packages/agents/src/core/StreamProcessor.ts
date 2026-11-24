@@ -46,7 +46,7 @@ import {
 } from './streamRefusalAuditBoundary.js';
 import { processAfterModelHook } from './streamAfterModelHook.js';
 import { RefusalDumpPairing } from './refusalDumpPairing.js';
-import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
+import { prepareAtSendSeam, releaseUnsent } from './promptEnvelopeSendSeam.js';
 import { prepareStreamEnvelope } from './streamEnvelopePreparation.js';
 import {
   applyToolSelectionHook,
@@ -86,6 +86,8 @@ import { logApiError, turnTelemetryPorts } from './turnLogging.js';
 import { assertAdmittedRoute } from './admittedRouteSecurity.js';
 import type { PreparedUserTurn } from './mediaAdmissionSeam.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { createCancellableStream } from './cancellableStream.js';
+import { replayOptions, snapshotSentOptions } from './requestReplay.js';
 import { buildStreamChatOptions } from './streamChatOptions.js';
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import {
@@ -97,15 +99,11 @@ import {
   reasoningInclusionPolicy,
 } from './runtimePorts.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
+import { resolveStreamUserInput } from './streamUserInput.js';
 import { throwIfRefused } from '../refusal/refusalDetection.js';
 import { RefusalStreamAudit } from '../refusal/refusalStreamAudit.js';
 import type { RefusalContextFingerprint } from '../refusal/refusalAudit.js';
 
-function isPreparedUserTurn(
-  value: IContent | IContent[] | PreparedUserTurn,
-): value is PreparedUserTurn {
-  return !Array.isArray(value) && 'userContents' in value;
-}
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
 
@@ -222,27 +220,14 @@ export class StreamProcessor {
 
     const providerBaseUrl =
       params.modelParameters?.route?.baseURL ?? this.ports.state.baseUrl;
-    let prepared: PreparedUserTurn | undefined;
-    let providerUserContent: IContent | IContent[];
-    let historyUserContent: IContent | IContent[];
-    if (isPreparedUserTurn(userInput)) {
-      prepared = userInput;
-      providerUserContent = userInput.userIContents;
-      historyUserContent = userInput.userContents;
-    } else {
-      prepared = undefined;
-      providerUserContent = userInput;
-      historyUserContent = userInput;
-    }
-    const existingTurnId = (
-      Array.isArray(providerUserContent)
-        ? providerUserContent
-        : [providerUserContent]
-    ).find((content) => content.metadata?.turnId !== undefined)?.metadata
-      ?.turnId;
+    const {
+      prepared,
+      providerUserContent,
+      historyUserContent,
+      establishedTurnId,
+    } = resolveStreamUserInput(userInput);
     const turnId =
-      prepared?.turnId ??
-      existingTurnId ??
+      establishedTurnId ??
       this.turnIdByPromptId.get(promptId) ??
       this.historyService.generateTurnKey();
     this.turnIdByPromptId.set(promptId, turnId);
@@ -278,87 +263,24 @@ export class StreamProcessor {
       sendState,
     );
 
-    return this._createCancellableStream(
-      streamResponse,
-      historyUserContent,
-      prepared,
-      semanticMediaPurge,
-      turnId,
-      params.recordingExecution?.historyOrigin,
-      promptId,
-      this.currentAttemptIndex,
-      this.currentContextFingerprint,
-    );
-  }
-
-  private _createCancellableStream(
-    streamResponse: AsyncGenerator<ModelStreamChunk>,
-    userContent: IContent | IContent[],
-    prepared: PreparedUserTurn | undefined,
-    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-    turnId: string,
-    origin: object | undefined,
-    promptId: string,
-    attemptIndex: number,
-    contextFingerprint: RefusalContextFingerprint | undefined,
-  ): AsyncGenerator<ModelStreamChunk> {
-    let processedStream: AsyncGenerator<ModelStreamChunk> | undefined;
-    const ensureProcessedStream = (): AsyncGenerator<ModelStreamChunk> => {
-      processedStream ??= this.processStreamResponse(
+    const origin = params.recordingExecution?.historyOrigin;
+    const sentAttemptIndex = this.currentAttemptIndex;
+    const contextFingerprint = this.currentContextFingerprint;
+    return createCancellableStream(streamResponse, () =>
+      this.processStreamResponse(
         streamResponse,
-        userContent,
+        historyUserContent,
         semanticMediaPurge,
         turnId,
         prepared,
         origin,
         contextFingerprint,
         promptId,
-        attemptIndex,
-      );
-      return processedStream;
-    };
-
-    const cancellableStream = {
-      async next(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        return ensureProcessedStream().next(value);
-      },
-      async return(value?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        if (processedStream) {
-          return typeof processedStream.return === 'function'
-            ? processedStream.return(value)
-            : { done: true, value: undefined };
-        }
-
-        if (typeof streamResponse.return === 'function') {
-          await streamResponse.return(value);
-        }
-
-        return { done: true, value: undefined };
-      },
-      async throw(error?: unknown): Promise<IteratorResult<ModelStreamChunk>> {
-        if (processedStream) {
-          if (typeof processedStream.throw === 'function') {
-            return processedStream.throw(error);
-          }
-          throw error;
-        }
-
-        if (typeof streamResponse.throw === 'function') {
-          return streamResponse.throw(error);
-        }
-
-        if (typeof streamResponse.return === 'function') {
-          await streamResponse.return(undefined);
-        }
-
-        throw error;
-      },
-      [Symbol.asyncIterator](): AsyncGenerator<ModelStreamChunk> {
-        return this as AsyncGenerator<ModelStreamChunk>;
-      },
-    };
-
-    return cancellableStream as AsyncGenerator<ModelStreamChunk>;
+        sentAttemptIndex,
+        params.config?.abortSignal,
+        sendState,
+      ),
+    );
   }
 
   /**
@@ -386,7 +308,13 @@ export class StreamProcessor {
       );
       const kept = sendState?.replayable();
       if (kept !== undefined) {
-        return this._resendKeptRequest(provider, kept, params, promptId);
+        return this._resendKeptRequest(
+          provider,
+          kept,
+          params,
+          promptId,
+          sendState,
+        );
       }
       return this._buildAndSendStreamRequest(
         params,
@@ -410,9 +338,9 @@ export class StreamProcessor {
 
   private _selectHookRequestTools(
     params: SendMessageParams,
-  ): ReturnType<StreamProcessor['_applyToolSelectionHook']> {
+  ): Promise<ToolSelectionHookResult> {
     return this._applyToolSelectionHook(
-      this._selectRequestTools(params),
+      selectRequestTools(params, this.generationConfig.tools),
       params.hookOwner ?? params.recordingExecution?.hookOwner,
     );
   }
@@ -446,7 +374,8 @@ export class StreamProcessor {
     );
 
     provider = this._bindProviderMediaAndFiles(provider);
-
+    // The projection this attempt holds until it hands it on to be sent.
+    let unsent: Awaited<ReturnType<typeof prepareAtSendSeam>> | undefined;
     try {
       const { contents: finalContents, ...pendingRegion } =
         await this._fireBeforeModel(
@@ -479,6 +408,10 @@ export class StreamProcessor {
         this.ports.promptEstimator,
       );
 
+      unsent = streamPreparation.prepared;
+      // What a resend replays is what was sent: an attempt abandoned while it
+      // was prepared leaves nothing behind for the attempt that replaced it.
+      params.config?.abortSignal?.throwIfAborted();
       logOutgoingRequest(
         this.turnTelemetryPorts(),
         { ...requestPayload, contents: streamPreparation.contents },
@@ -490,7 +423,7 @@ export class StreamProcessor {
         toolSelection,
         systemInstruction: this.generationConfig.systemInstruction,
       });
-
+      unsent = undefined;
       const stream = await this._sendProviderRequest(
         provider,
         { ...requestPayload, contents: streamPreparation.contents },
@@ -499,27 +432,36 @@ export class StreamProcessor {
         promptId,
         toolSelection.allowedFunctionNames,
         streamPreparation.prepared,
-        this.generationConfig,
+        sendState,
         dumpAttemptContext,
       );
-      return withCompressionCallbackCleanup(
-        stream,
-        provider,
-        this.compressionHandler,
-        params.config?.abortSignal,
-      );
+      return this._withCompressionCleanup(stream, provider, params);
     } catch (error) {
       this.compressionHandler.clearProviderCompressionCallback(provider);
+      await releaseUnsent(unsent, error);
       throw error;
     }
   }
-  private _fireBeforeModel(
+  private _withCompressionCleanup(
+    stream: AsyncGenerator<ModelStreamChunk>,
+    provider: IProvider,
+    params: SendMessageParams,
+  ): AsyncGenerator<ModelStreamChunk> {
+    return withCompressionCallbackCleanup(
+      stream,
+      provider,
+      this.compressionHandler,
+      params.config?.abortSignal,
+    );
+  }
+
+  private async _fireBeforeModel(
     params: SendMessageParams,
     requestContents: IContent[],
     pendingUserIContents: IContent[],
     toolSelection: ToolSelectionHookResult,
   ): ReturnType<typeof fireBeforeModelHook> {
-    return fireBeforeModelHook({
+    const fired = await fireBeforeModelHook({
       owner: params.hookOwner ?? params.recordingExecution?.hookOwner,
       requestContents,
       pendingUserIContents,
@@ -528,6 +470,10 @@ export class StreamProcessor {
       model: this.ports.state.model,
       log: (msg) => this.logger.debug(() => msg),
     });
+    // An attempt abandoned while its hook ran must not go on to enforce the
+    // context limit for a request that will not be sent.
+    params.config?.abortSignal?.throwIfAborted();
+    return fired;
   }
 
   /**
@@ -540,6 +486,7 @@ export class StreamProcessor {
     kept: ProviderReadyRequest,
     params: SendMessageParams,
     promptId: string,
+    sendState: SendRequestState | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     assertAdmittedRoute(params.modelParameters?.route);
     const { requestPayload, runtimeContext } = this._prepareRequestPayload(
@@ -563,14 +510,11 @@ export class StreamProcessor {
         promptId,
         kept.toolSelection.allowedFunctionNames,
         undefined,
+        sendState,
+        this.refusalDumpPairing.createAttempt(promptId),
         { ...this.generationConfig, systemInstruction: kept.systemInstruction },
       );
-      return withCompressionCallbackCleanup(
-        stream,
-        bound,
-        this.compressionHandler,
-        params.config?.abortSignal,
-      );
+      return this._withCompressionCleanup(stream, bound, params);
     } catch (error) {
       this.compressionHandler.clearProviderCompressionCallback(bound);
       throw error;
@@ -608,6 +552,45 @@ export class StreamProcessor {
     return { requestPayload, baseRuntimeContext, runtimeContext };
   }
 
+  /**
+   * The options this attempt sends: built from the live request for a first
+   * send, or the options of the kept request bound to this attempt's own
+   * signal and observers for an identical resend (issue #4093).
+   */
+  private _chatOptionsForSend(
+    provider: IProvider,
+    requestPayload: PreparedRequest['requestPayload'],
+    runtimeContext: ProviderRequestCollaborators,
+    params: SendMessageParams,
+    promptId: string,
+    generation: ChatSessionConfig,
+    sendState: SendRequestState | undefined,
+    dumpAttemptContext: DumpAttemptContext,
+  ): ReturnType<typeof buildStreamChatOptions> {
+    const keptOptions = sendState?.replayable()?.options;
+    if (keptOptions !== undefined) {
+      return replayOptions(keptOptions, {
+        signal: params.config?.abortSignal,
+        onProviderError: params.config?.onProviderError,
+        onStreamLiveness: params.config?.onStreamLiveness,
+        requestContext: params.config?.providerRequestContext,
+        rawTokenDeltaSink: this.currentRawTokenDeltaBridge?.notify,
+        dumpAttemptContext,
+      });
+    }
+    return buildStreamChatOptions(
+      this.ports.prepareProviderInvocation,
+      provider.name,
+      promptId,
+      requestPayload,
+      runtimeContext.metadata,
+      params,
+      generation,
+      this.currentRawTokenDeltaBridge,
+      dumpAttemptContext,
+    );
+  }
+
   // @plan:PLAN-20260617-COREAPI.P15
   // @requirement:REQ-001
   private async _sendProviderRequest(
@@ -617,23 +600,26 @@ export class StreamProcessor {
     params: SendMessageParams,
     promptId: string,
     hookRestrictedAllowedTools: string[] | undefined,
-    preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
+    preparedAtEnforcement:
+      | Awaited<ReturnType<typeof prepareAtSendSeam>>
+      | undefined,
+    sendState: SendRequestState | undefined,
+    dumpAttemptContext: DumpAttemptContext,
     generation: ChatSessionConfig = this.generationConfig,
-    dumpAttemptContext: DumpAttemptContext = this.refusalDumpPairing.createAttempt(
-      promptId,
-    ),
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
+    let dispatching = false;
+    // The projection this attempt holds until the provider is called with it.
+    let unsent = preparedAtEnforcement;
     try {
-      const chatOptions = buildStreamChatOptions(
-        this.ports.prepareProviderInvocation,
-        provider.name,
-        promptId,
+      const chatOptions = this._chatOptionsForSend(
+        provider,
         requestPayload,
-        runtimeContext.metadata,
+        runtimeContext,
         params,
+        promptId,
         generation,
-        this.currentRawTokenDeltaBridge,
+        sendState,
         dumpAttemptContext,
       );
       const prepared =
@@ -643,19 +629,22 @@ export class StreamProcessor {
           chatOptions,
           this.ports.promptEstimator,
         ));
+      unsent = prepared;
+      assertAdmittedRoute(params.modelParameters?.route);
+      // The dispatch boundary: an attempt abandoned while it was prepared (a
+      // slow hook, a purge lease) publishes nothing and sends nothing when it
+      // resumes. Everything below, up to the provider call, is synchronous.
+      params.config?.abortSignal?.throwIfAborted();
+      dispatching = true;
+      sendState?.keepOptions(snapshotSentOptions(prepared.options));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      this.currentContextFingerprint = captureSendBoundaryAudit(
-        this.refusalStreamAudit,
-        this.compressionHandler,
-        this.ports,
-        this.historyService,
+      this.currentContextFingerprint = this._captureSendAudit(
         prepared,
         requestPayload,
         generation,
         promptId,
-        this.turnIdByPromptId.get(promptId) ?? null,
+        params,
       );
-      assertAdmittedRoute(params.modelParameters?.route);
       const streamResponse = provider.generateChatCompletion({
         ...prepared.options,
         requestDiagnostics: this.ports.requestDiagnostics,
@@ -665,7 +654,7 @@ export class StreamProcessor {
       // what keeps this attempt's stream wired to this attempt's tracker.
       const rawTokenDeltaBridge = this.currentRawTokenDeltaBridge;
 
-      const convertedStream = await consumeFirstChunkAndReturn(
+      return await consumeFirstChunkAndReturn(
         streamResponse,
         requestPayload,
         promptId,
@@ -675,27 +664,43 @@ export class StreamProcessor {
         rawTokenDeltaBridge,
         params.hookOwner ?? params.recordingExecution?.hookOwner,
         dumpAttemptContext,
+        params.config?.abortSignal,
         this._convertIContentStream.bind(this),
       );
-      return convertedStream;
     } catch (error) {
-      const durationMs = Date.now() - startTime;
       logApiError(
         this.turnTelemetryPorts(),
         this.ports.state.model,
         promptId,
-        durationMs,
+        Date.now() - startTime,
         error,
       );
-      this.currentPromptEnvelopeEstimate = null;
+      // An attempt that never dispatched did not set the estimate, so it must
+      // not clear the one belonging to the attempt that replaced it.
+      if (dispatching) this.currentPromptEnvelopeEstimate = null;
+      else await releaseUnsent(unsent, error);
       throw error;
     }
   }
 
-  private _selectRequestTools(
+  private _captureSendAudit(
+    prepared: Awaited<ReturnType<typeof prepareAtSendSeam>>,
+    requestPayload: PreparedRequest['requestPayload'],
+    generation: ChatSessionConfig,
+    promptId: string,
     params: SendMessageParams,
-  ): AgentClientGenerateConfig['tools'] {
-    return selectRequestTools(params, this.generationConfig.tools);
+  ): RefusalContextFingerprint | undefined {
+    return captureSendBoundaryAudit(
+      this.refusalStreamAudit,
+      this.compressionHandler,
+      this.ports,
+      this.historyService,
+      prepared,
+      requestPayload,
+      generation,
+      promptId,
+      params.logicalSend?.turnId ?? this.turnIdByPromptId.get(promptId) ?? null,
+    );
   }
 
   private async _applyToolSelectionHook(
@@ -708,10 +713,7 @@ export class StreamProcessor {
   private _buildContents(
     userContent: IContent | IContent[],
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): {
-    contents: IContent[];
-    pending: IContent[];
-  } {
+  ): ReturnType<typeof buildRequestContentsResult> {
     return buildRequestContentsResult(
       userContent,
       this.historyService,
@@ -759,6 +761,7 @@ export class StreamProcessor {
     rawTokenDeltaBridge: RawTokenDeltaBridge | null | undefined,
     owner: HookExecutionOwner | undefined,
     dumpAttemptContext: DumpAttemptContext,
+    attemptSignal?: AbortSignal,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
     let finish: StreamFinishInfo = {};
@@ -771,8 +774,10 @@ export class StreamProcessor {
     // attempt's estimate here so only a successful one stays observable.
     try {
       for await (const iContent of streamResponse) {
+        // Data from an abandoned attempt is neither processed nor published.
+        attemptSignal?.throwIfAborted();
         timing?.recordChunk(iContent);
-        this._trackPromptTokens(iContent);
+        trackPromptTokens(iContent, this.compressionHandler, this.logger);
         const chunk = toModelStreamChunk(iContent);
         if (hookRestrictedAllowedTools !== undefined) {
           chunk.hookRestrictions = {
@@ -799,6 +804,8 @@ export class StreamProcessor {
         finish = accumulateStreamFinishInfo(finish, yieldedChunk);
         yield yieldedChunk;
       }
+      // An EOF that arrives after the attempt was abandoned is not a success.
+      attemptSignal?.throwIfAborted();
     } catch (error) {
       this.currentPromptEnvelopeEstimate = null;
       attachStreamTiming(
@@ -828,10 +835,6 @@ export class StreamProcessor {
     );
   }
 
-  private _trackPromptTokens(iContent: IContent): void {
-    trackPromptTokens(iContent, this.compressionHandler, this.logger);
-  }
-
   /**
    * Process streaming response chunks into a complete conversation turn.
    *
@@ -851,6 +854,8 @@ export class StreamProcessor {
     contextFingerprint?: RefusalContextFingerprint,
     promptId = 'unknown',
     attemptIndex = 0,
+    attemptSignal?: AbortSignal,
+    sendState?: SendRequestState,
   ): AsyncGenerator<ModelStreamChunk> {
     const includeThoughts = this.ports.ephemerals.reasoning.includeInContext();
     const turnId = capturedTurnId ?? this.historyService.generateTurnKey();
@@ -870,9 +875,13 @@ export class StreamProcessor {
           turnId,
         );
         admissions.push(...admitted.admissions);
-        accumulator.add({ ...chunk, content: admitted.historyContent });
+        // Checked only once the admission is registered, so that what was
+        // admitted while the attempt was being abandoned is still released.
+        attemptSignal?.throwIfAborted();
+        accumulator.add(admitted.historyChunk);
         yield { ...chunk, content: admitted.filteredContent };
       }
+      attemptSignal?.throwIfAborted();
       const accumulated = accumulator.materialize();
       // Classified before validation, history commit and success accounting:
       // a refused attempt's output never reaches any of them (issue #4036).
@@ -893,6 +902,8 @@ export class StreamProcessor {
           this.eagerlyRecordedToolResponseCallIds,
         preparedUserTurn,
         mediaAdmissions: admissions,
+        attemptSignal,
+        sendState,
       });
       this.refusalStreamAudit.commit(
         this.historyService.getAll(),

@@ -12,6 +12,7 @@ import type {
 } from './tokenUsageRecords.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { isStreamTimeoutAbort } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 
 /**
  * Neutral token-usage input for actual-usage recording. Accepts the full set
@@ -39,6 +40,7 @@ export interface ActualTokenUsageInput {
   cache_creation_input_tokens?: number;
   attemptIndex?: number;
   attemptOutcome?: TokenUsageAttemptOutcome;
+  retryReason?: string;
   finishReason?: string;
   rawStopReason?: string;
   refusalCategory?: string | null;
@@ -254,6 +256,9 @@ export async function recordActualTokenUsage(
       ...(usage.attemptOutcome !== undefined && {
         attemptOutcome: usage.attemptOutcome,
       }),
+      ...(usage.retryReason !== undefined && {
+        retryReason: usage.retryReason,
+      }),
       ...(usage.finishReason !== undefined && {
         finishReason: usage.finishReason,
       }),
@@ -309,4 +314,36 @@ export async function recordAbandonedStreamAttempt(
     attemptOutcome: hasYieldedChunk ? 'abandoned' : 'error',
     ...(requestId === undefined ? {} : { requestId }),
   });
+}
+
+/**
+ * Logs the attempt a stream watchdog ends (issue #4093), at the moment the
+ * watchdog aborts `signal` rather than whenever the abandoned attempt gets
+ * round to noticing, so the record is written before the resend that follows.
+ * Any other abort logs nothing. The provider never finished the request, so
+ * the prompt tokens it reported, if any, are used and otherwise zero is
+ * recorded; `retry_reason` marks the attempt as a timeout. The pending entry
+ * is preserved for the resend. Returns the function that stops watching.
+ */
+export function logAttemptEndedByStreamTimeout(
+  signal: AbortSignal | undefined,
+  usageLogger: ActualTokenUsageRecorder | TokenUsageLogger | null | undefined,
+  promptId: string,
+  attempt: number,
+  readUsage: () => UsageStats | undefined,
+): () => void {
+  if (signal === undefined) return () => undefined;
+  const onAbort = (): void => {
+    if (!isStreamTimeoutAbort(signal)) return;
+    const usage = readUsage();
+    void recordActualTokenUsage(usageLogger, promptId, {
+      ...(usage === undefined ? {} : usageStatsToActualInput(usage)),
+      promptTokens: usage?.promptTokens ?? 0,
+      attemptIndex: attempt,
+      attemptOutcome: 'error',
+      retryReason: 'stream-timeout',
+    });
+  };
+  signal.addEventListener('abort', onAbort, { once: true });
+  return () => signal.removeEventListener('abort', onAbort);
 }

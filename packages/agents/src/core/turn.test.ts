@@ -9,6 +9,7 @@ import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerToolCallRequestEvent, ServerErrorEvent } from './turn.js';
+import { LogicalSend } from './logicalSend.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type {
   ContentBlock,
@@ -97,6 +98,7 @@ describe('Turn', () => {
             onStreamLiveness: expect.any(Function),
           },
           modelParameters: undefined,
+          logicalSend: expect.any(LogicalSend),
         },
         'prompt-id-1',
         undefined,

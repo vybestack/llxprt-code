@@ -381,6 +381,29 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
     );
   });
 
+  it('applies the profile shell inactivity timeout at startup to the session policy and the direct shell path (issue #4094)', async () => {
+    const profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'local-model.gguf',
+      ephemeralSettings: {
+        'shell-inactivity-timeout-seconds': 900,
+      },
+    };
+
+    const { config, settingsOwner: configSettingsOwner } = await runConfig({}, [
+      '--profile',
+      JSON.stringify(profile),
+    ]);
+
+    expect(
+      configSettingsOwner.readToolExecutionPolicy()[
+        'shell-inactivity-timeout-seconds'
+      ],
+    ).toBe(900);
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(900_000);
+  });
+
   it('skips profile socket-timeout when --provider is explicit', async () => {
     const profile = {
       version: 1,

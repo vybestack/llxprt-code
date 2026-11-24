@@ -58,6 +58,7 @@ export async function consumeFirstChunkAndReturn(
   rawTokenDeltaBridge: RawTokenDeltaBridge | null,
   owner: HookExecutionOwner | undefined,
   dumpAttemptContext: DumpAttemptContext,
+  attemptSignal: AbortSignal | undefined,
   convertStream: (
     stream: AsyncIterable<IContent>,
     payload: PreparedRequest['requestPayload'],
@@ -66,6 +67,7 @@ export async function consumeFirstChunkAndReturn(
     tokenDeltaBridge: RawTokenDeltaBridge | null,
     hookOwner: HookExecutionOwner | undefined,
     dumpAttemptContext: DumpAttemptContext,
+    attemptSignal: AbortSignal | undefined,
   ) => AsyncGenerator<ModelStreamChunk>,
 ): Promise<AsyncGenerator<ModelStreamChunk>> {
   const convertedStream = convertStream(
@@ -76,6 +78,7 @@ export async function consumeFirstChunkAndReturn(
     rawTokenDeltaBridge,
     owner,
     dumpAttemptContext,
+    attemptSignal,
   );
   const firstChunk = await convertedStream.next();
   if (firstChunk.done === true) {

@@ -19,7 +19,11 @@ import { debugLogger } from '../utils/debugLogger.js';
 import { ShellJobManager, type ShellJob } from '../services/shellJobManager.js';
 import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ShellTool, type IToolMessageBus } from '@vybestack/llxprt-code-tools';
+import {
+  ShellTool,
+  type IToolMessageBus,
+  type ToolExecutionPolicy,
+} from '@vybestack/llxprt-code-tools';
 import { initializeParser, isParserAvailable } from '../utils/shell-parser.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import type { IContent } from '../services/history/IContent.js';
@@ -149,6 +153,55 @@ describe('inactivity termination passthrough @plan:issue3589', () => {
       'inactivityTimeoutMs',
       1000,
     );
+  });
+
+  it('H: a host scoped to another policy applies that policy and leaves the original alone', async () => {
+    const { adapter } = makeAdapter();
+    const child = new SessionSettingsOwner(new SettingsService());
+    child.writeUserParameter('shell-inactivity-timeout-seconds', 1);
+    const scoped = adapter.scopedToExecutionPolicy(
+      (): ToolExecutionPolicy => child.readToolExecutionPolicy(),
+    );
+
+    expect(scoped.getShellExecutionConfig().inactivityTimeoutMs).toBe(1000);
+    expect(adapter.getShellExecutionConfig().inactivityTimeoutMs).toBe(300000);
+
+    const result = await scoped.executeShellCommand(
+      os.platform() === 'win32' ? 'Start-Sleep -Seconds 5' : 'sleep 5',
+      os.tmpdir(),
+      () => undefined,
+      new AbortController().signal,
+    );
+    expect(result.inactivityTimedOut).toBe(true);
+  }, 15000);
+
+  it('H: a tool scoped to another policy still launches background jobs through the jobs bound to it', async () => {
+    const { adapter } = makeAdapter();
+    const launched: string[] = [];
+    const child = new SessionSettingsOwner(new SettingsService());
+    const tool = new ShellTool(adapter, createInertMessageBus())
+      .withBackgroundJobs({
+        launchBackgroundJob: (input) => {
+          launched.push(input.command);
+          return {
+            id: 'shell_scoped',
+            command: input.command,
+            cwd: input.cwd,
+            state: 'running',
+            startedAt: 0,
+            pid: undefined,
+          };
+        },
+        tailBackgroundJob: (id) => ({ id, output: '', truncated: false }),
+      })
+      .withExecutionPolicy(() => child.readToolExecutionPolicy());
+
+    const result = await tool
+      .build({ command: 'echo scoped', is_background: true })
+      .execute(new AbortController().signal);
+
+    expect(launched).toStrictEqual(['echo scoped']);
+    expect(String(result.llmContent)).toContain('Job ID: shell_scoped');
   });
 });
 

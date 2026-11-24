@@ -9,6 +9,7 @@ import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/co
 import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ChatSession, StreamEvent } from './chatSession.js';
+import type { LogicalSend } from './logicalSend.js';
 
 /**
  * Open the provider response stream and return its async iterator. Shared by
@@ -25,6 +26,7 @@ export async function openResponseStreamIterator(
   onStreamLiveness?: StreamLivenessListener,
   modelParameters?: AdmittedModelParameters,
   hookOwner?: AgentChatRecordingExecution['hookOwner'],
+  logicalSend?: LogicalSend,
 ): Promise<AsyncIterator<StreamEvent>> {
   // Bridge: chatSession.sendMessageStream still expects Google-shaped
   // SendMessageParameters (until P21). The value is structurally compatible;
@@ -34,6 +36,7 @@ export async function openResponseStreamIterator(
       message: req as Parameters<typeof chat.sendMessageStream>[0]['message'],
       modelParameters,
       hookOwner,
+      logicalSend,
       config: {
         abortSignal: timeoutSignal,
         onProviderError,

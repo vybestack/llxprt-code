@@ -11,6 +11,7 @@
 
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import type { TruncationMetadata } from '../acquisition/types.js';
+import type { ToolExecutionPolicy } from './tool-execution-policy.js';
 
 /**
  * Tools-owned interface for shell tool host dependencies.
@@ -290,6 +291,16 @@ export interface IShellToolHost {
    * Resolves the log path by id only — never a caller-supplied path.
    */
   tailBackgroundJob(id: string): HostShellJobTailResult;
+
+  /**
+   * Returns a host that keeps this host's workspace, transport and approval
+   * wiring but reads shell execution settings (inactivity window, timeouts,
+   * output limits, replacement mode) from `read`. A child agent uses it so
+   * that the settings of its own profile govern the commands it runs, rather
+   * than those of the session that owns the shared shell tool. Hosts without
+   * session-scoped settings omit it.
+   */
+  scopedToExecutionPolicy?(read: () => ToolExecutionPolicy): IShellToolHost;
 
   /**
    * Check whether a command's final top-level construct is a trailing async
