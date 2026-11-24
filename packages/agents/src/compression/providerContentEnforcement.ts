@@ -16,19 +16,15 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
-  isRequestByteOverflowError,
   type RequestByteOverflowError,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { PromptEnvelopeBudgetEstimator } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { buildUnrecoverableBoundaryError } from './contextOverflowError.js';
 import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
   computeHistoryTruncationTarget,
 } from './contextLimitPolicy.js';
-import {
-  computeContextLimits,
-  limitsForGuard,
-  type ContextLimits,
-} from './enforcementLimits.js';
+import { limitsForGuard, type ContextLimits } from './enforcementLimits.js';
 import {
   buildOverflowError,
   withToolTruncationFailure,
@@ -37,10 +33,15 @@ import {
 import { executeFallbackTruncation } from './fallbackTruncationCommit.js';
 import {
   calibrateGuardOverhead,
-  measureRequestTokens,
   type CallbackRequest,
   type GuardCalibration,
 } from './guardCalibration.js';
+import {
+  computeProviderContextLimits,
+  estimateByContents,
+  estimateInitialPrompt,
+  estimateProviderProjection,
+} from './providerContentProjection.js';
 import { runGuardedCompression } from './guardedCompression.js';
 import {
   compressionCanRelieve,
@@ -91,7 +92,7 @@ export interface ProviderContentEnforcementDeps {
   getPromptTokenBaseline: () => number | null;
   resetPromptTokenBaseline: () => void;
   restorePromptTokenBaseline: (baseline: number | null) => void;
-  estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>;
+  estimateFinalizedPromptTokens?: PromptEnvelopeBudgetEstimator;
   /**
    * Explicit request media budget override; the shared default applies when
    * absent. The oldest historical images are retired from every request view
@@ -146,16 +147,22 @@ export class ProviderContentEnforcer {
   ): Promise<IContent[]> {
     await this.deps.historyService.waitForTokenUpdates();
     const model = this.resolveModel(provider);
-    const limits = this.computeContextLimits(provider, model);
     const contents = retireEnvelopeImages(envelope, this.mediaBudgetBytes());
+    let limits = this.computeContextLimits(provider, model);
     let initialProjected: number;
     try {
-      initialProjected = await this.estimateProviderProjection(
+      const estimate = await estimateInitialPrompt(
+        this.deps,
         contents,
-        limits.completionBudget,
         model,
-        'initial',
+        this.mode.measuresByContents === true,
       );
+      limits = this.computeContextLimits(
+        provider,
+        model,
+        estimate.maxOutputTokens,
+      );
+      initialProjected = estimate.tokens + limits.completionBudget;
     } catch (error) {
       if (!isRelievableMediaPressure(error)) {
         throw error;
@@ -194,6 +201,7 @@ export class ProviderContentEnforcer {
         envelope,
         { promptId, provider },
         true,
+        limits,
       );
     }
   }
@@ -319,9 +327,11 @@ export class ProviderContentEnforcer {
     envelope: ProviderContentEnvelope,
     request: { promptId: string; provider?: IProvider },
     historyChanged: boolean,
+    resolvedLimits?: ContextLimits,
   ): Promise<IContent[]> {
     const model = this.resolveModel(request.provider);
-    const limits = this.computeContextLimits(request.provider, model);
+    const limits =
+      resolvedLimits ?? this.computeContextLimits(request.provider, model);
     const relieved = await relieveMediaPressure({
       error,
       envelope,
@@ -527,7 +537,8 @@ export class ProviderContentEnforcer {
           model,
           'guard-calibration',
         ),
-      estimateByContents: this.contentEstimator(model),
+      estimateByContents: (contents) =>
+        estimateByContents(this.deps, contents, model),
     });
   }
 
@@ -882,55 +893,32 @@ export class ProviderContentEnforcer {
     );
   }
 
-  private async estimateProviderProjection(
+  private estimateProviderProjection(
     contents: IContent[],
     completionBudget: number,
     model: string,
     stage: string = 'initial',
   ): Promise<number> {
-    try {
-      const requestTokens = await measureRequestTokens(
-        {
-          finalized: this.deps.estimateFinalizedPromptTokens,
-          byContents: this.contentEstimator(model),
-          preferContents: this.mode.measuresByContents === true,
-        },
-        contents,
-      );
-      return requestTokens + completionBudget;
-    } catch (error) {
-      if (isRequestByteOverflowError(error)) {
-        throw error;
-      }
-      const projectionError = this.normalizeError(error);
-      throw new Error(
-        `Token projection failed at ${stage} stage during provider-content hard-limit enforcement: ${projectionError.message}`,
-        { cause: projectionError },
-      );
-    }
-  }
-
-  private contentEstimator(
-    model: string,
-  ): (contents: IContent[]) => Promise<number> {
-    return (contents) =>
-      this.deps.historyService.estimateTokensForContents(contents, model);
+    return estimateProviderProjection(
+      this.deps,
+      contents,
+      completionBudget,
+      model,
+      this.mode.measuresByContents === true,
+      stage,
+    );
   }
 
   private computeContextLimits(
     provider: IProvider | undefined,
     model: string,
+    maxOutputTokens?: number,
   ): ContextLimits {
-    const { ephemerals } = this.deps.runtimeContext;
-    return computeContextLimits(
-      {
-        userContextLimit: ephemerals.contextLimit(),
-        compressionThreshold: ephemerals.compressionThreshold(),
-        generationConfig: this.deps.generationConfig,
-        completionBudgetSetting: this.deps.readCompletionBudgetSetting(),
-      },
+    return computeProviderContextLimits(
+      this.deps,
       provider,
       model,
+      maxOutputTokens,
     );
   }
 

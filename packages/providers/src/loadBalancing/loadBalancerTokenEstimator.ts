@@ -38,6 +38,7 @@ export interface EstimationResult {
   tokens: number;
   source: string;
   transportToken?: object;
+  maxOutputTokens?: number;
 }
 
 export interface LoadBalancerEstimatorDeps {

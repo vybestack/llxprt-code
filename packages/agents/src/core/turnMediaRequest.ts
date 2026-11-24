@@ -6,6 +6,7 @@
 
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { PromptEnvelopeBudgetEstimator } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
@@ -21,7 +22,7 @@ interface TurnMediaRequestOptions {
   readonly promptId: string;
   readonly semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
   readonly estimateFinalizedPromptTokens:
-    | ((contents: IContent[]) => Promise<number>)
+    | PromptEnvelopeBudgetEstimator
     | undefined;
   readonly hookOwner?: AgentChatRecordingExecution['hookOwner'];
   readonly recordingExecution?: AgentChatRecordingExecution;

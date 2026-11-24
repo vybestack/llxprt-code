@@ -898,5 +898,62 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       expect(projection?.model).toBe('model-a');
       expect(failoverState.getIndex()).toBe(2);
     });
+
+    it('uses admitted generic output caps authoritatively and invocation ephemerals only without admission, omitting invalid caps', async () => {
+      const delegate = createProjectingDelegate({
+        name: 'prov',
+        estimateTokens: () => 10,
+      });
+      providerManager.registerProvider(delegate.provider);
+      const base = {
+        bindDelegateProvider: (provider: IProvider) => provider,
+        config: {
+          profileName: 'unit-lb',
+          strategy: 'round-robin' as const,
+          subProfiles: unitMembers('prov'),
+        },
+        providerManager,
+        failoverState: new FailoverState(),
+        roundRobinIndex: 0,
+        isBackendEligible: () => true,
+        buildDelegateResolvedOptions: unitResolvedOptions,
+      };
+      const project = (options: GenerateChatOptions) =>
+        projectNextSubProfilePromptEnvelope({ ...base, options });
+      const admittedWithoutCap = await project({
+        contents: [],
+        invocation: makeLoadBalancerInvocation({ maxOutputTokens: 1200 }),
+        modelParameters: { providerName: 'prov', modelParams: {} },
+      });
+      expect(admittedWithoutCap?.maxOutputTokens).toBeUndefined();
+
+      const admittedWithCap = await project({
+        contents: [],
+        invocation: makeLoadBalancerInvocation({ maxOutputTokens: 1200 }),
+        modelParameters: {
+          providerName: 'prov',
+          modelParams: {},
+          genericMaxOutputTokens: 2400,
+        },
+      });
+      expect(admittedWithCap?.maxOutputTokens).toBe(2400);
+
+      const invocationCap = await project({
+        contents: [],
+        invocation: makeLoadBalancerInvocation({ maxOutputTokens: 3600 }),
+      });
+      expect(invocationCap?.maxOutputTokens).toBe(3600);
+      for (const cap of [0, Number.POSITIVE_INFINITY]) {
+        const projection = await project({
+          contents: [],
+          modelParameters: {
+            providerName: 'prov',
+            modelParams: {},
+            genericMaxOutputTokens: cap,
+          },
+        });
+        expect(projection?.maxOutputTokens).toBeUndefined();
+      }
+    });
   });
 });
