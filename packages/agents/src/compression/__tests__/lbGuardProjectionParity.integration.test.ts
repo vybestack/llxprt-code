@@ -311,7 +311,7 @@ async function consume(
 function createEnforcementSession(options: {
   historyService: HistoryService;
   contextLimit: number;
-}): { handler: ChatSession['compressionHandler'] } {
+}) {
   const runtimeContext = buildRuntimeContext(options.historyService, {
     contextLimit: options.contextLimit,
     compressionThreshold: 0.8,
