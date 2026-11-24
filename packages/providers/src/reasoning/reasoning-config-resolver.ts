@@ -215,6 +215,28 @@ function validateSelectorCompatibility(input: ReasoningResolverInput): void {
   }
 }
 
+/**
+ * Effort wire formats a user can select explicitly to put reasoning effort on
+ * the wire for an adapter: every accepted selector except 'auto' (detection)
+ * and 'none' (suppression).
+ */
+export function emittingEffortWireFormats(
+  adapter: NativeReasoningAdapter,
+): readonly ReasoningEffortWireFormat[] {
+  return [...adapterFormats(EFFORT_FORMATS_BY_ADAPTER, adapter)].filter(
+    (format) => format !== 'auto' && format !== 'none',
+  );
+}
+
+/** Enabled wire formats that put reasoning enablement on the wire. */
+export function emittingEnabledWireFormats(
+  adapter: NativeReasoningAdapter,
+): readonly ReasoningEnabledWireFormat[] {
+  return [...adapterFormats(ENABLED_FORMATS_BY_ADAPTER, adapter)].filter(
+    (format) => format !== 'auto' && format !== 'none',
+  );
+}
+
 function adapterFormats<T extends string>(
   formats: ReadonlyMap<NativeReasoningAdapter, ReadonlySet<T>>,
   adapter: NativeReasoningAdapter,
