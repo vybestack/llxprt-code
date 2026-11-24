@@ -4,25 +4,61 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** Avoid runtime-native stream iteration in the OpenAI SDK's SSE reader. */
+import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { createSseCommentScanner } from './sseCommentScanner.js';
+
+/** Observes each raw byte chunk as the SDK reads it from a response body. */
+export type BodyChunkObserver = (chunk: Uint8Array) => void;
+
+/**
+ * Avoid runtime-native stream iteration in the OpenAI SDK's SSE reader.
+ *
+ * When `onStreamLiveness` is given, every SSE comment line (for example
+ * `: keepalive`) read from a successful `text/event-stream` response is
+ * reported as stream liveness. The SDK's own SSE decoder discards comment
+ * lines, so servers that buffer a whole generation and only send keepalive
+ * comments meanwhile would otherwise look dead to the stream watchdog
+ * (issue #4135).
+ */
 export function createReaderBasedStreamFetch(
   innerFetch: typeof fetch,
+  onStreamLiveness?: StreamLivenessListener,
 ): typeof fetch {
   return async (input, init) => {
     const response = await innerFetch(input, init);
-    return response.ok &&
-      response.body &&
-      Boolean(Reflect.get(response.body, Symbol.asyncIterator))
+    if (!response.ok || !response.body) return response;
+    if (onStreamLiveness !== undefined && isEventStream(response)) {
+      return wrapResponseWithReaderIteratedBody(
+        response,
+        createSseCommentScanner(() =>
+          onStreamLiveness({ sourceEvent: 'sse-comment', sseObserved: true }),
+        ),
+      );
+    }
+    return Reflect.get(response.body, Symbol.asyncIterator) !== undefined
       ? wrapResponseWithReaderIteratedBody(response)
       : response;
   };
 }
 
-/** Delegate Response methods to their original internal slots. */
+function isEventStream(response: Response): boolean {
+  const contentType = response.headers.get('content-type');
+  return (
+    contentType !== null &&
+    contentType.split(';')[0].trim().toLowerCase() === 'text/event-stream'
+  );
+}
+
+/**
+ * Delegate Response methods to their original internal slots. The optional
+ * observer sees each chunk read through the wrapped body's iterator; clones
+ * read an independent branch and are not observed.
+ */
 export function wrapResponseWithReaderIteratedBody(
   response: Response,
+  observeChunk?: BodyChunkObserver,
 ): Response {
-  return createBodyDelegatingWrapper(response, response);
+  return createBodyDelegatingWrapper(response, response, observeChunk);
 }
 
 /**
@@ -35,6 +71,7 @@ export function wrapResponseWithReaderIteratedBody(
 function createBodyDelegatingWrapper(
   metadataSource: Response,
   initialBodySource: Response,
+  observeChunk?: BodyChunkObserver,
 ): Response {
   const initialBody = initialBodySource.body;
   if (!initialBody) return metadataSource;
@@ -42,7 +79,7 @@ function createBodyDelegatingWrapper(
   // disturbing immutable metadata, which stays delegated to the original.
   let bodySource = initialBodySource;
   let currentBody = initialBody;
-  let wrappedBody = createReaderIteratedBody(currentBody);
+  let wrappedBody = createReaderIteratedBody(currentBody, observeChunk);
   return {
     get status() {
       return metadataSource.status;
@@ -76,7 +113,7 @@ function createBodyDelegatingWrapper(
       if (body === null) return null;
       if (body !== currentBody) {
         currentBody = body;
-        wrappedBody = createReaderIteratedBody(body);
+        wrappedBody = createReaderIteratedBody(body, observeChunk);
       }
       return wrappedBody;
     },
@@ -95,7 +132,7 @@ function createBodyDelegatingWrapper(
       };
       bodySource = new Response(originalBranch, responseInit);
       currentBody = originalBranch;
-      wrappedBody = createReaderIteratedBody(originalBranch);
+      wrappedBody = createReaderIteratedBody(originalBranch, observeChunk);
       return createBodyDelegatingWrapper(
         metadataSource,
         new Response(cloneBranch, responseInit),
@@ -119,6 +156,7 @@ type ReaderIteratedBody<T extends Uint8Array> = ReadableStream<T> & {
 /** Keep reads incremental without entering the runtime's native async iterator. */
 export function createReaderIteratedBody<T extends Uint8Array>(
   body: ReadableStream<T>,
+  observeChunk?: BodyChunkObserver,
 ): ReaderIteratedBody<T> {
   return {
     get locked() {
@@ -140,10 +178,10 @@ export function createReaderIteratedBody<T extends Uint8Array>(
             if (result.done) {
               finished = true;
               reader.releaseLock();
+              return { done: true, value: undefined };
             }
-            return result.done
-              ? { done: true, value: undefined }
-              : { done: false, value: result.value };
+            observeChunk?.(result.value);
+            return { done: false, value: result.value };
           } catch (error) {
             finished = true;
             reader.releaseLock();

@@ -27,6 +27,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from './openaiModelPolicy.js';
 import { createReaderBasedStreamFetch } from './openaiStreamFetchSafety.js';
@@ -190,6 +191,8 @@ export function instantiateClient(
     headersTimeoutMs?: number;
     requestTimeoutMs?: number;
     fetch: NetworkFetch;
+    /** Receives SSE keepalive comments read from streaming responses. */
+    onStreamLiveness?: StreamLivenessListener;
   },
 ): OpenAI {
   const clientOptions: Record<string, unknown> = {
@@ -210,7 +213,10 @@ export function instantiateClient(
     transport.headersTimeoutMs === undefined
       ? transport.fetch
       : fetchWithHeadersTimeout(transport.headersTimeoutMs, transport.fetch);
-  clientOptions.fetch = createReaderBasedStreamFetch(scopedFetch);
+  clientOptions.fetch = createReaderBasedStreamFetch(
+    scopedFetch,
+    transport.onStreamLiveness,
+  );
 
   if (headers && Object.keys(headers).length > 0) {
     // Ensure headers like User-Agent are applied even if the SDK call-site
