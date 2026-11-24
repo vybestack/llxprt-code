@@ -27,6 +27,7 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { PromptEnvelopeBudgetEstimator } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { AnthropicProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
@@ -319,7 +320,7 @@ export class RetirementSession {
   }
 
   private enforcerFor(
-    estimate: (contents: IContent[]) => Promise<number>,
+    estimate: PromptEnvelopeBudgetEstimator,
   ): ProviderContentEnforcer {
     const runtimeContext = createHistoryRuntimeFixture({
       state: createAgentRuntimeState({
@@ -425,7 +426,7 @@ export class RetirementSession {
     /** The request the provider handed its callback; absent for the legacy call. */
     original?: IContent[],
     /** Replaces the projection-based token estimator (a tokenizer boundary). */
-    estimate?: (contents: IContent[]) => Promise<number>,
+    estimate?: PromptEnvelopeBudgetEstimator,
   ): Promise<IContent[]> {
     const preparer = createPromptEnvelopePreparer(
       this.provider,
