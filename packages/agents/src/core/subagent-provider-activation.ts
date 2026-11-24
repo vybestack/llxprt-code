@@ -74,10 +74,10 @@ function buildChildActivationIntent(
     // with the RIGHT key. Without base-url, a profile like zai
     // (provider 'anthropic', base-url https://api.z.ai/api/anthropic)
     // would fall back to the provider default (api.anthropic.com) and
-    // its z.ai key would never authenticate — the request stalls until
-    // the 5-minute first-response timeout and the subagent returns an
-    // empty result. auth-key-name/auth-keyfile are resolved the same
-    // way the CLI bootstrap applies them (Issue #2410).
+    // its z.ai key would never authenticate — the request stalls with no
+    // response and the subagent returns an empty result.
+    // auth-key-name/auth-keyfile are resolved the same way the CLI
+    // bootstrap applies them (Issue #2410).
     cliOverrides: buildActivationCliOverrides(profile),
   };
 }

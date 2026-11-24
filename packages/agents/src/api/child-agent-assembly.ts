@@ -1,4 +1,5 @@
 import { acquireSessionClient } from '../session/session-client-binding.js';
+import { bindChildExecutionPolicy } from '../session/childToolAssembly.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -426,7 +427,9 @@ export class ChildAgentAssembly {
       manager,
       tokenizer,
       content,
-      this.operations.tools,
+      bindChildExecutionPolicy(this.operations.tools, () =>
+        settingsOwner.readToolExecutionPolicy(),
+      ),
       this.data.state,
       settingsSnapshot,
       createSubagentProviderRuntime(

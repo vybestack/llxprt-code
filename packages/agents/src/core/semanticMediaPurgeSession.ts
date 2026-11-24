@@ -13,6 +13,7 @@ import type {
 import {
   SemanticMediaPurgeCoordinator,
   type SemanticMediaPurgeFrontier,
+  type SemanticMediaPurgeOutcome,
   type SemanticMediaPurgeTransaction,
 } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 import { sanitizeProviderHistoryForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
@@ -108,8 +109,10 @@ export class SemanticMediaPurgeAttempt {
   readonly requestHistory: readonly IContent[];
   readonly preparedBoundary: PreparedSemanticMediaPurgeBoundary | undefined;
   private completed = false;
+  private committing = false;
   private committed = false;
   private retryHandoff = false;
+  private retired = false;
 
   private released = false;
 
@@ -139,28 +142,38 @@ export class SemanticMediaPurgeAttempt {
       throw new Error('Semantic media purge attempt is already complete');
     }
     this.completed = true;
+    this.committing = true;
     try {
-      if (evidence.retryHandoff || this.retryHandoff) {
-        this.committed = await this.coordinator.commit(this.transaction, {
-          status: 'retry-handoff',
-          cachePrefixWritten: false,
-        });
-        return this.committed;
-      }
-      const cachePrefixWritten = this.requiresExplicitCacheWrite
-        ? matchesRequiredCacheWrite(this.preparedBoundary, evidence)
-        : true;
-      this.committed = await this.coordinator.commit(this.transaction, {
-        status:
-          this.requiresExplicitCacheWrite && !cachePrefixWritten
-            ? 'error'
-            : evidence.status,
-        cachePrefixWritten,
-      });
+      this.committed = await this.coordinator.commit(
+        this.transaction,
+        this.outcomeFor(evidence),
+      );
+      // Retired while the commit was in flight: the attempt was abandoned, so
+      // its purge must not stay published.
+      if (this.committed && this.retired) await this.rollbackCommitted();
       return this.committed;
     } finally {
+      this.committing = false;
       if (!this.committed) this.release();
     }
+  }
+
+  private outcomeFor(
+    evidence: SemanticMediaPurgeCompletion,
+  ): SemanticMediaPurgeOutcome {
+    if (evidence.retryHandoff || this.retryHandoff) {
+      return { status: 'retry-handoff', cachePrefixWritten: false };
+    }
+    const cachePrefixWritten = this.requiresExplicitCacheWrite
+      ? matchesRequiredCacheWrite(this.preparedBoundary, evidence)
+      : true;
+    return {
+      status:
+        this.requiresExplicitCacheWrite && !cachePrefixWritten
+          ? 'error'
+          : evidence.status,
+      cachePrefixWritten,
+    };
   }
 
   finalize(): void {
@@ -175,7 +188,13 @@ export class SemanticMediaPurgeAttempt {
    */
   retire(): void {
     this.completed = true;
-    this.release();
+    this.retired = true;
+    // A commit already in flight releases the lease itself once it settles. A
+    // purge that is already committed stays published until the attempt that
+    // committed it finalizes or rolls it back; giving the lease up earlier
+    // would let a replacement begin on top of it, and the rollback could then
+    // no longer find the history it published.
+    if (!this.committing && !this.committed) this.release();
   }
 
   async rollbackCommitted(): Promise<void> {

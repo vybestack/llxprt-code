@@ -257,6 +257,21 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
         }
       });
     });
+    it.each([
+      { seconds: 300, window: '300s' },
+      { seconds: 900, window: '900s' },
+    ])(
+      'B: names the configured $seconds s window in both fields',
+      async ({ seconds, window }) => {
+        const result = await runHost(
+          causeHost({ inactivityTimedOut: true }, seconds * 1000),
+        );
+        for (const content of [result.llmContent, result.returnDisplay])
+          expect(String(content)).toContain(
+            `no output for the inactivity window (${window})`,
+          );
+      },
+    );
     it.each([undefined, Number.NaN, Infinity, 0, -1])(
       'C: omits invalid window %s',
       async (window) => {

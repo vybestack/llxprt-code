@@ -46,7 +46,10 @@ import { SendRequestState } from './sendRequestState.js';
 import type { StreamProcessor } from './StreamProcessor.js';
 import { withReportedUsage } from './streamRequestHelpers.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
-import { canonicalizeToolName } from './toolGovernance.js';
+import {
+  applyToolSelectionHook,
+  type ToolSelectionHookResult,
+} from './turnToolSelection.js';
 import {
   applyRetryTemperature,
   chunkHasVisibleOutput,
@@ -79,10 +82,14 @@ import {
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
-import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
+import {
+  recordAbandonedStreamAttempt,
+  logAttemptEndedByStreamTimeout,
+} from './tokenUsageActualLogger.js';
 import { commitTurnHistory } from './turnHistoryCommit.js';
 import {
   failedTurnCleanup,
+  releaseWhenAttemptAborted,
   throwAfterFailedTurnCleanup,
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
@@ -105,11 +112,6 @@ import {
 type SemanticMediaPurgeFactory = () => Promise<
   SemanticMediaPurgeAttempt | undefined
 >;
-
-interface ToolSelectionHookResult {
-  tools: ToolDeclaration[] | undefined;
-  allowedFunctionNames: string[] | undefined;
-}
 
 /**
  * Wraps a neutral ModelStreamChunk into a CHUNK StreamEvent.
@@ -266,8 +268,19 @@ export class TurnProcessor {
       this.historyService,
       this._normalizeUserContent(params),
       prompt_id,
+      params.logicalSend?.turnId,
     );
+    // An attempt abandoned while its admissions were in flight publishes
+    // nothing: its replacement may already have stored the turn identity the
+    // next resend must use, and this attempt must not overwrite it.
+    try {
+      params.config?.abortSignal?.throwIfAborted();
+    } catch (error: unknown) {
+      return throwAfterFailedTurnCleanup(error, prepared, undefined);
+    }
     this.currentTurnId = prepared.turnId;
+    if (params.logicalSend !== undefined)
+      params.logicalSend.turnId = prepared.turnId;
 
     let semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
     try {
@@ -281,19 +294,13 @@ export class TurnProcessor {
       streamDoneResolver = resolve;
     });
 
-    // Force-resolve sendPromise when the abort signal fires.
-    // This prevents a permanent deadlock when .return() can't propagate
-    // through a generator blocked on a hung inner iterator (e.g. stalled
-    // HTTP stream after idle timeout).
     const abortSignal = params.config?.abortSignal;
-    const onAbort = () => streamDoneResolver!();
-    if (abortSignal) {
-      if (abortSignal.aborted) {
-        streamDoneResolver!();
-      } else {
-        abortSignal.addEventListener('abort', onAbort, { once: true });
-      }
-    }
+    const stopWatchingAbort = releaseWhenAttemptAborted(
+      abortSignal,
+      prepared,
+      semanticMediaPurge,
+      () => streamDoneResolver!(),
+    );
 
     let finished = false;
     const onDone = (): void => {
@@ -305,7 +312,7 @@ export class TurnProcessor {
       } catch (error: unknown) {
         releaseFailure = { error };
       }
-      abortSignal?.removeEventListener('abort', onAbort);
+      stopWatchingAbort();
       streamDoneResolver!();
       if (releaseFailure !== undefined) throw releaseFailure.error;
     };
@@ -350,7 +357,8 @@ export class TurnProcessor {
       // rewritten turn is then what is resent and finally committed.
       let turn = prepared;
       let attemptPurge = semanticMediaPurge;
-      const sendState = new SendRequestState();
+      const sendState =
+        requestParams.logicalSend?.state ?? new SendRequestState();
       let retrying = true;
       while (
         retrying &&
@@ -366,7 +374,9 @@ export class TurnProcessor {
         );
         lastError = outcome.error;
         turn = turnForNextAttempt(turn, outcome);
-        keepRequestForNextAttempt(sendState, outcome);
+        // An abandoned attempt must not decide what its replacement resends.
+        if (requestParams.config?.abortSignal?.aborted !== true)
+          keepRequestForNextAttempt(sendState, outcome);
         if (rewroteCommittedHistory(outcome)) {
           // The next request is built from the rewritten history.
           attemptPurge?.retire();
@@ -421,6 +431,15 @@ export class TurnProcessor {
 
     let hasYieldedChunk = false;
     let attemptUsage: UsageStats | undefined;
+    // A watchdog abort belongs to the turn, which resends the whole request
+    // itself (issue #4093); the attempt is only logged, at the moment it ends.
+    const stopWatching = logAttemptEndedByStreamTimeout(
+      params.config?.abortSignal,
+      this.compressionHandler.tokenUsageLogger,
+      prompt_id,
+      attempt.requestAttempt,
+      () => attemptUsage,
+    );
     let attemptRequestId: string | null | undefined;
     try {
       const currentParams = applyRetryTemperature(
@@ -449,24 +468,13 @@ export class TurnProcessor {
       // classification: it never reaches the temperature-changing content
       // retry below (issue #4036).
       if (error instanceof ModelRefusalSignal) {
-        const route = params.modelParameters?.route;
-        const settlement = await settleRefusal(
-          {
-            recovery: this.refusalRecovery,
-            usageLogger: this.compressionHandler.tokenUsageLogger,
-            provider: () =>
-              route?.provider.name ?? this.providerResolver('stream').name,
-            model: () => route?.model ?? this.ports.state.model,
-            execution: params.recordingExecution,
-            pending: prepared,
-            modelParameters: params.modelParameters,
-            signal: params.config?.abortSignal,
-          },
+        return yield* this._settleRefusedAttempt(
           error,
+          params,
           prompt_id,
-          attempt.requestAttempt,
+          prepared,
+          attempt,
         );
-        return yield* announceRefusalSettlement(settlement);
       }
       // Hook execution control errors are yielded then stop the loop.
       if (yield* hookControlStreamEvents(error)) {
@@ -489,7 +497,37 @@ export class TurnProcessor {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
+    } finally {
+      stopWatching();
     }
+  }
+
+  /** Applies the refusal recovery policy to one refused attempt (#4036). */
+  private async *_settleRefusedAttempt(
+    refusal: ModelRefusalSignal,
+    params: SendMessageParams,
+    prompt_id: string,
+    prepared: PreparedUserTurn,
+    attempt: AttemptCounters,
+  ): AsyncGenerator<StreamEvent, StreamAttemptOutcome> {
+    const route = params.modelParameters?.route;
+    const settlement = await settleRefusal(
+      {
+        recovery: this.refusalRecovery,
+        usageLogger: this.compressionHandler.tokenUsageLogger,
+        provider: () =>
+          route?.provider.name ?? this.providerResolver('stream').name,
+        model: () => route?.model ?? this.ports.state.model,
+        execution: params.recordingExecution,
+        pending: prepared,
+        modelParameters: params.modelParameters,
+        signal: params.config?.abortSignal,
+      },
+      refusal,
+      prompt_id,
+      attempt.requestAttempt,
+    );
+    return yield* announceRefusalSettlement(settlement);
   }
 
   /**
@@ -844,47 +882,20 @@ export class TurnProcessor {
     return params.config?.tools ?? this.generationConfig.tools;
   }
 
-  private _normalizeRequestTools(
-    params: SendMessageParams,
-  ): ToolDeclaration[] | undefined {
-    const tools = this._selectRequestTools(params);
-    return Array.isArray(tools) ? tools : undefined;
-  }
-
-  private async _applyToolSelectionHook(
+  private _applyToolSelectionHook(
     tools: AgentClientGenerateConfig['tools'],
     hookOwner?: NonNullable<
       SendMessageParams['recordingExecution']
     >['hookOwner'],
   ): Promise<ToolSelectionHookResult> {
-    const toolsFromConfig = Array.isArray(tools) ? tools : [];
-    if (hookOwner?.beforeToolSelection === undefined)
-      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    const toolSelectionResult = await hookOwner.beforeToolSelection(
-      {
-        model: this.ports.state.model,
-        contents: [],
-        tools: toolsFromConfig,
-      },
-      hookOwner.signal,
-    );
-    const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
-      tools: toolsFromConfig,
-    });
-    const toolChoice = modifiedConfig?.toolChoice;
-    if (toolChoice?.mode === 'none') {
-      return { tools: [], allowedFunctionNames: [] };
-    }
-    const allowedFunctions = toolChoice?.allowedToolNames;
-    if (!Array.isArray(allowedFunctions)) {
-      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    }
+    return applyToolSelectionHook(tools, this.ports.state.model, hookOwner);
+  }
 
-    const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
-    const filteredTools = toolsFromConfig.filter((decl) =>
-      allowedNames.has(canonicalizeToolName(decl.name)),
-    );
-    return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
+  private _normalizeRequestTools(
+    params: SendMessageParams,
+  ): ToolDeclaration[] | undefined {
+    const tools = this._selectRequestTools(params);
+    return Array.isArray(tools) ? tools : undefined;
   }
 
   /**

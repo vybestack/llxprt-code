@@ -19,6 +19,7 @@ import type {
 import type { ConversationManager } from './ConversationManager.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import type { PreparedUserTurn } from './mediaAdmissionSeam.js';
+import type { SendRequestState } from './sendRequestState.js';
 import {
   analyzeBlocksOutcome,
   extractResponseTextFromBlocks,
@@ -34,6 +35,17 @@ import {
 
 interface FinalizeStreamResponseOptions {
   readonly origin?: object;
+  /**
+   * Aborts when the attempt is abandoned (a watchdog timeout, a cancellation).
+   * An abandoned attempt publishes nothing: its purge and its answer are
+   * fenced out before they reach history.
+   */
+  readonly attemptSignal?: AbortSignal;
+  /**
+   * Told when the answer reaches history, so a timeout that lands during the
+   * cleanup after the commit does not make the turn send the request again.
+   */
+  readonly sendState?: SendRequestState;
   readonly logger: DebugLogger;
   readonly conversationManager: ConversationManager;
   readonly historyService: HistoryService;
@@ -67,7 +79,12 @@ export async function failStreamProcessing(
 
 async function settlePublishedStreamAdmissions(
   options: FinalizeStreamResponseOptions,
+  publication: object,
 ): Promise<void> {
+  // Last point at which an abandoned attempt can still be rolled back: an
+  // error here undoes the publication, anything later is a completed send.
+  options.attemptSignal?.throwIfAborted();
+  options.sendState?.markAnswerPublished(publication);
   const failures: unknown[] = [];
   try {
     await options.preparedUserTurn?.transferToHistory();
@@ -93,6 +110,8 @@ async function commitFinalizedStreamHistory(
   acc: ModelOutput,
   preparedHistoryUserInput: ReturnType<typeof prepareHistoryUserInput>,
 ): Promise<void> {
+  // Identifies this finalization's publication to the send's answer marker.
+  const publication = {};
   const historyOptions = {
     ...preparedHistoryUserInput.userInputFlags,
     responseId: acc.responseId ?? acc.content.metadata?.id ?? null,
@@ -108,9 +127,15 @@ async function commitFinalizedStreamHistory(
       preparedHistoryUserInput.historyUserInput,
       acc,
       historyOptions,
-      () => settlePublishedStreamAdmissions(options),
+      () => settlePublishedStreamAdmissions(options, publication),
       options.origin,
     );
+  } catch (error: unknown) {
+    // The history mutation was rolled back, so the marker must follow it, for
+    // an abandoned attempt too: left set, no resend would answer the turn. Only
+    // this finalization's own publication is revoked, never a replacement's.
+    options.sendState?.markAnswerRevoked(publication);
+    throw error;
   } finally {
     clearMatchedEagerToolResponseCallIds(
       preparedHistoryUserInput.filteredResults,
@@ -171,6 +196,7 @@ export async function finalizeStreamResponse(
     );
   }
 
+  options.attemptSignal?.throwIfAborted();
   await options.semanticMediaPurge?.complete({
     status: 'success',
     usage: acc.usage,

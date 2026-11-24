@@ -185,6 +185,7 @@ export interface ProfileEphemeralSettings {
   'compression.density.compressHeadroom'?: number;
   'stream-first-response-timeout-ms'?: number;
   'stream-idle-timeout-ms'?: number;
+  'stream-timeout-retries'?: number;
   'image-payload-budget-bytes'?: number;
   'media-store-quota-bytes'?: number;
   'session-recording-queue-max-bytes'?: number;

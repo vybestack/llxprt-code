@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   runScriptedPrompt,
+  stallReply,
   stopReply,
   turnRecords,
 } from './helpers/refusal-endpoint.js';
@@ -362,6 +363,30 @@ describe('refusal dump pairing (issue #4101)', () => {
     expect(request['attemptIndex']).toBe(0);
     expect(response['promptId']).toBe(request['promptId']);
     expect(response['attemptIndex']).toBe(request['attemptIndex']);
+  });
+
+  it('labels the resend after a stream timeout as its own attempt', async () => {
+    await runScriptedPrompt(
+      [stallReply(), stopReply('recovered')],
+      ['slow prompt'],
+      {
+        settings: {
+          dumpcontext: 'on',
+          'stream-first-response-timeout-ms': 1000,
+          'refusal.backoff-ms': 1,
+        },
+      },
+    );
+
+    const dumpDir = join(cacheRoot, 'dumps');
+    const files = existsSync(dumpDir) ? readdirSync(dumpDir).sort() : [];
+    const requests = files
+      .filter((name) => name.endsWith('-request.json'))
+      .map((name) => readDump(dumpDir, name));
+
+    expect(requests.map((dump) => dump['attemptIndex']).sort()).toStrictEqual([
+      0, 1,
+    ]);
   });
 
   it('writes exactly one pair per attempt in on mode', async () => {

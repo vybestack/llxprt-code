@@ -248,6 +248,9 @@ describe('explicit adopted session settings on a shared Config', () => {
         const secondSettings = new SettingsService();
         const first = await adopt(firstSettings);
         const second = await adopt(secondSettings);
+        // This test watches one timeout per session; a resend would hide it.
+        firstSettings.set('stream-timeout-retries', 0);
+        secondSettings.set('stream-timeout-retries', 0);
         firstSettings.set('stream-first-response-timeout-ms', 10);
         secondSettings.set('stream-first-response-timeout-ms', 1000);
         endpoint.delayNext(150);

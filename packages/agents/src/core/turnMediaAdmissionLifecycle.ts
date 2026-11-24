@@ -41,6 +41,35 @@ export async function throwAfterFailedTurnCleanup(
   throw primaryError;
 }
 
+/**
+ * An abort ends an attempt's claim on its turn. The attempt's stream may never
+ * resume to clean up after itself (a stalled transport that ignores the
+ * abort), so what a replacement attempt needs is released here, when the abort
+ * fires: the purge lease, the user media admission and the send queue. Cleanup
+ * that runs later finds all three already released. Returns the function that
+ * stops watching, for an attempt that ended without an abort.
+ */
+export function releaseWhenAttemptAborted(
+  signal: AbortSignal | undefined,
+  prepared: PreparedUserTurn,
+  semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+  releaseSendQueue: () => void,
+): () => void {
+  if (signal === undefined) return () => undefined;
+  const onAbort = (): void => {
+    semanticMediaPurge?.retire();
+    // The outcome stays on the idempotent release for the stream cleanup.
+    prepared.releaseIfUncommitted().catch(() => undefined);
+    releaseSendQueue();
+  };
+  if (signal.aborted) {
+    onAbort();
+    return () => undefined;
+  }
+  signal.addEventListener('abort', onAbort, { once: true });
+  return () => signal.removeEventListener('abort', onAbort);
+}
+
 async function completeStreamTermination(
   operation: () => Promise<IteratorResult<StreamEvent>>,
   prepared: PreparedUserTurn,

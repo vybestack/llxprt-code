@@ -5,7 +5,10 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  SettingsService,
+  getSettingSpec,
+} from '@vybestack/llxprt-code-settings';
 import { Config } from '../config/config.js';
 import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 import { WorkspaceFilesystemOwner } from '../services/workspace-filesystem-owner.js';
@@ -52,7 +55,7 @@ describe('shell session acquisition policy', () => {
         .outputRetentionMaxBytes,
     ).toBeUndefined();
     expect(secondHost.getShellExecutionConfig().inactivityTimeoutMs).toBe(
-      120000,
+      300000,
     );
     first.writeUserParameter('shell-inactivity-timeout-seconds', -1);
     expect(
@@ -63,5 +66,88 @@ describe('shell session acquisition policy', () => {
       firstHost.getShellExecutionConfig().executionOptions
         .outputRetentionMaxBytes,
     ).toBeUndefined();
+  });
+
+  it('declares the 300 s inactivity default in the settings registry and applies it when nothing is set', () => {
+    expect(getSettingSpec('shell-inactivity-timeout-seconds')?.default).toBe(
+      300,
+    );
+    const config = new Config({
+      model: 'shell-model',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      sessionId: 'shell-inactivity-default',
+      debugMode: false,
+    });
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(300000);
+  });
+
+  it('applies a profile value present at startup, including -1 for unlimited', () => {
+    const create = (value: number) =>
+      new Config({
+        model: 'shell-model',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        sessionId: `shell-inactivity-startup-${value}`,
+        debugMode: false,
+        initialSettings: { 'shell-inactivity-timeout-seconds': value },
+      });
+    expect(create(900).getShellExecutionConfig().inactivityTimeoutMs).toBe(
+      900000,
+    );
+    expect(
+      create(-1).getShellExecutionConfig().inactivityTimeoutMs,
+    ).toBeUndefined();
+  });
+
+  it('follows a live settings reader over the startup snapshot, so a later profile load applies to direct shell commands', () => {
+    const config = new Config({
+      model: 'shell-model',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      sessionId: 'shell-inactivity-live',
+      debugMode: false,
+      initialSettings: { 'shell-inactivity-timeout-seconds': 60 },
+    });
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(60000);
+    let live: Record<string, unknown> = {};
+    config.bindLiveSettingsReader(() => live);
+
+    live = { 'shell-inactivity-timeout-seconds': 900 };
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(900000);
+
+    live = { 'shell-inactivity-timeout-seconds': -1 };
+    expect(
+      config.getShellExecutionConfig().inactivityTimeoutMs,
+    ).toBeUndefined();
+  });
+
+  it('returns to the default, not to the startup value, when a profile load clears the setting', () => {
+    const settings = new SettingsService();
+    const owner = new SessionSettingsOwner(settings);
+    owner.writeUserParameter('shell-inactivity-timeout-seconds', 900);
+    const config = new Config({
+      model: 'shell-model',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      sessionId: 'shell-inactivity-cleared',
+      debugMode: false,
+      initialSettings: settings.getAllGlobalSettings(),
+    });
+    config.bindLiveSettingsReader(() => settings.getAllGlobalSettings());
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(900000);
+
+    owner.writeUserParameter('shell-inactivity-timeout-seconds', undefined);
+
+    const toolHost = new CoreShellToolHostAdapter(
+      config,
+      new WorkspaceFilesystemOwner({
+        targetDir: config.getTargetDir(),
+        isTrusted: () => true,
+      }).paths,
+      () => owner.readToolExecutionPolicy(),
+    );
+    expect(toolHost.getShellExecutionConfig().inactivityTimeoutMs).toBe(300000);
+    expect(config.getShellExecutionConfig().inactivityTimeoutMs).toBe(300000);
   });
 });

@@ -507,9 +507,10 @@ export class CoderAgentExecutor implements AgentExecutor {
         }
         return false;
       case 'notice':
-        // Refusal-recovery progress is appended like the refusal safety
-        // notice; unsourced notices stay informational.
-        if (event.source === 'refusal-recovery') {
+        // Recovery progress (refusal and stream-timeout retries) is appended
+        // like the refusal safety notice; unsourced notices stay
+        // informational.
+        if (event.source !== undefined) {
           sequencer.flushBuffered();
           task.sendTextContent(`\n\n[recovery notice] ${event.message}`);
         }

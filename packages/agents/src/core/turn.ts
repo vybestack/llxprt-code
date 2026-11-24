@@ -41,6 +41,7 @@ import {
   type StreamEvent,
 } from './chatSession.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
+import { LogicalSend } from './logicalSend.js';
 import { openResponseStreamIterator } from './turnResponseStream.js';
 import {
   TurnDebugResponses,
@@ -56,12 +57,12 @@ import {
   resolveStreamIdleTimeoutMsSource,
   resolveStreamFirstResponseTimeoutMsSource,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  abortForStreamTimeout,
   type StreamLivenessListener,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import {
   createStreamWatchdog,
   type StreamWatchdog,
-  type StreamWatchdogFire,
 } from '@vybestack/llxprt-code-core/utils/streamWatchdog.js';
 import {
   buildStructuredError,
@@ -69,6 +70,11 @@ import {
   safeJsonStringify,
 } from './turnJsonUtils.js';
 import { buildCitationEvent } from './turnCitations.js';
+import {
+  resolveTimeoutRetryPolicy,
+  retryOnStreamTimeout,
+  type IdleFlag,
+} from './turnTimeoutRetry.js';
 import { buildErrorReportContext } from './turnErrorReportContext.js';
 import {
   beginWatchdogBoundedAcquisition,
@@ -90,12 +96,6 @@ export { MAX_DEBUG_RESPONSE_CHUNKS };
 type TurnRequest = string | object | readonly unknown[];
 /** @deprecated Use DEFAULT_STREAM_IDLE_TIMEOUT_MS from streamIdleTimeout.js instead */
 export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
-
-interface IdleFlag {
-  timedOut: boolean;
-  fire: StreamWatchdogFire | undefined;
-  livenessObserved: boolean;
-}
 
 /**
  * Options object for {@link Turn.emitFinishReason}. Encapsulates the data
@@ -164,6 +164,8 @@ export class Turn {
   readonly pendingToolCalls: ToolCallRequestInfo[];
   private readonly debugResponses = new TurnDebugResponses();
   finishReason: CanonicalFinishReason | undefined;
+  /** The request `run` is sending, shared by the attempts it makes. */
+  private logicalSend: LogicalSend | undefined;
   private logger: DebugLogger;
 
   constructor(
@@ -615,22 +617,43 @@ export class Turn {
       onFire: (fire) => {
         idleFlag.timedOut = true;
         idleFlag.fire = fire;
-        timeoutController.abort();
+        abortForStreamTimeout(timeoutController);
       },
     });
     return { watchdog, idleMs: idleResolution.ms };
   }
 
-  async *run(
+  /**
+   * Runs the request, resending it unchanged after a watchdog timeout while
+   * the stream-timeout retry budget lasts (issue #4093).
+   */
+  run(
     req: TurnRequest,
     signal: AbortSignal,
     modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<ServerAgentStreamEvent> {
-    const idleFlag: IdleFlag = {
-      timedOut: false,
-      fire: undefined,
-      livenessObserved: false,
-    };
+    const logicalSend = new LogicalSend();
+    this.logicalSend = logicalSend;
+    let attempts = 0;
+    return retryOnStreamTimeout({
+      attempt: (idleFlag) => {
+        this.pendingToolCalls.length = 0;
+        // Every attempt after the first sends the same request again.
+        if (attempts++ > 0) logicalSend.state.resendIdentically();
+        return this.runAttempt(req, signal, idleFlag, modelParameters);
+      },
+      policy: resolveTimeoutRetryPolicy(this.chat.getStreamTimeoutPolicy()),
+      answerCommitted: () => logicalSend.state.hasAnswerInHistory(),
+      signal,
+    });
+  }
+
+  private async *runAttempt(
+    req: TurnRequest,
+    signal: AbortSignal,
+    idleFlag: IdleFlag,
+    modelParameters?: AdmittedModelParameters,
+  ): AsyncGenerator<ServerAgentStreamEvent> {
     let observedProviderError: StructuredError | undefined;
     const onProviderError = (error: StructuredError): void => {
       observedProviderError = error;
@@ -758,8 +781,8 @@ export class Turn {
     iterator: AsyncIterator<StreamEvent>;
     firstResult: IteratorResult<StreamEvent>;
   }> {
-    if (!watchdog.isActive) {
-      const iterator = await openResponseStreamIterator(
+    const open = () =>
+      openResponseStreamIterator(
         this.chat,
         this.prompt_id,
         this.recordingExecution,
@@ -769,7 +792,10 @@ export class Turn {
         onStreamLiveness,
         modelParameters,
         this.hookOwner,
+        this.logicalSend,
       );
+    if (!watchdog.isActive) {
+      const iterator = await open();
       try {
         const outcome = await raceReadWithAbort(iterator.next(), signal);
         if (outcome.aborted) {
@@ -785,17 +811,7 @@ export class Turn {
       }
     }
 
-    const acquisitionPromise = openResponseStreamIterator(
-      this.chat,
-      this.prompt_id,
-      this.recordingExecution,
-      req,
-      timeoutSignal,
-      onProviderError,
-      onStreamLiveness,
-      modelParameters,
-      this.hookOwner,
-    );
+    const acquisitionPromise = open();
     const acquisition = beginWatchdogBoundedAcquisition(acquisitionPromise);
 
     try {

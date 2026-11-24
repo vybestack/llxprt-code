@@ -16,7 +16,8 @@ import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/
 
 export interface AdmittedRefusalAuditChunk {
   readonly filteredContent: IContent;
-  readonly historyContent: IContent;
+  /** The chunk as history takes it: output and AFC history admitted. */
+  readonly historyChunk: ModelStreamChunk;
   readonly admissions: readonly MediaAdmissionRelease[];
 }
 
@@ -72,7 +73,7 @@ export async function admitRefusalAuditChunk(
   }
   return {
     filteredContent,
-    historyContent: historyChunk.content,
+    historyChunk,
     admissions,
   };
 }

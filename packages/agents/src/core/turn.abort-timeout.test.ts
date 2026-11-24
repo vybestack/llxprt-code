@@ -704,13 +704,18 @@ describe('Turn run — abort settles provider reads that ignore the abort signal
     }
   });
 
-  it('aborts the default-config watchdog-active FIRST read with exactly one UserCancelled', async () => {
+  it('aborts the armed-watchdog FIRST read with exactly one UserCancelled', async () => {
     const failures = captureProcessFailures();
     try {
+      // The first-response guard is disabled by default (#4092); arm it
+      // explicitly so the acquisition sits in the watchdog-active branch.
+      turn = makeTurnWithConfig((key) =>
+        key === 'stream-first-response-timeout-ms' ? 300_000 : undefined,
+      );
       const abortController = new AbortController();
       // chunksBeforeStall 0: the very first next() never settles, so the
-      // acquisition sits in the watchdog-active branch under the default
-      // 5-minute first-response guard.
+      // acquisition sits in the watchdog-active branch under the 5-minute
+      // first-response guard armed above.
       const stalled = createStallingStream(0);
       mockSendMessageStream.mockResolvedValue(stalled.stream);
 
@@ -735,6 +740,9 @@ describe('Turn run — abort settles provider reads that ignore the abort signal
   });
 
   it('abort still settles when provider liveness disarms the first-response guard mid-acquisition', async () => {
+    turn = makeTurnWithConfig((key) =>
+      key === 'stream-first-response-timeout-ms' ? 300_000 : undefined,
+    );
     const abortController = new AbortController();
     const stalled = createStallingStream(0);
     mockSendMessageStream.mockImplementation(async (params) => {

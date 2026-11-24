@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ChatSessionConfig } from './chatSession.js';
 import type { ToolSelectionHookResult } from './streamRequestHelpers.js';
@@ -11,12 +12,16 @@ import type { ToolSelectionHookResult } from './streamRequestHelpers.js';
 /**
  * A provider-ready request as it left the BeforeModel hook and the context
  * enforcement: the contents the provider is sent, the tool selection and the
- * system prompt of that moment (issue #4036).
+ * system prompt of that moment (issue #4036). `options` is what the provider
+ * was handed, once it was: model parameters, invocation settings and metadata
+ * included, so an identical resend does not rebuild them from live settings
+ * (issue #4093).
  */
 export interface ProviderReadyRequest {
   readonly contents: IContent[];
   readonly toolSelection: ToolSelectionHookResult;
   readonly systemInstruction: ChatSessionConfig['systemInstruction'];
+  readonly options?: RuntimeGenerateChatOptions;
 }
 
 /**
@@ -32,6 +37,7 @@ export class SendRequestState {
   private kept: ProviderReadyRequest | undefined;
   private replay = false;
   private started = 0;
+  private answerOwner: object | undefined;
 
   /** Marks the start of an attempt; true when an earlier one ran in this send. */
   begin(): boolean {
@@ -49,9 +55,38 @@ export class SendRequestState {
     this.kept = request;
   }
 
+  /** Records what the provider was handed for the request kept so far. */
+  keepOptions(options: RuntimeGenerateChatOptions): void {
+    if (this.kept !== undefined) this.kept = { ...this.kept, options };
+  }
+
   /** The next attempt resends the kept request unchanged. */
   resendIdentically(): void {
     this.replay = true;
+  }
+
+  /**
+   * The attempt's answer was published to history. From here a timeout must
+   * not send the request again: the answer is already there, and a second
+   * one would sit next to it. `owner` identifies the publication, so that
+   * only the attempt that made it can take it back.
+   */
+  markAnswerPublished(owner: object): void {
+    this.answerOwner = owner;
+  }
+
+  /**
+   * The publication was undone, so the request is unanswered again. A
+   * revocation from anyone but the current publisher is ignored: an abandoned
+   * attempt that fails late must not clear the answer of its replacement.
+   */
+  markAnswerRevoked(owner: object): void {
+    if (this.answerOwner === owner) this.answerOwner = undefined;
+  }
+
+  /** Whether an attempt of this send has its answer in history. */
+  hasAnswerInHistory(): boolean {
+    return this.answerOwner !== undefined;
   }
 
   /** The next attempt builds its request afresh. */

@@ -333,6 +333,9 @@ export async function loadCliConfig(
     pieces,
     runtimeState.captureSettings(),
   );
+  // Profiles are applied after the Config exists, so shell settings must be
+  // read from the live session rather than the construction-time snapshot.
+  config.bindLiveSettingsReader(() => runtimeState.captureSettings());
 
   return finalizeConfig(
     {

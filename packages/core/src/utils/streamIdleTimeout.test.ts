@@ -10,6 +10,8 @@ import {
   type StreamTimeoutPolicy,
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
+  abortForStreamTimeout,
+  isStreamTimeoutAbort,
   resolveStreamIdleTimeoutMs,
   resolveStreamFirstResponseTimeoutMs,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
@@ -536,19 +538,19 @@ describe('resolveStreamFirstResponseTimeoutMs', () => {
     process.env = originalEnv;
   });
 
-  it('DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS is 300000 (5 minutes)', () => {
-    expect(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS).toBe(300_000);
+  it('DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS is -1 (disabled, issue #4092)', () => {
+    expect(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS).toBe(-1);
   });
 
-  it('returns 300000 (DEFAULT-ON) when no env var or config is set — the liveness fix for issue #2379', () => {
+  it('returns -1 (no limit) when no env var or config is set', () => {
     const result = resolveStreamFirstResponseTimeoutMs();
     expect(result).toBe(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS);
-    expect(result).toBe(300_000);
+    expect(result).toBe(-1);
   });
 
-  it('returns 300000 (DEFAULT-ON) when config has no getEphemeralSetting', () => {
+  it('returns -1 (no limit) when the policy is empty', () => {
     const result = resolveStreamFirstResponseTimeoutMs({});
-    expect(result).toBe(300_000);
+    expect(result).toBe(-1);
   });
 
   it('env var LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS overrides default', () => {
@@ -625,40 +627,40 @@ describe('resolveStreamFirstResponseTimeoutMs', () => {
     expect(result).toBe(0);
   });
 
-  it('invalid env var string falls through to default (300000)', () => {
+  it('invalid env var string falls through to default (-1)', () => {
     process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = 'not-a-number';
     const result = resolveStreamFirstResponseTimeoutMs();
-    expect(result).toBe(300_000);
+    expect(result).toBe(-1);
   });
 
-  it('numeric NaN config value falls through to default (300000)', () => {
+  it('numeric NaN config value falls through to default (-1)', () => {
     const mockConfig = timeoutConfigFor(
       STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
       Number.NaN,
     );
     const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
-    expect(result).toBe(300_000);
+    expect(result).toBe(-1);
   });
 
-  it('numeric Infinity config value falls through to default (300000)', () => {
+  it('numeric Infinity config value falls through to default (-1)', () => {
     const mockConfig = timeoutConfigFor(
       STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
       Number.POSITIVE_INFINITY,
     );
     const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
-    expect(result).toBe(300_000);
+    expect(result).toBe(-1);
   });
 
   it('empty string env var falls through to default (not parsed as 0)', () => {
     process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '';
     const result = resolveStreamFirstResponseTimeoutMs();
-    expect(result).toBe(300_000);
+    expect(result).toBe(-1);
   });
 
   it('whitespace-only env var falls through to default', () => {
     process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '   ';
     const result = resolveStreamFirstResponseTimeoutMs();
-    expect(result).toBe(300_000);
+    expect(result).toBe(-1);
   });
 
   it('uses the default for an invalid registry value despite a legacy value', () => {
@@ -689,8 +691,8 @@ describe('resolveStreamFirstResponseTimeoutMs', () => {
   });
 
   it('is independent from resolveStreamIdleTimeoutMs — different keys, different defaults', () => {
-    // First-response: default-on (300000); idle: default-off (0)
-    expect(resolveStreamFirstResponseTimeoutMs()).toBe(300_000);
+    // First-response: default-off (-1); idle: default-off (0)
+    expect(resolveStreamFirstResponseTimeoutMs()).toBe(-1);
     expect(resolveStreamIdleTimeoutMs()).toBe(0);
 
     // Setting the first-response env does not affect idle resolution
@@ -701,7 +703,31 @@ describe('resolveStreamFirstResponseTimeoutMs', () => {
     // Setting the idle env does not affect first-response resolution
     delete process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV];
     process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '77000';
-    expect(resolveStreamFirstResponseTimeoutMs()).toBe(300_000);
+    expect(resolveStreamFirstResponseTimeoutMs()).toBe(-1);
     expect(resolveStreamIdleTimeoutMs()).toBe(77_000);
+  });
+});
+
+describe('abortForStreamTimeout (issue #4093)', () => {
+  it('marks the signal as aborted by a watchdog, as an ordinary AbortError', () => {
+    const controller = new AbortController();
+
+    abortForStreamTimeout(controller);
+
+    expect(isStreamTimeoutAbort(controller.signal)).toBe(true);
+    expect(controller.signal.reason).toBeInstanceOf(DOMException);
+    expect((controller.signal.reason as DOMException).name).toBe('AbortError');
+  });
+
+  it('does not mistake a user cancel, a custom abort or a live signal for a watchdog abort', () => {
+    const userCancel = new AbortController();
+    userCancel.abort();
+    const custom = new AbortController();
+    custom.abort(new Error('stop'));
+
+    expect(isStreamTimeoutAbort(userCancel.signal)).toBe(false);
+    expect(isStreamTimeoutAbort(custom.signal)).toBe(false);
+    expect(isStreamTimeoutAbort(new AbortController().signal)).toBe(false);
+    expect(isStreamTimeoutAbort(undefined)).toBe(false);
   });
 });

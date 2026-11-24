@@ -108,8 +108,8 @@ export async function resolveRuntimeProfile(
  * Without this, a profile like `zai` (provider 'anthropic', base-url
  * https://api.z.ai/api/anthropic) would fall back to the provider default
  * (api.anthropic.com), its z.ai key would never authenticate, and the request
- * would stall until the 5-minute first-response timeout — the subagent then
- * returns an empty result (Issue #2410).
+ * would stall with no response — the subagent then returns an empty result
+ * (Issue #2410).
  */
 export function buildActivationCliOverrides(
   profile: Profile,

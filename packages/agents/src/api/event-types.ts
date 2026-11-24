@@ -138,14 +138,14 @@ export type AgentModelInfoEvent = Readonly<{
 
 /**
  * A user-facing status message. `source` is present when the message belongs
- * to a subsystem whose notices every host should show (for example
- * `refusal-recovery`); notices without a source are informational and hosts
+ * to a subsystem whose notices every host should show (`refusal-recovery`,
+ * `stream-timeout-retry`); notices without a source are informational and hosts
  * may ignore them.
  */
 export type AgentNoticeEvent = Readonly<{
   type: 'notice';
   message: string;
-  source?: 'refusal-recovery';
+  source?: 'refusal-recovery' | 'stream-timeout-retry';
 }>;
 
 export type AgentCompressionEvent = Readonly<{

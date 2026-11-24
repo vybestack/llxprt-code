@@ -11,6 +11,8 @@ import { deepFreezeTable } from '../immutableTable.js';
 export const REFUSAL_RETRIES_MAX = 10;
 /** Largest number of review and rewrite rounds per logical request. */
 export const REFUSAL_REWRITES_MAX = 3;
+/** Largest number of resends after a stream watchdog timeout (issue #4093). */
+export const STREAM_TIMEOUT_RETRIES_MAX = 10;
 
 function validateBoundedInteger(
   key: string,
@@ -57,8 +59,9 @@ function validateProfileName(key: string, value: unknown): ValidationResult {
 }
 
 /**
- * Refusal recovery policy (issue #4036). The agent reads these at the moment a
- * request is admitted, so changing one affects the next request.
+ * Refusal recovery policy (issue #4036) and stream timeout recovery
+ * (issue #4093). The agent reads these when a request starts, so changing one
+ * affects the next request.
  */
 export const REGISTRY_ENTRIES_PART_4: readonly SettingSpec[] = deepFreezeTable<
   readonly SettingSpec[]
@@ -81,7 +84,7 @@ export const REGISTRY_ENTRIES_PART_4: readonly SettingSpec[] = deepFreezeTable<
     owner: 'model',
     propagation: 'next-turn',
     description:
-      'Base wait in milliseconds before the first refusal retry. Retry n waits min(base * 4^(n-1), 180000). 0 retries immediately (default: 15000)',
+      'Base wait in milliseconds before the first refusal retry and before stream-timeout resends (see stream-timeout-retries). Retry n waits min(base * 4^(n-1), 180000). 0 retries immediately (default: 15000)',
     type: 'number',
     default: 15000,
     persistToProfile: true,
@@ -126,6 +129,23 @@ export const REGISTRY_ENTRIES_PART_4: readonly SettingSpec[] = deepFreezeTable<
         value,
         0,
         REFUSAL_REWRITES_MAX,
+      ),
+  },
+  {
+    key: 'stream-timeout-retries',
+    category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
+    description: `Resends after a stream watchdog timeout (first-response or idle), before the turn ends (integer 0 to ${STREAM_TIMEOUT_RETRIES_MAX}, default: 2). The wait before each resend follows the refusal backoff schedule set by refusal.backoff-ms. 0 ends the turn at the first timeout`,
+    type: 'number',
+    default: 2,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateBoundedInteger(
+        'stream-timeout-retries',
+        value,
+        0,
+        STREAM_TIMEOUT_RETRIES_MAX,
       ),
   },
 ]);
