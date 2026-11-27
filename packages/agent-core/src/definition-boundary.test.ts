@@ -24,7 +24,13 @@ const validDefinition: AgentDefinition = {
     fallbackOn: [],
   },
   tools: [],
-  policy: { authority: [], preferences: [], fallback: 'deny' },
+  policy: {
+    authority: [],
+    preferences: [],
+    sourceStacks: [],
+    approvalMode: 'default',
+    fallback: 'deny',
+  },
   limits: { maxStepsPerTurn: 12, maxParallelChildren: 2 },
   context: {
     compactAtRatio: 0.8,

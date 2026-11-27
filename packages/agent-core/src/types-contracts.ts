@@ -6,6 +6,53 @@
 
 import type { AgentEvent, JournalRecord } from './types-events.js';
 
+export type {
+  ToolPattern,
+  ApprovalMode,
+  PolicyRegex,
+  PolicyRegexInput,
+  PolicyProvenance,
+  PolicyMatch,
+  ArgMatcher,
+  PolicyRule,
+  PolicyLayer,
+  RestrictionRule,
+  PolicySourceStack,
+  PolicyEvaluationError,
+  PolicyDocument,
+  HookProvenance,
+  ModelAttemptSource,
+  RequestBoundary,
+  HookRequestPatch,
+  HookResponsePart,
+  HookModelResponse,
+  ModelResponseFrame,
+  BeforeModelEffect,
+  AfterModelEffect,
+  HookToolSelection,
+  HookStop,
+  HookAuditEntry,
+  HookEventResult,
+  HookError,
+  ModelRequestView,
+  ModelResponseView,
+} from './types-policy-hooks.js';
+import type {
+  ApprovalMode,
+  PolicyLayer,
+  RestrictionRule,
+  PolicySourceStack,
+  PolicyDocument,
+  HookModelResponse,
+  ModelResponseFrame,
+  BeforeModelEffect,
+  AfterModelEffect,
+  HookToolSelection,
+  HookEventResult,
+  ModelRequestView,
+  ModelResponseView,
+} from './types-policy-hooks.js';
+
 export type AgentId = string;
 export type SessionId = string;
 export type TurnId = string;
@@ -91,10 +138,13 @@ export interface LoopDetection {
 }
 export interface ModelParameters {
   readonly temperature?: number;
+  readonly topP?: number;
   readonly maxOutputTokens?: number;
+  readonly responseJsonSchema?: JsonSchema;
   readonly reasoning?: {
     readonly effort?: 'low' | 'medium' | 'high';
     readonly budgetTokens?: number;
+    readonly includeInOutput?: boolean;
   };
   readonly extra?: Readonly<Record<string, string | number | boolean>>;
 }
@@ -119,35 +169,6 @@ export interface ToolOutputLimits {
   readonly maxResultBytes: number;
   readonly maxStepResultBytes: number;
   readonly truncation: 'head' | 'tail' | 'head-and-tail';
-}
-export type ToolPattern = string;
-export interface PolicyMatch {
-  readonly tools?: readonly ToolPattern[];
-  readonly effects?: readonly Effect[];
-  readonly args?: readonly ArgMatcher[];
-}
-export type ArgMatcher =
-  | { readonly arg: string; readonly pathUnder: string }
-  | { readonly arg: string; readonly commandPrefix: readonly string[] }
-  | {
-      readonly arg: string;
-      readonly equals: string | number | boolean;
-    }
-  | { readonly arg: string; readonly urlHost: readonly string[] };
-export interface PolicyRule {
-  readonly id: RuleId;
-  readonly match: PolicyMatch;
-  readonly outcome: 'allow' | 'deny' | 'ask';
-  readonly reason?: string;
-}
-export interface PolicyLayer {
-  readonly name: string;
-  readonly rules: readonly PolicyRule[];
-}
-export interface PolicyDocument {
-  readonly authority: readonly PolicyRule[];
-  readonly preferences: readonly PolicyLayer[];
-  readonly fallback: 'allow' | 'deny' | 'ask';
 }
 export interface SubagentTemplate {
   readonly name: string;
@@ -237,12 +258,24 @@ export interface ModelRecovery {
   readonly data: JsonValue;
 }
 export type PreparedShell =
-  | { readonly parsed: false; readonly command: string; readonly error: string }
+  | {
+      readonly parsed: false;
+      readonly rawCommand: string;
+      readonly hasRedirection: boolean;
+      readonly policySplit: readonly ShellPolicySegment[];
+      readonly error: string;
+    }
   | {
       readonly parsed: true;
-      readonly command: string;
+      readonly rawCommand: string;
+      readonly hasRedirection: boolean;
+      readonly policySplit: readonly ShellPolicySegment[];
       readonly segments: readonly ShellSegment[];
     };
+export interface ShellPolicySegment {
+  readonly text: string;
+  readonly hasRedirection: boolean;
+}
 export interface ShellSegment {
   readonly command: string;
   readonly argv: readonly string[];
@@ -279,6 +312,7 @@ export interface ToolDescriptor {
   readonly id: ToolId;
   readonly description: string;
   readonly inputSchema: JsonSchema;
+  readonly policyIdentity: { readonly name: string; readonly server?: string };
   readonly effects: readonly Effect[];
   readonly concurrency: 'parallel' | 'exclusive';
   readonly resources?: readonly string[];
@@ -329,7 +363,12 @@ export interface ModelRequest {
     readonly inputSchema: JsonSchema;
   }>;
   readonly parameters: ModelParameters;
+  readonly toolChoice?: ModelToolChoice;
   readonly recovery?: ModelRecovery;
+}
+export interface ModelToolChoice {
+  readonly mode: 'auto' | 'required' | 'none';
+  readonly allowedToolIds?: readonly ToolId[];
 }
 export type FinishReason = 'stop' | 'tool-calls' | 'length' | 'other';
 export type ModelChunk =
@@ -345,6 +384,7 @@ export type ModelChunk =
       readonly argsDelta: string;
     }
   | { readonly kind: 'replay'; readonly value: ProviderReplayData }
+  | { readonly kind: 'response-frame'; readonly frame: ModelResponseFrame }
   | { readonly kind: 'usage'; readonly report: UsageReport }
   | {
       readonly kind: 'finish';
@@ -389,7 +429,17 @@ export interface ToolError {
   readonly message: string;
 }
 export interface StoreError {
-  readonly kind: 'unavailable' | 'corrupt' | 'aborted';
+  readonly kind: 'unavailable' | 'corrupt' | 'aborted' | 'import-required';
+  readonly message: string;
+}
+export interface ImportNotice {
+  readonly code:
+    | 'indeterminate-effect'
+    | 'grants-dropped'
+    | 'replay-excluded'
+    | 'compressed-history';
+  readonly sourceSequence?: number;
+  readonly call?: CallId;
   readonly message: string;
 }
 export interface SessionStore {
@@ -425,6 +475,7 @@ export interface Grant {
   readonly scope: GrantScope;
   readonly duration: 'turn' | 'session';
   readonly policyRevision: number;
+  readonly order: number;
 }
 export interface PreparedCallView {
   readonly tool: ToolId;
@@ -517,12 +568,18 @@ export interface Interceptors {
   ): Promise<
     Continue | Block | { readonly addContext: readonly ContextItem[] }
   >;
+  beforeToolSelection?(
+    view: ModelRequestView,
+    signal: AbortSignal,
+  ): Promise<HookEventResult<HookToolSelection>>;
   beforeModel?(
     view: ModelRequestView,
     signal: AbortSignal,
-  ): Promise<
-    Continue | Block | { readonly addContext: readonly ContextItem[] }
-  >;
+  ): Promise<HookEventResult<BeforeModelEffect>>;
+  afterModel?(
+    view: ModelResponseView,
+    signal: AbortSignal,
+  ): Promise<HookEventResult<AfterModelEffect>>;
   beforeTool?(
     call: PreparedCallView,
     signal: AbortSignal,
@@ -573,6 +630,8 @@ export interface Continue {
 export interface Block {
   readonly action: 'block';
   readonly reason: string;
+  readonly systemMessage?: string;
+  readonly response?: HookModelResponse;
 }
 export type JsonPatch = ReadonlyArray<{
   readonly op: 'add' | 'remove' | 'replace' | 'move' | 'copy' | 'test';
@@ -585,12 +644,6 @@ export interface Redaction {
   readonly end: number;
   readonly replacement: string;
 }
-export interface ModelRequestView {
-  readonly instructions: readonly InstructionBlock[];
-  readonly messages: readonly TranscriptEntry[];
-  readonly tools: ModelRequest['tools'];
-  readonly parameters: ModelParameters;
-}
 export interface Turn {
   readonly id: TurnId;
   readonly events: AsyncIterable<AgentEvent>;
@@ -601,8 +654,16 @@ export type AgentCommand = { readonly id?: CommandId } & (
   | {
       readonly type: 'set-preferences';
       readonly layers: readonly PolicyLayer[];
+      readonly approvalMode: ApprovalMode;
     }
-  | { readonly type: 'set-authority'; readonly rules: readonly PolicyRule[] }
+  | {
+      readonly type: 'set-authority';
+      readonly rules: readonly RestrictionRule[];
+    }
+  | {
+      readonly type: 'set-source-stacks';
+      readonly stacks: readonly PolicySourceStack[];
+    }
   | { readonly type: 'set-limits'; readonly limits: Limits }
   | { readonly type: 'set-mode'; readonly mode: 'normal' | 'plan' }
   | {
